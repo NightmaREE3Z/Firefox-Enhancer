@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "BraveFox Enhancer",
-  "version": "12.3.2",
+  "version": "12.5.0",
   "description": "Enhances browsing experience by blocking unwanted content and cleaning up URLs.",
   "background": {
     "scripts": [
