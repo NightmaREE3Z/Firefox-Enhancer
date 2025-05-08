@@ -1,0 +1,123 @@
+{
+  "manifest_version": 2,
+  "name": "BraveFox Enhancer",
+  "version": "12.3.2",
+  "description": "Enhances browsing experience by blocking unwanted content and cleaning up URLs.",
+  "background": {
+    "scripts": [
+      "background.js"
+    ]
+  },
+  "permissions": [
+    "webRequest",
+    "webRequestBlocking",
+    "storage",
+    "tabs",
+    "history",
+    "<all_urls>",
+    "webNavigation"
+  ],
+  "incognito": "spanning",
+  "icons": {
+    "16": "icons/16.png",
+    "48": "icons/48.png",
+    "128": "icons/128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.facebook.com/*",
+        "https://m.facebook.com/*"
+      ],
+      "js": [
+        "scripts/facebook.js"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://www.google.com/*",
+        "https://www.google.fi/*"
+      ],
+      "js": [
+        "scripts/google.js"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://www.youtube.com/*",
+        "https://m.youtube.com/*"
+      ],
+      "js": [
+        "scripts/youtube.js"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://irc-galleria.net/user/*",
+        "https://www.instagram.com/*",
+        "https://www.threads.net/*",
+        "https://www.tiktok.com/*",
+        "https://www.xvideos.com/*",
+        "https://www.github.com/*"
+      ],
+      "js": [
+        "scripts/extra.js"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://github.com/copilot/*"
+      ],
+      "js": [
+        "scripts/copilot.js"
+      ]
+    },
+    {
+      "matches": [
+        "https://chatgpt.com/*"
+      ],
+      "js": [
+        "scripts/chatgpt.js"
+      ]
+    },
+    {
+      "matches": [
+        "https://www.xvideos.com/*"
+      ],
+      "js": [
+        "scripts/adult.js"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://www.reddit.com/*",
+        "https://*.reddit.com/*"
+      ],
+      "js": [
+        "scripts/reddit.js"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "*://*.blogger.com/*",
+        "*://*.blogspot.com/*",
+        "https://draft.blogger.com/*"
+      ],
+      "js": [
+        "scripts/blogger.js"
+      ],
+      "run_at": "document_start"
+    }
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "enhancer@goldenfox.com"
+    }
+  }
+}
