@@ -216,11 +216,14 @@
         /n8ked\./i,
         /deepnude\./i,
         /nudify\./i,
+        /nudifier\./i,
         /undress\./i,
         /nudify\./i,
         /twitter\.com/i,
         /x\.com/i,
         /\.ai/i,
+        /\.app/i,
+        /\.io/i,
     ];
 
     // Define the list of protected selectors
