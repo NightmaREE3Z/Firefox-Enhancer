@@ -59,7 +59,7 @@
 	/imagetoimage/i, /image2image/i, /girl/i, /woman/i, /women/i, /babe/i, /waifu/i, /wife/i, /spouse/i, /celeb/i, /celebrit/i, /Face Magic/i, /ex prompt/i, /example prompt/i, /prompt example/i, /4l4ston/i, /last0n/i, /l4st0n/i,
 	/removebg/i, /remove bg/i, /remov bg/i, /removal bg/i, /ia onl/i, /removebg/i,  /removalbg/i, /rembg/i, /rem background/i, /del background/i, /eras background/i, /erase background/i, /erasing background/i, /butth/i, /buttc/i, 
 	/\bIA\b/i,/\bIas\b/i, /\b-Ia\b/i, /\bIa-\b/i, /background eras/i, /background del/i, /background rem/i, /background off/i, /off background/i, /background out/i, /out background/i, /removbg/i, /ladies/i, /lady/i, /butts/i,
-	/buttc/i, /butt c/i, /butt h/i, /butt s/i,
+	/buttc/i, /butt c/i, /butt h/i, /butt s/i, /\bMLM\b/i, /\bLLM\b/i, /learn model/i, /mach model/i,
     ];
 
 
@@ -121,7 +121,9 @@
 	"Nicole Garcia", "Nikki Garcia", "Wrestling babe", "Divas hot", "WWE sexy", "spicy site", "for fans", "VIP pic", "premium content", "sussy pic", "after dark", "NSFL", "artistic nude", "tasteful nude", "sus site",
 	"uncensored version", "alt site", "runwayml", "runway", "run way", "runaway", "run away",  "replicate.ai", "huggingface", "hugging face", "cloth remover", "AI eraser", "Magic Editor", "magicstudio", "cleanup.pictures", 
 	"app123", "modapk", "apkmod", "tool hub", "tools hub", "alaston", "alasti", "vaatteeton", "paljas", "seksikäs", "pimppi", "vittu", "tissit", "nänni", "sukupuolielin", "paljain", "seksisivu", "alastomuus", "sus content",
-	"aikuissisältö", "aikuissivusto", "seksikuva", "homo", "lesbo", "transu", "pervo", "🍑", "🍆", "💦", "👅", "🔞", "😈", "👙", "🩲", "👠", "🧼", "🧽", "( . )( . )", "| |", "( o )( o )", "(!)", "bg remover"
+	"aikuissisältö", "aikuissivusto", "seksikuva", "homo", "lesbo", "transu", "pervo", "🍑", "🍆", "💦", "👅", "🔞", "😈", "👙", "🩲", "👠", "🧼", "🧽", "( . )( . )", "| |", "( o )( o )", "(!)", "bg remover",
+	"dick", "cock", "penis", "breast", "thigh", "leggings", "leggins", "jeans", "jerking", "jerkmate", "jerk mate", "jerk off", "jerking off", "jack off", "jacking off", "imgtovid", "img2vid", "imagetovideo", "image2video",
+	"her butt", "herbutt", "butthole", "butt hole", "asshole", "ass hole", "buttcrack", "butt crack", "buttcheek", "butt cheek", "ladies", "lady", "runway", "runaway", "run way", "run away", "cheek",
     ];
 
     // List of allowed words that should not be hidden
@@ -149,7 +151,7 @@
         /Fermi/i, /Ampere/i, /Blackwell/i, /diagnoosi/i, /diagnosoitiin/i, /diagnosoitu/i, /diagnosis/i, /saada/i, /löytää/i, /ostaa/i, /löytö/i, /osto/i, /saanti/i, /muumit/i, /Tarina/i, /veren/i, /paine/i, /päiväkirja/i, /Joakim/i,
         /kuinka/i, /miten/i, /miksi/i, /minkä/i, /takia/i, /minä/i, /teen/i, /tätä/i, /ilman/i, /ilma/i,/sää/i, /foreca/i, /ilmatieteenlaitos/i, /päivän/i, /sää/i, /foreca/i, /muumilaakson/i, /tarinoita/i, /muumilaakso/i, /Stream/i,
         /Presidentti/i, /James/i, /Hetfield/i, /Metallica/i, /Sabaton/i, /TheGamingDefinition/i, /Twitch/i, /WhatsApp/i, /Messenger/i, /sääennuste/i, /ennuste/i, /oramorph/i, /oramorfiini/i, /morfiini/i, /yliopistonapteekki/i,
-	/apteekki/i, /market/i, /k-market/i, /s-market/i, /marketti/i, /kauppa/i, /kauppatori/i, /butters/i,
+	/apteekki/i, /market/i, /k-market/i, /s-market/i, /marketti/i, /kauppa/i, /kauppatori/i, /butters/i, /Pat McAfee/i, 
     ];
 
     // List of allowed URLs that should never be blocked
