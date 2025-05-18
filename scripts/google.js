@@ -64,7 +64,7 @@
 	/join 2 fac/i, /Stormwrestl/i, /Stormrassl/i, /Storm wrestl/i, /Storm rassl/i, /Storm rassl/i, /Toni AEW/i, /Storm AEW/i, /Toni WWE/i, /Toni AEW/i, /Genius of The Sky/i, /\bToni\b/i, /huora/i, /huoru/i, /horo/i, /horats/i,
 	/prostitoitu/i, /ilotyttå/i, /ilotyttö/i, /ilötyttö/i, /ilötytto/i, /ilåtyttå/i, /ilåtyttö/i, /iløtyttö/i, /iløtytto/i, /iløtyttø/i, /il0tyttö/i, /il0tytto/i, /il0tytt0/i, /il0tyttå/i, /il0tyttø/i, /1lotyttö/i, /1lotytto/i, 
 	/!lotyttö/i, /ilotyttø/i, /ilotytt0/i, /ilotytto/i, /bordel/i, /bordel/i, /bordelli/i, /ilotalo/i, /ilåtalo/i, /ilåtalå/i, /ilotalå/i, /iløtalo/i, /ilötalo/i, /il0talo/i, /iløtalå/i, /ilötalå/i, /ilotalø/i, /erootti/i,
-	/erotii/i, /erooti/i, /erootii/i, 
+	/erotii/i, /erooti/i, /erootii/i, /\bkuvake\b/i, /kuvakenet/i, /kuvake.net/i, /toniwwe/i, /tonywwe/i,
     ];
 
 
@@ -223,14 +223,16 @@
         /pixelixe\.com/i,
         /picresize\.com/i,
         /replicate\.ai/i,
+        /kuvake\.net/i,
         /nude\./i,
         /naked\./i,
         /n8ked\./i,
         /deepnude\./i,
         /nudify\./i,
+        /nudifyer\./i,
+        /nudifying\./i,
         /nudifier\./i,
         /undress\./i,
-        /nudify\./i,
         /twitter\.com/i,
         /x\.com/i,
         /\.ai/i,
