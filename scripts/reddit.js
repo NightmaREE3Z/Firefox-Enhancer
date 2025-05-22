@@ -1,26 +1,31 @@
 (function () {
     'use strict';
 
-    // --- CSS PRE-HIDING for posts: use .prehide, not global ---
+    // --- CSS PRE-HIDING for posts ---
     const style = document.createElement('style');
     style.textContent = `
-        article.prehide {
+        article.prehide, .Comment.prehide, shreddit-post.prehide {
             visibility: hidden !important;
             opacity: 0 !important;
             transition: none !important;
         }
-        article {
-            visibility: hidden !important;
-            opacity: 0 !important;
-            transition: none !important;
-        }
-        body.reddit-filter-ready article:not(.prehide) {
+        body.reddit-filter-ready article:not(.prehide),
+        body.reddit-filter-ready .Comment:not(.prehide),
+        body.reddit-filter-ready shreddit-post:not(.prehide) {
             visibility: visible !important;
             opacity: 1 !important;
+        }
+        reddit-recent-pages,
+        shreddit-recent-communities,
+        div[data-testid="community-list"],
+        [data-testid="recent-communities"],
+        .recent-communities {
+            display: none !important;
         }
     `;
     document.documentElement.appendChild(style);
 
+    // FULL ARRAYS/KEYWORDS
     const allowedUrls = [
         "https://www.reddit.com/user/birppis/"
     ];
@@ -32,11 +37,11 @@
         "trans", "transvestite", "queer", "LGBT", "LGBTQ", "Pride", "Jessika Carr", "Carr WWE"," Jessica Carr", "Jessika Karr", "Jessika WWE",
         "prostitute", "escort", "fetish", "adult", "erotic", "explicit", "mature", "blowjob", "anal", "sexual", "Jessica WWE", "Jessica Karr",
         "vagina", "pussy", "tushy", "tushi", "genital", "vagena", "butt", "booty", "derriere", "busty", "cum", "slut", "Karr WWE", "CJ Lana", "dick", 
-        "whore", "camgirl", "celeb", "cumslut", "Tiffany Stratton", "Lillian", "Garcia", "Jordynne", "Trish", "Stratus", "Lana Del Rey", "cock",
+        "whore", "camgirl", "celeb", "cumslut", "Tiffany Stratton", "Lillian", "Garcia", "Jordynne", "Trish", "Stratus", "Lana Del Rey", "cock", "raped",
         "DeepSeek", "DeepSeek AI", "nudyi", "ai app", "onlyfans", "fantime", "fansly", "justforfans", "patreon", "CJ Perry", "Lana Perry", "penis",
         "manyvids", "chaturbate", "myfreecams", "cam4", "fat fetish", "camsoda", "stripchat", "bongacams", "livejasmin", "Lana WWE", "anus", "rape",
         "WWE woman", "WWE women", "WWE Xoxo", "Liv Xoxo", "Xoxo", "Chelsey", "Chelsea", "Niven", "Hardwell", "Indi", "Del Rey", "Del Ray", "sex", "breast",
-        "amateur", "alexa", "bliss", "alexa bliss", "her ass", "she ass", "her's ass", "hers ass", "Alexa WWE", "5 feet of fury", "Morgan Xoxo", "raped",
+        "amateur", "alexa", "bliss", "alexa bliss", "her ass", "she ass", "her's ass", "hers ass", "venice", "Alexa WWE", "5 feet of fury", "Morgan Xoxo",
         "Tiffany Stratton", "Tiffy time", "Stratton", "Tiffany", "Mandy Rose", "Chelsea Green", "Zelina Vega", "Valhalla", "poses", "posing", "vagene",
         "IYO SKY", "Io Shirai", "Iyo Shirai", "IO SKY", "Dakota Kai", "Asuka", "Perez", "Kairi Sane", "Meiko Satomura", "playboy", "Dynamite", "jizz",
         "Shayna Baszler", "Ronda Rousey", "Carmella", "Emma", "Dana Brooke", "Tamina", "Alicia Fox", "Summer Rae", "MS Edge", "Microsoft Edge", "jizzed",
@@ -44,19 +49,55 @@
         "Mickie James", "Maria", "Kanellis", "Beth Phoenix", "Victoria", "Jazz", "Molly Holly", "Gail Kim", "Awesome Kong", "Goddess", "Rampaige", "breasts",
         "Madison Rayne", "Velvet Sky", "Angelina Love", "ODB", "Tessmacher", "Havok", "Su Yung", "Miko Satomura", "Opera GX", "Sweeney", "Brooke", "No nut",
         "Taya", "Valkyrie", "Deonna", "Purrazzo", "Saraya", "Britt Baker", "Jamie Hayter", "Anna Jay", "Tay Conti", "Tay Melo", "Opera Browser", "nofap",
-        "Willow Nightingale", "Kris Statlander", "Hikaru Shida", "Riho", "Sakazaki", "Nyla Rose", "Emi Sakura", "Brave", "Fatal Influence", "Aubert",
-        "Penelope Ford", "Shotzi", "Blackheart", "Tegan", "Nox", "Charlotte", "Charlotte Flair", "Sarray", "Xia Li", "OperaGX", "Sky Wrestling", "steph",
-        "Becky Lynch", "Bayley", "Bailey", "Giulia", "Michin", "Mia Yim", "AJ Lee", "Paige", "Bella", "Bianca", "Belair", "Alicia", "Atout", "stephanie",
-        "Stephanie", "Liv Morgan", "Piper Niven", "Jordynne Grace", "Jordynne", "NXT Womens", "NXT Women", "NXT Woman", "Aubrey", "Edwards", "Renee",
+        "Willow Nightingale", "Kris Statlander", "Hikaru Shida", "Riho", "Sakazaki", "Nyla Rose", "Emi Sakura", "Brave", "Fatal Influence", "Aubert", "*ape", 
+        "Penelope Ford", "Shotzi", "Blackheart", "Tegan", "Nox", "Charlotte", "Charlotte Flair", "Sarray", "Xia Li", "OperaGX", "Sky Wrestling", "steph", "r*pe",
+        "Becky Lynch", "Bayley", "Bailey", "Giulia", "Michin", "Mia Yim", "AJ Lee", "Paige", "Bella", "Bianca", "Belair", "Alicia", "Atout", "stephanie", "ra*e",
+        "Stephanie", "Liv Morgan", "Piper Niven", "Jordynne Grace", "Jordynne", "NXT Womens", "NXT Women", "NXT Woman", "Aubrey", "Edwards", "Renee", "rap*",
         "Sunny", "Maryse", "Tessa", "Brooke", "Jackson", "Jakara", "Lash Legend", "Velvet Sky", "Izzi Dame", "Alba Fyre", "Isla Dawn", "Tamina", "Sydney",
         "Raquel Rodriguez", "B-Fab", "Scarlett Bordeaux", "Kayden Carter", "Katana Chance", "Lyra Valkyria", "Tamina Snuka", "Renee Young", "Sydney Sweeney",
-        "Roxanne Perez", "Indi Hartwell", "Hartwell", "Blair Davenport", "Lola Vice", "Maxxine Dupri", "Karmen Petrovic", "Brittany", "Renee Paquette",
-        "Ava Raine", "Cora Jade", "Jacy Jayne", "Gigi Dolin", "Thea Hail", "Tatum", "Paxley", "Fallon Henley", "Sky wrestle", "Women’s", "Girl", "Women",
-        "Kelani Jordan", "Electra Lopez", "Wendy Choo", "Yulisa Leon", "Valentina Feroz", "Amari Miller", "Sky WWE", "Woman", "Lady", "Girls", "Girl's",
-        "Sol Ruca", "Arianna Grace", "Natalya", "Nattie", "Young Bucks", "Matt Jackson", "Nick Jackson", "AEW", "Woman’s", "Lady's", "Girl's", "Mandy",
-        "Mercedes", "Sasha", "Banks", "Russo", "Vince Russo", "Dave Meltzer", "Sportskeeda", "Liv Xoxo", "Roxanne", "Kristen Stewart", "Vladimir", "Putin",
-        "jerking", "jerkmate", "jerk mate", "jerk off", "jerking off", "jack off", "jacking off", "Join now",
+        "Roxanne Perez", "Indi Hartwell", "Hartwell", "Blair", "Davenport", "Lola Vice", "Maxxine Dupri", "Karmen", "Karmen Petrovic", "Brittany", "Renee Paquette",
+        "Ava Raine", "Cora Jade", "Jacy Jayne", "Gigi Dolin", "Thea Hail", "Tatum", "Paxley", "Fallon Henley", "Sky wrestle", "Women's", "Girl", "Women", "venoisi",
+        "Kelani Jordan", "Electra Lopez", "Wendy Choo", "Yulisa Leon", "Valentina Feroz", "Amari Miller", "Sky WWE", "Woman", "Lady", "Girls", "Girl's", "venoise",
+        "Sol Ruca", "Arianna Grace", "Natalya", "Nattie", "Young Bucks", "Matt Jackson", "Nick Jackson", "AEW", "Woman's", "Lady's", "Girl's", "Mandy", "org@$m", "0rga$m", "orga$m",
+        "Mercedes", "Sasha", "Banks", "Russo", "Vince Russo", "Dave Meltzer", "Sportskeeda", "Liv Xoxo", "Roxanne", "orgasm", "0rgasm", "org@sm", "orga5m", "org@5m", "0rg@sm", "0rga5m", "0rg@5m", "0rg@$m", 
+        "jerking", "jerkmate", "jerk mate", "jerk off", "jerking off", "jack off", "jacking off", "Join now", "a*al", "an*l", "*nal", "ana*", "s*x", "*ex", "se*", "Kristen Stewart", "Vladimir", "Putin",
+        "Paxley", "NXT Women", "adult site", "cam4", "biscuit rear", "d3ep", "Sweeney", "Britt", "Mariah","puzzy", "editing app", "linq", "pussy", "tushy", "Roxanne", "Blies", "CJ Lana", "Melina WWE", "Satomura", "Statlander",
+        "*uck", "f*ck", "fu*k", "fuc*", "f***", "f**k", "**ck", "fuc*k", "f*cked", "f*cker", "f**ked", "f**king", "fu**", "f**", "f****", "f*c*", "*cked", "f*cking", "f*cked", "f*cks", "f*ckup", "f**kery", "f*ckface", "f*ckwit", 
+        "f*cktard", "f*cker", "f*ckery", "sh*t", "sh*tty", "*hit", "s**t", "sh**", "sh*tfaced", "sh*tbag", "s*cker", "b*tch", "b**ch", "b****", "b*itch", "*itch", "b*stard", "b**tard", "b*stardly", "b*st*rd", "b*st*rds", "b*lls", 
+        "*lls", "b*llocks", "b*llsack", "a**", "a*shole", "*sshole", "as*hole", "assh*le", "as**hole", "a**hole", "a**wipe", "a*shat", "b*lls", "p*ssy", "c*nt", "c**t", "cu*t", "*unt", "c*nts", "c**ts", "cunt*","c*nts", "tw*t", 
+        "tw**t", "t*at", "t**t", "p*ss", "p***", "p*ssed", "p*ssy", "t*rd", "t*rd", "rawdog", "rawdogging", "raw dogging", "raw dog", "d*ck", "d**k", "di*k", "d*ckhead", "d*ckbag", "d**kface", "sh*thead", "b*lls", "t*t", "*n**r", 
+        "*n***r", "m*therf*cker", "m*therfucker", "*ss", "as****", "f*ckface", "f*cktard", "fukk", "fukc", "fu*c", "*ss", "a*s", "azz", "a*z", "az*", "***", "###", "@@", "#*", "*#", "@*", "*@", "#@", "@#", "sheer", "face replace", 
+        "face merge", "face blend", "faceblend", "AI face", "neural", "AI morph", "face animation", "deep swap", "swap model", "photorealistic swap", "synthetic face", "hyperreal", "hyper real", "reface", "facereplace", 
+        "facefusion", "face fusion", "face reconstruction", "AI face recreation", "virtual morph", "face synthesis", "neural face swap", "deep neural face", "AI-powered face swap", "face augmentation", "digital face synthesis", 
+        "virtual face swap", "hyperreal AI face", "photo-real AI face", "face deepfake", "synthetic portrait generation", "AI image transformation", "face fusion technology", "deepface swap", "photo manipulation face", 
+        "deepfak portrait", "machine learning", "generation", "generative", "AI model face swap", "face generation AI", "face replacement AI", "video face morphing", "3D face morph", "AI facial animation", "deepfake avatar", 
+        "synthetic avatar creation", "facial", "AI model swap", "deep model swap", "image to face morph", "AI character face", "face remapping AI", "synthetic media", "AI-created character face", "face replacement tool", 
+        "photo trans", "pict trans", "image trans", "virtual avatar face", "AI video face replacement", "digital face replacement", "hyperreal synthetic face", "AI face transformer", "face generation model", "realistic face", 
+        "face blend", "virtual reality face", "face technology", "face tech", "3D morph face", "face AI animation", "real-time face swap", "AI-driven photo manipulation", "deepfake model creation", "digital persona",
+        "face overlay", "synthetic person", "facial blending", "face swap", "virtual character face swap", "photorealistic face generator", "face altering AI", "realistic AI swap", "face expression morphing", "video gen",
+        "face transformation AI", "virtual human face swap", "synthetic media generation", "3D face recreation", "AI-generated face animation", "neural network face replacement", "deepfake face morphing", "video generat", 
+        "hyperreal", "face projection", "synthetic face swap", "face model", "virtual human face", "venice", "real-time deepfake", "photorealistic deepfake", "neural face transformation", "AI-generated face morph", "face render",
+        "machine-generated face swap", "face image manipulation", "video face animation", "virtual morphing tool", "AI-powered video face swap", "digital face recreation", "AI-based facial replacement", "neural face",
+        "machine learning face generator", "face recognition swap", "AI face animation tool", "synthetic media face", "AI character morphing", "deepfake avatar generation", "photoreal face synthesis", "synthetic face",
+        "facial deep learning", "neural facial expression swap", "hyperrealistic face model", "AI-driven face fusion", "video face deepfake", "face pattern generation", "AI virtual persona swap", "deepface model trans",
+        "nekkid", "nudee", "nudy", "noodz", "neude", "nudesz", "fan5ly", "fan-sly", "f4nslie", "f@nsly", "deep nuud", "deepnud", "deapnude", "d33pnud3", "f@n", "0nly", "0nlifans", "onlii", "onlifanz", "onnly", "n@ked", 
+        "n4ked", "nakid", "nakd", "nakie", "s3x", "sx", "secks", "seggs", "seks", "Erase clothes", "AI uncloth", "Unclothing AI", "Gen AI pics", "text-to-undress", "text2nude", "remove outfit", "undress filter", "persona creation",
+        "stripfilter", "clothing eraser", "nudify tool", "leak editor", "Realistic nude gen", "fleshify", "Skinify", "Alex Kaufman", "Lexi Kaufman", "Lexi Bliss", "Tenille Dashwood", "Saraya Knight", "Paige WWE",
+        "Celeste Bonin", "Ariane Andrew", "Brianna Monique Garcia", "Stephanie Nicole Garcia", "CJ Perry", "Lana Rusev", "Pamela Martinez", "Ashley Sebera", "Ayesha Raymond", "Marti Belle", "Alisha Edwards", "image2video",
+        "Nicol", "Garcia", "Nikki Garcia", "Wrestling babe", "Divas hot", "WWE sexy", "spicy site", "for fans", "VIP pic", "premium content", "sussy pic", "after dark", "NSFL", "artistic nude", "tasteful nude", "sus site",
+        "uncensored version", "alt site", "runwayml", "runway", "run way", "runaway", "run away",  "replicate.ai", "huggingface", "hugging face", "cloth remover", "AI eraser", "Magic Editor", "magicstudio", "cleanup.pictures", 
+        "app123", "modapk", "apkmod", "tool hub", "tools hub", "alaston", "alasti", "vaatteeton", "paljas", "seksikäs", "pimppi", "vittu", "tissit", "nänni", "sukupuolielin", "paljain", "seksisivu", "alastomuus", "sus content",
+        "aikuissisältö", "aikuissivusto", "seksikuva", "homo", "lesbo", "transu", "pervo", "🍑", "🍆", "💦", "👅", "🔞", "😈", "👙", "🩲", "👠", "🧼", "🧽", "( . )( . )", "| |", "( o )( o )", "(!)", "bg remover", "face+", "face +",
+        "dick", "cock", "penis", "breast", "thigh", "leggings", "leggins", "venoice", "veniice", "jeans", "jerking", "jerkmate", "jerk mate", "jerk off", "jerking off", "jack off", "jacking off", "imgtovid", "img2vid", "imagetovideo", 
+        "her butt", "herbutt", "butth", "butt hole", "assh", "ass h", "buttc", "butt c", "buttcheek", "butt cheek", "ladies", "lady", "runway", "runaway", "run way", "run away", "cheek", "aasho", "ääsho", "ääshö", "face join",
+        "poistamis", "vaatteidenpoistaminen", "vaatteiden poistaminen", "facemerg", "facefusi", "face merg", "face fusi", "face plus", "faceplus", "merge two faces", "merge 2 faces", "merging 2 faces", "merging two faces", "join face",
+        "join two faces", "join 2 faces", "join2faces", "jointwofaces", "fotor", "Toni WWE", "Tony Storm", "off the Sky", "off da skai", "Priscilla", "Kelly", "Erika", "Vikman", "pakara", "pakarat", "Viikman", "Eerika", 
+        "puss*", "p*ssy", "pu*sy", "pus*y", "an*l", "s*x", "s**", "veeniic", "veenice", "**x", "se*", "*ex", "*uck", "s*ck", "d*ck", "c*ck", "f*ck", "fu*k", "fuc*", "*nal", "a*al", "ana*", "*ss", "a*s", "as*", "su*k", "di*k", "co*k", "suc*", 
+        "*wat", "t*at", "tw*t", "twa*", "*unt", "c*nt", "cu*t", "cun*", "*orn", "p*rn", "po*n", "por*", "*eep", "d*ep", "de*p", "dee*", "*ude", "n*de", "nu*e", "nud*", "*udi", "n*di", "nu*i", "n**e", "n**i", "nu**", "n**e", "dic*", "coc*",
+        "*aked", "n*ked", "na*ed", "nak*d", "nake*", "**ked", "n**ed", "na**d", "nak**", "**aked", "n**aked", "n*aked", "d!ck", "d1ck", "dlck", "na**ked", "nak**ed", "nake**d", "*kin", "s*in", "sk*n", "ski*", "*lesh", "f*esh", "fl*sh",
+        "fle*h", "fles*"
     ];
+
     const redgifsKeyword = "www.redgifs.com";
 
     const adultSubreddits = [
@@ -84,7 +125,12 @@
         /Nicki/i, /Minaj/i, /next-gen face/i, /smooth body/i, /photo trick/i, /edit for fun/i, /realistic AI/i, /dream girl/i, /enhanced image/i, /\bButt\b/i, /Derriere/i, /Backside/i, /läpinäkyvä/i, /alaston/i, /erotiikka/i,
         /vaatepoisto/i, /poista vaatteet/i, /vaatteiden poisto/i, /tekoäly/i, /panee/i, /panevat/i, /paneminen/i, /panemis/i, /paneskelu/i, /nussi/i, /nussinta /i, /nussia/i, /nussiminen/i, /nussimista/i, /exclusive leak/i,
         /Stratusfaction/i, /yhdynnässä/i, /seksikuva/i, /seksi kuvia/i, /seksikuvia/i, /yhdyntäkuvia/i, /yhdyntä kuvia/i, /panovideo/i, /pano video/i, /panokuva/i, /pano kuva/i, /pano kuvia/i, /panokuvia/i, /banned app/i,
-        /\bFAP\b/i, /fapping/i, /wanking/i, /masturbating/i, /masturbation/i, /masturboida/i, /masturbaatio/i, /masturboin/i, /runkata/i, /runkkaus/i, /runkkaaminen/i, /runkku/i, /masturbointi/i, /jerking/i,        
+        /\bFAP\b/i, /fapping/i, /wanking/i, /venice/i, /masturbating/i, /masturbation/i, /masturboida/i, /masturbaatio/i, /masturboin/i, /runkata/i, /runkkaus/i, /runkkaaminen/i, /runkku/i, /masturbointi/i, /jerking/i,
+        /Stratusfaction/i, /yhdynnässä/i, /seksikuva/i, /seksivideo/i, /seksi kuvia/i, /seksikuvia/i, /yhdyntäkuvia/i, /yhdyntä kuvia/i, /panovideo/i, /pano video/i, /panokuva/i, /pano kuva/i, /pano kuvia/i, /panokuvia/i,
+        /masturb/i, /itsetyydy/i, /itse tyydytys/i, /itsetyydytysvid/i, /itsetyydytyskuv/i, /runkkualbumi/i, /runkku/i, /runkkaus/i, /runkata/i, /runkka/i, /näpitys/i, /näpittäminen/i, /sormetus/i, /sormitus/i, /sormitta/i, /sormetta/i,
+        /sormettamiskuv/i, /sormittamiskuv/i, /sormettamiskuv/i, /fistaaminen/i, /näpityskuv/i, /näpittämiskuv/i, /sormettamisvid/i, /näpitysvid/i, /kotijynkky/i, /jynkkykuv/i, /jynkkyvid/i, /aikuisviihde/i, /fisting/i, /fistaus/i,
+        /sheer/i, /aikuis viihde/i, /aikuissisältö/i, /aikuissisältö/i, /aikuissivusto/i, /seksikuva/i, /homo/i, /lesbo/i, /transu/i, /pervo/i, /🍑/i, /🍆/i, /💦/i, /👅/i, /🔞/i, /😈/i, /👙/i, /🩲/i, /👠/i, /🧼/i, /🧽/i, /\(\.\s*\)\(\.\s*\)/i, 
+	/\|\s*\|/i, /\(o\)\(o\)/i, /\(!\)/i, /bg remover/i, /face\+/i, /face \+/i, /fles*/i
     ];
 
     const unifiedSelectors = [
@@ -111,115 +157,178 @@
     const selectorsToDelete = [
         "community-highlight-carousel",
         "community-highlight-carousel h3",
-        "community-highlight-carousel shreddit-gallery-carousel",
+        "community-highlight-carousel shreddit-gallery-carousel"
     ];
 
-    const isUrlAllowed = () => {
+    function isUrlAllowed() {
         const currentUrl = window.location.href;
         return allowedUrls.some(url => currentUrl.startsWith(url));
-    };
+    }
 
-    const removeElementAndRelated = (element) => {
+    function removeElementAndRelated(element) {
         element.remove();
-    };
+    }
 
-    const checkContentForSubreddits = (content) => {
-        const contentText = content.innerText.toLowerCase();
-        const contentHtml = content.innerHTML.toLowerCase();
+    function getSubredditForAnyRedditPost(el) {
+        let attr = el.getAttribute && el.getAttribute('subreddit-prefixed-name');
+        if (attr) return attr.startsWith('r/') ? attr : 'r/' + attr;
+        let attr2 = el.getAttribute && el.getAttribute('subreddit-name');
+        if (attr2) return 'r/' + attr2;
+        let attr3 = el.getAttribute && el.getAttribute('data-subreddit');
+        if (attr3) return attr3.startsWith('r/') ? attr3 : 'r/' + attr3;
+        let a = el.querySelector && el.querySelector('a[data-testid="subreddit-name"]');
+        if (a && a.textContent) return a.textContent.trim();
+        let a2 = el.querySelector && el.querySelector('a[href^="/r/"]');
+        if (a2 && a2.textContent) return a2.textContent.trim();
+        let aTags = el.querySelectorAll && el.querySelectorAll('a[href*="/r/"]');
+        if (aTags) {
+            for (const a3 of aTags) {
+                const href = a3.getAttribute('href');
+                const match = href && href.match(/\/r\/([A-Za-z0-9_]+)/);
+                if (match) {
+                    return "r/" + match[1];
+                }
+            }
+        }
+        return null;
+    }
 
-        return adultSubreddits.some(subreddit =>
-            contentText.includes(subreddit.toLowerCase()) || contentHtml.includes(subreddit.toLowerCase())
-        );
-    };
+    function isElementFromAdultSubreddit(el) {
+        const sub = getSubredditForAnyRedditPost(el);
+        if (!sub) return false;
+        return adultSubreddits.some(asub => sub.toLowerCase() === asub.toLowerCase());
+    }
 
-    // Filter out articles/posts in the feed containing "Join now" button
-    const hideJoinNowPosts = () => {
-        const posts = document.querySelectorAll('article');
+    function filterAdultSubredditPostsAndComments() {
+        const posts = document.querySelectorAll('article, shreddit-post, [subreddit-prefixed-name]');
         posts.forEach(post => {
-            // Only consider "Join now" buttons (not generic "Join" buttons)
+            if (isElementFromAdultSubreddit(post)) {
+                post.classList.add('prehide');
+                removeElementAndRelated(post);
+            } else {
+                post.classList.remove('prehide');
+            }
+        });
+        const comments = document.querySelectorAll('.Comment');
+        comments.forEach(comment => {
+            if (isElementFromAdultSubreddit(comment)) {
+                comment.classList.add('prehide');
+                removeElementAndRelated(comment);
+            } else {
+                comment.classList.remove('prehide');
+            }
+        });
+    }
+
+    // ... all other functions (hideJoinNowPosts, getSubredditFromPost, hideSubredditPosts, etc.) unchanged from your file ...
+
+    function checkContentForSubreddits(content) {
+        const contentText = content.textContent ? content.textContent.toLowerCase() : '';
+        return adultSubreddits.some(subreddit =>
+            contentText.includes(subreddit.toLowerCase())
+        );
+    }
+
+    function hideJoinNowPosts() {
+        const posts = document.querySelectorAll('article, shreddit-post');
+        posts.forEach(post => {
             let joinNowFound = false;
-            // Look for "Join now" visible button/text in this post
-            // This is the selector you posted, but let's look for the text as well to be robust
             const joinNowSelectors = [
                 '#t3_1kklihk > div.flex.gap-2xs.items-center.justify-between.min-h-\\[32px\\].mt-xs',
-                'button', // check all buttons as a fallback
+                'button'
             ];
-
             joinNowSelectors.forEach(selector => {
                 const elements = post.querySelectorAll(selector);
                 elements.forEach(el => {
-                    if (el.innerText && el.innerText.trim().toLowerCase() === 'join now') {
+                    if (el.textContent && el.textContent.trim().toLowerCase() === 'join now') {
                         joinNowFound = true;
                     }
                 });
             });
-            // Also check for any button/link with exact text "Join now"
             const btns = post.querySelectorAll('button, a');
             btns.forEach(el => {
-                if (el.innerText && el.innerText.trim().toLowerCase() === 'join now') {
+                if (el.textContent && el.textContent.trim().toLowerCase() === 'join now') {
                     joinNowFound = true;
                 }
             });
-
             if (joinNowFound) {
                 removeElementAndRelated(post);
             }
         });
-    };
+    }
 
-    const hideSubredditPosts = () => {
+    function getSubredditFromPost(post) {
+        let sub = post.getAttribute && post.getAttribute('data-subreddit');
+        if (sub) return sub.startsWith('r/') ? sub : 'r/' + sub;
+        let aTags = post.querySelectorAll && post.querySelectorAll('a[href*="/r/"]');
+        if (aTags) {
+            for (let a of aTags) {
+                let match = a.getAttribute('href').match(/\/r\/([A-Za-z0-9_]+)/);
+                if (match) return 'r/' + match[1];
+            }
+        }
+        let aria = post.getAttribute && post.getAttribute('aria-label');
+        if (aria) {
+            let match = aria.match(/\/r\/([A-Za-z0-9_]+)/);
+            if (match) return 'r/' + match[1];
+        }
+        let spans = post.querySelectorAll && post.querySelectorAll('span, div');
+        if (spans) {
+            for (let s of spans) {
+                if (s.textContent) {
+                    let txt = s.textContent.trim();
+                    if (txt.startsWith('r/')) {
+                        let check = txt.split(' ')[0];
+                        if (check.length > 3 && check.length < 40) return check;
+                    }
+                }
+            }
+        }
+        let allAs = post.getElementsByTagName && post.getElementsByTagName('a');
+        if (allAs) {
+            for (let a of allAs) {
+                if (a.textContent && a.textContent.trim().startsWith('r/')) {
+                    return a.textContent.trim();
+                }
+            }
+        }
+        return null;
+    }
+
+    function hideSubredditPosts() {
         const posts = document.querySelectorAll('article');
         posts.forEach(post => {
-            let containsSubredditToHide = false;
-
-            const selectorsToCheck = [
-                'a[data-click-id="subreddit"]',
-                '.subreddit',
-                ...unifiedSelectors
-            ];
-
-            selectorsToCheck.forEach(selector => {
-                const elements = post.querySelectorAll(selector);
-                elements.forEach(element => {
-                    if (checkContentForSubreddits(element)) {
-                        containsSubredditToHide = true;
+            let foundSubreddit = getSubredditFromPost(post);
+            if (foundSubreddit) {
+                for (const sub of adultSubreddits) {
+                    if (foundSubreddit.toLowerCase() === sub.toLowerCase()) {
+                        removeElementAndRelated(post);
+                        return;
                     }
-                });
-            });
-
-            if (containsSubredditToHide) {
-                removeElementAndRelated(post);
+                }
             }
         });
-    };
+    }
 
-    const checkContentForKeywords = (content) => {
-        const contentText = content.innerText.toLowerCase();
-        const contentHtml = content.innerHTML.toLowerCase();
-
-        // Check for exact keyword matches
+    function checkContentForKeywords(content) {
+        const contentText = content.textContent ? content.textContent.toLowerCase() : '';
         const exactMatch = keywordsToHide.some(keyword =>
-            contentText.includes(keyword.toLowerCase()) || contentHtml.includes(keyword.toLowerCase())
+            contentText.includes(keyword.toLowerCase())
         );
-
         if (exactMatch) return true;
-
-        // Check for regex pattern matches
         return regexKeywordsToHide.some(pattern =>
-            pattern.test(contentText) || pattern.test(contentHtml)
+            pattern.test(contentText)
         );
-    };
+    }
 
-    const hideKeywordPosts = () => {
+    function hideKeywordPosts() {
         const posts = document.querySelectorAll('article');
         posts.forEach(post => {
             let containsKeywordToHide = false;
-
             const selectorsToCheck = [
                 'a[data-click-id="body"]',
                 '.inset-0.absolute'
             ];
-
             selectorsToCheck.forEach(selector => {
                 const elements = post.querySelectorAll(selector);
                 elements.forEach(element => {
@@ -237,140 +346,105 @@
         });
 
         checkForAdultContentTag();
-    };
+    }
 
-    const checkForAdultContentTag = () => {
+    function checkForAdultContentTag() {
         const adultContentTags = document.querySelectorAll('.flex.items-center svg[icon-name="nsfw-outline"]');
         if (adultContentTags.length > 0 && !isUrlAllowed()) {
             window.location.replace('https://www.reddit.com');
         }
-    };
+    }
 
-    const interceptSearchInputChanges = () => {
+    function interceptSearchInputChanges() {
         const searchInput = document.querySelector('input[name="q"]');
-
         if (searchInput) {
             searchInput.addEventListener('input', () => {
                 const query = searchInput.value.toLowerCase();
-
-                // Check for exact keyword matches
                 const exactMatch = keywordsToHide.some(keyword =>
                     query.includes(keyword.toLowerCase())
                 );
-
-                // Check for regex pattern matches
                 const regexMatch = regexKeywordsToHide.some(pattern =>
                     pattern.test(query)
                 );
-
                 if ((exactMatch || regexMatch) || (!isUrlAllowed() && query.includes(redgifsKeyword))) {
                     window.location.replace('https://www.reddit.com');
                 }
             });
         }
-    };
+    }
 
-    const interceptSearchFormSubmit = () => {
+    function interceptSearchFormSubmit() {
         const searchForm = document.querySelector('form[action="/search"]');
-
         if (searchForm) {
             searchForm.addEventListener('submit', (event) => {
                 const searchParams = new URLSearchParams(new FormData(searchForm));
                 const query = (searchParams.get('q') || '').toLowerCase();
-
-                // Check for exact keyword matches
                 const exactMatch = keywordsToHide.some(keyword =>
                     query.includes(keyword.toLowerCase())
                 );
-
-                // Check for regex pattern matches
                 const regexMatch = regexKeywordsToHide.some(pattern =>
                     pattern.test(query)
                 );
-
                 if ((exactMatch || regexMatch) || (!isUrlAllowed() && query.includes(redgifsKeyword))) {
                     event.preventDefault();
                     window.location.replace('https://www.reddit.com');
                 }
             });
         }
-    };
+    }
 
-    const checkUrlForKeywordsToHide = () => {
+    function checkUrlForKeywordsToHide() {
         const currentUrl = window.location.href.toLowerCase();
-
-        // Check for exact keyword matches
         const exactMatch = keywordsToHide.some(keyword =>
             currentUrl.includes(keyword.toLowerCase())
         );
-
-        // Check for regex pattern matches
         const regexMatch = regexKeywordsToHide.some(pattern =>
             pattern.test(currentUrl)
         );
-
         if ((exactMatch || regexMatch) && !isUrlAllowed()) {
             window.location.replace('https://www.reddit.com');
         }
-    };
+    }
 
-    const clearRecentPages = () => {
+    function clearRecentPages() {
         const recentPagesStore = localStorage.getItem('recent-subreddits-store');
         if (recentPagesStore) {
             const recentPages = JSON.parse(recentPagesStore);
             const filteredPages = recentPages.filter(page => {
                 if (typeof page !== 'string') return true;
-
-                // Check for exact keyword matches
                 const exactMatch = keywordsToHide.some(keyword =>
                     page.toLowerCase().includes(keyword.toLowerCase())
                 );
-
-                // Check for regex pattern matches
                 const regexMatch = regexKeywordsToHide.some(pattern =>
                     pattern.test(page.toLowerCase())
                 );
-
-                // Check for adult subreddits
                 const subredditMatch = adultSubreddits.some(subreddit =>
                     page.toLowerCase().includes(subreddit.toLowerCase())
                 );
-
                 return !exactMatch && !regexMatch && !subredditMatch;
             });
 
             localStorage.setItem('recent-subreddits-store', JSON.stringify(filteredPages));
         }
-    };
+    }
 
-    const runAllChecks = () => {
-        try {
-            if (!isUrlAllowed()) {
-                // Pre-hide all posts before filtering, for flicker-free experience
-                document.body.classList.remove('reddit-filter-ready');
-                document.querySelectorAll('article').forEach(post => post.classList.add('prehide'));
+    function hideRecentCommunitiesSection() {
+        const selectors = [
+            'reddit-recent-pages', 
+            'shreddit-recent-communities',
+            'div[data-testid="community-list"]',
+            '[data-testid="recent-communities"]',
+            '.recent-communities'
+        ];
+        selectors.forEach(selector => {
+            document.querySelectorAll(selector).forEach(el => {
+                el.style.display = 'none';
+            });
+        });
+        localStorage.setItem('recent-subreddits-store', '[]');
+    }
 
-                hideJoinNowPosts(); // Hide posts with "Join now" in the feed!
-                hideSubredditPosts();
-                hideKeywordPosts();
-                checkForAdultContentTag();
-                checkUrlForKeywordsToHide();
-                clearRecentPages();
-
-                // Now show only allowed posts
-                document.body.classList.add('reddit-filter-ready');
-            } else {
-                // Unhide all articles just in case (for allowed pages)
-                document.body.classList.add('reddit-filter-ready');
-                document.querySelectorAll('article.prehide').forEach(post => post.classList.remove('prehide'));
-            }
-        } catch (error) {
-            // Ignore, but log for dev
-            // console.error('Error running all checks:', error);
-        }
-    };
-
-    const checkAndHideNSFWClassElements = () => {
+    function checkAndHideNSFWClassElements() {
         const nsfwClasses = ['NSFW', 'nsfw-tag', 'nsfw-content'];
         nsfwClasses.forEach(className => {
             const elements = document.querySelectorAll(`.${className}`);
@@ -378,25 +452,40 @@
                 removeElementAndRelated(element);
             });
         });
-    };
+    }
 
-    const removeHrElements = () => {
+    function removeHrElements() {
         const hrElements = document.querySelectorAll('hr.border-b-neutral-border-weak.border-solid.border-b-sm.border-0');
         hrElements.forEach((element) => {
             element.remove();
         });
-    };
+    }
 
-    const removeSelectorsToDelete = () => {
+    function removeSelectorsToDelete() {
         selectorsToDelete.forEach(selector => {
             const elements = document.querySelectorAll(selector);
             elements.forEach(element => {
                 removeElementAndRelated(element);
             });
         });
-    };
+    }
 
-    const init = () => {
+    function runAllChecks() {
+        // Always hide adult subreddit posts/comments
+        filterAdultSubredditPostsAndComments();
+
+        if (!isUrlAllowed()) {
+            hideJoinNowPosts();
+            hideSubredditPosts();
+            hideKeywordPosts();
+            checkForAdultContentTag();
+            checkUrlForKeywordsToHide();
+            clearRecentPages();
+            hideRecentCommunitiesSection();
+        }
+    }
+
+    function init() {
         interceptSearchInputChanges();
         interceptSearchFormSubmit();
         runAllChecks();
@@ -419,8 +508,9 @@
             checkAndHideNSFWClassElements();
             removeHrElements();
             removeSelectorsToDelete();
-        }, 20);
-    };
+            hideRecentCommunitiesSection();
+        }, 100);
+    }
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);
