@@ -369,6 +369,8 @@
         "Velvet Sky",
         "Angelina Love",
         "ODB",
+	"Shirai",
+	"shirakawa",
         "Brooke Tessmacher",
         "Havok",
         "Su Yung",
