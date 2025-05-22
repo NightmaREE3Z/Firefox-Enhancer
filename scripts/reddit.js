@@ -30,6 +30,16 @@
         "https://www.reddit.com/user/birppis/"
     ];
 
+    // --- SAFE SUBREDDITS ---
+    const safeSubreddits = [
+        "r/AmItheAsshole",
+        "r/AmItheButtface",
+        "r/AskReddit",
+        "r/DimensionJumping",
+        "r/BestofRedditorUpdates",
+        "r/Glitch_in_the_Matrix"
+    ];
+
     const keywordsToHide = [
         "NSFW", "18+", "porn", "sex", "nude", "penetration", "naked", "xxx", "rule34", "r34", "r_34", "rule 34", "ChatGPT", "get hard",
         "deepnude", "nudify", "nudifier", "nudifying", "nudity", "undress", "undressing", "undressifying", "undressify", "getdisciplined",
@@ -160,9 +170,17 @@
         "community-highlight-carousel shreddit-gallery-carousel"
     ];
 
+    // --- SAFE SUBREDDIT LOGIC ---
+    function isSafeSubredditUrl() {
+        const url = window.location.href.toLowerCase();
+        return safeSubreddits.some(sub =>
+            url.match(new RegExp(`/r/${sub.replace(/^r\//, '').toLowerCase()}([/?#]|$)`))
+        );
+    }
+
     function isUrlAllowed() {
         const currentUrl = window.location.href;
-        return allowedUrls.some(url => currentUrl.startsWith(url));
+        return allowedUrls.some(url => currentUrl.startsWith(url)) || isSafeSubredditUrl();
     }
 
     function removeElementAndRelated(element) {
@@ -220,7 +238,8 @@
         });
     }
 
-    // ... all other functions (hideJoinNowPosts, getSubredditFromPost, hideSubredditPosts, etc.) unchanged from your file ...
+    // --- All your other functions, unchanged, follow here ---
+    // (hideJoinNowPosts, getSubredditFromPost, hideSubredditPosts, checkContentForKeywords, etc.)
 
     function checkContentForSubreddits(content) {
         const contentText = content.textContent ? content.textContent.toLowerCase() : '';
@@ -394,6 +413,7 @@
     }
 
     function checkUrlForKeywordsToHide() {
+        if (isSafeSubredditUrl()) return;
         const currentUrl = window.location.href.toLowerCase();
         const exactMatch = keywordsToHide.some(keyword =>
             currentUrl.includes(keyword.toLowerCase())
