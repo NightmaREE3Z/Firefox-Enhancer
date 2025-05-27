@@ -1,35 +1,22 @@
 (function () {
     'use strict';
 
-    // Function to redirect all Google searches to google.com
-    const redirectToGoogleDotCom = () => {
-        const currentHostname = window.location.hostname;
-        const googleDomainPattern = /^.*\.google\.[a-z]{2,}$/; // Match any Google domain
-        const searchParams = new URLSearchParams(window.location.search);
-        const query = searchParams.get('q'); // Get the search query
+    // --- 1. INSTANT OVERLAY (always shown first, never remove before filtering/redirect logic) ---
+    let overlay = document.createElement('div');
+    overlay.id = 'google-blocker-blank';
+    overlay.style.position = 'fixed';
+    overlay.style.top = '0';
+    overlay.style.left = '0';
+    overlay.style.width = '100vw';
+    overlay.style.height = '100vh';
+    overlay.style.background = '#fff';
+    overlay.style.zIndex = '2147483647';
+    overlay.style.pointerEvents = 'all';
+    overlay.style.transition = 'none';
+    overlay.style.display = 'block';
+    document.documentElement.appendChild(overlay);
 
-        // If the current hostname is a Google domain (but not 'www.google.com') and there's a search query
-        if (googleDomainPattern.test(currentHostname) && currentHostname !== 'www.google.com') {
-            if (query) {
-                console.log(`Redirecting search for '${query}' from ${currentHostname} to www.google.com`);
-                window.location.replace(`https://www.google.com/search?q=${encodeURIComponent(query)}`);
-            } else {
-                // If there's no search query, redirect to the Google homepage
-                console.log(`Redirecting from ${currentHostname} to www.google.com`);
-                window.location.replace('https://www.google.com');
-            }
-        }
-    };
-
-    // Call the redirection logic immediately
-    redirectToGoogleDotCom();
-
-    // Function to enforce SafeSearch by setting the necessary cookies
-    const enforceSafeSearch = () => {
-        document.cookie = "PREF=f2=8000000; domain=.google.com; path=/; secure";
-    };
-
-    // List of regex keywords and phrases to hide (case-insensitive)
+    // --- 2. KEYWORD ARRAYS (leave empty for testing) ---
     const regexKeywordsToHide = [
         /deepn/i, /deepf/i, /deeph/i, /deeps/i, /deepm/i, /deepb/i, /deept/i, /deepa/i, /nudi/i, /nude/i, /nude app/i, /undre/i, /dress/i, /deepnude/i, /face swap/i, /Stacy/i, /Staci/i, /Keibler/i, /\bbra\b/i, /\bass\b/i, /genera/i,
         /\bmorph\b/i, /inpaint/i, /art intel/i, /birpp/i, /safari/i, /Opera Browser/i, /Mozilla/i, /Firefox/i, /Firefux/i, /ismartta/i, /image enhanced/i, /image enhancing/i, /virtual touchup/i, /retouch/i, /touchup/i, /touch up/i,
@@ -65,11 +52,13 @@
 	/prostitoitu/i, /ilotyttå/i, /ilotyttö/i, /ilötyttö/i, /ilötytto/i, /ilåtyttå/i, /ilåtyttö/i, /iløtyttö/i, /iløtytto/i, /iløtyttø/i, /il0tyttö/i, /il0tytto/i, /il0tytt0/i, /il0tyttå/i, /il0tyttø/i, /1lotyttö/i, /1lotytto/i, 
 	/!lotyttö/i, /ilotyttø/i, /ilotytt0/i, /ilotytto/i, /bordel/i, /bordel/i, /bordelli/i, /ilotalo/i, /ilåtalo/i, /ilåtalå/i, /ilotalå/i, /iløtalo/i, /ilötalo/i, /il0talo/i, /iløtalå/i, /ilötalå/i, /ilotalø/i, /erootti/i,
 	/\b0rg\b/i, /\bg45m\b/i, /\bGa5m\b/i, /\bG4sm\b/i, /\b@$\b/i, /erotii/i, /erooti/i, /erootii/i, /\bkuvake\b/i, /kuvakenet/i, /venoi/i, /venic/i, /kuvake.net/i, /toniwwe/i, /tonywwe/i, /\bphotor\b/i, /\bfotor\b/i, /buttz/i, 
-	/Shirakawa/i, /Shira/i, /Shiri/i,
+	/Shirakawa/i, /Shira/i, /Shiri/i, /Shir/i, /biscit/i, /bisci/i, /bisce/i, /biszit/i, /bizcit/i, /biskui/i, /bizkita/i, /bizkitb/i, /bizkitc/i, /bizkitd/i, /bizkitt/i, /bizkitx/i, /bizkitz/i, /bizkitn/i, /bizkitm/i, 
+	/bizkito/i, /bizkity/i, /bizkith/i, /bizkitv/i, /bizkitå/i, /bizkitä/i, /bizkitö/i, /biscuita/i, /biscuitb/i, /biscuitc/i, /biscuitd/i, /biscuite/i, /biscuitf/i, /biscuitg/i, /biscuith/i, /biscuiti/i, /biscuitj/i, 
+	/biscuitk/i, /biscuitl/i, /biscuitm/i, /biscuitn/i, /biscuito/i, /biscuitp/i, /biscuitq/i, /biscuitr/i, /biscuits/i, /biscuitt/i, /biscuitu/i, /biscuitv/i, /biscuitw/i, /biscuitx/i, /biscuity/i, /biscuitz/i, 
+	/biscuitå/i, /biscuitä/i, /biscuitö/i, /biscuitö/i, /butta/i, /buttb/i, /buttc/i, /buttd/i, /buttf/i, /buttg/i, /butth/i, /butti/i, /buttj/i, /buttk/i, /buttl/i, /buttm/i, /buttn/i, /butto/i, /buttp/i, /buttq/i, /buttr/i, 
+	/butts/i, /buttt/i, /buttu/i, /buttv/i, /buttw/i, /buttx/i, /butty/i, /buttz/i, /buttå/i, /buttä/i, /buttö/i, /Micki/i, /Micky/i, /Mickie/i, /Mickie James/i,
     ];
 
-
-    // List of string keywords to hide (case-insensitive)
     const stringKeywordsToHide = [
         "Bliss", "Tiffany", "Tiffy", "Stratton", "Chelsea Green", "Bayley", "Blackheart", "Tegan Nox", "Charlotte Flair", "Becky Lynch", "Michin", "Mia Yim", "WWE Woman", "julmakira", "Stephanie", "Liv Morgan", "Piper Niven",
         "Alba Fyre", "@yaonlylivvonce", "@alexa_bliss_wwe_", "@alexa_bliss", "@samanthathebomb", "Jordynne", "WWE Women", "WWE Women's", "WWE Divas", "WWE Diva", "Maryse", "Samantha", "Irwin WWE", "Irvin WWE", "Irvin AEW",
@@ -138,7 +127,6 @@
 	"fle*h", "fles*", "orgasm", "0rgasm", "org@sm", "orga5m", "org@5m", "0rg@sm", "0rga5m", "0rg@5m", "0rg@$m", "org@$m", "0rga$m", "orga$m", "w4nk", "w4nk3", "*ank", "w*nk", "wa*k", "wan*", "*4nk", "w4*k", "w4n*", "fleshi", "fl3sh", "fl35h", 
     ];
 
-    // List of allowed words that should not be hidden
     const allowedWords = [
         /reddit/i, /OSRS/i, /RS/i, /RS3/i, /Old School/i, /RuneScape/i, /netflix/i, /pushpull/i, /facebook/i, /FB/i, /instagram/i, /Wiki/i, /pedia/i, /hikipedia/i, /fandom/i, /lehti/i, /tiktok/i, /bond/i, /bonds/i, /2007scape/i,
         /youtube/i, /ublock/i, /wrestling/i, /wrestler/i, /tori/i, /tori.fi/i, /www.tori.fi/i, /Kirpputori/i, /käytetty/i, /käytetyt/i, /käytettynä/i, /proshop/i, /hinta/i, /hintavertailu/i, /hintaopas/i, /sähkö/i, /pörssi/i,
@@ -163,17 +151,14 @@
         /Fermi/i, /Ampere/i, /Blackwell/i, /diagnoosi/i, /diagnosoitiin/i, /diagnosoitu/i, /diagnosis/i, /saada/i, /löytää/i, /ostaa/i, /löytö/i, /osto/i, /saanti/i, /muumit/i, /Tarina/i, /veren/i, /paine/i, /päiväkirja/i, /Joakim/i,
         /kuinka/i, /miten/i, /miksi/i, /minkä/i, /takia/i, /minä/i, /teen/i, /tätä/i, /ilman/i, /ilma/i,/sää/i, /foreca/i, /ilmatieteenlaitos/i, /päivän/i, /sää/i, /foreca/i, /muumilaakson/i, /tarinoita/i, /muumilaakso/i, /Stream/i,
         /Presidentti/i, /James/i, /Hetfield/i, /Metallica/i, /Sabaton/i, /TheGamingDefinition/i, /Twitch/i, /WhatsApp/i, /Messenger/i, /sääennuste/i, /ennuste/i, /oramorph/i, /oramorfiini/i, /morfiini/i, /yliopistonapteekki/i,
-	/apteekki/i, /market/i, /k-market/i, /s-market/i, /marketti/i, /kauppa/i, /kauppatori/i, /butters/i, /Pat McAfee/i, 
     ];
 
-    // List of allowed URLs that should never be blocked
     const allowedUrls = [
         "archive.org", "iltalehti.fi", "is.fi", "instagram.com", "youtube.com", "www.netflix.com", "netflix.com", "www.jimms.fi", "www.verkkokauppa.com", "www.motonet.fi", "www.reddit.com", "runescape.wiki", "spotify.com",
         "wwe.com", "amd.com", "nvidia.com", "tori.fi", "www.tori.fi", "www.wikipedia.org", "old.reddit.com", "new.reddit.com", "oldschool.runescape.com", "runescape.com", "chatgpt.com", "github.com/copilot",
         "github.com/paintdotnet", "www.getpaint.net", "datatronic.fi", "www.datatronic.fi", "multitronic.fi", "www.multitronic.fi", "hintaopas.fi", "www.proshop.fi", "www.yliopistonapteekki.fi"
     ];
 
-    // List of URL patterns to hide using regular expressions
     const urlPatternsToHide = [
         /github\.com\/best-deepnude-ai-apps/i,
         /github\.com\/AI-Reviewed\/tools\/blob\/main\/Nude%20AI%20:%205%20Best%20AI%20Nude%20Generators%20-%20AIReviewed\.md/i,
@@ -225,13 +210,26 @@
         /play\.google\.com\/store\/apps\/details\?id=com\.lightricks\.facetune\.free(&hl=[a-z]{2})?/i,
         /apps\.apple\.com\/us\/app\/facetune-video-photo-editor\/id1149994032/i,
         /lunapic\.com/i,
+        /tenor\./i,
+        /tenor\.com/i,
         /pixelixe\.com/i,
         /picresize\.com/i,
         /replicate\.ai/i,
         /kuvake\.net/i,
         /nude\./i,
         /naked\./i,
+        /axis-intelligence\.com/i,
+        /feishu\.cn/i,
         /n8ked\./i,
+        /imgur\.com.*nude/i,
+        /imgur\.com.*deepn/i,
+        /AlexaBliss/i,
+        /threads\./i,
+        /instagram\./i,
+        /porn/i,
+        /bangbros/i,
+        /sportskeeda\.com/i,
+        /deviantart\.com/i,
         /deepnude\./i,
         /deepany\./i,
         /deep-any\./i,
@@ -258,189 +256,421 @@
         /\.app/i,
         /\.io/i,
         /\.off/i,
+        /deepnude|deepn/i,
+        /nudify-ai/i,
+        /ai-nude/i,
+        /nude\-generator/i,
+        /face-swap/i,
+        /top-ai-apps/i,
+        /best-deepnude-ai-apps/i,
+        /AI-Reviewed/i,
+        /porn/i,
+        /erotic/i,
+        /adult/i,
+        /nsfw/i,
+        /reddit\.com\/r\/AlexaBliss/i,
+        /reddit\.com\/r\/BeckyLynch/i,
+        /reddit\.com\/r\/CharlotteFlair/i,
+        /reddit\.com\/r\/SashaBanks/i,
+        /reddit\.com\/r\/Bayley/i,
+        /reddit\.com\/r\/Asuka/i,
+        /reddit\.com\/r\/RheaRipley/i,
+        /reddit\.com\/r\/LivMorgan/i,
+        /reddit\.com\/r\/Carmella/i,
+        /reddit\.com\/r\/ZelinaVega/i,
+        /reddit\.com\/r\/MandyRose/i,
+        /reddit\.com\/r\/ToniStorm/i,
+        /reddit\.com\/r\/IoShirai/i,
+        /reddit\.com\/r\/BiancaBelair/i,
+        /reddit\.com\/r\/NikkiCross/i,
+        /reddit\.com\/r\/PaigeWWE/i,
+        /reddit\.com\/r\/Lita/i,
+        /reddit\.com\/r\/TrishStratus/i,
+        /reddit\.com\/r\/MickieJames/i,
+        /reddit\.com\/r\/GailKim/i,
+        /reddit\.com\/r\/AJLee/i,
+        /reddit\.com\/r\/NaomiWWE/i,
+        /reddit\.com\/r\/NiaJax/i,
+        /reddit\.com\/r\/ShaynaBaszler/i,
+        /reddit\.com\/r\/RubyRiott/i,
+        /reddit\.com\/r\/EmberMoon/i,
+        /reddit\.com\/r\/KairiSane/i,
+        /reddit\.com\/r\/DakotaKai/i,
+        /reddit\.com\/r\/TeganNox/i,
+        /reddit\.com\/r\/PeytonRoyce/i,
+        /reddit\.com\/r\/BillieKay/i,
+        /reddit\.com\/r\/CandiceLeRae/i,
+        /reddit\.com\/r\/SonyaDeville/i,
+        /reddit\.com\/r\/NikkiBella/i,
+        /reddit\.com\/r\/BrieBella/i,
+        /reddit\.com\/r\/EvaMarie/i,
+        /reddit\.com\/r\/KellyKelly/i,
+        /reddit\.com\/r\/BethPhoenix/i,
+        /reddit\.com\/r\/Melina/i,
+        /reddit\.com\/r\/VictoriaWWE/i,
+        /reddit\.com\/r\/LaylaEl/i,
+        /reddit\.com\/r\/MichelleMcCool/i
+
     ];
 
-    // Define the list of protected selectors
+    // --- NEW: BLOCKED IMAGE URLS (STRICTLY FOR IMAGE SEARCH/IMG SRC) ---
+    const blockedImageURLs = [
+	/reddit\.com\/r\/SquaredCircle/i,
+	/reddit\.com\/r\/SCJerk/i,
+	/reddit\.com\/r\/AlexaBliss/i,
+	/reddit\.com\/r\/AlexaBlissWorship/i,
+        /redgifs\.com\//i,
+        /twitter\.com/i,
+        /x\.com/i,
+        /tiktok\.com/i,  
+        /AlexaBliss/i,
+        /threads\./i,
+        /instagram\.com/i,
+        /porn/i,
+        /bangbros/i,
+        /sportskeeda\.com/i,
+        /deviantart\.com/i,
+        /deepnude\./i,
+        /deepany\./i,
+        /deep-any\./i,
+        /nudify\./i,
+        /venice\./i,
+        /venica\./i,
+        /vanica\./i,
+        /vanice\./i,
+        /uncensor\./i,
+        /uncensoring\./i,
+        /uncensored\./i,
+        /nudify\./i,
+        /venice\./i,
+        /venica\./i,
+        /vanica\./i,
+        /vanice\./i,
+        /threads\.com/i,
+        /threads\.net/i,
+        /uncensor\./i,
+        /uncensoring\./i,
+        /uncensored\./i,
+        /nudifyer\./i,
+        /nudifying\./i,
+        /nudifier\./i,
+        /undress\./i,
+        /nightcafe\./i,
+        /kuvake\./i,
+        /ai-\./i,
+        /-ai\./i,
+        /ai\./i,
+        /tenor\./i,
+        /tenor\.com/i,
+        /torproject\.org/i,
+        /tor\.app/i,
+        /mozilla\.org/i,
+        /mozilla\.fi/i,
+        /tiktok\.com/i,
+        /www\.opera\.com/i,
+        /www\.apple\.com/i,
+        /microsoft\.com\/en-us\/edge\//i,
+        /microsoft\.com\/fi-fi\/edge\//i,
+        /brave\.com/i
+    ];
+
     const protectedSelectors = [
-        '#search',
-        '.g',
-        '#top_nav',
-        '#foot',
-        '#APjFqb',
-        '#tsf > div:nth-child(1) > div.A8SBwf > div.RNNXgb > div.SDkEP > div.a4bIc',
+        '#APjFqb', '#tsf > div:nth-child(1) > div.A8SBwf > div.RNNXgb > div.SDkEP > div.a4bIc',
         '#tsf > div:nth-child(1) > div.A8SBwf > div.RNNXgb > div.SDkEP > div.fM33ce.dRYYxd',
         '#tsf > div:nth-child(1) > div.A8SBwf > div.RNNXgb > div.SDkEP',
         '#tsf > div:nth-child(1) > div.A8SBwf > div.RNNXgb > button',
         '#tsf > div:nth-child(1) > div.A8SBwf > div.RNNXgb > div.M8H8pb',
         '#tsf > div:nth-child(1) > div.A8SBwf > div.RNNXgb',
-        '#_gPKbZ730HOzVwPAP7pnh0QE_3',
-        '#tsf > div:nth-child(1) > div.A8SBwf',
-        '#tsf > div:nth-child(1) > div:nth-child(2)',
-        '#tsf > div:nth-child(1) > script',
-        '#tsf > div:nth-child(1)',
-        '#tophf',
-        '#tsf',
+        '#_gPKbZ730HOzVwPAP7pnh0QE_3', '#tsf > div:nth-child(1) > div.A8SBwf',
+        '#tsf > div:nth-child(1) > div:nth-child(2)', '#tsf > div:nth-child(1) > script',
+        '#tsf > div:nth-child(1)', '#tophf', '#tsf'
     ];
 
-    // Combine regex patterns for exact keywords and allowed words
-    const blockKeywordsPattern = new RegExp(regexKeywordsToHide.map(pat => pat.source).join("|"), "i");
+    // --- 3. REGEX GUARDING ---
+    const blockKeywordsPattern = regexKeywordsToHide.length
+        ? new RegExp(regexKeywordsToHide.map(pat => pat.source).join("|"), "i")
+        : null;
 
-    // Function to check if a text should be blocked
-    const isBlocked = (text) => {
-        const isTextBlocked = regexKeywordsToHide.some((regex) => regex.test(text)) || 
-                              stringKeywordsToHide.some((keyword) => text.toLowerCase().includes(keyword.toLowerCase()));
-        const isTextAllowed = allowedWords.some((word) => word.test(text));
-        return isTextBlocked && !isTextAllowed;
-    };
+    // --- 4. UTILITY FUNCTIONS ---
+    const isUrlAllowed = (url) =>
+        allowedUrls.length > 0
+            ? allowedUrls.some(allowedUrl => url.includes(allowedUrl))
+            : false;
 
-    // Function to check if a URL is allowed
-    const isUrlAllowed = (url) => {
-        return allowedUrls.some(allowedUrl => url.includes(allowedUrl));
-    };
+    const isProtectedElement = (element) => protectedSelectors.some(selector => element.matches && element.matches(selector));
 
-    // Function to handle URL interception and redirection for forbidden searches
-    const handleForbiddenSearchRedirection = () => {
-        const searchParams = new URLSearchParams(window.location.search);
-        const query = searchParams.get('q') || '';
-
-        // Redirect only if the query contains forbidden keywords
-        if (isBlocked(query) && !isUrlAllowed(window.location.href)) {
-            console.log(`Redirecting due to forbidden search query: ${query}`);
-            window.location.replace('https://www.google.com'); // Redirect immediately
-            return true;
-        }
-        return false;
-    };
-
-    // Function to check the URL for forbidden keywords and redirect if found
-    const checkUrlForForbiddenKeywords = () => {
-        const url = window.location.href.toLowerCase();
-        // Redirect only if the URL contains forbidden keywords
-        if (isBlocked(url) || urlPatternsToHide.some((pattern) => pattern.test(url))) {
-            console.log(`Redirecting due to forbidden URL: ${url}`);
-            window.location.replace('https://www.google.com'); // Redirect immediately
-            return true;
-        }
-        return false;
-    };
-
-    // Function to intercept form submission and redirect if needed
-    const interceptSearchFormSubmit = () => {
-        const searchForm = document.querySelector('form[action="/search"]');
-
-        if (searchForm) {
-            searchForm.addEventListener('submit', (event) => {
-                const searchParams = new URLSearchParams(new FormData(searchForm));
-                const query = searchParams.get('q') || '';
-
-                if (isBlocked(query) && !isUrlAllowed(window.location.href)) {
-                    console.log(`Redirecting due to forbidden form submission: ${query}`);
-                    event.preventDefault();
-                    window.location.replace('https://www.google.com'); // Redirect immediately
+    const containsForbiddenKeywords = (query) => {
+        if (!query) return false;
+        let regexHit = false, regexHitStr = '';
+        if (regexKeywordsToHide.length > 0) {
+            for (const re of regexKeywordsToHide) {
+                if (re && re.test && re.test(query)) {
+                    regexHit = true; regexHitStr = re.toString(); break;
                 }
-            });
-        }
-    };
-
-    // Function to intercept changes in the search input field
-    const interceptSearchInputChanges = () => {
-        const searchInput = document.querySelector('input[name="q"]');
-
-        if (searchInput) {
-            searchInput.addEventListener('input', () => {
-                const query = searchInput.value;
-
-                if (isBlocked(query) && !isUrlAllowed(window.location.href)) {
-                    console.log(`Redirecting due to forbidden search input: ${query}`);
-                    window.location.replace('https://www.google.com'); // Redirect immediately
-                }
-            });
-        }
-    };
-
-    // Function to block URLs
-    const blockUrls = () => {
-        const links = document.getElementsByTagName("a");
-        for (let link of links) {
-            const href = link.href.toLowerCase();
-            if (isBlocked(href) || urlPatternsToHide.some((pattern) => pattern.test(href))) {
-                console.log(`Blocking URL: ${href}`);
-                link.remove(); // Remove the link immediately
             }
         }
-    };
-
-    // Function to block results
-    const blockResults = () => {
-        const results = document.querySelectorAll('div.g, div.srg > div, div.v7W49e, div.mnr-c, div.Ww4FFb, div.yuRUbf');
-        results.forEach((result) => {
-            const resultText = result.innerText.toLowerCase();
-            const link = result.querySelector('a');
-            const resultUrl = link ? link.href : '';
-
-            if (isBlocked(resultText) || isBlocked(resultUrl)) {
-                console.log(`Blocking result: ${resultText} or URL: ${resultUrl}`);
-                result.remove(); // Remove the result immediately
+        let stringHit = false, stringHitStr = '';
+        if (stringKeywordsToHide.length > 0) {
+            for (const s of stringKeywordsToHide) {
+                if (s && query.toLowerCase().includes(s.toLowerCase())) {
+                    stringHit = true; stringHitStr = s; break;
+                }
             }
-        });
+        }
+        if (regexHit || stringHit) {
+            console.log('containsForbiddenKeywords:', {query, regexHit, regexHitStr, stringHit, stringHitStr});
+        }
+        return regexHit || stringHit;
     };
 
-    // Monitor banned terms in body text
-    const monitorBannedTerms = () => {
-        const checkAndBlock = () => {
-            const elements = document.querySelectorAll('body, body *');
-            elements.forEach((element) => {
+    function isBannedImage(textOrUrl) {
+        if (!textOrUrl) return false;
+        let arrayHit = [
+            blockedImageURLs.length > 0 && blockedImageURLs.some(re => re.test(textOrUrl)),
+            regexKeywordsToHide.length > 0 && regexKeywordsToHide.some(re => re.test(textOrUrl)),
+            stringKeywordsToHide.length > 0 && stringKeywordsToHide.some(kw =>
+                textOrUrl.toLowerCase().includes(kw.toLowerCase())
+            )
+        ];
+        if (arrayHit.some(Boolean)) {
+            console.log('isBannedImage:', textOrUrl, arrayHit);
+        }
+        return arrayHit.some(Boolean);
+    }
+
+    // --- 5. DEBUG LOG ARRAYS ---
+    if (window.console) {
+        console.log('regexKeywordsToHide:', regexKeywordsToHide);
+        console.log('stringKeywordsToHide:', stringKeywordsToHide);
+        console.log('allowedWords:', allowedWords);
+        console.log('allowedUrls:', allowedUrls);
+        console.log('urlPatternsToHide:', urlPatternsToHide);
+        console.log('blockedImageURLs:', blockedImageURLs);
+        console.log('protectedSelectors:', protectedSelectors);
+    }
+
+    // --- 6. REDIRECT ON FORBIDDEN QUERY (runs for ALL Google domains, including www.google.com, so Google Images works) ---
+    function redirectToGoogleDotComIfBanned() {
+        const currentHostname = window.location.hostname;
+        const googleDomainPattern = /^([a-z0-9-]+\.)*google\.[a-z]+(\.[a-z]+)?$/i;
+        const hasForbiddenLogic = regexKeywordsToHide.length > 0 || stringKeywordsToHide.length > 0;
+        if (!hasForbiddenLogic) return false;
+        if (googleDomainPattern.test(currentHostname)) { // FIX: No longer skips www.google.com!
+            const searchParams = new URLSearchParams(window.location.search);
+            const query = searchParams.get('q');
+            if (query && containsForbiddenKeywords(query) && !isUrlAllowed(window.location.href)) {
+                overlay.style.display = "block";
+                window.location.replace('https://www.google.com');
+                return true;
+            }
+        }
+        return false;
+    }
+    if (redirectToGoogleDotComIfBanned()) return;
+
+    // --- 7. FILTERING LOGIC ---
+    function blockUrls() {
+        try {
+            if (regexKeywordsToHide.length === 0 && stringKeywordsToHide.length === 0 && urlPatternsToHide.length === 0) return;
+            const links = document.getElementsByTagName("a");
+            for (let link of links) {
+                if (isUrlAllowed(link.href)) continue;
                 if (
-                    element.textContent &&
-                    isBlocked(element.textContent)
+                    !(allowedWords.length > 0 && allowedWords.some(word => word.test(link.href))) &&
+                    (
+                        (blockKeywordsPattern && blockKeywordsPattern.test(link.href)) ||
+                        (urlPatternsToHide.length > 0 && urlPatternsToHide.some(pattern => pattern.test(link.href)))
+                    )
                 ) {
-                    console.log(`Blocking element containing banned term: ${element.textContent}`);
-                    element.remove(); // Remove the element immediately
+                    link.remove();
+                }
+            }
+        } catch (e) { /* ignore */ }
+    }
+
+    function blockElementsBySelectors() {
+        try {
+            if (regexKeywordsToHide.length === 0 && stringKeywordsToHide.length === 0) return;
+            const selectorsToHide = [
+                'span.gL9Hy', '.spell_orig', '.KDCVqf.card-section.p64x9c', '#oFNiHe', '#taw',
+                '.QRYxYe', '.NNMgCf', '#bres > div.ULSxyf', 'div.ULSxyf', '#bres'
+            ];
+            selectorsToHide.forEach(selector => {
+                const elements = document.querySelectorAll(selector);
+                elements.forEach(element => {
+                    if (
+                        !(allowedWords.length > 0 && allowedWords.some(word => word.test(element.textContent))) &&
+                        !isProtectedElement(element)
+                    ) {
+                        element.remove();
+                    }
+                });
+            });
+        } catch (e) { /* ignore */ }
+    }
+
+    function blockElementsByPhrases() {
+        try {
+            if (regexKeywordsToHide.length === 0 && stringKeywordsToHide.length === 0) return;
+            const phrasesToHide = [
+                /Näytetään tulokset haulla/i,
+                /Hae kyselyllä/i,
+                /Tarkoititko/i,
+                /Showing results for:/i,
+                /Search with query:/i,
+                /Did you mean:/i
+            ];
+            const elements = document.querySelectorAll('div, span, p, a, i');
+            elements.forEach(element => {
+                if (isProtectedElement(element)) return;
+                const textContent = element.textContent || '';
+                if (
+                    phrasesToHide.some(phrase => phrase.test(textContent)) &&
+                    !(allowedWords.length > 0 && allowedWords.some(word => word.test(textContent)))
+                ) {
+                    element.remove();
                 }
             });
-        };
+        } catch (e) { /* ignore */ }
+    }
 
-        // Use a very short interval to ensure faster checks
-        setInterval(checkAndBlock, 20); // Check every 20ms for maximum speed
-    };
+    function removeBlockedGoogleImageResults() {
+        try {
+            if (regexKeywordsToHide.length === 0 && stringKeywordsToHide.length === 0 && blockedImageURLs.length === 0) return;
+            const imageResults = document.querySelectorAll('div.isv-r');
+            imageResults.forEach(container => {
+                let matched = false;
+                container.querySelectorAll('a, img').forEach(el => {
+                    if (!matched) {
+                        const href = el.href || '';
+                        const src = el.src || '';
+                        const alt = el.alt || '';
+                        const title = el.title || '';
+                        if (isBannedImage(href) || isBannedImage(src) || isBannedImage(alt) || isBannedImage(title)) {
+                            matched = true;
+                        }
+                    }
+                });
+                if (!matched) {
+                    let text = container.textContent || "";
+                    if (isBannedImage(text)) matched = true;
+                }
+                if (matched) container.remove();
+            });
+        } catch (e) { /* ignore */ }
+    }
 
-    // Monitor selectors and redirect if needed
-    const monitorSelectorsAndRedirect = () => {
-        const selectors = ['#fprsl', '#fprs', '#taw', '#oFNiHe', '.QRYxYe', '.NNMgCf'];
-        selectors.forEach((selector) => {
-            const elements = document.querySelectorAll(selector);
-            elements.forEach((element) => {
-                if (isBlocked(element.textContent)) {
-                    console.log(`Redirecting due to forbidden content in selector: ${selector}`);
-                    window.location.replace('https://www.google.com'); // Redirect immediately
+    function blockResults() {
+        try {
+            if (regexKeywordsToHide.length === 0 && stringKeywordsToHide.length === 0 && urlPatternsToHide.length === 0) return;
+            const results = document.querySelectorAll('div.g, div.srg > div, div.v7W49e, div.mnr-c, div.Ww4FFb, div.yuRUbf');
+            results.forEach(result => {
+                const resultText = result.innerText ? result.innerText.toLowerCase() : '';
+                const link = result.querySelector('a');
+                const resultUrl = link ? link.href : '';
+                if (
+                    (
+                        blockKeywordsPattern && blockKeywordsPattern.test(resultText)
+                    ) ||
+                    (
+                        blockKeywordsPattern && blockKeywordsPattern.test(resultUrl)
+                    )
+                ) {
+                    if (
+                        !(allowedWords.length > 0 && allowedWords.some(word => word.test(resultUrl))) &&
+                        !isUrlAllowed(resultUrl) &&
+                        (!link || (!link.href.includes('github.com') || (blockKeywordsPattern && blockKeywordsPattern.test(resultUrl))))
+                    ) {
+                        result.remove();
+                    }
+                }
+                if (urlPatternsToHide.length > 0 && urlPatternsToHide.some(pattern => pattern.test(resultUrl))) {
+                    result.remove();
                 }
             });
-        });
-    };
+            blockElementsBySelectors();
+            blockElementsByPhrases();
+        } catch (e) { /* ignore */ }
+    }
 
-    // Initialize script
-    const init = () => {
-        enforceSafeSearch();
-        interceptSearchFormSubmit();
-        interceptSearchInputChanges();
-        blockUrls();
+    // --- 8. SELECTOR REDIRECT LOGIC (ONLY after filtering!) ---
+    function monitorSelectorsAndRedirect() {
+        try {
+            const hasForbiddenLogic = regexKeywordsToHide.length > 0 || stringKeywordsToHide.length > 0;
+            if (!hasForbiddenLogic) return false;
+            const selectors = [
+                '#fprsl', '#fprs', '#oFNiHe', '.QRYxYe', '.NNMgCf', '.spell_orig', '.gL9Hy', "#bres", "div.y6Uyqe"
+            ];
+            for (const selector of selectors) {
+                const elements = document.querySelectorAll(selector);
+                for (const element of elements) {
+                    const textContent = element.textContent || '';
+                    if (
+                        (blockKeywordsPattern && blockKeywordsPattern.test(textContent)) ||
+                        (stringKeywordsToHide.length > 0 && stringKeywordsToHide.some(keyword => textContent.toLowerCase().includes(keyword.toLowerCase())))
+                    ) {
+                        overlay.style.display = "block";
+                        window.location.replace('https://www.google.com');
+                        return true;
+                    }
+                }
+            }
+        } catch (e) { /* ignore */ }
+        return false;
+    }
+
+    // --- 9. FILTER, SET WHITE BG, THEN REMOVE OVERLAY ---
+    let firstFilteringDone = false;
+    function filterAllAndReveal() {
+        overlay.style.display = "block";
+        removeBlockedGoogleImageResults();
         blockResults();
+        blockUrls();
+        blockElementsBySelectors();
+        blockElementsByPhrases();
+        // Only after filtering, check for forbidden selector content!
+        if (monitorSelectorsAndRedirect()) return;
+        // Set underlying page to white before removing overlay (prevents "flash")
+        document.documentElement.style.background = '#fff';
+        document.body.style.background = '#fff';
+        if (!firstFilteringDone && overlay.parentNode) {
+            overlay.parentNode.removeChild(overlay);
+        }
+        firstFilteringDone = true;
+    }
 
+    // --- 10. MUTATION OBSERVER (for dynamic results, always keep overlay up if redirect) ---
+    function observeAndFilter() {
+        let mutationTimeout;
         const observer = new MutationObserver(() => {
-            blockUrls();
-            blockResults();
-            monitorSelectorsAndRedirect();
+            clearTimeout(mutationTimeout);
+            mutationTimeout = setTimeout(() => {
+                removeBlockedGoogleImageResults();
+                blockResults();
+                blockUrls();
+                blockElementsBySelectors();
+                blockElementsByPhrases();
+                if (monitorSelectorsAndRedirect()) return;
+            }, 18);
         });
-
         observer.observe(document.body, { childList: true, subtree: true });
+    }
 
-        monitorBannedTerms(); // Start monitoring banned terms instantly
+    // --- 11. INIT ---
+    const init = () => {
+        filterAllAndReveal();
+        observeAndFilter();
     };
 
-    // Perform immediate checks
-    if (!handleForbiddenSearchRedirection() && !checkUrlForForbiddenKeywords()) {
-        document.addEventListener('DOMContentLoaded', init);
+    if (document.readyState === "loading") {
+        document.addEventListener('DOMContentLoaded', init, { once: true });
+        document.addEventListener('readystatechange', function onState() {
+            if (document.readyState === 'interactive' || document.readyState === 'complete') {
+                init();
+                document.removeEventListener('readystatechange', onState);
+            }
+        });
     } else {
-        console.log('Redirection occurred due to forbidden search or URL.');
+        init();
     }
 })();
