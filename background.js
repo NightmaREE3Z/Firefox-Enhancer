@@ -157,7 +157,7 @@ const checkTermsAndRedirect = (url) => {
         "Penelope Ford", "Shotzi", "Tegan", "Nox", "Stephanie", "Sasha Banks", "Sakura", "Tessa", "Brooke", "Jakara", "Alba Fyre", "Isla Dawn", "Scarlett Bordeaux",
         "B-Fab", "Kayden Carter", "Katana Chance", "Lyra Valkyria", "Indi Hartwell", "Blair Davenport", "Maxxine Dupri", "China", "Russia", "Natalya", "Sakazaki",
         "Karmen Petrovic", "Ava Raine", "Cora Jade", "Jacy Jayne", "Gigi Dolin", "Thea Hail", "Tatum WWE", "Paxley", "Fallon Henley", "Nattie", "escort", "Sol Ruca",
-        "Kelani Jordan", "Electra Lopez", "Wendy Choo", "Yulisa Leon", "Valentina Feroz", "Amari Miller", "Arianna Grace"];
+        "Kelani Jordan", "Electra Lopez", "Wendy Choo", "Yulisa Leon", "Valentina Feroz", "Amari Miller", "Arianna Grace", "Filmora", "Wondershare"];
     for (let term of terms) {
         if (url.includes(term)) {
             console.log(`Term found in URL: ${term}. Redirecting to Wayback Machine front page.`);
@@ -169,7 +169,7 @@ const checkTermsAndRedirect = (url) => {
 
 // Function to check for banned URLs
 const isBannedURL = (url) => {
-    const bannedURLs = ["blogspot.com", "blogger.com", "ask.fm", "reddit.com", "reddit.com/r/"];
+    const bannedURLs = ["blogspot.com", "blogger.com", "ask.fm", "reddit.com", "reddit.com/r/", "irc-galleria.fi", "irc.fi", "wondershare.com", "wondershare.net"];
     for (let bannedURL of bannedURLs) {
         if (url.includes(bannedURL) || url.includes(`www.${bannedURL}`)) {
             console.log(`Banned URL detected: ${bannedURL}`);
