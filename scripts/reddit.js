@@ -1,10 +1,30 @@
 (function () {
     'use strict';
 
-    // --- NUCLEAR CSS INJECTION FOR IMMEDIATE HIDING ---
-    function addNuclearCSS() {
+    // --- IMMEDIATE PRE-HIDING CSS (Applied before any content loads) ---
+    function addPreHidingCSS() {
         const style = document.createElement('style');
         style.textContent = `
+            /* Hide ALL posts/comments immediately until approved */
+            article:not(.reddit-approved),
+            .Comment:not(.reddit-approved),
+            shreddit-post:not(.reddit-approved),
+            [subreddit-prefixed-name]:not(.reddit-approved) {
+                display: none !important;
+                visibility: hidden !important;
+                opacity: 0 !important;
+            }
+            
+            /* Show only approved content */
+            article.reddit-approved,
+            .Comment.reddit-approved,
+            shreddit-post.reddit-approved,
+            [subreddit-prefixed-name].reddit-approved {
+                display: block !important;
+                visibility: visible !important;
+                opacity: 1 !important;
+            }
+            
             /* Hide search dropdown items until filtered */
             li[role="presentation"]:not(.reddit-search-approved),
             div[role="presentation"]:not(.reddit-search-approved),
@@ -26,63 +46,32 @@
                 display: none !important;
             }
             
-            /* Banned content - permanent hiding */
-            .reddit-banned {
-                display: none !important;
-                visibility: hidden !important;
-                height: 0 !important;
-                overflow: hidden !important;
-                margin: 0 !important;
-                padding: 0 !important;
-                border: none !important;
-                opacity: 0 !important;
-                pointer-events: none !important;
-            }
-            
-            /* Search dropdown hiding */
-            .reddit-search-item-prehide, .reddit-search-shadow-prehide {
-                display: none !important;
-                visibility: hidden !important;
-                opacity: 0 !important;
-            }
-            
-            /* NUCLEAR CONTENT SETTINGS HIDING */
-            .reddit-content-settings-hidden {
+            /* Hide Answers BETA button - Using improved selectors */
+            span.text-global-admin.font-semibold.text-12,
+            a[href="/answers/"],
+            a.flex.justify-between.relative.px-md[href="/answers/"],
+            a[href="/answers/"][class*="gap-[0.5rem]"],
+            a.gap-\\[0\\.5rem\\][href="/answers/"],
+            faceplate-tracker[noun="gen_guides_sidebar"],
+            faceplate-tracker[source="nav"][action="click"][noun="gen_guides_sidebar"],
+            svg[icon-name="answers-outline"],
+            svg[rpl][icon-name="answers-outline"] {
                 display: none !important;
                 visibility: hidden !important;
                 opacity: 0 !important;
                 height: 0 !important;
                 width: 0 !important;
-                overflow: hidden !important;
                 margin: 0 !important;
                 padding: 0 !important;
                 border: none !important;
+                overflow: hidden !important;
                 position: absolute !important;
                 left: -9999px !important;
                 top: -9999px !important;
                 pointer-events: none !important;
-                z-index: -9999 !important;
             }
             
-            /* Hide NSFW search banners and toggles */
-            .reddit-nsfw-search-hidden {
-                display: none !important;
-                visibility: hidden !important;
-                opacity: 0 !important;
-                height: 0 !important;
-                width: 0 !important;
-                overflow: hidden !important;
-                margin: 0 !important;
-                padding: 0 !important;
-                border: none !important;
-                position: absolute !important;
-                left: -9999px !important;
-                top: -9999px !important;
-                pointer-events: none !important;
-                z-index: -9999 !important;
-            }
-            
-            /* Hide Answers button elements */
+            /* Hide by class for Answers button */
             .reddit-answers-hidden {
                 display: none !important;
                 visibility: hidden !important;
@@ -99,86 +88,87 @@
                 pointer-events: none !important;
             }
             
-            /* COMPLETE SHOW MATURE CONTENT REMOVAL - NUCLEAR OPTION */
-            label[data-testid="is-nsfw-shown"] {
+            /* Banned content - permanent hiding */
+            .reddit-banned {
                 display: none !important;
                 visibility: hidden !important;
-                opacity: 0 !important;
                 height: 0 !important;
-                width: 0 !important;
                 overflow: hidden !important;
                 margin: 0 !important;
                 padding: 0 !important;
                 border: none !important;
-                position: absolute !important;
-                left: -9999px !important;
-                top: -9999px !important;
+                opacity: 0 !important;
                 pointer-events: none !important;
-                z-index: -9999 !important;
             }
-
-            /* HIDE NSFW CONFIRMATION BUTTONS */
-            button[slot="primary-button"],
-            button.button-primary[slot="primary-button"],
-            button[rpl][slot="primary-button"],
-            button.button-medium.button-primary {
+            
+            /* Specific prehiding classes for banned content */
+            article.prehide, .Comment.prehide, shreddit-post.prehide, [subreddit-prefixed-name].prehide {
                 display: none !important;
                 visibility: hidden !important;
                 opacity: 0 !important;
                 height: 0 !important;
-                width: 0 !important;
                 overflow: hidden !important;
                 margin: 0 !important;
                 padding: 0 !important;
                 border: none !important;
-                position: absolute !important;
-                left: -9999px !important;
-                top: -9999px !important;
                 pointer-events: none !important;
-                z-index: -9999 !important;
-            }
-
-            /* FALLBACK DISABLED STYLING IF REMOVAL FAILS */
-            .reddit-nsfw-forced-disabled {
-                opacity: 0.6 !important;
-                pointer-events: none !important;
-                cursor: default !important;
             }
             
-            .reddit-nsfw-forced-disabled,
-            .reddit-nsfw-forced-disabled * {
-                pointer-events: none !important;
-                cursor: default !important;
+            /* Search dropdown hiding */
+            .reddit-search-item-prehide, .reddit-search-shadow-prehide {
+                display: none !important;
+                visibility: hidden !important;
+                opacity: 0 !important;
             }
             
-            .reddit-nsfw-forced-disabled .text-14,
-            .reddit-nsfw-forced-disabled .text-12,
-            .reddit-nsfw-forced-disabled span,
-            .reddit-nsfw-forced-disabled div {
-                color: var(--color-secondary, #6b7280) !important;
+            /* Hide potentially NSFW thumbnails until approved */
+            article:not(.reddit-approved) img, 
+            .Comment:not(.reddit-approved) img, 
+            shreddit-post:not(.reddit-approved) img,
+            [subreddit-prefixed-name]:not(.reddit-approved) img {
+                visibility: hidden !important;
+                opacity: 0 !important;
             }
             
-            .reddit-nsfw-forced-disabled faceplate-switch-input {
-                opacity: 0.6 !important;
-                pointer-events: none !important;
-                cursor: default !important;
+            article.reddit-approved img, 
+            .Comment.reddit-approved img, 
+            shreddit-post.reddit-approved img,
+            [subreddit-prefixed-name].reddit-approved img {
+                visibility: visible !important;
+                opacity: 1 !important;
             }
         `;
         
+        // Inject style at the earliest possible moment
         try {
+            // Create and inject before DOM is ready for fastest application
             const head = document.head || document.documentElement;
             head.insertBefore(style, head.firstChild);
         } catch (e) {
+            // Fallback: wait for document ready and try again
             document.addEventListener('DOMContentLoaded', function() {
                 (document.head || document.documentElement).appendChild(style);
             });
         }
     }
 
-    addNuclearCSS();
+    // Apply CSS immediately before any other code runs
+    addPreHidingCSS();
 
+    // --- CSS PRE-HIDING for posts ---
     const style = document.createElement('style');
     style.textContent = `
+        article.prehide, .Comment.prehide, shreddit-post.prehide {
+            visibility: hidden !important;
+            opacity: 0 !important;
+            transition: none !important;
+        }
+        body.reddit-filter-ready article:not(.prehide),
+        body.reddit-filter-ready .Comment:not(.prehide),
+        body.reddit-filter-ready shreddit-post:not(.prehide) {
+            visibility: visible !important;
+            opacity: 1 !important;
+        }
         reddit-recent-pages,
         shreddit-recent-communities,
         div[data-testid="community-list"],
@@ -207,6 +197,9 @@
 
     checkAndRedirectFromPreferences();
 
+    // Immediate redirect check
+    checkAndRedirectFromAnswers();
+
     const allowedUrls = [
         "https://www.reddit.com/user/birppis/"
     ];
@@ -234,22 +227,22 @@
         "amateur", "alexa", "bliss", "alexa bliss", "her ass", "she ass", "her's ass", "hers ass", "venice", "Alexa WWE", "5 feet of fury", "Morgan Xoxo",
         "Tiffany Stratton", "Tiffy time", "Stratton", "Tiffany", "Mandy Rose", "Chelsea Green", "Zelina", "Zelina Vega", "Valhalla", "poses", "posing", "vagene",
         "IYO SKY", "Io Shirai", "Iyo Shirai", "IO SKY", "Dakota Kai", "Asuka", "Perez", "Kairi Sane", "Meiko", "Satomura", "playboy", "Dynamite", "jizz",
-        "Shayna Baszler", "Ronda Rousey", "Carmella", "Emma", "Dana Brooke", "Tamina", "Alicia Fox", "Summer Rae", "MS Edge", "Microsoft Edge", "jizzed",
-        "Layla", "Michelle McCool", "Eve Torres", "Kelly Kelly", "Melina WWE", "Melina wrestler", "Jillian Hall", "five feet of fury", "Rampage", "raepd",
+        "Shayna Baszler", "Ronda Rousey", "Carmella", "Emma", "Dana Brooke", "Tamina", "Alicia Fox", "Summer Rae", "MS Edge", "Microsoft Edge", "jizzed", "Torrie",
+        "Layla", "Michelle McCool", "Eve Torres", "Kelly Kelly", "Melina WWE", "Melina wrestler", "Jillian Hall", "five feet of fury", "Rampage", "raepd", "Wilson",
         "Mickie James", "Maria", "Kanellis", "Beth Phoenix", "Victoria", "Jazz", "Molly Holly", "Gail Kim", "Awesome Kong", "Goddess", "Rampaige", "breasts",
         "Madison Rayne", "Velvet Sky", "Angelina", "ODB", "filmora", "wondershare", "Tessmacher", "Havok", "Su Yung", "Miko Satomura", "Opera GX", "Sweeney", "Mickie",
         "Taya", "Valkyrie", "Deonna", "Purrazzo", "Vaquer", "Vaqueer", "Vaguer", "Vagueer", "Saraya", "Britt Baker", "Jamie Hayter", "Anna Jay", "Tay Conti", "Tay Melo", 
         "Nightingale", "Statlander", "Hikaru Shida", "Riho", "Sakazaki", "Nyla Rose", "Emi Sakura", "Brave", "Fatal Influence", "Aubert", "*ape", "Brooke", "Hikaru",
-        "Penelope Ford", "Shotzi", "Blackheart", "Tegan", "Nox", "Charlotte", "Charlotte", "Sarray", "Xia Li", "OperaGX", "Sky Wrestling", "steph", "r*pe", "Opera Browser", 
+        "Penelope", "Shotzi", "Blackheart", "Tegan", "Nox", "Charlotte", "Charlotte", "Sarray", "Xia Li", "OperaGX", "Sky Wrestling", "steph", "r*pe", "Opera Browser", 
         "Becky Lynch", "Bayley", "Bailey", "Giulia", "Michin", "Mia Yim", "AJ Lee", "Paige", "Bella", "Bianca", "Belair", "Alicia", "Atout", "stephanie", "ra*e", "nofap", "No nut",
         "Stephanie", "Liv Morgan", "Piper Niven", "Jordynne Grace", "Jordynne", "NXT Womens", "NXT Women", "NXT Woman", "Aubrey", "Edwards", "Renee", "rap*", "Answers BETA",
         "Maryse", "Tessa", "Brooke", "Jackson", "Jakara", "Lash Legend", "Velvet Sky", "Izzi Dame", "Alba Fyre", "Isla Dawn", "Tamina", "Sydney", "Gina Adams", "Kelly2",
         "Raquel Rodriguez", "B-Fab", "Scarlett", "Bordeaux", "Kayden", "Carter", "Katana Chance", "Valkyria", "Tamina Snuka", "Renee Young", "Sydney Sweeney", "Priscilla",
         "Roxanne Perez", "Indi Hartwell", "Hartwell", "Blair", "Davenport", "wonder share", "Lola Vice", "Maxxine Dupri", "Karmen", "Karmen Petrovic", "Brittany", "Renee Paquette",
         "Ava Raine", "Cora Jade", "Jacy Jayne", "Gigi Dolin", "Thea Hail", "Tatum", "Paxley", "Fallon Henley", "Sky wrestle", "Women's", "Girl", "Women", "venoisi",  "rawdog", "rawdogging", 
-        "Kelani Jordan", "Electra Lopez", "Wendy Choo", "Yulisa", "Valentina", "Valentine", "Amari Miller", "Sky WWE", "Woman", "Lady", "Girls", "Girl's", "venoise", "AlexaBliss", "AlexaPearl",
-        "Sol Ruca", "Arianna Grace", "Natalya", "Nattie", "Young Bucks", "Matt Jackson", "Nick Jackson", "AEW", "Woman's", "Lady's", "Girl's", "Mandy", "org@$m", "0rga$m", "orga$m",
-        "Mercedes", "Sasha", "Banks", "Russo", "Vince Russo", "Dave Meltzer", "Sportskeeda", "Liv Xoxo", "Roxanne", "orgasm", "0rgasm", "org@sm", "orga5m", "org@5m", "org@sm", "orga5m", "0rg@sm", "0rg@5m"
+        "Kelani Jordan", "Electra", "Wendy Choo", "Yulisa", "Valentina", "Valentine", "Amari Miller", "Sky WWE", "Woman", "Lady", "Girls", "Girl's", "venoise", "AlexaBliss", "AlexaPearl",
+        "Sol Ruca", "Arianna" "Natalya", "Nattie", "Young Bucks", "Matt Jackson", "Nick Jackson", "AEW", "Woman's", "Lady's", "Girl's", "Mandy", "org@$m", "0rga$m", "orga$m",
+        "Mercedes", "Sasha", "Banks", "Russo", "Vince Russo", "Dave Meltzer", "Sportskeeda", "Liv Xoxo", "Roxanne", "orgasm", "0rgasm", "org@sm", "orga5m", "org@5m", "org@sm", "orga5m", "0rg@sm", "0rga5m"
     ];
 
     const redgifsKeyword = "www.redgifs.com";
@@ -263,51 +256,45 @@
         /morph/i, /inpaint/i, /art intel/i, /safari/i, /Opera Browser/i, /Mozilla/i, /Firefox/i, /Firefux/i, /\bbra\b/i, /soulgen/i, /ismartta/i, /editor/i, /image enhanced/i, /image enhancing/i,
         /tush/i, /lex bl/i, /image ai/i, /edit ai/i, /deviant/i, /Lex Cabr/i, /Lex Carb/i, /Lex Kauf/i, /Lex Man/i, /Blis/i, /nudecrawler/i, /photo AI/i, /pict AI/i, /pics app/i, /enhanced image/i,
         /AI edit/i, /faceswap/i, /DeepSeek/i, /deepnude ai/i, /deepnude-ai/i, /object/i, /unc1oth/i, /Opera GX/i, /Perez/i, /Mickie/i, /Micky/i, /Brows/i, /vagena/i, /ed17/i, /Lana Perry/i, /Del Rey/i,
-        /vegi/i, /vege/i, /vulv/i, /clit/i, /cl1t/i, /cloth/i, /uncloth/i, /decloth/i, /rem cloth/i, /del cloth/i, /izzi dame/i, /eras cloth/i, /Bella/i, /Tiffy/i, /vagi/i, /vagene/i, /Del Ray/i, /CJ Lana/i,
+        /vegi/i, /vege/i, /vulv/i, /clit/i, /cl1t/i, /cloth/i, /uncloth/i, /decloth/i, /rem cloth/i, /del cloth/i, /izzi dame/i, /eras cloth/i, /Bella/i, /Tiffy/i, /vagi/i, /vagene/i, /Del Ray/i, /CJ Perry/i,
         /Tiffa/i, /Strat/i, /puz/i, /Sweee/i, /Kristen Stewart/i, /Steward/i, /Perze/i, /Brave/i, /Roxan/i, /Browser/i, /Selain/i, /TOR-Selain/i, /Brit Bake/i, /vega/i, /\bSlut\b/i, /3dit/i, /ed1t/i,
-        /Liv org/i, /pant/i, /off pant/i, /rem pant/i, /del pant/i, /eras pant/i, /her pant/i, /she pant/i, /pussy/i, /adult content/i, /content adult/i, /porn/i, /\bTor\b/i, /editing/i, /3d1t/i, /\bAi\b/i,
+        /Liv org/i, /pant/i, /off pant/i, /rem pant/i, /del pant/i, /eras pant/i, /her pant/i, /she pant/i, /pussy/i, /adult content/i, /content adult/i, /porn/i, /\bTor\b/i, /editing/i, /3d1t/i, /\bApp\b/i,
         /Sydney Sweeney/i, /Sweeney/i, /fap/i, /Sydnee/i, /Stee/i, /Waaa/i, /Stewart/i, /MS Edge/i, /TOR-browser/i, /Opera/i, /\bAi\b/i, /\bADM\b/i, /\bAis\b/i, /\b-Ai\b/i, /\bedit\b/i, /Feikki/i,
         /\bAnall\b/i, /\bAlexa\b/i, /\bAleksa\b/i, /AI Tool/i, /aitool/i, /\bHer\b/i, /\bShe\b/i, /\bADMX\b/i, /\bAss\b/i, /\bSol\b/i, /\bEmma\b/i, /\bRiho\b/i, /\bJaida\b/i, /\bCum\b/i, /\bAi-\b/i,
         /\bIzzi\b/i, /\bDame\b/i, /\bNox\b/i, /\bLiv\b/i, /Chelsey/i, /Zel Veg/i, /Ch3l/i, /Chel5/i, /\bTay\b/i, /\balexa wwe\b/i, /\bazz\b/i, /\bjaida\b/i, /Steph/i, /St3ph/i, /editation/i, /3d!7/i,
         /P4IG3/i, /Paig3/i, /P4ige/i, /pa1g/i, /pa!g/i, /palg3/i, /palge/i, /Br1tt/i, /Br!tt/i, /Brltt/i, /Lana WWE/i, /Lana Del Rey/i, /\bLana\b/i, /CJ WWE/i, /image app/i, /edi7/i, /syvavaarennos/i,
         /Diipfeikki/i, /Diipfeik/i, /deep feik/i, /deepfeik/i, /Diip feik/i, /Diip feikki/i, /syva vaarennos/i, /syvä vaarennos/i, /picture app/i, /edit app/i, /pic app/i, /photo app/i, /syvävääre/i,
-        /pillu/i, /perse/i, /pylly/i, /peppu/i, /pimppi/i, /pinppi/i, /\bPeba\b/i, /\bBeba\b/i, /\bBabe\b/i, /\bBepa\b/i, /\bAnaali\b/i, /\bAnus\b/i, /sexuaali/i, /\bSeksi\b/i, /yhdyntä/i, /\bGina\b/i, 
-        /application/i, /sukupuoliyhteys/i, /penetraatio/i, /penetration/i, /vaatepoisto/i, /vaatteidenpoisto/i, /poista vaatteet/i, /(?:poista|poisto|poistaminen)[ -]?(?:vaatteet|vaatteiden)/i, /seksikuva/i,
+        /pillu/i, /perse/i, /pylly/i, /peppu/i, /pimppi/i, /pinppi/i, /\bPeba\b/i, /\bBeba\b/i, /\bBabe\b/i, /\bBepa\b/i, /\bAnaali\b/i, /\bAnus\b/i, /sexuaali/i, /\bSeksi\b/i, /yhdyntä/i, /\bGina\b/i,
+        /application/i, /sukupuoliyhteys/i, /penetraatio/i, /penetration/i, /vaatepoisto/i, /vaatteidenpoisto/i, /poista vaatteet/i, /(?:poista|poisto|poistaminen)[ -]?(?:vaatteet|vaatteiden)/i, /seksi/i,
         /vaateiden poisto/i, /kuvankäsittely/i, /paneminen/i, /seksikuva/i, /seksi kuvia/i, /uncensor app/i, /xray/i, /see[- ]?through/i, /clothes remover/i, /nsfw/i, /not safe for work/i, /alaston/i,
-        /scanner/i, /AI unblur/i, /deblur/i, /nsfwgen/i, /nsfw gen/i, /image enhancer/i, /skin view/i, /erotic/i, /eroottinen/i, /AI fantasy/i, /Fantasy AI/i, /fantasy edit/i, /AI recreation/i, /synth/i,
-        /Margot/i, /Robbie/i, /Johansson/i, /Ana de Armas/i, /Emily/i, /Emilia/i, /Ratajkowski/i, /Zendaya/i, /Doja Cat/i, /Madelyn/i, /Salma Hayek/i, /Megan Fox/i, /Addison/i, /Emma Watson/i, /Taylor/i,
+        /scanner/i, /AI unblur/i, /deblur/i, /nsfwgen/i, /nsfw gen/i, /image enhancer/i, /skin view/i, /erotic/i, /eroottinen/i, /AI fantasy/i, /Fantasy AI/i, /fantasy edit/i, /AI recreation/i, /synthetic/i,
+        /Margot/i, /Robbie/i, /Johansson/i, /Ana de Armas/i, /Emily/i, /Emilia/i, /Ratajkowski/i, /Zendaya/i, /Doja Cat/i, /Madelyn/i, /Salma Hayek/i, /Megan Fox/i, /Addison/i, /Emma Watson/i, /Taylor Swift/i,
         /Nicki/i, /Minaj/i, /next-gen face/i, /smooth body/i, /photo trick/i, /edit for fun/i, /realistic AI/i, /dream girl/i, /\bButt\b/i, /Derriere/i, /Backside/i, /läpinäkyvä/i, /panee/i, /paneva/i,
         /nussi/i, /nussinta /i, /nussia/i, /nussiminen/i, /nussimis/i, /Stratusfaction/i, /yhdynnässä/i, /seksivideo/i, /seksikuvia/i, /yhdyntäkuvia/i, /yhdyntä kuvia/i, /panovideo/i, /pano video/i,
-        /pano kuva/i, /panokuvat/i, /masturb/i, /itsetyydy/i, /itse tyydytys/i, /itsetyydytysvid/i, /itsetyydytyskuv/i, /runkkualbumi/i, /runkku/i, /runkkaus/i, /runkata/i, /runkka/i, /näpitys/i, /näpittä/i,
-        /sormetus/i, /sormettamiskuv/i, /sormittamiskuv/i, /sormettamiskuv/i, /fistaaminen/i, /näpityskuv/i, /näpittämiskuv/i, /sormettamisvid/i, /näpitysvid/i, /kotijynkky/i, /jynkkykuv/i, /jynkkyvid/i,
-        /sheer/i, /aikuis viihde/i, /aikuissisältö/i, /aikuissivusto/i, /homo/i, /lesbo/i, /transu/i, /pervo/i, /5yvä/i, /\|\s*\|/i, /\(o\)\(o\)/i, /\(!\)/i, /face plus/i,  /face\+/i, /face+/i, /fac\+/i,
-        /bg remover/i, /\bMina\b/i, /Shir/i, /kawa/i, /perver/i, /Mariah/i, /\bAva\b/i, /\bAnal-\b/i, /\b-Anal\b/i, /\bAnal\b/i, 
+        /pano kuva/i, /panokuvat/i, /masturb/i, /itsetyydy/i, /itse tyydytys/i, /itsetyydytysvid/i, /itsetyydytyskuv/i, /runkkualbumi/i, /runkku/i, /runkkaus/i, /runkata/i, /runkka/i, /näpitys/i, /näpitä/i,
+        /sormetus/i, /sormettamiskuv/i, /sormittamiskuv/i, /sormettamiskuv/i, /fistaaminen/i, /näpityskuv/i, /näpittämiskuv/i, /sormettamisvid/i, /näpitysvid/i, /kotijynkky/i, /jynkkykuv/i, /jynkkyvi/i,
+        /sheer/i, /aikuis viihde/i, /aikuissisältö/i, /aikuissivusto/i, /homo/i, /lesbo/i, /transu/i, /pervo/i, /5yvä/i, /\|\s*\|/i, /\(o\)\(o\)/i, /\(!\)/i, /face plus/i,  /face\+/i, /face+/i, /face_plus/i,
+        /bg remover/i, /\bMina\b/i, /Shir/i, /kawa/i, /perver/i, /Mariah/i, /\bAva\b/i, /\bAnal-\b/i, /\b-Anal\b/i, /\bAnal\b/i
     ];
 
     const unifiedSelectors = [
-        "faceplate-batch > article.w-full.mb-0 > .nd\\:visible.w-full > .relative.hover\\:bg-neutral-background-hover > .p-md > .w-fit.relative.text-12 > .items-center.flex > .text-neutral-content-strong",
-        "faceplate-batch > article.w-full.mb-0 > .nd\\:visible.w-full > .relative.hover\\:bg-neutral-background-hover > .p-md > .w-fit.relative.text-12 > .items-center.flex > .text-neutral-content-weak",
+        "faceplate-batch > article.w-full.mb-0 > .nd\\:visible.w-full > .relative.hover\\:bg-neutral-background-hover > .p-md > .w-fit.relative.text-12 > .items-center.flex > .text-neutral-content-strong.shrink-0 > .ml-2xs.text-12.font-semibold.text-neutral-content-strong",
+        "faceplate-batch > article.w-full.mb-0 > .nd\\:visible.w-full > .relative.hover\\:bg-neutral-background-hover > .p-md > .w-fit.relative.text-12 > .items-center.flex > .text-neutral-content-strong.shrink-0",
         "faceplate-batch > article.w-full.mb-0 > .nd\\:visible.w-full > .relative.hover\\:bg-neutral-background-hover > .p-md > .w-fit.relative.text-12 > .items-center.flex",
         "faceplate-batch > article.w-full.mb-0 > .nd\\:visible.w-full > .relative.hover\\:bg-neutral-background-hover > .p-md > .w-fit.relative.text-12",
         "faceplate-batch > article.w-full.mb-0 > .nd\\:visible.w-full > .relative.hover\\:bg-neutral-background-hover > .p-md",
-        "faceplate-batch > shreddit-feed-load-more-observer > .w-full.mb-0 > .nd\\:visible.w-full > .relative.hover\\:bg-neutral-background-hover > .p-md > .w-fit.relative.text-12 > .items-center.flex > .text-neutral-content-strong",
-        "faceplate-batch > shreddit-feed-load-more-observer > .w-full.mb-0 > .nd\\:visible.w-full > .relative.hover\\:bg-neutral-background-hover > .p-md > .w-fit.relative.text-12 > .items-center.flex > .text-neutral-content-weak",
+        "faceplate-batch > shreddit-feed-load-more-observer > .w-full.mb-0 > .nd\\:visible.w-full > .relative.hover\\:bg-neutral-background-hover > .p-md > .w-fit.relative.text-12 > .items-center.flex > .text-neutral-content-strong.shrink-0 > .ml-2xs.text-12.font-semibold.text-neutral-content-strong",
+        "faceplate-batch > shreddit-feed-load-more-observer > .w-full.mb-0 > .nd\\:visible.w-full > .relative.hover\\:bg-neutral-background-hover > .p-md > .w-fit.relative.text-12 > .items-center.flex > .text-neutral-content-strong.shrink-0",
         "faceplate-batch > shreddit-feed-load-more-observer > .w-full.mb-0 > .nd\\:visible.w-full > .relative.hover\\:bg-neutral-background-hover > .p-md > .w-fit.relative.text-12 > .items-center.flex",
         "faceplate-batch > shreddit-feed-load-more-observer > .w-full.mb-0 > .nd\\:visible.w-full > .relative.hover\\:bg-neutral-background-hover > .p-md > .w-fit.relative.text-12",
         "faceplate-batch > shreddit-feed-load-more-observer > .w-full.mb-0 > .nd\\:visible.w-full > .relative.hover\\:bg-neutral-background-hover > .p-md",
-        ".\\32 xs.gap.items-center.flex > shreddit-async-loader > .nd\\:visible > .hover\\:no-underline.no-underline.no-visited.font-semibold.text-12.cursor-pointer.a.h-xl.items-center.flex.whitespace-nowrap.rounded.px-xs.text-neutral-content",
+        ".\\32 xs.gap.items-center.flex > shreddit-async-loader > .nd\\:visible > .hover\\:no-underline.no-underline.no-visited.font-semibold.text-12.cursor-pointer.a.h-xl.items-center.flex.whitespace-nowrap.text-12.font-semibold.text-neutral-content-strong",
         ".\\32 xs.gap.items-center.flex > shreddit-async-loader > .nd\\:visible",
         ".\\32 xs.gap.items-center.flex > shreddit-async-loader",
         ".\\32 xs.gap.items-center.flex",
         ".mt-\\[-4px\\].mb-2xs.min-h-\\[32px\\].text-12.justify-between.flex > .relative.min-w-0.items-center.gap-2xs.text-12.flex-wrap.flex",
         ".row-end-2.row-start-1.col-end-3.col-start-1 > .mt-\\[-4px\\].mb-2xs.min-h-\\[32px\\].text-12.justify-between.flex > .relative.min-w-0.items-center.gap-2xs.text-12.flex-wrap.flex",
-        'span.text-global-admin.font-semibold.text-12',
-        'a[href="/answers/"]',
-        'a.flex.justify-between.relative.px-md[href="/answers/"]',
-        'faceplate-tracker[noun="gen_guides_sidebar"]',
-        'faceplate-tracker[source="nav"][action="click"][noun="gen_guides_sidebar"]',
-        'svg[icon-name="answers-outline"]',
-        'svg[rpl][icon-name="answers-outline"]'
+        'span.text-global-admin.font-semibold.text-12'
     ];
 
     const selectorsToDelete = [
@@ -316,6 +303,7 @@
         "community-highlight-carousel shreddit-gallery-carousel"
     ];
 
+    // Specific selectors for Answers button based on your HTML
     const answersButtonSelectors = [
         'a[href="/answers/"]',
         'a.flex.justify-between.relative.px-md[href="/answers/"]',
@@ -323,82 +311,150 @@
         'faceplate-tracker[source="nav"][action="click"][noun="gen_guides_sidebar"]',
         'svg[icon-name="answers-outline"]',
         'svg[rpl][icon-name="answers-outline"]',
-        'span.text-global-admin.font-semibold.text-12'
+        'span.text-global-admin.font-semibold.text-12',
     ];
 
-    const nsfwConfirmationSelectors = [
-        'button[slot="primary-button"]',
-        'button.button-primary[slot="primary-button"]',
-        'button[rpl][slot="primary-button"]',
-        'button.button-medium.button-primary',
-        'button.button-primary.items-center.justify-center',
-        'button.button-medium.px-\\[var\\(--rem14\\)\\].button-primary'
+    // Reddit Answers page selectors to monitor text content only
+    const redditAnswersSelectors = [
+        "#response-heading",
+        "label",
+        "label > div > span",
+        "label > div > span > span.input-container.activated > span",
+        "label > div > span > span.input-container.activated > div",
+        "#innerTextArea",
+        "label > div > span > span.input-container.activated",
+        "label > div",
     ];
 
-    // Optimized caches and performance variables
+    // --- PERFORMANCE OPTIMIZATIONS ---
+    // Caches for better performance
     const processedElements = new WeakSet();
     const processedSearchItems = new WeakSet();
     const bannedSubredditCache = new Map();
     const contentBannedCache = new Map();
     const shadowRootsProcessed = new WeakSet();
+    const permanentlyApprovedElements = new WeakSet(); // NEW: Track permanently approved elements
     let lastFilterTime = 0;
     let pendingOperations = false;
-    let isCurrentlyFiltering = false;
 
-    // Cache page type checks
-    let pageTypeCache = {
-        lastCheck: 0,
-        isAnswers: false,
-        isPreferences: false,
-        isAccount: false,
-        isSearch: false,
-        isPost: false
-    };
-
-    function updatePageTypeCache() {
-        const now = performance.now();
-        if (now - pageTypeCache.lastCheck < 500) return;
-        
-        const url = window.location.href;
-        pageTypeCache.lastCheck = now;
-        pageTypeCache.isAnswers = url.includes('reddit.com/answers');
-        pageTypeCache.isPreferences = url.includes('reddit.com/settings/preferences') || 
-                                      (url.includes('reddit.com/settings/') && url.includes('preferences'));
-        pageTypeCache.isAccount = url.includes('reddit.com/settings/account') || 
-                                  (url.includes('reddit.com/settings/') && url.includes('account'));
-        pageTypeCache.isSearch = url.includes('/search');
-        pageTypeCache.isPost = url.includes('/comments/') || 
-                               window.location.pathname.match(/^\/r\/[^\/]+\/comments\//) ||
-                               window.location.pathname.match(/^\/u\/[^\/]+\/comments\//) ||
-                               window.location.pathname.match(/^\/user\/[^\/]+\/comments\//);
-    }
-
+    // Check if we're on Reddit Answers page
     function isRedditAnswersPage() {
-        updatePageTypeCache();
-        return pageTypeCache.isAnswers;
+        return window.location.href.includes('reddit.com/answers');
     }
 
-    function isRedditPreferencesPage() {
-        updatePageTypeCache();
-        return pageTypeCache.isPreferences;
+    // --- ANSWERS BUTTON HIDING FUNCTIONS ---
+    function hideAnswersButton() {
+        // Method 1: Hide by href="/answers/" (most specific)
+        const answersLinks = document.querySelectorAll('a[href="/answers/"]');
+        for (let i = 0; i < answersLinks.length; i++) {
+            answersLinks[i].remove();
+        }
+
+        // Method 2: Hide by full class + href combination
+        const specificAnswersLinks = document.querySelectorAll('a.flex.justify-between.relative.px-md[href="/answers/"]');
+        for (let i = 0; i < specificAnswersLinks.length; i++) {
+            specificAnswersLinks[i].remove();
+        }
+
+        // Method 3: Hide using your original selectors
+        for (let i = 0; i < answersButtonSelectors.length; i++) {
+            const elements = document.querySelectorAll(answersButtonSelectors[i]);
+            for (let j = 0; j < elements.length; j++) {
+                elements[j].remove();
+            }
+        }
+
+        // Method 4: Hide by answers icon and traverse up
+        const answersIcons = document.querySelectorAll('svg[icon-name="answers-outline"], svg[rpl][icon-name="answers-outline"]');
+        for (let i = 0; i < answersIcons.length; i++) {
+            const icon = answersIcons[i];
+            // Traverse up to find the link
+            const linkElement = icon.closest('a[href="/answers/"]');
+            if (linkElement) {
+                linkElement.remove();
+                continue;
+            }
+            
+            // Fallback: traverse up to other containers
+            const containers = [
+                icon.closest('faceplate-tracker[noun="gen_guides_sidebar"]'),
+                icon.closest('faceplate-tracker'),
+                icon.closest('li[role="presentation"]'),
+                icon.closest('a'),
+                icon.closest('div'),
+                icon.closest('section'),
+                icon.closest('nav')
+            ];
+            
+            for (let k = 0; k < containers.length; k++) {
+                const container = containers[k];
+                if (container) {
+                    container.remove();
+                    break;
+                }
+            }
+        }
+
+        // Method 5: Hide elements containing "Answers" and "BETA" text
+        const allElements = document.querySelectorAll('*');
+        for (let i = 0; i < allElements.length; i++) {
+            const element = allElements[i];
+            
+            // Skip if already processed or if it's a large container
+            if (element.hasAttribute('data-answers-processed') || 
+                element.textContent.length > 200) continue;
+            
+            const textContent = element.textContent || '';
+            
+            if (textContent.includes('Answers') && textContent.includes('BETA')) {
+                element.setAttribute('data-answers-processed', 'true');
+                
+                // Check if this element is inside a link to /answers/
+                const parentLink = element.closest('a[href="/answers/"]');
+                if (parentLink) {
+                    parentLink.remove();
+                    continue;
+                }
+                
+                // Find the root navigation container
+                const rootContainer = element.closest('faceplate-tracker, li[role="presentation"], nav, section, div[class*="nav"]');
+                if (rootContainer) {
+                    rootContainer.remove();
+                } else {
+                    element.remove();
+                }
+            }
+        }
+
+        // Method 6: Hide BETA spans specifically
+        const betaSpans = document.querySelectorAll('span.text-global-admin.font-semibold.text-12');
+        for (let i = 0; i < betaSpans.length; i++) {
+            const span = betaSpans[i];
+            if (span.textContent.trim() === 'BETA') {
+                // Check if this BETA span is inside an answers link
+                const parentLink = span.closest('a[href="/answers/"]');
+                if (parentLink) {
+                    parentLink.remove();
+                    continue;
+                }
+                
+                const rootContainer = span.closest('faceplate-tracker, li[role="presentation"], div, section, nav');
+                if (rootContainer) {
+                    rootContainer.remove();
+                } else {
+                    span.remove();
+                }
+            }
+        }
+
+        // Method 7: Target the exact gap class structure
+        const gapElements = document.querySelectorAll('a.gap-\\[0\\.5rem\\][href="/answers/"]');
+        for (let i = 0; i < gapElements.length; i++) {
+            gapElements[i].remove();
+        }
     }
 
-    function isRedditAccountPage() {
-        updatePageTypeCache();
-        return pageTypeCache.isAccount;
-    }
-
-    function isSearchResultsPage() {
-        updatePageTypeCache();
-        return pageTypeCache.isSearch;
-    }
-
-    function isPostPage() {
-        updatePageTypeCache();
-        return pageTypeCache.isPost;
-    }
-
-    // Optimized throttle with RAF
+    // Improved throttle with idle callback for smoother performance
     function throttle(fn, wait) {
         let lastCall = 0;
         let requestId = null;
@@ -411,7 +467,8 @@
                 lastCall = now;
                 fn.apply(context, args);
             } else if (!requestId) {
-                requestId = requestAnimationFrame(() => {
+                // Use requestIdleCallback for better performance if available
+                requestId = (window.requestIdleCallback || window.requestAnimationFrame)(() => {
                     requestId = null;
                     lastCall = performance.now();
                     fn.apply(context, args);
@@ -420,6 +477,7 @@
         };
     }
 
+    // Improved debounce function
     function debounce(fn, wait, immediate = false) {
         let timeout;
         return function(...args) {
@@ -437,655 +495,159 @@
         };
     }
 
+    // Batch DOM operations for smoother performance
     function batchProcess(fn) {
         if (pendingOperations) return;
         pendingOperations = true;
         
+        // Use requestAnimationFrame for better performance with visual updates
         requestAnimationFrame(() => {
             fn();
             pendingOperations = false;
         });
     }
 
-    // --- ULTIMATE NUCLEAR NSFW DISABLING SYSTEM ---
-    function forceNSFWDisabled() {
-        try {
-            // Force set NSFW preferences to disabled in localStorage
-            const nsfwSettings = {
-                'nsfw_enabled': false,
-                'blur_nsfw': true,
-                'safe_search': true,
-                'show_nsfw': false,
-                'nsfw_filter': true,
-                'show_mature_content': false,
-                'mature_content_enabled': false,
-                'is_nsfw_shown': false,
-                'over_18': false,
-                'nsfw_age_verification': false
-            };
-            
-            for (const [key, value] of Object.entries(nsfwSettings)) {
-                try {
-                    localStorage.setItem(key, value.toString());
-                    sessionStorage.setItem(key, value.toString());
-                } catch (e) {
-                    // Handle storage errors silently
-                }
-            }
-            
-            // Intercept and override any NSFW setting changes
-            if (!window.__nsfwOverrideAttached) {
-                const originalSetItem = localStorage.setItem;
-                localStorage.setItem = function(key, value) {
-                    if (key.toLowerCase().includes('nsfw') || key.toLowerCase().includes('mature') || key.toLowerCase().includes('over_18') || key.toLowerCase().includes('age')) {
-                        if (key.includes('enabled') || key.includes('show') || key.includes('over') || key.includes('verification')) {
-                            value = 'false';
-                        } else if (key.includes('blur') || key.includes('filter') || key.includes('safe')) {
-                            value = 'true';
-                        }
-                    }
-                    return originalSetItem.call(this, key, value);
-                };
-                
-                const originalSessionSetItem = sessionStorage.setItem;
-                sessionStorage.setItem = function(key, value) {
-                    if (key.toLowerCase().includes('nsfw') || key.toLowerCase().includes('mature') || key.toLowerCase().includes('over_18') || key.toLowerCase().includes('age')) {
-                        if (key.includes('enabled') || key.includes('show') || key.includes('over') || key.includes('verification')) {
-                            value = 'false';
-                        } else if (key.includes('blur') || key.includes('filter') || key.includes('safe')) {
-                            value = 'true';
-                        }
-                    }
-                    return originalSessionSetItem.call(this, key, value);
-                };
-                
-                window.__nsfwOverrideAttached = true;
-            }
-            
-            // Override forms and prevent NSFW settings
-            const forms = document.querySelectorAll('form');
-            for (let i = 0; i < forms.length; i++) {
-                const form = forms[i];
-                if (!form.__nsfwOverrideAttached) {
-                    form.addEventListener('submit', function(e) {
-                        const formData = new FormData(form);
-                        const entries = Array.from(formData.entries());
-                        
-                        for (let j = 0; j < entries.length; j++) {
-                            const [name, value] = entries[j];
-                            if (name.toLowerCase().includes('nsfw') || name.toLowerCase().includes('mature') || name.toLowerCase().includes('over_18')) {
-                                formData.set(name, 'false');
-                            }
-                        }
-                        
-                        // Block NSFW form submissions
-                        const formAction = form.action || '';
-                        const formHTML = form.outerHTML || '';
-                        if (formAction.includes('nsfw') || formAction.includes('mature') || 
-                            formHTML.includes('nsfw') || formHTML.includes('mature') || 
-                            formHTML.includes('over 18') || formHTML.includes('adult')) {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            return false;
-                        }
-                    });
-                    form.__nsfwOverrideAttached = true;
-                }
-            }
-            
-            // Force toggle switches to disabled state
-            const switches = document.querySelectorAll('button[role="switch"], faceplate-switch-input, input[type="checkbox"]');
-            const allEvents = ['mousedown', 'mouseup', 'touchstart', 'touchend', 'keydown', 'keyup', 'focus', 'change', 'click'];
-            
-            for (let i = 0; i < switches.length; i++) {
-                const switchEl = switches[i];
-                const ariaLabel = switchEl.getAttribute('aria-label') || '';
-                const id = switchEl.getAttribute('id') || '';
-                
-                if (ariaLabel.toLowerCase().includes('mature') ||
-                    ariaLabel.toLowerCase().includes('18+') ||
-                    ariaLabel.toLowerCase().includes('nsfw') ||
-                    ariaLabel.toLowerCase().includes('over 18') ||
-                    id.toLowerCase().includes('nsfw') ||
-                    id.toLowerCase().includes('mature')) {
-                    
-                    if (switchEl.tagName === 'INPUT') {
-                        switchEl.checked = false;
-                        switchEl.disabled = true;
-                    } else {
-                        switchEl.setAttribute('aria-checked', 'false');
-                        switchEl.setAttribute('disabled', '');
-                        switchEl.setAttribute('aria-disabled', 'true');
-                    }
-                    
-                    // Block all interactions
-                    for (let k = 0; k < allEvents.length; k++) {
-                        switchEl.addEventListener(allEvents[k], function(e) {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            e.stopImmediatePropagation();
-                            if (allEvents[k] === 'focus') this.blur();
-                            return false;
-                        }, { capture: true, passive: false });
-                    }
-                }
-            }
-            
-            // Block NSFW confirmation buttons
-            const confirmationButtons = document.querySelectorAll('button');
-            for (let i = 0; i < confirmationButtons.length; i++) {
-                const button = confirmationButtons[i];
-                const buttonText = button.textContent || '';
-                const buttonHTML = button.outerHTML || '';
-                
-                if (buttonText.includes('Yes, I\'m Over 18') || 
-                    buttonText.includes('I\'m over 18') ||
-                    buttonText.includes('Continue') ||
-                    buttonHTML.includes('primary-button') ||
-                    button.hasAttribute('slot') && button.getAttribute('slot') === 'primary-button') {
-                    
-                    button.addEventListener('click', function(e) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        e.stopImmediatePropagation();
-                        return false;
-                    }, { capture: true, passive: false });
-                    
-                    button.disabled = true;
-                    button.style.setProperty('pointer-events', 'none', 'important');
-                    button.style.setProperty('opacity', '0.5', 'important');
-                }
-            }
-            
-        } catch (e) {
-            console.warn('Force NSFW disabled failed:', e);
-        }
-    }
-
-    // --- NUCLEAR ANSWERS BUTTON HIDING FUNCTIONS ---
-    function hideAnswersButton() {
-        const answersHrefs = [
-            'a[href="/answers/"]',
-            'a[href="/answers"]',
-            'a[href*="/answers"]',
-            'a[href^="/answers"]'
-        ];
+    // --- REDDIT ANSWERS PAGE FILTERING ---
+    function checkRedditAnswersTextContent() {
+        // Only run on Reddit Answers pages
+        if (!isRedditAnswersPage()) return;
         
-        for (let h = 0; h < answersHrefs.length; h++) {
-            const answersLinks = document.querySelectorAll(answersHrefs[h]);
-            for (let i = 0; i < answersLinks.length; i++) {
-                const link = answersLinks[i];
-                
-                if (!link.closest('nav, header, [role="navigation"], [role="banner"], shreddit-header')) {
-                    link.classList.add('reddit-answers-hidden');
-                    let parent = link.parentElement;
-                    let parentLevels = 0;
-                    while (parent && parentLevels < 5) {
-                        if (!parent.closest('nav, header, [role="navigation"], [role="banner"], shreddit-header')) {
-                            parent.classList.add('reddit-answers-hidden');
-                        }
-                        parent = parent.parentElement;
-                        parentLevels++;
-                    }
-                    link.remove();
-                }
-            }
-        }
-
-        const specificAnswersLinks = document.querySelectorAll('a.flex.justify-between.relative.px-md[href="/answers/"], a.flex.justify-between.relative.px-md[href="/answers"], a.flex.justify-between.relative.px-md[href*="/answers"]');
-        for (let i = 0; i < specificAnswersLinks.length; i++) {
-            const link = specificAnswersLinks[i];
-            if (!link.closest('nav, header, [role="navigation"], [role="banner"], shreddit-header')) {
-                link.classList.add('reddit-answers-hidden');
-                let parent = link.parentElement;
-                let parentLevels = 0;
-                while (parent && parentLevels < 5) {
-                    if (!parent.closest('nav, header, [role="navigation"], [role="banner"], shreddit-header')) {
-                        parent.classList.add('reddit-answers-hidden');
-                    }
-                    parent = parent.parentElement;
-                    parentLevels++;
-                }
-                link.remove();
-            }
-        }
-
-        for (let i = 0; i < answersButtonSelectors.length; i++) {
-            const elements = document.querySelectorAll(answersButtonSelectors[i]);
+        // Check text content within monitored selectors without breaking functionality
+        for (let i = 0; i < redditAnswersSelectors.length; i++) {
+            const elements = document.querySelectorAll(redditAnswersSelectors[i]);
+            
             for (let j = 0; j < elements.length; j++) {
                 const element = elements[j];
-                if (!element.closest('nav, header, [role="navigation"], [role="banner"], shreddit-header')) {
-                    element.classList.add('reddit-answers-hidden');
-                    let parent = element.parentElement;
-                    let parentLevels = 0;
-                    while (parent && parentLevels < 5) {
-                        if (!parent.closest('nav, header, [role="navigation"], [role="banner"], shreddit-header')) {
-                            parent.classList.add('reddit-answers-hidden');
+                if (!element || processedElements.has(element)) continue;
+                
+                // Check only text content, not the element structure
+                const textContent = element.textContent || element.innerText || '';
+                if (textContent && checkTextForKeywords(textContent)) {
+                    console.log('Banned text content found in Reddit Answers, redirecting to answers page');
+                    window.location.href = 'https://www.reddit.com/answers';
+                    return;
+                }
+                
+                processedElements.add(element);
+            }
+        }
+    }
+
+    // Separate function to check only text content
+    function checkTextForKeywords(textContent) {
+        if (!textContent) return false;
+        
+        const lowerText = textContent.toLowerCase();
+        
+        // Check cache first
+        if (contentBannedCache.has(lowerText)) {
+            return contentBannedCache.get(lowerText);
+        }
+        
+        // Check for exact keyword matches (most efficient)
+        for (let i = 0; i < keywordsToHide.length; i++) {
+            if (lowerText.includes(keywordsToHide[i].toLowerCase())) {
+                contentBannedCache.set(lowerText, true);
+                return true;
+            }
+        }
+        
+        // Only check regex patterns if needed (more expensive)
+        for (let i = 0; i < regexKeywordsToHide.length; i++) {
+            if (regexKeywordsToHide[i].test(lowerText)) {
+                contentBannedCache.set(lowerText, true);
+                return true;
+            }
+        }
+        
+        contentBannedCache.set(lowerText, false);
+        return false;
+    }
+
+    // Process Reddit Answers shadow DOM text content only
+    function processAnswersShadowDOMText() {
+        if (!isRedditAnswersPage()) return;
+        
+        // Look for Reddit Answers specific web components
+        const answersComponents = document.querySelectorAll('guides-header-panel, guides-response-container-realtime, guides-search-input');
+        
+        for (let i = 0; i < answersComponents.length; i++) {
+            const component = answersComponents[i];
+            if (!component.shadowRoot || shadowRootsProcessed.has(component.shadowRoot)) continue;
+            
+            shadowRootsProcessed.add(component.shadowRoot);
+            
+            // Check shadow DOM text content only
+            const shadowTextContent = component.shadowRoot.textContent || '';
+            if (shadowTextContent && checkTextForKeywords(shadowTextContent)) {
+                console.log('Banned text content found in Reddit Answers shadow DOM, redirecting to answers page');
+                window.location.href = 'https://www.reddit.com/answers';
+                return;
+            }
+            
+            // Set up observer for this shadow root
+            const shadowObserver = new MutationObserver(throttledAnswersTextHandler);
+            shadowObserver.observe(component.shadowRoot, {
+                childList: true,
+                subtree: true,
+                attributes: false,
+                characterData: true // Important for Reddit Answers as content is streamed
+            });
+        }
+    }
+
+    // Handler for Reddit Answers shadow root mutations - text content only
+    const throttledAnswersTextHandler = throttle((mutations) => {
+        for (const mutation of mutations) {
+            // Check for text content changes (streaming responses)
+            if (mutation.type === 'characterData') {
+                const textContent = mutation.target.nodeValue || '';
+                if (textContent && checkTextForKeywords(textContent)) {
+                    console.log('Banned text content found in Reddit Answers text mutation, redirecting to answers page');
+                    window.location.href = 'https://www.reddit.com/answers';
+                    return;
+                }
+            }
+            
+            if (mutation.type === 'childList') {
+                for (const node of mutation.addedNodes) {
+                    if (node.nodeType === 3) { // Text node
+                        const textContent = node.nodeValue || '';
+                        if (textContent && checkTextForKeywords(textContent)) {
+                            console.log('Banned text content found in Reddit Answers added text node, redirecting to answers page');
+                            window.location.href = 'https://www.reddit.com/answers';
+                            return;
                         }
-                        parent = parent.parentElement;
-                        parentLevels++;
-                    }
-                    element.remove();
-                }
-            }
-        }
-
-        const answersIcons = document.querySelectorAll('svg[icon-name="answers-outline"], svg[rpl][icon-name="answers-outline"], svg[viewBox*="24"], *[data-icon="answers"], *[aria-label*="answers"]');
-        for (let i = 0; i < answersIcons.length; i++) {
-            const icon = answersIcons[i];
-            if (!icon.closest('nav, header, [role="navigation"], [role="banner"], shreddit-header')) {
-                let current = icon;
-                for (let level = 0; level < 10; level++) {
-                    if (current && !current.closest('nav, header, [role="navigation"], [role="banner"], shreddit-header')) {
-                        current.classList.add('reddit-answers-hidden');
-                        current = current.parentElement;
-                    } else {
-                        break;
-                    }
-                }
-                icon.remove();
-            }
-        }
-
-        const textSearchElements = document.querySelectorAll('*');
-        for (let i = 0; i < textSearchElements.length; i++) {
-            const element = textSearchElements[i];
-            
-            if (element.hasAttribute('data-answers-processed') || 
-                element.textContent.length > 500 ||
-                element.classList.contains('reddit-answers-hidden') ||
-                element.closest('nav, header, [role="navigation"], [role="banner"], shreddit-header')) continue;
-            
-            const textContent = element.textContent || '';
-            const lowerText = textContent.toLowerCase();
-            
-            if ((lowerText.includes('answers') && lowerText.includes('beta')) ||
-                (lowerText === 'answers beta') ||
-                (lowerText === 'answers') ||
-                (element.tagName === 'SPAN' && element.classList.contains('text-global-admin') && element.classList.contains('font-semibold') && lowerText.includes('beta'))) {
-                
-                element.setAttribute('data-answers-processed', 'true');
-                element.classList.add('reddit-answers-hidden');
-                
-                let parent = element.parentElement;
-                let parentLevels = 0;
-                while (parent && parentLevels < 8) {
-                    if (!parent.closest('nav, header, [role="navigation"], [role="banner"], shreddit-header')) {
-                        parent.classList.add('reddit-answers-hidden');
-                    }
-                    parent = parent.parentElement;
-                    parentLevels++;
-                }
-                element.remove();
-            }
-        }
-
-        const allSpans = document.querySelectorAll('span');
-        for (let i = 0; i < allSpans.length; i++) {
-            const span = allSpans[i];
-            if (span.closest('nav, header, [role="navigation"], [role="banner"], shreddit-header')) continue;
-            
-            const spanText = span.textContent ? span.textContent.trim().toLowerCase() : '';
-            
-            if (spanText === 'beta' || 
-                spanText.includes('beta') ||
-                (span.classList.contains('text-global-admin') && span.classList.contains('font-semibold') && span.classList.contains('text-12'))) {
-                
-                span.classList.add('reddit-answers-hidden');
-                
-                let parent = span.parentElement;
-                let parentLevels = 0;
-                while (parent && parentLevels < 10) {
-                    if (!parent.closest('nav, header, [role="navigation"], [role="banner"], shreddit-header')) {
-                        parent.classList.add('reddit-answers-hidden');
-                    }
-                    parent = parent.parentElement;
-                    parentLevels++;
-                }
-                span.remove();
-            }
-        }
-
-        const gapElements = document.querySelectorAll('a[class*="gap"][href*="/answers"]');
-        for (let i = 0; i < gapElements.length; i++) {
-            const element = gapElements[i];
-            if (!element.closest('nav, header, [role="navigation"], [role="banner"], shreddit-header')) {
-                element.classList.add('reddit-answers-hidden');
-                let parent = element.parentElement;
-                let parentLevels = 0;
-                while (parent && parentLevels < 8) {
-                    if (!parent.closest('nav, header, [role="navigation"], [role="banner"], shreddit-header')) {
-                        parent.classList.add('reddit-answers-hidden');
-                    }
-                    parent = parent.parentElement;
-                    parentLevels++;
-                }
-                element.remove();
-            }
-        }
-
-        const navContainers = document.querySelectorAll('aside, menu, ul, li, faceplate-tracker, div[role="menu"]');
-        for (let i = 0; i < navContainers.length; i++) {
-            const container = navContainers[i];
-            if (container.closest('nav, header, [role="navigation"], [role="banner"], shreddit-header')) continue;
-            
-            if (container.querySelector && (
-                container.querySelector('a[href*="/answers"]') ||
-                container.querySelector('svg[icon-name="answers-outline"]') ||
-                (container.textContent && container.textContent.toLowerCase().includes('answers') && container.textContent.toLowerCase().includes('beta'))
-            )) {
-                container.classList.add('reddit-answers-hidden');
-                container.remove();
-            }
-        }
-        
-        const hiddenElements = document.querySelectorAll('.reddit-answers-hidden');
-        for (let i = 0; i < hiddenElements.length; i++) {
-            hiddenElements[i].remove();
-        }
-    }
-
-    // --- HIDE NSFW CONFIRMATION BUTTONS ---
-    function hideNSFWConfirmationButtons() {
-        // Hide by selectors
-        for (let i = 0; i < nsfwConfirmationSelectors.length; i++) {
-            const buttons = document.querySelectorAll(nsfwConfirmationSelectors[i]);
-            for (let j = 0; j < buttons.length; j++) {
-                const button = buttons[j];
-                button.classList.add('reddit-nsfw-search-hidden');
-                button.remove();
-            }
-        }
-        
-        // Hide by text content
-        const allButtons = document.querySelectorAll('button');
-        for (let i = 0; i < allButtons.length; i++) {
-            const button = allButtons[i];
-            const buttonText = button.textContent || '';
-            
-            if (buttonText.includes('Yes, I\'m Over 18') || 
-                buttonText.includes('I\'m over 18') ||
-                buttonText.includes('Continue') ||
-                (buttonText.includes('Yes') && buttonText.includes('18'))) {
-                
-                button.classList.add('reddit-nsfw-search-hidden');
-                button.remove();
-            }
-        }
-        
-        // Hide entire modals containing NSFW content
-        const modals = document.querySelectorAll('rpl-dialog, rpl-dialog-sheet, [role="dialog"], .modal, [data-testid*="modal"]');
-        for (let i = 0; i < modals.length; i++) {
-            const modal = modals[i];
-            const modalText = modal.textContent || '';
-            
-            if (modalText.includes('mature content') || 
-                modalText.includes('over 18') ||
-                modalText.includes('NSFW') ||
-                modalText.includes('adult content')) {
-                
-                modal.classList.add('reddit-nsfw-search-hidden');
-                modal.remove();
-            }
-        }
-    }
-
-    // --- OPTIMIZED ELEMENT DELETION ---
-    function deleteElementsAutomatically() {
-        if (!isRedditPreferencesPage() || isRedditAccountPage()) {
-            return;
-        }
-        
-        try {
-            // Batch all selector-based deletions
-            const selectorsToDelete = [
-                'faceplate-switch-input[aria-label="Show mature content (I\'m over 18)"]',
-                'div.flex.justify-between.gap-\\[0\\.5rem\\].text-secondary.py-xs',
-                'label[data-testid="is-nsfw-shown"]',
-                'label.block.normal-case.cursor-pointer[data-testid="is-nsfw-shown"]'
-            ];
-            
-            for (let i = 0; i < selectorsToDelete.length; i++) {
-                const elements = document.querySelectorAll(selectorsToDelete[i]);
-                for (let j = 0; j < elements.length; j++) {
-                    elements[j].remove();
-                }
-            }
-            
-            // Find and delete by text content efficiently
-            const spanElements = document.querySelectorAll('span.text-14.break-normal');
-            for (let i = 0; i < spanElements.length; i++) {
-                const span = spanElements[i];
-                if (span.textContent === 'Show mature content (I\'m over 18)') {
-                    const containerToDelete = span.closest('div.flex.justify-between') || span.closest('div');
-                    if (containerToDelete) {
-                        containerToDelete.remove();
-                    }
-                }
-            }
-            
-        } catch (e) {
-            console.warn('Automated element deletion failed:', e);
-        }
-    }
-
-    // --- OPTIMIZED CONTENT SETTINGS DESTRUCTION ---
-    function hideContentSettings() {
-        if (!isRedditPreferencesPage() || isRedditAccountPage()) {
-            return;
-        }
-        
-        try {
-            forceNSFWDisabled();
-            hideNSFWConfirmationButtons();
-            deleteElementsAutomatically();
-            
-            // Remove by data-testid efficiently
-            const nsfwElements = document.querySelectorAll('label[data-testid="is-nsfw-shown"], label.block.normal-case.cursor-pointer[data-testid="is-nsfw-shown"]');
-            for (let i = 0; i < nsfwElements.length; i++) {
-                nsfwElements[i].remove();
-            }
-            
-            // Force disable remaining switches
-            const nsfwSwitches = document.querySelectorAll('faceplate-switch-input[aria-label="Show mature content (I\'m over 18)"]');
-            for (let i = 0; i < nsfwSwitches.length; i++) {
-                const switchEl = nsfwSwitches[i];
-                const parentLabel = switchEl.closest('label[data-testid="is-nsfw-shown"]') || switchEl.closest('label');
-                if (parentLabel) {
-                    parentLabel.remove();
-                }
-            }
-            
-            // Apply disabled styling as fallback
-            const remainingNsfwLabels = document.querySelectorAll('label[data-testid="is-nsfw-shown"]');
-            for (let i = 0; i < remainingNsfwLabels.length; i++) {
-                const label = remainingNsfwLabels[i];
-                const innerDiv = label.querySelector('div.flex.justify-between');
-                if (innerDiv) {
-                    innerDiv.classList.add('opacity-60', 'pointer-events-none');
-                    label.classList.remove('cursor-pointer');
-                    
-                    const switchInput = innerDiv.querySelector('faceplate-switch-input');
-                    if (switchInput) {
-                        switchInput.setAttribute('disabled', '');
-                        switchInput.setAttribute('aria-disabled', 'true');
-                        switchInput.setAttribute('aria-checked', 'false');
-                        
-                        const allEvents = ['click', 'change', 'keydown', 'keyup', 'focus', 'blur'];
-                        for (let eventType of allEvents) {
-                            switchInput.addEventListener(eventType, function(e) {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                e.stopImmediatePropagation();
-                                if (eventType === 'focus') this.blur();
-                                if (eventType === 'change') this.setAttribute('aria-checked', 'false');
-                                return false;
-                            }, { capture: true, passive: false });
+                    } else if (node.nodeType === 1) { // Element node
+                        const elementText = node.textContent || '';
+                        if (elementText && checkTextForKeywords(elementText)) {
+                            console.log('Banned text content found in Reddit Answers added element, redirecting to answers page');
+                            window.location.href = 'https://www.reddit.com/answers';
+                            return;
                         }
                     }
                 }
             }
-            
-            // Remove modals and dialog sheets
-            const nsfwModals = document.querySelectorAll('settings-preferences-nsfw-modal, rpl-dialog-sheet[dialog-id="nsfw"]');
-            for (let i = 0; i < nsfwModals.length; i++) {
-                nsfwModals[i].remove();
-            }
-            
-        } catch (e) {
-            console.warn('Content settings destruction failed:', e);
         }
-    }
+    }, 50);
 
-    function hideNSFWSearchElements() {
-        try {
-            const nsfwToggleSelectors = [
-                'settings-preferences-nsfw-modal',
-                'rpl-dialog-sheet[dialog-id="nsfw"]',
-                'rpl-dialog-sheet[overlay-blur]',
-                'label[data-testid="is-nsfw-shown"]',
-                'label[data-testid="safe-browsing-mode"]',
-                'label.block.normal-case.cursor-pointer[data-testid="is-nsfw-shown"]',
-                'label.block.normal-case[data-testid="safe-browsing-mode"]',
-                'search-sort-dropdown-menu#search_modifier_safe_search',
-                'search-banner#banner',
-                'search-telemetry-tracker search-banner',
-                'safe-search-option-click-handler',
-                'button[aria-label*="NSFW"]',
-                'button[aria-label*="Safe Search"]',
-                '[data-testid*="nsfw"]',
-                '[data-testid*="safe-search"]',
-                'faceplate-switch-input[aria-label*="mature"]',
-                'faceplate-switch-input[aria-label*="18"]',
-                'faceplate-switch-input[aria-label*="Blur mature"]',
-                'faceplate-switch-input[aria-label*="Show mature content"]',
-                'faceplate-switch-input[aria-label*="I\'m over 18"]',
-                'faceplate-switch-input.flex-col.mr-xs.pointer-events-none',
-                'button[slot="primary-button"]',
-                'button.button-primary[slot="primary-button"]',
-                'button[rpl][slot="primary-button"]',
-                'button.button-medium.button-primary',
-                'button.button-primary.items-center.justify-center',
-                'button.button-medium.px-\\[var\\(--rem14\\)\\].button-primary',
-                '#nsfw-rpl-modal-card',
-                'div[part="base"].dialog',
-                'div[part="overlay"]',
-                'div[part="panel"]',
-                'div.dialog.dialog-variant-default.dialog-open',
-                'div.dialog-overlay',
-                'div.dialog-overlay-blur',
-                'div.dialog-overlay.dialog-overlay-blur',
-                'div.dialog-panel',
-                'div[part="overlay"].dialog-overlay-blur',
-                'div[part="overlay"][tabindex="-1"]',
-                'div.dialog-overlay[tabindex="-1"]',
-                'div.dialog-overlay-blur[tabindex="-1"]',
-                'div[role="dialog"]',
-                'div[aria-modal="true"]',
-                'div > div.dialog-overlay.dialog-overlay-blur',
-                '#nsfw',
-                'div:nth-child(2) > label:nth-child(3) > div > span.flex.items-center.gap-xs.min-w-0.shrink > span',
-                'div:nth-child(2) > label:nth-child(3) > div > span.flex.items-center.gap-xs.min-w-0.shrink',
-                'div:nth-child(2) > label:nth-child(3) > div',
-                'div:nth-child(2) > label:nth-child(3)'
-            ];
-            
-            for (let i = 0; i < nsfwToggleSelectors.length; i++) {
-                try {
-                    const elements = document.querySelectorAll(nsfwToggleSelectors[i]);
-                    for (let j = 0; j < elements.length; j++) {
-                        elements[j].classList.add('reddit-nsfw-search-hidden');
-                        elements[j].remove();
-                    }
-                } catch (selectorError) {
-                    // Ignore selector errors
-                }
-            }
-            
-            const nsfwBannerTexts = [
-                'NSFW search results are hidden',
-                'You have NSFW filter active',
-                'NSFW filter is active',
-                'Safe search is on',
-                'You won\'t see mature NSFW',
-                'Update Settings',
-                'NSFW search results',
-                'Safe Search On',
-                'Yes, I\'m Over 18',
-                'mature content',
-                'adult content',
-                'over 18'
-            ];
-            
-            for (let i = 0; i < nsfwBannerTexts.length; i++) {
-                const text = nsfwBannerTexts[i];
-                const allElements = document.querySelectorAll('*');
-                
-                for (let j = 0; j < allElements.length; j++) {
-                    const element = allElements[j];
-                    
-                    if (element.textContent && element.textContent.includes(text)) {
-                        let targetElement = element;
-                        
-                        while (targetElement) {
-                            if (targetElement.matches && (
-                                targetElement.matches('div[role="alert"]') ||
-                                targetElement.matches('search-banner') ||
-                                targetElement.matches('search-telemetry-tracker') ||
-                                targetElement.matches('div[class*="banner"]') ||
-                                targetElement.matches('rpl-dialog') ||
-                                targetElement.matches('rpl-dialog-sheet') ||
-                                targetElement.matches('[role="dialog"]') ||
-                                targetElement.matches('div')
-                            )) {
-                                targetElement.classList.add('reddit-nsfw-search-hidden');
-                                targetElement.remove();
-                                break;
-                            }
-                            targetElement = targetElement.parentElement;
-                        }
-                    }
-                }
-            }
-            
-            const updateButtons = document.querySelectorAll('button, a');
-            for (let i = 0; i < updateButtons.length; i++) {
-                const button = updateButtons[i];
-                if (button.textContent && 
-                    (button.textContent.includes('Update Settings') ||
-                     button.textContent.includes('Safe Search') ||
-                     button.textContent.includes('NSFW') ||
-                     button.textContent.includes('Yes, I\'m Over 18') ||
-                     button.textContent.includes('Continue'))) {
-                    
-                    let container = button.closest('div[role="alert"]') ||
-                                  button.closest('search-banner') ||
-                                  button.closest('rpl-dialog') ||
-                                  button.closest('rpl-dialog-sheet') ||
-                                  button.closest('[role="dialog"]') ||
-                                  button.closest('div');
-                    if (container) {
-                        container.classList.add('reddit-nsfw-search-hidden');
-                        container.remove();
-                    }
-                }
-            }
-            
-        } catch (e) {
-            console.warn('NSFW search element hiding failed:', e);
-        }
-    }
+    // Throttled version for frequent checks
+    const throttledRedditAnswersCheck = throttle(() => {
+        checkRedditAnswersTextContent();
+        processAnswersShadowDOMText();
+    }, 100);
 
-    // --- OPTIMIZED SUBREDDIT CHECKING ---
+    // --- CORE FILTERING FUNCTIONS ---
     function isSubredditNameBanned(subName) {
         if (!subName) return false;
         const lowerSub = subName.toLowerCase();
         
+        // Check cache first
         if (bannedSubredditCache.has(lowerSub)) {
             return bannedSubredditCache.get(lowerSub);
         }
         
-        // Check adult subreddits first (fastest)
+        // First check against adult subreddits list (most efficient)
         for (let i = 0; i < adultSubreddits.length; i++) {
             if (lowerSub === adultSubreddits[i].toLowerCase()) {
                 bannedSubredditCache.set(lowerSub, true);
@@ -1093,7 +655,7 @@
             }
         }
         
-        // Check keywords
+        // Check for exact keyword matches
         for (let i = 0; i < keywordsToHide.length; i++) {
             if (lowerSub.includes(keywordsToHide[i].toLowerCase())) {
                 bannedSubredditCache.set(lowerSub, true);
@@ -1101,7 +663,7 @@
             }
         }
         
-        // Check regex (most expensive)
+        // Check regex patterns
         for (let i = 0; i < regexKeywordsToHide.length; i++) {
             if (regexKeywordsToHide[i].test(lowerSub)) {
                 bannedSubredditCache.set(lowerSub, true);
@@ -1113,59 +675,13 @@
         return false;
     }
 
-    // Optimized content checking with early returns and better caching
     function checkContentForKeywords(content) {
         if (!content) return false;
         
-        const contentText = content.textContent || content.innerText || '';
-        if (!contentText || contentText.length < 3) return false;
+        const contentText = content.textContent || content.innerText || content.nodeValue || '';
+        if (!contentText) return false;
         
-        const lowerText = contentText.toLowerCase();
-        const cacheKey = lowerText.substring(0, 100).trim();
-        
-        if (contentBannedCache.has(cacheKey)) {
-            return contentBannedCache.get(cacheKey);
-        }
-        
-        let isBanned = false;
-        
-        // Optimized keyword check
-        const commonWords = ['her', 'she', 'the', 'and', 'for', 'app', 'main'];
-        for (let i = 0; i < keywordsToHide.length && !isBanned; i++) {
-            const keyword = keywordsToHide[i].toLowerCase();
-            
-            // Skip common words that are too short
-            if (keyword.length < 4 && commonWords.includes(keyword)) {
-                continue;
-            }
-            
-            if (lowerText.includes(keyword)) {
-                // Context check for 'main' keyword
-                if (keyword === 'main') {
-                    const index = lowerText.indexOf(keyword);
-                    const before = lowerText.substring(Math.max(0, index - 10), index);
-                    const after = lowerText.substring(index + keyword.length, index + keyword.length + 10);
-                    
-                    if (before.includes('domain') || after.includes('stream')) {
-                        continue;
-                    }
-                }
-                
-                isBanned = true;
-            }
-        }
-        
-        // Regex check only if keyword check failed
-        if (!isBanned) {
-            for (let i = 0; i < regexKeywordsToHide.length && !isBanned; i++) {
-                if (regexKeywordsToHide[i].test(lowerText)) {
-                    isBanned = true;
-                }
-            }
-        }
-        
-        contentBannedCache.set(cacheKey, isBanned);
-        return isBanned;
+        return checkTextForKeywords(contentText);
     }
 
     function isSafeSubredditUrl() {
@@ -1186,8 +702,8 @@
         }
     }
 
-    // Optimized subreddit extraction
     function getSubredditForAnyRedditPost(el) {
+        // Check for attributes first (most efficient)
         const prefixedName = el.getAttribute && el.getAttribute('subreddit-prefixed-name');
         if (prefixedName) return prefixedName.startsWith('r/') ? prefixedName : 'r/' + prefixedName;
         
@@ -1197,12 +713,14 @@
         const dataSubreddit = el.getAttribute && el.getAttribute('data-subreddit');
         if (dataSubreddit) return dataSubreddit.startsWith('r/') ? dataSubreddit : 'r/' + dataSubreddit;
         
+        // Check for subreddit links (less efficient)
         const subredditLink = el.querySelector && el.querySelector('a[data-testid="subreddit-name"]');
         if (subredditLink && subredditLink.textContent) return subredditLink.textContent.trim();
         
         const rLink = el.querySelector && el.querySelector('a[href^="/r/"]');
         if (rLink && rLink.textContent) return rLink.textContent.trim();
         
+        // Check all links as last resort
         const links = el.querySelectorAll && el.querySelectorAll('a[href*="/r/"]');
         if (links) {
             for (let i = 0; i < links.length; i++) {
@@ -1223,74 +741,75 @@
         return isSubredditNameBanned(sub);
     }
 
-    // Optimized search result filtering - SKIP ON POST PAGES
-    function filterSearchResultPosts() {
-        if (!isSearchResultsPage() || isCurrentlyFiltering || isPostPage()) return;
-        
-        isCurrentlyFiltering = true;
-        
-        try {
-            const searchPosts = document.querySelectorAll('article, shreddit-post, [data-testid*="post"], div[slot="post"]');
-            
-            for (let i = 0; i < searchPosts.length; i++) {
-                const post = searchPosts[i];
-                if (processedElements.has(post)) continue;
-                processedElements.add(post);
-                
-                let shouldHide = false;
-                
-                const subreddit = getSubredditForAnyRedditPost(post);
-                if (subreddit && isSubredditNameBanned(subreddit)) {
-                    shouldHide = true;
-                } else {
-                    // Check title only
-                    const titleElement = post.querySelector('h1, h2, h3, a[data-click-id="body"], .title, [data-testid*="title"], a[href*="/comments/"]');
-                    if (titleElement && checkContentForKeywords(titleElement)) {
-                        shouldHide = true;
-                    } else {
-                        // Check post content excluding title
-                        const postContentElements = post.querySelectorAll('p, div:not(:has(h1, h2, h3, a[data-click-id="body"], .title, [data-testid*="title"]))');
-                        for (let j = 0; j < postContentElements.length && !shouldHide; j++) {
-                            if (checkContentForKeywords(postContentElements[j])) {
-                                shouldHide = true;
-                            }
-                        }
-                    }
-                }
-                
-                if (shouldHide) {
-                    post.classList.add('reddit-banned');
-                    post.remove();
-                }
-            }
-        } finally {
-            isCurrentlyFiltering = false;
+    // NEW: Comprehensive content evaluation function
+    function evaluateElementForBanning(element) {
+        // Skip if permanently approved
+        if (permanentlyApprovedElements.has(element)) {
+            return false;
         }
+        
+        // Check subreddit first (most reliable)
+        if (isElementFromAdultSubreddit(element)) {
+            return true;
+        }
+        
+        // Check content for keywords
+        if (checkContentForKeywords(element)) {
+            return true;
+        }
+        
+        // Check specific areas more thoroughly
+        const titleElement = element.querySelector && element.querySelector('h1, h2, h3, a[data-click-id="body"], .title, [slot="title"]');
+        if (titleElement && checkContentForKeywords(titleElement)) {
+            return true;
+        }
+        
+        // Check post content/body
+        const contentElement = element.querySelector && element.querySelector('.post-content, .md-container, p, [slot="text-body"], [data-testid="post-content"]');
+        if (contentElement && checkContentForKeywords(contentElement)) {
+            return true;
+        }
+        
+        // Check for NSFW indicators
+        const nsfwIndicators = element.querySelectorAll && element.querySelectorAll('.nsfw, [data-nsfw="true"], svg[icon-name="nsfw-outline"], .text-category-nsfw');
+        if (nsfwIndicators && nsfwIndicators.length > 0) {
+            return true;
+        }
+        
+        return false;
     }
 
+    // --- MAIN FILTERING FUNCTIONS ---
     function filterAdultSubredditPostsAndComments() {
-        if (isPostPage()) return;
+        // Skip on Reddit Answers pages
+        if (isRedditAnswersPage()) return;
         
-        const posts = document.querySelectorAll('article:not(.reddit-processed), shreddit-post:not(.reddit-processed), [subreddit-prefixed-name]:not(.reddit-processed)');
+        // Get all post and comment elements, including those in various containers
+        const allSelectors = [
+            'article:not(.prehide):not(.reddit-approved)',
+            'shreddit-post:not(.prehide):not(.reddit-approved)', 
+            '[subreddit-prefixed-name]:not(.prehide):not(.reddit-approved)',
+            '.Comment:not(.prehide):not(.reddit-approved)',
+            'shreddit-comment:not(.prehide):not(.reddit-approved)'
+        ];
         
-        for (let i = 0; i < posts.length; i++) {
-            const post = posts[i];
-            post.classList.add('reddit-processed');
+        for (let selectorIndex = 0; selectorIndex < allSelectors.length; selectorIndex++) {
+            const elements = document.querySelectorAll(allSelectors[selectorIndex]);
             
-            if (isElementFromAdultSubreddit(post)) {
-                post.classList.add('reddit-banned');
-                removeElementAndRelated(post);
-            }
-        }
-        
-        const comments = document.querySelectorAll('.Comment:not(.reddit-processed)');
-        for (let i = 0; i < comments.length; i++) {
-            const comment = comments[i];
-            comment.classList.add('reddit-processed');
-            
-            if (isElementFromAdultSubreddit(comment)) {
-                comment.classList.add('reddit-banned');
-                removeElementAndRelated(comment);
+            for (let i = 0; i < elements.length; i++) {
+                const element = elements[i];
+                if (processedElements.has(element)) continue;
+                processedElements.add(element);
+                
+                // Comprehensive evaluation
+                if (evaluateElementForBanning(element)) {
+                    element.classList.add('prehide', 'reddit-banned');
+                    removeElementAndRelated(element);
+                } else {
+                    element.classList.add('reddit-approved');
+                    // Mark as permanently approved to avoid re-checking
+                    permanentlyApprovedElements.add(element);
+                }
             }
         }
     }
@@ -1303,14 +822,17 @@
     }
 
     function hideJoinNowPosts() {
-        if (isPostPage()) return;
+        // Skip on Reddit Answers pages
+        if (isRedditAnswersPage()) return;
         
-        const posts = document.querySelectorAll('article:not(.reddit-processed), shreddit-post:not(.reddit-processed)');
+        const posts = document.querySelectorAll('article:not(.prehide), shreddit-post:not(.prehide)');
         for (let i = 0; i < posts.length; i++) {
             const post = posts[i];
+            if (processedElements.has(post)) continue;
             
             let joinNowFound = false;
             
+            // Check buttons
             const btns = post.querySelectorAll('button, a');
             for (let j = 0; j < btns.length && !joinNowFound; j++) {
                 if (btns[j].textContent && btns[j].textContent.trim().toLowerCase() === 'join now') {
@@ -1319,13 +841,14 @@
             }
             
             if (joinNowFound) {
-                post.classList.add('reddit-banned');
+                post.classList.add('prehide');
                 removeElementAndRelated(post);
             }
         }
     }
 
     function getSubredditFromPost(post) {
+        // More efficient version of getSubredditForAnyRedditPost focused on posts
         const sub = post.getAttribute && post.getAttribute('data-subreddit');
         if (sub) return sub.startsWith('r/') ? sub : 'r/' + sub;
         
@@ -1341,92 +864,81 @@
     }
 
     function hideSubredditPosts() {
-        if (isPostPage()) return;
+        // Skip on Reddit Answers pages
+        if (isRedditAnswersPage()) return;
         
-        const posts = document.querySelectorAll('article:not(.reddit-processed)');
+        const posts = document.querySelectorAll('article:not(.prehide)');
         for (let i = 0; i < posts.length; i++) {
             const post = posts[i];
+            if (processedElements.has(post)) continue;
             
             const subName = getSubredditFromPost(post);
             if (subName && isSubredditNameBanned(subName)) {
-                post.classList.add('reddit-banned');
+                post.classList.add('prehide');
                 removeElementAndRelated(post);
             }
         }
     }
 
     function hideKeywordPosts() {
-        if (isPostPage()) return;
+        // Skip on Reddit Answers pages
+        if (isRedditAnswersPage()) return;
         
-        const posts = document.querySelectorAll('article:not(.reddit-processed)');
+        // More efficient implementation that checks fewer elements and uses caching
+        const posts = document.querySelectorAll('article:not(.prehide):not(.reddit-approved)');
         
         for (let i = 0; i < posts.length; i++) {
             const post = posts[i];
-            post.classList.add('reddit-processed');
+            if (processedElements.has(post)) continue;
+            processedElements.add(post);
             
-            let containsKeywordToHide = false;
-            
-            const subreddit = getSubredditFromPost(post);
-            if (subreddit && isSubredditNameBanned(subreddit)) {
-                containsKeywordToHide = true;
-            }
-            
-            if (!containsKeywordToHide) {
-                const titleElement = post.querySelector('h1, h2, h3, a[data-click-id="body"], .title');
-                if (titleElement && checkContentForKeywords(titleElement)) {
-                    containsKeywordToHide = true;
-                }
-                
-                if (!containsKeywordToHide) {
-                    const contentElement = post.querySelector('.post-content, .md-container, p');
-                    if (contentElement && checkContentForKeywords(contentElement)) {
-                        containsKeywordToHide = true;
-                    }
-                }
-            }
-            
-            if (containsKeywordToHide) {
-                post.classList.add('reddit-banned');
+            // Use comprehensive evaluation
+            if (evaluateElementForBanning(post)) {
+                post.classList.add('prehide', 'reddit-banned');
                 removeElementAndRelated(post);
+            } else {
+                post.classList.add('reddit-approved');
+                permanentlyApprovedElements.add(post);
             }
         }
     }
 
     function filterPostsByContent() {
-        if (isPostPage()) return;
+        // Skip on Reddit Answers pages
+        if (isRedditAnswersPage()) return;
         
-        const posts = document.querySelectorAll('article:not(.reddit-processed), shreddit-post:not(.reddit-processed)');
+        // More targeted approach with reduced DOM operations
+        const posts = document.querySelectorAll('article:not(.prehide):not(.reddit-approved), shreddit-post:not(.prehide):not(.reddit-approved)');
         
         for (let i = 0; i < posts.length; i++) {
             const post = posts[i];
-            post.classList.add('reddit-processed');
+            if (processedElements.has(post)) continue;
+            processedElements.add(post);
             
-            let hasBannedContent = false;
-            
-            if (isElementFromAdultSubreddit(post)) {
-                hasBannedContent = true;
-            }
-            
-            if (!hasBannedContent && checkContentForKeywords(post)) {
-                hasBannedContent = true;
-            }
-            
-            if (hasBannedContent) {
-                post.classList.add('reddit-banned');
+            // Use comprehensive evaluation
+            if (evaluateElementForBanning(post)) {
+                post.classList.add('prehide', 'reddit-banned');
                 removeElementAndRelated(post);
+            } else {
+                post.classList.add('reddit-approved');
+                permanentlyApprovedElements.add(post);
             }
         }
     }
 
     function checkForAdultContentTag() {
+        // Skip on Reddit Answers pages
+        if (isRedditAnswersPage()) return;
+        
         const adultContentTags = document.querySelectorAll('.flex.items-center svg[icon-name="nsfw-outline"]');
         if (adultContentTags.length > 0 && !isUrlAllowed()) {
             window.location.replace('https://www.reddit.com');
         }
     }
 
-    // --- OPTIMIZED SEARCH FILTERING FUNCTIONS ---
+    // --- SEARCH FILTERING FUNCTIONS ---
     function hideBannedSubredditsFromSearch() {
+        // Process all search dropdown items
         const allSearchItems = [
             ...Array.from(document.querySelectorAll('[data-type="search-dropdown-item-label-text"]')),
             ...Array.from(document.querySelectorAll('span.font-semibold.text-12.uppercase, span.text-category-nsfw')),
@@ -1439,8 +951,10 @@
             if (processedSearchItems.has(item)) continue;
             processedSearchItems.add(item);
             
+            // Process different types of items
             if (item.classList.contains('text-category-nsfw') || 
                 (item.textContent && item.textContent.trim().toUpperCase() === "NSFW")) {
+                // NSFW badge - hide parent element
                 let toHide = item.closest('li[role="presentation"], li, a, div');
                 if (toHide) {
                     toHide.style.display = 'none';
@@ -1448,11 +962,13 @@
                 continue;
             }
             
+            // Check item text for banned content
             const ariaLabel = item.getAttribute ? (item.getAttribute('aria-label') || '') : '';
             const textContent = item.textContent || '';
             const label = ariaLabel + ' ' + textContent;
             
             if (isSubredditNameBanned(label)) {
+                // Find nearest parent to hide
                 let toHide = item.closest('li[role="presentation"], li, a, div');
                 if (toHide) {
                     toHide.style.display = 'none';
@@ -1462,6 +978,7 @@
                     item.style.display = 'none';
                 }
             } else {
+                // Mark as approved
                 item.classList.add('reddit-search-approved');
                 let parent = item.closest('li[role="presentation"], li, a, div');
                 if (parent) parent.classList.add('reddit-search-approved');
@@ -1472,6 +989,7 @@
     function processShadowSearchItems(root) {
         if (!root || !root.querySelectorAll) return;
         
+        // Process all relevant search items in shadow DOM
         const searchItems = root.querySelectorAll('li[role="presentation"], div[role="presentation"], li, a[role="option"], div[data-testid="search-dropdown-item"]');
         
         for (let i = 0; i < searchItems.length; i++) {
@@ -1479,10 +997,12 @@
             if (processedSearchItems.has(item)) continue;
             processedSearchItems.add(item);
             
+            // Get item text
             const text = item.textContent || '';
             const ariaLabel = item.getAttribute ? (item.getAttribute('aria-label') || '') : '';
             const fullText = text + ' ' + ariaLabel;
             
+            // Check for NSFW badge
             let hasNSFWBadge = false;
             const spans = item.querySelectorAll('span, div');
             for (let j = 0; j < spans.length && !hasNSFWBadge; j++) {
@@ -1491,6 +1011,7 @@
                 }
             }
             
+            // Hide if banned content
             if (isSubredditNameBanned(fullText) || hasNSFWBadge) {
                 item.style.display = 'none';
             } else {
@@ -1503,10 +1024,12 @@
         function processShadowRoots(node) {
             if (!node) return;
             
+            // Process shadow root if it exists
             if (node.shadowRoot && !shadowRootsProcessed.has(node.shadowRoot)) {
                 shadowRootsProcessed.add(node.shadowRoot);
                 processShadowSearchItems(node.shadowRoot);
                 
+                // Set up observer for this shadow root
                 const shadowObserver = new MutationObserver(throttledShadowRootHandler);
                 shadowObserver.observe(node.shadowRoot, { 
                     childList: true, 
@@ -1515,12 +1038,14 @@
                     characterData: false
                 });
                 
+                // Process children in shadow root
                 const shadowChildren = node.shadowRoot.querySelectorAll('*');
                 for (let i = 0; i < shadowChildren.length; i++) {
                     processShadowRoots(shadowChildren[i]);
                 }
             }
             
+            // Process children
             if (node.children) {
                 for (let i = 0; i < node.children.length; i++) {
                     processShadowRoots(node.children[i]);
@@ -1528,24 +1053,29 @@
             }
         }
         
+        // First process light DOM
         hideBannedSubredditsFromSearch();
         
+        // Then process shadow DOM
         if (document.body) {
             processShadowRoots(document.body);
         }
         
+        // Direct processing of search dropdowns
         const searchDropdowns = document.querySelectorAll('faceplate-search-dropdown, shreddit-search-dropdown');
         for (let i = 0; i < searchDropdowns.length; i++) {
             processShadowRoots(searchDropdowns[i]);
         }
     }
 
+    // Handler for shadow root mutations
     const throttledShadowRootHandler = throttle((mutations) => {
         for (const mutation of mutations) {
             for (const node of mutation.addedNodes) {
-                if (node.nodeType === 1) {
+                if (node.nodeType === 1) { // Element node
                     processShadowSearchItems(mutation.target);
                     
+                    // Process shadow root if it exists
                     if (node.shadowRoot && !shadowRootsProcessed.has(node.shadowRoot)) {
                         shadowRootsProcessed.add(node.shadowRoot);
                         processShadowSearchItems(node.shadowRoot);
@@ -1556,6 +1086,7 @@
     }, 100);
 
     function observeSearchDropdown() {
+        // Observe search dropdown container
         const container = document.getElementById('search-dropdown-results-container');
         if (container && !container.__searchObserved) {
             const observer = new MutationObserver(() => {
@@ -1572,12 +1103,14 @@
             container.__searchObserved = true;
         }
         
+        // Observe all search dropdowns directly
         const searchDropdowns = document.querySelectorAll('faceplate-search-dropdown, shreddit-search-dropdown');
         for (let i = 0; i < searchDropdowns.length; i++) {
             const dropdown = searchDropdowns[i];
             if (dropdown.__searchObserved) continue;
             dropdown.__searchObserved = true;
             
+            // Observe the dropdown itself
             const observer = new MutationObserver(() => {
                 batchProcess(() => {
                     if (dropdown.shadowRoot) {
@@ -1605,8 +1138,13 @@
                 const regexMatch = regexKeywordsToHide.some(pattern =>
                     pattern.test(query)
                 );
+                
                 if ((exactMatch || regexMatch) || (!isUrlAllowed() && query.includes(redgifsKeyword))) {
-                    window.location.replace('https://www.reddit.com');
+                    if (isRedditAnswersPage()) {
+                        window.location.href = 'https://www.reddit.com/answers';
+                    } else {
+                        window.location.replace('https://www.reddit.com');
+                    }
                 }
             }, 200));
             searchInput.__filterListener = true;
@@ -1625,9 +1163,14 @@
                 const regexMatch = regexKeywordsToHide.some(pattern =>
                     pattern.test(query)
                 );
+                
                 if ((exactMatch || regexMatch) || (!isUrlAllowed() && query.includes(redgifsKeyword))) {
                     event.preventDefault();
-                    window.location.replace('https://www.reddit.com');
+                    if (isRedditAnswersPage()) {
+                        window.location.href = 'https://www.reddit.com/answers';
+                    } else {
+                        window.location.replace('https://www.reddit.com');
+                    }
                 }
             });
             searchForm.__filterListener = true;
@@ -1639,19 +1182,29 @@
         
         const currentUrl = window.location.href.toLowerCase();
         
+        // Check exact keywords first (most efficient)
         for (let i = 0; i < keywordsToHide.length; i++) {
             if (currentUrl.includes(keywordsToHide[i].toLowerCase())) {
                 if (!isUrlAllowed()) {
-                    window.location.replace('https://www.reddit.com');
+                    if (isRedditAnswersPage()) {
+                        window.location.href = 'https://www.reddit.com/answers';
+                    } else {
+                        window.location.replace('https://www.reddit.com');
+                    }
                     return;
                 }
             }
         }
         
+        // Check regex patterns if needed
         for (let i = 0; i < regexKeywordsToHide.length; i++) {
             if (regexKeywordsToHide[i].test(currentUrl)) {
                 if (!isUrlAllowed()) {
-                    window.location.replace('https://www.reddit.com');
+                    if (isRedditAnswersPage()) {
+                        window.location.href = 'https://www.reddit.com/answers';
+                    } else {
+                        window.location.replace('https://www.reddit.com');
+                    }
                     return;
                 }
             }
@@ -1659,44 +1212,32 @@
     }
 
     function clearRecentPages() {
+        // Skip on Reddit Answers pages
+        if (isRedditAnswersPage()) return;
+        
         try {
             const recentPagesStore = localStorage.getItem('recent-subreddits-store');
             if (!recentPagesStore) return;
             
-            let recentPages;
-            try {
-                recentPages = JSON.parse(recentPagesStore);
-            } catch (parseError) {
-                localStorage.setItem('recent-subreddits-store', '[]');
-                return;
-            }
+            const recentPages = JSON.parse(recentPagesStore);
+            if (!Array.isArray(recentPages)) return;
             
-            if (!Array.isArray(recentPages)) {
-                localStorage.setItem('recent-subreddits-store', '[]');
-                return;
-            }
-            
-            const filteredPages = [];
-            for (let i = 0; i < recentPages.length; i++) {
-                const page = recentPages[i];
-                if (typeof page === 'string' && !isSubredditNameBanned(page)) {
-                    filteredPages.push(page);
-                } else if (typeof page !== 'string') {
-                    filteredPages.push(page);
-                }
-            }
+            const filteredPages = recentPages.filter(page => {
+                if (typeof page !== 'string') return true;
+                return !isSubredditNameBanned(page);
+            });
             
             localStorage.setItem('recent-subreddits-store', JSON.stringify(filteredPages));
         } catch (e) {
-            try {
-                localStorage.setItem('recent-subreddits-store', '[]');
-            } catch (storageError) {
-                // Handle localStorage errors
-            }
+            // Handle localStorage errors safely
+            console.error("Error clearing recent pages:", e);
         }
     }
 
     function hideRecentCommunitiesSection() {
+        // Skip on Reddit Answers pages
+        if (isRedditAnswersPage()) return;
+        
         const selectors = [
             'reddit-recent-pages', 
             'shreddit-recent-communities',
@@ -1712,6 +1253,7 @@
             }
         }
         
+        // Clear stored communities
         try {
             localStorage.setItem('recent-subreddits-store', '[]');
         } catch (e) {
@@ -1720,6 +1262,9 @@
     }
 
     function checkAndHideNSFWClassElements() {
+        // Skip on Reddit Answers pages
+        if (isRedditAnswersPage()) return;
+        
         const nsfwClasses = ['NSFW', 'nsfw-tag', 'nsfw-content'];
         for (let i = 0; i < nsfwClasses.length; i++) {
             const elements = document.querySelectorAll(`.${nsfwClasses[i]}`);
@@ -1730,6 +1275,9 @@
     }
 
     function removeHrElements() {
+        // Skip on Reddit Answers pages
+        if (isRedditAnswersPage()) return;
+        
         const hrElements = document.querySelectorAll('hr.border-b-neutral-border-weak.border-solid.border-b-sm.border-0');
         for (let i = 0; i < hrElements.length; i++) {
             hrElements[i].remove();
@@ -1737,6 +1285,9 @@
     }
 
     function removeSelectorsToDelete() {
+        // Skip on Reddit Answers pages
+        if (isRedditAnswersPage()) return;
+        
         for (let i = 0; i < selectorsToDelete.length; i++) {
             const elements = document.querySelectorAll(selectorsToDelete[i]);
             for (let j = 0; j < elements.length; j++) {
@@ -1746,6 +1297,9 @@
     }
 
     function processShadowDOM() {
+        // Skip on Reddit Answers pages
+        if (isRedditAnswersPage()) return;
+        
         const elements = document.querySelectorAll('shreddit-post, shreddit-feed, shreddit-comments');
         
         for (let i = 0; i < elements.length; i++) {
@@ -1754,20 +1308,24 @@
             
             shadowRootsProcessed.add(element.shadowRoot);
             
+            // Process posts in shadow DOM
             const posts = element.shadowRoot.querySelectorAll('article, shreddit-post');
             for (let j = 0; j < posts.length; j++) {
                 const post = posts[j];
                 if (processedElements.has(post)) continue;
                 processedElements.add(post);
                 
-                if (isPostPage()) continue;
-                
-                if (checkContentForKeywords(post) || isElementFromAdultSubreddit(post)) {
-                    post.classList.add('reddit-banned');
+                // Use comprehensive evaluation for consistency
+                if (evaluateElementForBanning(post)) {
+                    post.classList.add('prehide', 'reddit-banned');
                     post.remove();
+                } else {
+                    post.classList.add('reddit-approved');
+                    permanentlyApprovedElements.add(post);
                 }
             }
             
+            // Set up observer for shadow root
             const shadowObserver = new MutationObserver(throttledShadowRootHandler);
             shadowObserver.observe(element.shadowRoot, {
                 childList: true,
@@ -1780,33 +1338,43 @@
 
     // --- MAIN FILTER FUNCTION ---
     function runAllChecks() {
+        // Skip if we just ran recently (for performance)
         const now = performance.now();
-        if (now - lastFilterTime < 100) return;
+        if (now - lastFilterTime < 50) return;
         lastFilterTime = now;
         
+        // Apply body class for CSS transitions
+        if (document.body && !document.body.classList.contains('reddit-filter-ready')) {
+            document.body.classList.add('reddit-filter-ready');
+        }
+        
+        // Check for answers page redirect first
         checkAndRedirectFromAnswers();
-        checkAndRedirectFromPreferences();
+        
+        // Hide Answers button
         hideAnswersButton();
         
-        if (isRedditPreferencesPage() && !isRedditAccountPage()) {
-            hideContentSettings();
-            forceNSFWDisabled();
+        // Check Reddit Answers pages first
+        if (isRedditAnswersPage()) {
+            checkRedditAnswersTextContent();
+            processAnswersShadowDOMText();
+            return; // Only run Reddit Answers filtering on those pages
         }
         
-        if (isSearchResultsPage()) {
-            hideNSFWSearchElements();
-            filterSearchResultPosts();
-        }
-        
+        // Handle search filtering first (to prevent flashes)
         hideBannedSubredditsFromSearch();
         hideBannedSubredditsFromAllSearchDropdowns();
         observeSearchDropdown();
+        
+        // Process shadow DOM
         processShadowDOM();
         
+        // Filter posts and comments with consistent logic
         filterAdultSubredditPostsAndComments();
         hideKeywordPosts();
         filterPostsByContent();
         
+        // Other checks
         if (!isUrlAllowed()) {
             hideJoinNowPosts();
             hideSubredditPosts();
@@ -1816,6 +1384,7 @@
             hideRecentCommunitiesSection();
         }
         
+        // Cleanup
         removeHrElements();
         removeSelectorsToDelete();
         checkAndHideNSFWClassElements();
@@ -1823,13 +1392,18 @@
 
     // --- INITIALIZATION AND EVENT HANDLING ---
     function init() {
+        // Check for answers page redirect immediately
         checkAndRedirectFromAnswers();
-        checkAndRedirectFromPreferences();
+        
+        // Set up search interception
         interceptSearchInputChanges();
         interceptSearchFormSubmit();
+        
+        // Run initial checks
         runAllChecks();
         
-        const throttledRunChecks = throttle(runAllChecks, 150);
+        // Set up observer for DOM changes
+        const throttledRunChecks = throttle(runAllChecks, 50);
         const observer = new MutationObserver(throttledRunChecks);
         
         if (document.body) {
@@ -1841,75 +1415,46 @@
             });
         }
         
-        setInterval(hideAnswersButton, 100);
-        setInterval(hideAnswersButton, 500);
-        setInterval(hideAnswersButton, 1000);
-        
-        if (isRedditPreferencesPage() && !isRedditAccountPage()) {
-            setInterval(hideContentSettings, 100);
-            setInterval(hideContentSettings, 500);
-            setInterval(hideContentSettings, 1000);
-            setInterval(forceNSFWDisabled, 200);
-            setInterval(forceNSFWDisabled, 1000);
-            setTimeout(hideContentSettings, 50);
-            setTimeout(hideContentSettings, 100);
-            setTimeout(hideContentSettings, 500);
-            setTimeout(hideContentSettings, 1000);
-            setTimeout(forceNSFWDisabled, 100);
-            setTimeout(forceNSFWDisabled, 500);
+        // Use minimal intervals to reduce lag
+        if (!isRedditAnswersPage()) {
+            const minimalInterval = setInterval(hideBannedSubredditsFromSearch, 500);
+            const answersButtonInterval = setInterval(hideAnswersButton, 50);
         }
         
-        if (isSearchResultsPage()) {
-            setInterval(hideNSFWSearchElements, 500);
-            setInterval(filterSearchResultPosts, 1000);
-        }
-        
-        setInterval(hideBannedSubredditsFromSearch, 1000);
-        
+        // Use requestIdleCallback for background tasks
         if (window.requestIdleCallback) {
             const idleCallback = () => {
                 if (document.hidden) {
                     runAllChecks();
                 } else {
-                    hideBannedSubredditsFromAllSearchDropdowns();
-                    filterPostsByContent();
-                    hideAnswersButton();
-                    
-                    if (isRedditPreferencesPage() && !isRedditAccountPage()) {
-                        hideContentSettings();
-                        forceNSFWDisabled();
-                    }
-                    
-                    if (isSearchResultsPage()) {
-                        hideNSFWSearchElements();
-                        setTimeout(filterSearchResultPosts, 200);
+                    if (isRedditAnswersPage()) {
+                        throttledRedditAnswersCheck();
+                    } else {
+                        hideBannedSubredditsFromAllSearchDropdowns();
+                        filterPostsByContent();
+                        hideAnswersButton();
                     }
                 }
                 
-                window.requestIdleCallback(idleCallback, { timeout: 2000 });
+                window.requestIdleCallback(idleCallback, { timeout: 1000 });
             };
             
-            window.requestIdleCallback(idleCallback, { timeout: 2000 });
+            window.requestIdleCallback(idleCallback, { timeout: 1000 });
         } else {
             setInterval(() => {
                 batchProcess(() => {
-                    hideBannedSubredditsFromAllSearchDropdowns();
-                    filterPostsByContent();
-                    hideAnswersButton();
-                    
-                    if (isRedditPreferencesPage() && !isRedditAccountPage()) {
-                        hideContentSettings();
-                        forceNSFWDisabled();
-                    }
-                    
-                    if (isSearchResultsPage()) {
-                        hideNSFWSearchElements();
-                        setTimeout(filterSearchResultPosts, 200);
+                    if (isRedditAnswersPage()) {
+                        throttledRedditAnswersCheck();
+                    } else {
+                        hideBannedSubredditsFromAllSearchDropdowns();
+                        filterPostsByContent();
+                        hideAnswersButton();
                     }
                 });
-            }, 2000);
+            }, 1000);
         }
         
+        // Clear caches periodically to prevent memory leaks
         setInterval(() => {
             if (contentBannedCache.size > 1000) {
                 contentBannedCache.clear();
@@ -1920,22 +1465,22 @@
         }, 60000);
     }
 
+    // Initialize when DOM is ready
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);
     } else {
         init();
     }
 
+    // Process elements as they're added to the DOM
     const processNewElements = throttle((mutations) => {
         let needsSearchUpdate = false;
-        let needsContentSettingsUpdate = false;
-        let needsNSFWSearchUpdate = false;
+        let needsAnswersCheck = false;
         
         for (let i = 0; i < mutations.length; i++) {
             const mutation = mutations[i];
             
             checkAndRedirectFromAnswers();
-            checkAndRedirectFromPreferences();
             
             if (mutation.target.id === 'search-dropdown-results-container' ||
                 mutation.target.tagName === 'FACEPLATE-SEARCH-DROPDOWN' ||
@@ -1943,22 +1488,19 @@
                 needsSearchUpdate = true;
             }
             
-            if (isRedditPreferencesPage() && !isRedditAccountPage() && mutation.target.textContent) {
-                const textContent = mutation.target.textContent;
-                if (textContent.includes('Show mature content') ||
-                    textContent.includes('Blur mature') ||
-                    textContent.includes("I'm over 18") ||
-                    textContent.includes('Content')) {
-                    needsContentSettingsUpdate = true;
+            if (isRedditAnswersPage()) {
+                for (let k = 0; k < redditAnswersSelectors.length; k++) {
+                    const selector = redditAnswersSelectors[k];
+                    if (mutation.target.id && selector.includes(mutation.target.id)) {
+                        needsAnswersCheck = true;
+                        break;
+                    }
                 }
-            }
-            
-            if (isSearchResultsPage() && mutation.target.textContent) {
-                const textContent = mutation.target.textContent;
-                if (textContent.includes('NSFW search results') ||
-                    textContent.includes('NSFW filter') ||
-                    textContent.includes('Safe search')) {
-                    needsNSFWSearchUpdate = true;
+                
+                if (mutation.target.tagName === 'GUIDES-HEADER-PANEL' ||
+                    mutation.target.tagName === 'GUIDES-RESPONSE-CONTAINER-REALTIME' ||
+                    mutation.target.tagName === 'GUIDES-SEARCH-INPUT') {
+                    needsAnswersCheck = true;
                 }
             }
             
@@ -1966,32 +1508,27 @@
                 const node = mutation.addedNodes[j];
                 if (node.nodeType !== 1) continue;
                 
-                if (node.tagName === 'A' && (node.getAttribute('href') === '/answers/' || 
-                    node.getAttribute('href') === '/answers' || 
-                    (node.getAttribute('href') && node.getAttribute('href').includes('/answers')))) {
-                    if (!node.closest('nav, header, [role="navigation"], [role="banner"], shreddit-header')) {
-                        hideAnswersButton();
-                    }
+                if (node.tagName === 'A' && node.getAttribute('href') === '/answers/') {
+                    hideAnswersButton();
                 }
                 
                 if (node.tagName === 'FACEPLATE-TRACKER' || 
-                    (node.querySelector && (node.querySelector('faceplate-tracker[noun="gen_guides_sidebar"]') ||
-                                         node.querySelector('a[href="/answers/"]') ||
-                                         node.querySelector('a[href="/answers"]') ||
-                                         node.querySelector('a[href*="/answers"]') ||
-                                         node.querySelector('svg[icon-name="answers-outline"]')))) {
-                    if (!node.closest('nav, header, [role="navigation"], [role="banner"], shreddit-header')) {
-                        hideAnswersButton();
-                    }
+                    node.querySelector && (node.querySelector('faceplate-tracker[noun="gen_guides_sidebar"]') ||
+                                         node.querySelector('a[href="/answers/"]'))) {
+                    hideAnswersButton();
                 }
                 
-                if (node.tagName === 'ARTICLE' || node.tagName === 'SHREDDIT-POST') {
+                if (!isRedditAnswersPage() && (node.tagName === 'ARTICLE' || node.tagName === 'SHREDDIT-POST')) {
                     if (!processedElements.has(node)) {
                         processedElements.add(node);
                         
-                        if (!isPostPage() && (checkContentForKeywords(node) || isElementFromAdultSubreddit(node))) {
-                            node.classList.add('reddit-banned');
+                        // Use consistent evaluation logic
+                        if (evaluateElementForBanning(node)) {
+                            node.classList.add('prehide', 'reddit-banned');
                             removeElementAndRelated(node);
+                        } else {
+                            node.classList.add('reddit-approved');
+                            permanentlyApprovedElements.add(node);
                         }
                     }
                 } else if (node.hasAttribute && (
@@ -2002,51 +1539,55 @@
                     needsSearchUpdate = true;
                 }
                 
-                if (isRedditPreferencesPage() && !isRedditAccountPage() && node.hasAttribute && 
-                    (node.hasAttribute('data-testid') && 
-                    (node.getAttribute('data-testid') === 'is-nsfw-shown' || 
-                     node.getAttribute('data-testid') === 'safe-browsing-mode' ||
-                     node.getAttribute('data-testid') === 'enable-feed-recommendation' ||
-                     node.getAttribute('data-testid') === 'muted-communities'))) {
-                    needsContentSettingsUpdate = true;
-                }
-                
-                if (isRedditPreferencesPage() && !isRedditAccountPage() && node.textContent && 
-                    !node.closest('nav, header, [role="navigation"], [role="banner"], shreddit-header, aside')) {
-                    const textContent = node.textContent;
-                    if (textContent.includes('Show mature content') ||
-                        textContent.includes('Blur mature') ||
-                        textContent.includes("I'm over 18") ||
-                        textContent.includes('Not Safe for Work') ||
-                        textContent.includes('Show recommendations in home feed') ||
-                        textContent.includes('Muted communities') ||
-                        (textContent.trim() === 'Content' && node.tagName === 'H2')) {
-                        setTimeout(hideContentSettings, 50);
-                        setTimeout(forceNSFWDisabled, 100);
+                if (node.shadowRoot && !shadowRootsProcessed.has(node.shadowRoot)) {
+                    shadowRootsProcessed.add(node.shadowRoot);
+                    
+                    if (isRedditAnswersPage()) {
+                        const shadowText = node.shadowRoot.textContent || '';
+                        if (shadowText && checkTextForKeywords(shadowText)) {
+                            console.log('Banned text content found in added node shadow DOM, redirecting to answers page');
+                            window.location.href = 'https://www.reddit.com/answers';
+                            return;
+                        }
+                        
+                        const shadowObserver = new MutationObserver(throttledAnswersTextHandler);
+                        shadowObserver.observe(node.shadowRoot, {
+                            childList: true,
+                            subtree: true,
+                            attributes: false,
+                            characterData: true
+                        });
+                    } else {
+                        processShadowSearchItems(node.shadowRoot);
+                        
+                        // Apply consistent filtering to shadow DOM content
+                        const shadowPosts = node.shadowRoot.querySelectorAll('article, shreddit-post');
+                        for (let k = 0; k < shadowPosts.length; k++) {
+                            const shadowPost = shadowPosts[k];
+                            if (!processedElements.has(shadowPost)) {
+                                processedElements.add(shadowPost);
+                                
+                                if (evaluateElementForBanning(shadowPost)) {
+                                    shadowPost.classList.add('prehide', 'reddit-banned');
+                                    shadowPost.remove();
+                                } else {
+                                    shadowPost.classList.add('reddit-approved');
+                                    permanentlyApprovedElements.add(shadowPost);
+                                }
+                            }
+                        }
+                        
+                        const shadowObserver = new MutationObserver(throttledShadowRootHandler);
+                        shadowObserver.observe(node.shadowRoot, {
+                            childList: true,
+                            subtree: true,
+                            attributes: false,
+                            characterData: false
+                        });
                     }
                 }
                 
-                if (isSearchResultsPage() && 
-                    (node.tagName === 'SEARCH-BANNER' || 
-                     node.tagName === 'SEARCH-TELEMETRY-TRACKER' ||
-                     node.tagName === 'SEARCH-SORT-DROPDOWN-MENU')) {
-                    needsNSFWSearchUpdate = true;
-                }
-                
-                if (node.shadowRoot && !shadowRootsProcessed.has(node.shadowRoot)) {
-                    shadowRootsProcessed.add(node.shadowRoot);
-                    processShadowSearchItems(node.shadowRoot);
-                    
-                    const shadowObserver = new MutationObserver(throttledShadowRootHandler);
-                    shadowObserver.observe(node.shadowRoot, {
-                        childList: true,
-                        subtree: true,
-                        attributes: false,
-                        characterData: false
-                    });
-                }
-                
-                if (node.querySelectorAll) {
+                if (!isRedditAnswersPage() && node.querySelectorAll) {
                     const hrElements = node.querySelectorAll('hr.border-b-neutral-border-weak.border-solid.border-b-sm.border-0');
                     for (let k = 0; k < hrElements.length; k++) {
                         hrElements[k].remove();
@@ -2062,31 +1603,19 @@
             }
         }
         
-        if (needsSearchUpdate) {
+        if (!isRedditAnswersPage() && needsSearchUpdate) {
             batchProcess(() => {
                 hideBannedSubredditsFromSearch();
                 hideBannedSubredditsFromAllSearchDropdowns();
             });
         }
         
-        if (needsContentSettingsUpdate) {
-            setTimeout(hideContentSettings, 50);
-            setTimeout(hideContentSettings, 100);
-            setTimeout(forceNSFWDisabled, 75);
-        }
-        
-        if (needsNSFWSearchUpdate) {
-            setTimeout(hideNSFWSearchElements, 100);
+        if (needsAnswersCheck) {
+            throttledRedditAnswersCheck();
         }
         
         hideAnswersButton();
-        hideNSFWSearchElements();
-        
-        if (isRedditPreferencesPage() && !isRedditAccountPage()) {
-            setTimeout(hideContentSettings, 100);
-            setTimeout(forceNSFWDisabled, 150);
-        }
-    }, 100);
+    }, 30);
 
     const observer = new MutationObserver(processNewElements);
     
@@ -2097,51 +1626,18 @@
         characterData: false
     });
 
-    hideBannedSubredditsFromSearch();
-    hideBannedSubredditsFromAllSearchDropdowns();
-    
-    if (isRedditPreferencesPage() && !isRedditAccountPage()) {
-        hideContentSettings();
-        forceNSFWDisabled();
-        setTimeout(hideContentSettings, 50);
-        setTimeout(hideContentSettings, 100);
-        setTimeout(hideContentSettings, 500);
-        setTimeout(forceNSFWDisabled, 100);
-        setTimeout(forceNSFWDisabled, 300);
-        setTimeout(forceNSFWDisabled, 1000);
-    }
-    
-    if (isSearchResultsPage()) {
-        hideNSFWSearchElements();
-        setTimeout(hideNSFWSearchElements, 500);
-        setTimeout(hideNSFWSearchElements, 1000);
+    if (!isRedditAnswersPage()) {
+        hideBannedSubredditsFromSearch();
+        hideBannedSubredditsFromAllSearchDropdowns();
     }
 
+    // Set up URL change detection for redirect
     let currentUrl = window.location.href;
     setInterval(() => {
         if (window.location.href !== currentUrl) {
             currentUrl = window.location.href;
-            
             checkAndRedirectFromAnswers();
-            checkAndRedirectFromPreferences();
-            hideAnswersButton();
-            
-            if (isRedditPreferencesPage() && !isRedditAccountPage()) {
-                setTimeout(hideContentSettings, 50);
-                setTimeout(hideContentSettings, 100);
-                setTimeout(hideContentSettings, 500);
-                setTimeout(forceNSFWDisabled, 100);
-                setTimeout(forceNSFWDisabled, 300);
-                setTimeout(forceNSFWDisabled, 1000);
-            }
-            
-            if (isSearchResultsPage()) {
-                setTimeout(hideNSFWSearchElements, 200);
-                setTimeout(filterSearchResultPosts, 500);
-            }
-            
-            setTimeout(interceptSearchFormSubmit, 1000);
         }
-    }, 200);
+    }, 100);
 
 })();
