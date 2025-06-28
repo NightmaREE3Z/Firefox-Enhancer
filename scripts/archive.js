@@ -51,7 +51,7 @@
         "tw**t", "t*at", "t**t", "p*ss", "p***", "p*ssed", "t*rd", "rawdog", "rawdogging", "raw dogging", "raw dog", "d*ck", "d**k", "di*k", "a*s", "azz", "a*z", "az*", "***", "###", "@@", "#*", "*#", "@*", "*@", "#@", "@#", 
         "*n***r", "m*therf*cker", "m*therfucker", "*ss", "as****", "f*ckface", "f*cktard", "fukk", "fukc", "fu*c", "sheer", "face replace", "photorealistic swap", "synthetic face", "hyperreal", "hyper real", "reface", 
         "face merge", "face blend", "faceblend", "AI face", "neural", "AI morph", "face animation", "deep swap", "swap model", "facereplace", "fylng", "face augmentation", "digital face synthesis", "AI-powered face swap",
-        "facefusion", "face reconstruction", "wondershare", "AI face recreation", "virtual morph", "face synthesis", "neural face swap", "deep neural face", "deepface swap", "photo manipulation face", "fy1ng",
+        "facefusion", "face reconstruction", "wondershare", "AI face recreation", "virtual morph", "face synthesis", "neural face swap", "deep neural face", "deepface swap", "photo manipulation face", "fy1ng", "Kamifuku",
         "virtual face swap", "hyperreal AI face", "photo-real AI face", "face deepfake", "synthetic portrait generation", "AI image transformation", "ladies", "lady", "cheek", "aasho", "ääsho", "ääshö", "face join", "Shira",
         "deepfak portrait", "machine learning", "generation", "generative", "AI model face swap", "face generation AI", "face replacement AI", "video face morphing", "3D face morph", "AI facial animation", "deepfake avatar",
         "synthetic avatar creation", "facial", "AI model swap", "deep model swap", "image to face morph", "AI character face", "face remapping AI", "synthetic media", "AI-created character face", "face replacement tool", "fy!ng",
@@ -59,7 +59,7 @@
         "face blend", "virtual reality face", "face technology", "face tech", "3D morph face", "face AI animation", "real-time face swap", "AI-driven photo manipulation", "deepfake model creation", "digital persona", 
         "face overlay", "synthetic person", "facial blending", "face swap", "virtual character face swap", "photorealistic face generator", "face altering AI", "realistic AI swap", "face expression morphing", "video gen",
         "face transformation AI", "virtual human face swap", "synthetic media generation", "3D face recreation", "AI-generated face animation", "neural network face replacement", "deepfake face morphing", "video generat", "Windsor",
-        "face projection", "synthetic face swap", "face model", "virtual human face", "venice", "real-time deepfake", "photorealistic deepfake", "neural face transformation", "AI-generated face morph", "face render",
+        "face projection", "synthetic face swap", "face model", "virtual human face", "venice", "real-time deepfake", "photorealistic deepfake", "neural face transformation", "AI-generated face morph", "face render", "Thekla",
         "machine-generated face swap", "face image manipulation", "video face animation", "virtual morphing tool", "AI-powered video face swap", "digital face recreation", "AI-based facial replacement", "neural face", "All Elite",
         "machine learning face generator", "face recognition swap", "AI face animation tool", "synthetic media face", "AI character morphing", "deepfake avatar generation", "photoreal face synthesis", "synthetic face", "n@ked", "onnly",
         "facial deep learning", "neural facial expression swap", "hyperrealistic face model", "wonder share", "AI-driven face fusion", "video face deepfake", "face pattern generation", "AI virtual persona swap", "deepface model trans",
@@ -81,7 +81,7 @@
         "irpp4", "irpppas", "Birbbis", "Birbb", "ski*", "*lesh", "f*esh", "fl*sh", "fle5h", "fle*h", "fles*", "orgasm", "0rgasm", "org@sm", "orga5m", "org@5m", "0rg@sm", "0rga5m", "0rg@5m", "0rg@$m", "org@$m", "0rga$m", "lady's", "ladie's", "women's", 
         "pushpull", "ask.fm", "deepseek", "deepseek ai", "reddit", "/r", "shirakawa", "Alexa", "Alexa Bliss", "sensuel", "shira", "model", "Woman", "Women", "Women's", "Woman's", "AI-generated", "undressed", "Vladimir Putin", "AI model", "deep fake",
         "orga$m", "w4nk", "w4nk3", "*ank", "w*nk", "wa*k", "wan*", "*4nk", "w4*k", "w4n*", "fleshi", "fl35h", "AI generated", "by AI", "clothes", "panties", "panty", "AI art", "bra", "sexy", "Alexa WWE", "deepfake", "ring gear", "Aleksa", "Rodriguez", 
-	"lingerie", "Harley Cameron", "trunks", "pants", "underwear", "attire", "Vladimir", "Putin", "Trump", "Saraya", "kuvake", "irc-galleria", "irc galleria", "girl", "girls", "woman", "womans", "La Leona", "girl's", "dic*", "face +",
+	"lingerie", "Harley Cameron", "trunks", "pants", "underwear", "attire", "Vladimir", "Putin", "Trump", "Saraya", "kuvake", "irc-galleria", "irc galleria", "girl", "girls", "woman", "womans", "La Leona", "girl's", "dic*", "face +", 
     ];
 
     // Define the regex patterns to search for in the URL or content
@@ -127,7 +127,7 @@
 	/wemen's/i, /wemen/i, /Nikki/i, /ldaies/i, /laadie/i, /laadis/i, /leydis/i, /leydies/i, /lewdy/i, /lewdi/i, /lewdie's/i, /wuhmans/i, /wahmans/i, /wehmans/i, /Torrie/i, /Torr1/i, /Torr!/i, /Torrl/i, /\bAshley\b/i, /Dawn Marie/i, /Down Marie/i, 
 	/Massaro/i, /\bPamela\b/i, /\bBrooke\b/i, /\bTylo\b/i, /\bCatherine\b/i, /\bBridget\b/i, /\bSally\b/i,/0rg4/i, /org4/i, /org4/i, /orgy/i, /orgi/i, /org@/i, /0rg@/i, /0rg1/i, /0rgi/i,  /origas/i, /0riga/i, /0r1g4/i, /0rlg4/i, /orlg4/i, /0rlg@/i, 
 	/orlg@/i, /origa/i, /0riga/i, /or1ga/i, /orig4/i, /0r1g4/i, /0rlga/i, /orlg4/i, /0rlg4/i, /0rlg@/i,/orlg@/i, /0rrg4/i, /orrg4/i, /or1g@/i, /0r1g@/i, /0r1ga/i, /0r!g@/i, /0r!g4/i, /0rig@/i, /0rig4/i, /0r9ga/i, /0r9g4/i, /0r1q4/i, /0r1qa/i, /0rlg4h/i, 
-	/or1g@h/i, /orrga/i, /orrgaa/i, /orgaa/i,
+	/or1g@h/i, /orrga/i, /orrgaa/i, /orgaa/i, /lexi/i, /\bFuku\b/i, /\bsex\b/i,
     ];
 
     // Function to check for terms in the URL and redirect
