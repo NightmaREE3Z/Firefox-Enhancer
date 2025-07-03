@@ -127,7 +127,8 @@
 	/wemen's/i, /wemen/i, /Nikki/i, /ldaies/i, /laadie/i, /laadis/i, /leydis/i, /leydies/i, /lewdy/i, /lewdi/i, /lewdie's/i, /wuhmans/i, /wahmans/i, /wehmans/i, /Torrie/i, /Torr1/i, /Torr!/i, /Torrl/i, /\bAshley\b/i, /Dawn Marie/i, /Down Marie/i, 
 	/Massaro/i, /\bPamela\b/i, /\bBrooke\b/i, /\bTylo\b/i, /\bCatherine\b/i, /\bBridget\b/i, /\bSally\b/i,/0rg4/i, /org4/i, /org4/i, /orgy/i, /orgi/i, /org@/i, /0rg@/i, /0rg1/i, /0rgi/i,  /origas/i, /0riga/i, /0r1g4/i, /0rlg4/i, /orlg4/i, /0rlg@/i, 
 	/orlg@/i, /origa/i, /0riga/i, /or1ga/i, /orig4/i, /0r1g4/i, /0rlga/i, /orlg4/i, /0rlg4/i, /0rlg@/i,/orlg@/i, /0rrg4/i, /orrg4/i, /or1g@/i, /0r1g@/i, /0r1ga/i, /0r!g@/i, /0r!g4/i, /0rig@/i, /0rig4/i, /0r9ga/i, /0r9g4/i, /0r1q4/i, /0r1qa/i, /0rlg4h/i, 
-	/or1g@h/i, /orrga/i, /orrgaa/i, /orgaa/i, /lexi/i, /\bFuku\b/i, /\bsex\b/i, /\bHMW\b/i, /\bBO6\b/i, /\bBO7\b/i, 
+	/or1g@h/i, /orrga/i, /orrgaa/i, /orgaa/i, /lexi/i, /\bFuku\b/i, /\bsex\b/i, /\bHMW\b/i, /\bBO6\b/i, /\bBO7\b/i, /dreambooth/i, /dream booth/i, /diffusion/i, /stabl diffus/i, /Horizon ModernWarfare/i, /\bHMW\b/i, /\bApple\b/i, /Dreamboot/i, 
+	/Dream boot/i, /\bSX\b/i, /Sxuel/i, /Sxual/i, /Sxu3l/i, /5xu3l/i, /5xuel/i, /5xu4l/i, /5xual/i, /dre4m/i, /dr34m/i, /bo0th/i, /b0oth/i, /b0o7h/i, /bo07h/i, /b007h/i, /b00th/i, /booo/i, /b0oo/i, /bo0o/i, /boo0/i, /b000/i, /booo/i,
     ];
 
     // Function to check for terms in the URL and redirect

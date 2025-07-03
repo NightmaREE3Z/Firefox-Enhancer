@@ -34,8 +34,8 @@
     // List of blocked keywords or phrases in video titles, usernames, and channel names (string-based)
     const blockedStringKeywords = [
     	"deepnude", "nudify", "undress", "alexa_poshspisy", "Alexa_poshspisy", "alexa", "alexaposhspicy-model", "alexaposhspicy", "whore", "slut", "dreamtime AI", "face swap", "shirakawa",
-    	"deviantart", "deviant art", "Bella", "Nikki", "Brie", "Chyna", "China", "Hulk", "Joanie Laurer", "NJPW", "pride", "McMahon", "Zelina Vega", "Stewart", "Sydney", "facemorph",
-    	"undress-app", "deepnude-app", "nudify-app", "deepseek", "Lola Vice", "WWE", "poshspicy", "Alexa", "Lexi", "TNA", "AEW", "bitch", "LGBT", "Sydney Sweeney", "faceswap", "face morph",
+    	"deviantart", "deviant art", "Bella", "Nikki", "Brie", "Chyna", "China", "Hulk", "Joanie Laurer", "NJPW", "pride", "McMahon", "Zelina Vega", "Stewart", "Sydney", "facemorph", "Margot",
+    	"undress-app", "deepnude-app", "nudify-app", "deepseek", "Lola Vice", "WWE", "poshspicy", "Alexa", "Lexi", "TNA", "AEW", "bitch", "LGBT", "Sydney Sweeney", "faceswap", "face morph", "Robbie",
     	"lex bl", "leks bl", "Hogan", "Alexa Bliss", "Tiffy", "app", "new app", "Bliss", "Tiffy Time", "Sol", "Liv Morgan", "Liv Xoxo", "Morgan Xoxo", "Kristen Stewart", "swapface", "morph face",
     	"rule34", "r34", "r_34", "Rule 34", "Rul", "Rul34", "Rul 34", "Stratton", "Ruca", "AI", "LGBTQ", "Gay", "Trans", "Transvestite", "anorexic", "Kristen", "Steward", "swap face", "morphface"
     ];
