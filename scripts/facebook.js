@@ -189,6 +189,8 @@
         '548697141828258',
         '1079952645369369',
         '1209351935762772',
+	'24185005747770732',
+	'24185005784437395',
         '1178535568844409',
         '101371466560830',
         '1166215320076434',
@@ -229,6 +231,9 @@
         '8812088588802292',
         'kiviahosirja',
         'pfbid06VXAEGvWCcsPbk553v88NMB8uWRnRGHffB5s9kEpKRyYmfEJtt4fULTnQ82LnieDl',
+	'pfbid0BAztBKYfE98ef3C48UxyERkVFBhbBvkd9DH6x6SP6vTnEEvxyHEBuLE8dopJtoXgl',
+	'pfbid036a61fZB9RjeBnRYcwN72Fs5RGmMjqDV9JmLRuujzh7MUYirPJjNDZ68KVfK9TdBHl',
+	'pfbid02F2SbMzUV5aMvUpsnSXsoftD76pCvE7hXVH21dqd96gMVYRxDBUSWnJz6j8jjAqr2l',
         '1495428881',
         '1356706889',
         'Cultaholic',
@@ -237,7 +242,10 @@
         'juho.leskinen',
         'melina.jokimaki',
         'johanna.jokimaki.18',
-        'paivi.sainio.3'
+        'paivi.sainio.3',
+	'292715294181170',
+	'505428986169752',
+	'444809228883717'
     ];
 
     const blockedUrls = [
@@ -265,6 +273,7 @@
         /permalink.php?story_fbid=642842945747010/,
         /permalink.php?story_fbid=895381147159854/,
         /permalink.php?story_fbid=936445033053465/,
+	//permalink.php?story_fbid=pfbid02F2SbMzUV5aMvUpsnSXsoftD76pCvE7hXVH21dqd96gMVYRxDBUSWnJz6j8jjAqr2l/,
         /permalink\.php\?story_fbid=pfbid05g1GaBBRjHMhXfekDtUEmRbP98Q4N9kdHhCrUUfp6LGdsQQMmShBYT8KfkSH938pl/,
         /permalink.php?story_fbid=pfbid02ZLJve5megHVfot9Ezfyr5z5m531kDh4TYzysgUZ3J2622PtM5Xb4NpJ9yiJqjfDNl/,
         /permalink.php?story_fbid=pfbid035WcvrEubf1RjAAXbYonu4smUnnSEYPcrY4Qz78v8jk3hv44aLbyikR4y2jboocztl/,
@@ -283,6 +292,7 @@
         /permalink\.php\?story_fbid=pfbid0Xq5bxtrXkWA9gWqcBt2aT8sDMeCDG5XN6hWVHE7axKu3jbn9LfiYfADgWHLtBfEUl/,
         /permalink.php?story_fbid=907980612566574/,
         /permalink.php?story_fbid=pfbid02ERbU7QHGJLQ8CwgMz2wdNjnQJdZ8fJje85i1LcExk5CLCXkDuTyyRp5uat4aKkAYl/,
+	//permalink.php?story_fbid=pfbid036a61fZB9RjeBnRYcwN72Fs5RGmMjqDV9JmLRuujzh7MUYirPJjNDZ68KVfK9TdBHl/,
         /permalink.php?story_fbid=907631116865858/,
         /fbid=pfbid036f6zK7fAhXTd4CpkSDtayrMrDW6VSNKcoQoPiR3CMPvVCVuMaNX8jMEoYc6WpkZnl/,
         /permalink.php?story_fbid=10099498386748038/,
@@ -428,7 +438,7 @@
         "Karr WWE", "Carr WWE", "Melina wrestler", "Jillian", "Mickie", "Kanellis", "Beth Phoenix", "Victoria", "Jazz WWE", "Molly Holly", "Shirai", "Priscilla", "Kelly", "Red Velvet", 
         "Gail Kim", "Awesome Kong", "Madison Rayne", "Velvet Sky", "Angelina", "Tessmacher", "Havok", "Su Yung", "Taya Valkyrie", "Bianca Belair", "Skye Blue", "Bordeaux", "Brooke",
         "Purrazzo", "Thekla", "Toni Storm", "Britt Baker", "Jamie Hayter", "Anna Jay", "Hikaru", "Sakazaki", "Nyla Rose", "Sakura", "Penelope Ford", "Julia Hart", "Kamifuku", 
-	"Black Ops 6", "Black Ops 7", "HorizonMW", "Horizon MW", "Horizon Modern Warfare", "Margot", "Robbie",
+	"Black Ops 6", "Black Ops 7", "HorizonMW", "Horizon MW", "Horizon Modern Warfare",
     ];
 
     const regexBlockedWords = [
@@ -440,8 +450,8 @@
         /\bTay\b/i, /\bMelo\b/i, /\bConti\b/i, /\bPaige\b/i, /\bShotzi\b/i, /\bTiffy\b/i, /\bStratton\b/i, /\bAEW\b/i, /\bAi\b/i, /\bAis\b/i, /\b-Ai\b/i, /\bAi-\b/i, /\bIvory\b/i, /\bposing\b/i, /\bTamina\b/i, /\bTessa\b/i, /\bRuca\b/i, /\bRuby\b/i, /\bSoho\b/i,
         /\bSasha\b/i, /\bAnal\b/i, /\bBliss\b/i, /\bGay\b/i, /\bTrans\b/i, /\bTransvestite\b/i, /\bTransu\b/i, /\bPride\b/i, /\bLesbian\b/i, /\bLesbo\b/i, /\bHomo\b/i, /\bQueer\b/i, /\bSable\b/i, /\bposed\b/i, /\bLayla\b/i, /\bLana\b/i, /\bSol\b/i, /\bJacy\b/i,
         /\bBella\b/i, /\bNikki\b/i, /\bBrie\b/i, /\bTegan\b/i, /\bNox\b/i, /\b Goddess\b/i, /\bLita\b/i, /\bRusso\b/i, /\bLGBT\b/i, /\bLGBTQ\b/i, /\bLGBTQ\b/i, /\bMami\b/i, /\bTrish\b/i, /\bStratus\b/i, /\bYung\b/i, /\bHavok\b/i, /\bJade\b/i, /\bAthena\b/i,
-        /\bIzzi\b/i, /\bFuku\b/i, /\bDame\b/i, /\bGiulia\b/i, /\bMichin\b/i, /\bJayne\b/i, /\bLLM\b/i, /\bMLM\b/i, /Shira/i, /Steph's place/i, /Stephanie's place/i, /Steph McMahon/i, /Stepan/i, /Stratu/i, /Stratt/i, /Tiffa/i, /Tiffy/i, /\bGina\b/i, /\bBO6\b/i, 
-	/\bBO7\b/i, /\bHMW\b/i, /Dream booth/i, /Dreambooth/i, 
+        /\bIzzi\b/i, /\bFuku\b/i, /\bDame\b/i, /\bGiulia\b/i, /\bMichin\b/i, /\bJayne\b/i, /\bLLM\b/i, /\bMLM\b/i, /Shira/i, /Steph's place/i, /Stephanie's place/i, /Steph McMahon/i, /Stepan/i, /Stratu/i, /Stratt/i, /Tiffa/i, /Tiffy/i, /\bGina\b/i, /\bBO6\b/i,
+	/\bBO7\b/i, /\bHMW\b/i, /Dreambooth/i, /Dream booth/i,
     ];
 
     const restrictedPhrases = [
@@ -1020,6 +1030,7 @@ const deleteSelectorsForSpecificProfile = () => {
                     '.x2lah0s.xvo6coq.x1ve1bff.x1q0g3np.xozqiw3.x1qjc9v5.xl56j7k.x1n2onr6.x78zum5.x1ja2u2z.x9f619',
                     '.x7wzq59.x1xzczws.x1ja2u2z.x9f619',
                     'div.xnjli0.x1q8cg2c.xwib8y2.x1y1aw1k.x6s0dn4.x1ja2u2z.x16tdsg8.x1n2onr6.x1gh759c.xnqzcj9.xfvfia3.x1i6fsjq.x2lah0s.x1q0g3np.x78zum5.x1ypdohk.x9f619.xjyslct.x1a2a7pz.x1lku1pv.x87ps6o.x13rtm0m.x1e5q0jg.x3x9cwd.x1o1ewxj.xggy1nq.x1hl2dhg.x13vifvy.x16tdsg8.x1xmf6yo',
+                    'div.x78zum5.x12nagc.x1n2onr6.x1s6qhgt:empty',
                     '.x7wzq59 > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(2)',
                     '.x7wzq59 > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(2) > div:nth-child(1) > div:nth-child(1)',
                     '.x7wzq59 > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1)',
@@ -1047,6 +1058,7 @@ const deleteSelectorsForSpecificProfile = () => {
                     'div.xamitd3:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > span:nth-child(1) > span:nth-child(1) > span:nth-child(1)',
                     'div.xamitd3:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2)',
                     '.x6d00yu',
+                    'mount_0_0_9k > div > div:nth-child(1) > div > div.x9f619.x1n2onr6.x1ja2u2z > div > div > div.x78zum5.xdt5ytf.x1t2pt76.x1n2onr6.x1ja2u2z.x10cihs4 > div.x78zum5.xdt5ytf.x1t2pt76 > div > div > div.x6s0dn4.x78zum5.xdt5ytf.x193iq5w > div.x9f619.x193iq5w.x1talbiv.x1sltb1f.x3fxtfs.xf7dkkf.xv54qhq.xw7yly9 > div > div.x9f619.x1n2onr6.x1ja2u2z.xeuugli.xs83m0k.xjl7jj.x1xmf6yo.x1xegmmw.x1e56ztr.x13fj5qh.xnp8db0.x1d1medc.x7ep2pv.x1xzczws > div.x7wzq59 > div > div:nth-child(2) > div > div',
                     'div[aria-label="Suodattimet"]',
                     'div[aria-label="Filters"]',
                     'div[aria-label="Suodattimet"][role="button"]',
