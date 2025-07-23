@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         YoutubEnhancer
-// @version      3.8
+// @version      3.9
 // @description  Enhances my YouTube experience by blocking trackers and hiding garbage.
 // @match        https://www.youtube.com/*
 // @grant        none
@@ -8,6 +8,11 @@
 
 (function () {
     'use strict';
+
+    // === CHROME DEV CONSOLE LOGGING ===
+    function devLog(message) {
+        console.log('[YOUTUBE.JS]', message);
+    }
 
     // List of known YouTube tracker domains or URL patterns
     const trackerPatterns = [
@@ -41,12 +46,12 @@
         /Molly Holly/i, /Gail Kim/i, /Awesome Kong/i, /Deonna Purrazzo/i, /Anna Jay/i, /\bRiho\b/i, /Britney/i, /Nyla Rose/i, /Angelina Love/i, /Tessmacher/i, /Havok/i, /Toni Storm/i, /Watchorn/i,
         /Taya Valkyrie/i, /Valkyria/i, /Tay Melo/i, /Willow Nightingale/i, /Statlander/i, /Hikaru Shida/i, /Sasha/i, /\bAEW\b/i, /Penelope Ford/i, /Shotzi/i, /Tegan/i, /Vladimir Putin/i, /beta male/i,
         /Nox/i, /Sasha Banks/i, /Sakura/i, /Tessa/i, /Brooke/i, /Jakara/i, /Alba Fyre/i, /Isla Dawn/i, /Scarlett Bordeaux/i, /\bB-Fab\b/i, /Kayden Carter/i, /Katana Chance/i, /\bMina\b/i, /alpha male/i,
-        /Lyra Valkyria/i, /Indi Hartwell/i, /Blair Davenport/i, /Maxxine Dupri/i, /China/i, /Russia/i, /Natalya/i, /Sakazaki/i, /Karmen Petrovic/i, /Ava Raine/i, /CJ Perry/i, /Shira/i,
+        /Lyra Valkyria/i, /Indi Hartwell/i, /Blair Davenport/i, /Maxxine Dupri/i, /China/i, /Russia/i, /Natalya/i, /Sakazaki/i, /Karmen Petrovic/i, /Ava Raine/i, /CJ Perry/i, /Shira/i, /Elayna/i, 
         /Cora Jade/i, /Jacy Jayne/i, /Gigi Dolin/i, /Thea Hail/i, /Tatum WWE/i, /Paxley/i, /Fallon Henley/i, /Nattie/i, /escort/i, /Sol Ruca/i, /Kelani Jordan/i, /CJ Lana/i, /Lana Perry/i,
         /Electra Lopez/i, /Wendy Choo/i, /Yulisa Leon/i, /Gina Adam/i, /Valentina Feroz/i, /Amari Miller/i, /Arianna Grace/i, /Courtney Ryan/i, /Venice/i, /Venoice/i, /Venise/i, /Venoise/i, /Sharia/i,
         /\bLin\b/i, /Watchorn/i, /@LinWatchorn/i, /HorizonMW/i, /Horizon MW/i, /MW2 Remaster/i, /MW3 Remaster/i, /MW2 Multiplayer Remaster/i, /MW3 Multiplayer Remastered/i, /Horizon Modern Warfare/i,
 	/MW2 MP Remaster/i, /MW3 MP Remaster/i, /\bBO6\b/i, /\bBO7\b/i, /Black Ops 6/i, /Black Ops 7/i, /Black Ops VI/i, /Black Ops VII/i, /wondershare/i, /wonder share/i, /filmora/i, /dreambooth/i,
-	/dream booth/i, /dream boot/i, /dreamboot/i, /diffusion/i, 
+	/dream booth/i, /dream boot/i, /dreamboot/i, /diffusion/i, /Elina WWE/i, /Elyna WWE/i, /Elyina/i,
     ];
 
     // List of keywords or phrases to allow (overrides blockKeywords in search queries)
@@ -57,12 +62,32 @@
         /south park/i, /siivoton juttu/i, /poliisin poika/i, /poliisi/i, /poika/i, /Edge WWE/i, /Ravage/i, /Savage/i, /volksvagen/i, /GTA/i, /Grand Theft Auto/i, /videopeli/i, /videogame/i, /video game/i, /ra/,
     ];
 
+    // Anti-adblock warning text patterns (Finnish and other languages)
+    const adblockWarningPatterns = [
+        /mainostenestoa ei sallita/i,
+        /mainostenesto/i,
+        /ad.?block/i,
+        /adblocker/i,
+        /turn off.*ad.?block/i,
+        /disable.*ad.?block/i,
+        /ads blocked/i,
+        /please disable/i,
+        /whitelist.*site/i,
+        /allow.*ads/i,
+        /enable.*ads/i,
+        /advertisement.*blocked/i,
+        /support.*creator/i,
+        /youtube premium/i,
+        /try youtube premium/i,
+        /get youtube premium/i
+    ];
+
     // Redirect URL (YouTube homepage)
     const redirectUrl = "https://www.youtube.com/";
 
     // Array of selectors to hide elements
     const selectors = [
-        "ytd-rich-item-renderer", // Use the container for videos
+        "ytd-rich-item-renderer",
         "yt-formatted-string#video-title",
         "yt-formatted-string.metadata-snippet-text",
         "ytd-channel-name a",
@@ -83,55 +108,239 @@
         "#contents > yt-lockup-view-model > div > div > yt-lockup-metadata-view-model > div.yt-lockup-metadata-view-model-wiz__text-container > h3 > a > span"
     ];
 
+    // Specific selectors for adblock warning popups
+    const adblockPopupSelectors = [
+        "ytd-popup-container",
+        "tp-yt-paper-dialog",
+        "ytd-enforcement-message-view-model",
+        "ytd-message-renderer",
+        "yt-confirm-dialog-renderer"
+    ];
+
+    // Function to remove specific adblock warning popups
+    function removeAdblockPopups() {
+        try {
+            let removedCount = 0;
+            
+            // Check specific popup selectors
+            adblockPopupSelectors.forEach(selector => {
+                const elements = document.querySelectorAll(selector);
+                elements.forEach(el => {
+                    const text = el.textContent?.toLowerCase() || "";
+                    
+                    // Only remove if it contains adblock warning text
+                    if (adblockWarningPatterns.some(pattern => pattern.test(text))) {
+                        devLog(`Removing adblock popup: ${selector}`);
+                        el.style.display = "none";
+                        el.style.visibility = "hidden";
+                        removedCount++;
+                        
+                        // Find and hide the backdrop/overlay
+                        const backdrop = el.closest('[role="presentation"]') || 
+                                       el.closest('.scrim') || 
+                                       el.closest('[class*="backdrop"]');
+                        if (backdrop) {
+                            backdrop.style.display = "none";
+                        }
+                    }
+                });
+            });
+
+            // Check for modal dialogs with role="dialog"
+            const dialogs = document.querySelectorAll('[role="dialog"]');
+            dialogs.forEach(dialog => {
+                const text = dialog.textContent?.toLowerCase() || "";
+                if (adblockWarningPatterns.some(pattern => pattern.test(text))) {
+                    devLog('Hiding adblock warning dialog');
+                    dialog.style.display = "none";
+                    dialog.style.visibility = "hidden";
+                    removedCount++;
+                    
+                    // Hide parent container if it's a modal wrapper
+                    const parent = dialog.parentElement;
+                    if (parent && (parent.classList.contains('scrim') || 
+                                  parent.hasAttribute('aria-modal') ||
+                                  parent.getAttribute('role') === 'presentation')) {
+                        parent.style.display = "none";
+                    }
+                }
+            });
+
+            // Restore body scrolling if it was disabled
+            const body = document.body;
+            if (body && body.style.overflow === 'hidden') {
+                // Only restore if there are no visible dialogs left
+                const visibleDialogs = document.querySelectorAll('[role="dialog"]:not([style*="display: none"])');
+                if (visibleDialogs.length === 0) {
+                    body.style.overflow = '';
+                }
+            }
+            
+            if (removedCount > 0) {
+                devLog(`Removed ${removedCount} adblock popups`);
+            }
+        } catch (err) {
+            console.log('Error removing adblock popups: ' + err.message);
+        }
+    }
+
     // Function to check the current search query
     function checkSearchQuery() {
-        const urlParams = new URLSearchParams(window.location.search);
-        const query = urlParams.get('search_query') || '';
+        try {
+            const urlParams = new URLSearchParams(window.location.search);
+            const query = urlParams.get('search_query') || '';
 
-        if (blockKeywords.some(keyword => keyword.test(query)) && !allowedWords.some(word => word.test(query))) {
-            console.log(`Blocked search query: ${query}`); // Log blocked query
-            window.location.href = redirectUrl; // Redirect to homepage
-        } else {
-            console.log(`Allowed search query: ${query}`); // Log allowed query
+            if (blockKeywords.some(keyword => keyword.test(query)) && !allowedWords.some(word => word.test(query))) {
+                console.log(`Blocked search query: ${query}`);
+                window.location.href = redirectUrl;
+            } else {
+                devLog(`Allowed search query: ${query}`);
+            }
+        } catch (err) {
+            console.log('Error checking search query: ' + err.message);
         }
     }
 
     // Function to hide elements based on selectors and banned words in their content
     function hideElementsBySelectors() {
-        const elements = selectors.flatMap(selector => Array.from(document.querySelectorAll(selector)));
+        try {
+            const elements = selectors.flatMap(selector => Array.from(document.querySelectorAll(selector)));
+            let hiddenCount = 0;
 
-        elements.forEach(el => {
-            const text = el.textContent?.toLowerCase() || "";
-            if (blockKeywords.some(keyword => keyword.test(text))) {
-                console.log(`Hiding element containing banned word: ${text}`);
-                el.style.display = "none"; // Hide the element
-                el.style.visibility = "hidden"; // Ensure no ghosting or rendering artifacts
-                const parent = el.closest("ytd-rich-item-renderer, ytd-grid-video-renderer, ytd-video-renderer");
-                if (parent) {
-                    parent.style.display = "none"; // Hide the parent container to collapse space
+            elements.forEach(el => {
+                const text = el.textContent?.toLowerCase() || "";
+                if (blockKeywords.some(keyword => keyword.test(text))) {
+                    devLog(`Hiding element containing banned word: ${text.substring(0, 50)}...`);
+                    el.style.display = "none";
+                    el.style.visibility = "hidden";
+                    hiddenCount++;
+                    
+                    const parent = el.closest("ytd-rich-item-renderer, ytd-grid-video-renderer, ytd-video-renderer");
+                    if (parent) {
+                        parent.style.display = "none";
+                    }
                 }
+            });
+            
+            if (hiddenCount > 0) {
+                devLog(`Hidden ${hiddenCount} elements with banned content`);
             }
-        });
+        } catch (err) {
+            console.log('Error hiding elements by selectors: ' + err.message);
+        }
+    }
+
+    // Function to handle clicks on "Skip" or "Continue" buttons in popups
+    function handlePopupButtons() {
+        try {
+            const buttons = document.querySelectorAll('button, [role="button"]');
+            let clickedCount = 0;
+            
+            buttons.forEach(button => {
+                const text = button.textContent?.toLowerCase() || "";
+                const ariaLabel = button.getAttribute('aria-label')?.toLowerCase() || "";
+                
+                if (text.includes('skip') || text.includes('continue') || 
+                    text.includes('ohita') || text.includes('jatka') ||
+                    ariaLabel.includes('skip') || ariaLabel.includes('continue')) {
+                    
+                    // Check if this button is in an adblock warning popup
+                    const popup = button.closest('[role="dialog"], ytd-popup-container, tp-yt-paper-dialog');
+                    if (popup) {
+                        const popupText = popup.textContent?.toLowerCase() || "";
+                        if (adblockWarningPatterns.some(pattern => pattern.test(popupText))) {
+                            devLog('Auto-clicking skip button in adblock popup');
+                            button.click();
+                            clickedCount++;
+                        }
+                    }
+                }
+            });
+            
+            if (clickedCount > 0) {
+                devLog(`Clicked ${clickedCount} popup buttons`);
+            }
+        } catch (err) {
+            console.log('Error handling popup buttons: ' + err.message);
+        }
     }
 
     // Observe URL changes to check for search queries
     function observeUrlChanges() {
-        let currentUrl = window.location.href;
-        const observer = new MutationObserver(() => {
-            if (currentUrl !== window.location.href) {
-                currentUrl = window.location.href;
-                checkSearchQuery(); // Recheck the search query on URL change
-            }
-        });
+        try {
+            let currentUrl = window.location.href;
+            const observer = new MutationObserver(() => {
+                if (currentUrl !== window.location.href) {
+                    currentUrl = window.location.href;
+                    checkSearchQuery();
+                }
+            });
 
-        // Check if document.body exists before calling observe
-        if (document.body) {
-            observer.observe(document.body, { childList: true, subtree: true });
-        } else {
-            // Retry after a short delay if document.body isn't available
-            setTimeout(observeUrlChanges, 100); // Retry after 100ms
+            if (document.body) {
+                observer.observe(document.body, { childList: true, subtree: true });
+                devLog('URL observer started');
+            } else {
+                setTimeout(observeUrlChanges, 100);
+            }
+        } catch (err) {
+            console.log('Error setting up URL observer: ' + err.message);
         }
     }
+
+    // Enhanced mutation observer for new popup content
+    function observePopupChanges() {
+        try {
+            const observer = new MutationObserver((mutations) => {
+                mutations.forEach((mutation) => {
+                    if (mutation.addedNodes.length > 0) {
+                        mutation.addedNodes.forEach((node) => {
+                            if (node.nodeType === 1) { // Element node
+                                // Check if the new node is a popup
+                                if (node.matches && (
+                                    node.matches('[role="dialog"]') ||
+                                    node.matches('ytd-popup-container') ||
+                                    node.matches('tp-yt-paper-dialog') ||
+                                    node.matches('ytd-enforcement-message-view-model')
+                                )) {
+                                    const text = node.textContent?.toLowerCase() || "";
+                                    if (adblockWarningPatterns.some(pattern => pattern.test(text))) {
+                                        devLog('Hiding newly added adblock popup');
+                                        node.style.display = "none";
+                                        node.style.visibility = "hidden";
+                                    }
+                                }
+                                
+                                // Check child elements of the new node
+                                const popupChildren = node.querySelectorAll ? 
+                                    node.querySelectorAll('[role="dialog"], ytd-popup-container, tp-yt-paper-dialog') : 
+                                    [];
+                                popupChildren.forEach(child => {
+                                    const text = child.textContent?.toLowerCase() || "";
+                                    if (adblockWarningPatterns.some(pattern => pattern.test(text))) {
+                                        devLog('Hiding adblock popup in new content');
+                                        child.style.display = "none";
+                                        child.style.visibility = "hidden";
+                                    }
+                                });
+                            }
+                        });
+                    }
+                });
+            });
+
+            if (document.body) {
+                observer.observe(document.body, {
+                    childList: true,
+                    subtree: true
+                });
+                devLog('Popup observer started');
+            }
+        } catch (err) {
+            console.log('Error setting up popup observer: ' + err.message);
+        }
+    }
+
+    devLog('YouTube Enhancer initializing');
 
     // Initial check for search query
     checkSearchQuery();
@@ -139,6 +348,21 @@
     // Start observing URL changes
     observeUrlChanges();
 
+    // Start observing popup changes
+    observePopupChanges();
+
     // Periodically hide elements matching selectors
     setInterval(hideElementsBySelectors, 250);
+
+    // Check for adblock popups more frequently
+    setInterval(removeAdblockPopups, 500);
+
+    // Handle popup buttons
+    setInterval(handlePopupButtons, 1000);
+
+    // Initial popup removal after page load
+    setTimeout(removeAdblockPopups, 1000);
+    setTimeout(handlePopupButtons, 2000);
+
+    devLog('YouTube Enhancer with targeted adblock popup removal loaded');
 })();

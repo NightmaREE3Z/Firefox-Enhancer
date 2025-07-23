@@ -180,6 +180,7 @@
         '9761862833844930',
         '936445033053465',
         '907980612566574',
+	'8065217176842846',
         '895381147159854',
         '1080918508606116',
         '1072683142762986',
@@ -189,11 +190,12 @@
         '548697141828258',
         '1079952645369369',
         '1209351935762772',
-	'24185005747770732',
-	'24185005784437395',
+        '24185005747770732',
+        '24185005784437395',
         '1178535568844409',
         '101371466560830',
         '1166215320076434',
+        '1158912826275168',
         '1109723022392331',
         '1099222803442353',
         '1090312024333431',
@@ -206,13 +208,13 @@
         '2155319098244876',
         '293678390751527',
         '292375400881826',
-	'100003019443729',
+        '100003019443729',
         '599253748555949',
         '855022637862372',
         '1467275073303789',
         '24332459019692070',
         '843081002389869',
-	'heidi.huuska',
+        'heidi.huuska',
         '24329736293297676',
         '642842945747010',
         '629932107038094',
@@ -233,9 +235,11 @@
         '8812088588802292',
         'kiviahosirja',
         'pfbid06VXAEGvWCcsPbk553v88NMB8uWRnRGHffB5s9kEpKRyYmfEJtt4fULTnQ82LnieDl',
-	'pfbid0BAztBKYfE98ef3C48UxyERkVFBhbBvkd9DH6x6SP6vTnEEvxyHEBuLE8dopJtoXgl',
-	'pfbid036a61fZB9RjeBnRYcwN72Fs5RGmMjqDV9JmLRuujzh7MUYirPJjNDZ68KVfK9TdBHl',
-	'pfbid02F2SbMzUV5aMvUpsnSXsoftD76pCvE7hXVH21dqd96gMVYRxDBUSWnJz6j8jjAqr2l',
+        'pfbid0BAztBKYfE98ef3C48UxyERkVFBhbBvkd9DH6x6SP6vTnEEvxyHEBuLE8dopJtoXgl',
+        'pfbid036a61fZB9RjeBnRYcwN72Fs5RGmMjqDV9JmLRuujzh7MUYirPJjNDZ68KVfK9TdBHl',
+        'pfbid02F2SbMzUV5aMvUpsnSXsoftD76pCvE7hXVH21dqd96gMVYRxDBUSWnJz6j8jjAqr2l',
+	'pfbid0BXRwmdPq99Pen4NzC6szx7MrZp8krdYyvDgQNyRbzShyMFjNEAMACkp18qQL8vJCl',
+	'pfbid02r5HgTdBcDnPPsbWTrvAMpc32cbDYWCaJwYWCQJz78oGFmEp5Xa1Cr8DrzKR2TgCBl',
         '1495428881',
         '1356706889',
         'Cultaholic',
@@ -245,9 +249,9 @@
         'melina.jokimaki',
         'johanna.jokimaki.18',
         'paivi.sainio.3',
-	'292715294181170',
-	'505428986169752',
-	'444809228883717'
+        '292715294181170',
+        '505428986169752',
+        '444809228883717'
     ];
 
     const blockedUrls = [
@@ -275,7 +279,6 @@
         /permalink.php?story_fbid=642842945747010/,
         /permalink.php?story_fbid=895381147159854/,
         /permalink.php?story_fbid=936445033053465/,
-	//permalink.php?story_fbid=pfbid02F2SbMzUV5aMvUpsnSXsoftD76pCvE7hXVH21dqd96gMVYRxDBUSWnJz6j8jjAqr2l/,
         /permalink\.php\?story_fbid=pfbid05g1GaBBRjHMhXfekDtUEmRbP98Q4N9kdHhCrUUfp6LGdsQQMmShBYT8KfkSH938pl/,
         /permalink.php?story_fbid=pfbid02ZLJve5megHVfot9Ezfyr5z5m531kDh4TYzysgUZ3J2622PtM5Xb4NpJ9yiJqjfDNl/,
         /permalink.php?story_fbid=pfbid035WcvrEubf1RjAAXbYonu4smUnnSEYPcrY4Qz78v8jk3hv44aLbyikR4y2jboocztl/,
@@ -294,7 +297,6 @@
         /permalink\.php\?story_fbid=pfbid0Xq5bxtrXkWA9gWqcBt2aT8sDMeCDG5XN6hWVHE7axKu3jbn9LfiYfADgWHLtBfEUl/,
         /permalink.php?story_fbid=907980612566574/,
         /permalink.php?story_fbid=pfbid02ERbU7QHGJLQ8CwgMz2wdNjnQJdZ8fJje85i1LcExk5CLCXkDuTyyRp5uat4aKkAYl/,
-	//permalink.php?story_fbid=pfbid036a61fZB9RjeBnRYcwN72Fs5RGmMjqDV9JmLRuujzh7MUYirPJjNDZ68KVfK9TdBHl/,
         /permalink.php?story_fbid=907631116865858/,
         /fbid=pfbid036f6zK7fAhXTd4CpkSDtayrMrDW6VSNKcoQoPiR3CMPvVCVuMaNX8jMEoYc6WpkZnl/,
         /permalink.php?story_fbid=10099498386748038/,
@@ -312,11 +314,11 @@
         /pfbid02MRkRwJLc6tyeWCMHAw16Z7Y7kQhbFmhk7uui4RV7SRZSXNdL4EYxLgN2ndJriBxel/,
         /pfbid0nkBwAMmJZ8LNs9awZ9tvLRo29tbP9PpW8FZ1cDDFNtVCJJW5Vin8B6QUSqNkqLH5l/,
         /pfbid02aGzvCJefJC5Fh3XUVbvBPCxg55Px15NyDsK4VU3TjXpnnMktss6SEUC622SmQmTWl/,
-	/pfbid06qH6x7KFy2KNqqB3j8nnDWJDxGfq11oh3FBBPDgPBn4PasfWGshxReW7gvHfqEHkl/,
+        /pfbid06qH6x7KFy2KNqqB3j8nnDWJDxGfq11oh3FBBPDgPBn4PasfWGshxReW7gvHfqEHkl/,
         /pfbid0HaJikdQnFY855RTGVzsdJ37A35tfx9bwipQu23jk1wyc3xzCSb9rvgBPUpjsuVZbl/,
         /pfbid036f6zK7fAhXTd4CpkSDtayrMrDW6VSNKcoQoPiR3CMPvVCVuMaNX8jMEoYc6WpkZnl/,
         /pfbid0XkSVwYhGrkQ1wcBZHDqvrTXc3nhYzVNnQ6znaLpxwrGeSrpn3VJ4wSaUt1WeywDMl/,
-	/pfbid02r7g7nP7vadRLpCU9jtP4yR8bYJtWt7d9JUqC839QUfaySuyzXzMBcExFufQENKaal/,
+        /pfbid02r7g7nP7vadRLpCU9jtP4yR8bYJtWt7d9JUqC839QUfaySuyzXzMBcExFufQENKaal/,
         /permalink.php?story_fbid=pfbid02XysYZFdPcadPVYXqD9SyzmDChrqfcK4kd6haSDo2WrE4thPhn8WemX4n44GKsmdVl/,
         /permalink.php?story_fbid=940194702678498/,
         /permalink.php?story_fbid=pfbid0xh4ZoQA4XvgYL7iXe238V7o1sxEyULXGhr6Ufk2YeWFMwD4Ct4UYixF5UbycsCyEl/,
@@ -440,21 +442,21 @@
         "Summer Rae", "Layla", "Michelle McCool", "Eve Torres", "Kelly Kelly", "Jessika Carr", "Jessica Karr", "Venice", "Jessica Carr", "Jessika WWE", "Jessica WWE", "Matt Jackson", 
         "Karr WWE", "Carr WWE", "Melina wrestler", "Jillian", "Mickie", "Kanellis", "Beth Phoenix", "Victoria", "Jazz WWE", "Molly Holly", "Shirai", "Priscilla", "Kelly", "Red Velvet", 
         "Gail Kim", "Awesome Kong", "Madison Rayne", "Velvet Sky", "Angelina", "Tessmacher", "Havok", "Su Yung", "Taya Valkyrie", "Bianca Belair", "Skye Blue", "Bordeaux", "Brooke",
-        "Purrazzo", "Thekla", "Toni Storm", "Britt Baker", "Jamie Hayter", "Anna Jay", "Hikaru", "Sakazaki", "Nyla Rose", "Sakura", "Penelope Ford", "Julia Hart", "Kamifuku", 
-	"Black Ops 6", "Black Ops 7", "HorizonMW", "Horizon MW", "Horizon Modern Warfare",
+        "Purrazzo", "Thekla", "Toni Storm", "Britt Baker", "Jamie Hayter", "Anna Jay", "Hikaru", "Sakazaki", "Nyla Rose", "Sakura", "Penelope Ford", "Julia Hart", "Kamifuku", "Elayna",
+        "Black Ops 6", "Black Ops 7", "Elayna Black", "Blake", "Monroe",
     ];
 
     const regexBlockedWords = [
         /lex bl/i, /\bSol\b/i, /\bShe\b/i, /\bHer\b/i, /\bHer's\b/i, /\bShe's\b/i, /\bRiho\b/i, /\bCum\b/i, /\bSlut\b/i, /\bTor\b/i, /\bIzzi\b/i, /\bDame\b/i, /\bNox\b/i, /\bLiv\b/i, /\bAlexa\b/i, /\bTay\b/i, /\bMelo\b/i, /\bConti\b/i, /\bPaige\b/i, /\bShotzi\b/i, 
-	/\bTiffy\b/i, /\bStratton\b/i, /\bAEW\b/i, /\bAi\b/i, /\bAis\b/i, /\b-Ai\b/i, /\bAi-\b/i, /\bIvory\b/i, /\bposing\b/i, /Ripl/i, /\bSasha\b/i, /\bAnal\b/i, /\bBliss\b/i, /\bGay\b/i, /\bTrans\b/i, /\bTransvestite\b/i, /\bTransu\b/i, /\bPride\b/i, /\bLesbian\b/i, 
-	/\bLesbo\b/i, /\bHomo\b/i, /\bQueer\b/i, /\bSable\b/i, /\bBella\b/i, /\bNikki\b/i, /\bBrie\b/i, /\bTegan\b/i, /\bNox\b/i, /\bGoddess\b/i, /\bLita\b/i, /\bRusso\b/i, /\bLGBT\b/i, /\bLGBTQ\b/i, /\bLGBTQ\b/i, /\bMami\b/i, /\bTrish\b/i, /\bStratus\b/i, /\bIzzi\b/i, 
-	/\bDame\b/i, /\bGiulia\b/i, /\bMichin\b/i, /\bJayne\b/i, /\bLLM\b/i, /\bMLM\b/i, /Shira/i, /Steph's place/i, /Stephanie's place/i, /Steph McMahon/i, /Stepan/i, /Stratu/i, /Stratt/i, /Gina Adam/i, /\bG1na\b/i, /\bGlna\b/i, /\bG!na\b/i, /\bSol\b/i, /\bShe\b/i, 
-	/\bHer\b/i, /\bHer's\b/i, /\bShe's\b/i, /\bRiho\b/i, /\bCum\b/i, /\bSlut\b/i, /\bTor\b/i, /\bIzzi\b/i, /\bDame\b/i, /\bNox\b/i, /\bLiv\b/i, /\bAlexa\b/i, /\bODB\b/i, /\bLita\b/i, /\bChyna\b/i, /\bSaraya\b/i, /\bBrooke\b/i, /\bCora\b/i, /\bGin4\b/i, /\bG1n4\b/i,
+        /\bTiffy\b/i, /\bStratton\b/i, /\bAEW\b/i, /\bAi\b/i, /\bAis\b/i, /\b-Ai\b/i, /\bAi-\b/i, /\bIvory\b/i, /\bposing\b/i, /Ripl/i, /\bSasha\b/i, /\bAnal\b/i, /\bBliss\b/i, /\bGay\b/i, /\bTrans\b/i, /\bTransvestite\b/i, /\bTransu\b/i, /\bPride\b/i, /\bLesbian\b/i, 
+        /\bLesbo\b/i, /\bHomo\b/i, /\bQueer\b/i, /\bSable\b/i, /\bBella\b/i, /\bNikki\b/i, /\bBrie\b/i, /\bTegan\b/i, /\bNox\b/i, /\bGoddess\b/i, /\bLita\b/i, /\bRusso\b/i, /\bLGBT\b/i, /\bLGBTQ\b/i, /\bLGBTQ\b/i, /\bMami\b/i, /\bTrish\b/i, /\bStratus\b/i, /\bIzzi\b/i, 
+        /\bDame\b/i, /\bGiulia\b/i, /\bMichin\b/i, /\bJayne\b/i, /\bLLM\b/i, /\bMLM\b/i, /Shira/i, /Steph's place/i, /Stephanie's place/i, /Steph McMahon/i, /Stepan/i, /Stratu/i, /Stratt/i, /Gina Adam/i, /\bG1na\b/i, /\bGlna\b/i, /\bG!na\b/i, /\bSol\b/i, /\bShe\b/i, 
+        /\bHer\b/i, /\bHer's\b/i, /\bShe's\b/i, /\bRiho\b/i, /\bCum\b/i, /\bSlut\b/i, /\bTor\b/i, /\bIzzi\b/i, /\bDame\b/i, /\bNox\b/i, /\bLiv\b/i, /\bAlexa\b/i, /\bODB\b/i, /\bLita\b/i, /\bChyna\b/i, /\bSaraya\b/i, /\bBrooke\b/i, /\bCora\b/i, /\bGin4\b/i, /\bG1n4\b/i,
         /\bTay\b/i, /\bMelo\b/i, /\bConti\b/i, /\bPaige\b/i, /\bShotzi\b/i, /\bTiffy\b/i, /\bStratton\b/i, /\bAEW\b/i, /\bAi\b/i, /\bAis\b/i, /\b-Ai\b/i, /\bAi-\b/i, /\bIvory\b/i, /\bposing\b/i, /\bTamina\b/i, /\bTessa\b/i, /\bRuca\b/i, /\bRuby\b/i, /\bSoho\b/i,
         /\bSasha\b/i, /\bAnal\b/i, /\bBliss\b/i, /\bGay\b/i, /\bTrans\b/i, /\bTransvestite\b/i, /\bTransu\b/i, /\bPride\b/i, /\bLesbian\b/i, /\bLesbo\b/i, /\bHomo\b/i, /\bQueer\b/i, /\bSable\b/i, /\bposed\b/i, /\bLayla\b/i, /\bLana\b/i, /\bSol\b/i, /\bJacy\b/i,
         /\bBella\b/i, /\bNikki\b/i, /\bBrie\b/i, /\bTegan\b/i, /\bNox\b/i, /\b Goddess\b/i, /\bLita\b/i, /\bRusso\b/i, /\bLGBT\b/i, /\bLGBTQ\b/i, /\bLGBTQ\b/i, /\bMami\b/i, /\bTrish\b/i, /\bStratus\b/i, /\bYung\b/i, /\bHavok\b/i, /\bJade\b/i, /\bAthena\b/i,
         /\bIzzi\b/i, /\bFuku\b/i, /\bDame\b/i, /\bGiulia\b/i, /\bMichin\b/i, /\bJayne\b/i, /\bLLM\b/i, /\bMLM\b/i, /Shira/i, /Steph's place/i, /Stephanie's place/i, /Steph McMahon/i, /Stepan/i, /Stratu/i, /Stratt/i, /Tiffa/i, /Tiffy/i, /\bGina\b/i, /\bBO6\b/i,
-	/\bBO7\b/i, /\bHMW\b/i, /Dreambooth/i, /Dream booth/i,
+        /\bBO7\b/i, /\bHMW\b/i, /Dreambooth/i, /Dream booth/i,
     ];
 
     const restrictedPhrases = [
@@ -874,13 +876,6 @@
                 'div[aria-label="Näytä suosituksia"] .x1ey2m1c.xds687c.x17qophe.xg01cxk.x47corl.x10l6tqk.x13vifvy.x1ebt8du.x19991ni.x1dhq9h.x1o1ewxj.x3x9cwd.x1e5q0jg.x13rtm0m',
                 'div.xsgj6o6.xw3qccf.x1xmf6yo.x1w6jkce.xusnbm3 div[aria-label="Näytä suosituksia"] .x1ja2u2z.x78zum5.x2lah0s.x1n2onr6.xl56j7k.x6s0dn4.xozqiw3.x1q0g3np.xi112ho.x17zwfj4.x585lrc.x1403ito.x',
                 'div.xsgj6o6.xw3qccf.x1xmf6yo.x1w6jkce.xusnbm3 div[aria-label="Näytä suosituksia"] .x1ey2m1c.xds687c.x17qophe.xg01cxk.x47corl.x10l6tqk.x13vifvy.x1ebt8du.x19991ni.x1dhq9h.x1o1ewxj.x3x9cwd',
-                'div.x1w6jkce:nth-child(3)',
-                'div.x1w6jkce:nth-child(3) > div:nth-child(1)',
-                'div.x1w6jkce:nth-child(3) > div:nth-child(1) > div:nth-child(1)',
-                'div.x1w6jkce:nth-child(3) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1)',
-                'div.x1w6jkce:nth-child(3) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1)',
-                'div.x1w6jkce:nth-child(3) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > i:nth-child(1)',
-                'div.x1w6jkce:nth-child(3) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2)',
                 'div.x1exxf4d.x1y71gwh.x1nb4dca.xu1343h.x1lq5wgf.xgqcy7u.x30kzoy.x9jhf4c.x13fuv20.xu3j5b3.x1q0q8m5.x26u7qi.x178xt8z.xm81vs4.xso031l.xy80clv.xev17xk.x1xmf6yo'
             ];
 
@@ -899,13 +894,48 @@
         }
     };
 
-// Function to delete elements for specific URLs
-const deleteSelectorsForSpecificUrl = () => {
-    try {
-        const currentUrl = window.location.href;
-        
-        if (currentUrl.includes('https://www.facebook.com/four3four')) {
-            devLog('Applying selectors for four3four URL');
+    // FIXED: Helper function with proper URL matching
+    function isSupportedFacebookPage(currentUrl, supportedPages) {
+        try {
+            const url = new URL(currentUrl);
+            
+            return supportedPages.some(pageUrl => {
+                try {
+                    const page = new URL(pageUrl);
+                    // Must be same host
+                    if (url.host !== page.host) return false;
+                    
+                    // Extract the page path (e.g., "/four3four")
+                    const basePath = page.pathname.replace(/\/+$/, '');
+                    const currentPath = url.pathname.replace(/\/+$/, '');
+                    
+                    // Exact match OR subpage match
+                    return currentPath === basePath || currentPath.startsWith(basePath + '/');
+                } catch (e) {
+                    return false;
+                }
+            });
+        } catch (e) {
+            return false;
+        }
+    }
+
+    // FIXED: Function to delete elements for specific URLs - now with proper URL restriction
+    const deleteSelectorsForSpecificUrl = () => {
+        try {
+            const currentUrl = window.location.href;
+            const supportedUrls = [
+                "https://www.facebook.com/four3four",
+                "https://www.facebook.com/ItsStillRealToUsDammit",
+                // Add more URLs here!
+            ];
+
+            // FIXED: Only run if we're actually on one of the supported pages
+            if (!isSupportedFacebookPage(currentUrl, supportedUrls)) {
+                return; // Exit early if not on supported page
+            }
+
+            devLog('Applying selectors for supported URLs');
             const selectorsToDelete = [
                 '.x1120s5i.x1n2onr6.x10wlt62.x6ikm8r.x1lliihq',
                 '.x1cnzs8.xjkvuk6.x193iq5w.x2lah0s.xdt5ytf.x78zum5.x9f619.x1ja2u2z.x1n2onr6',
@@ -937,141 +967,128 @@ const deleteSelectorsForSpecificUrl = () => {
                 'footer .xi81zsa',
                 '.xh8yej3 > .xh8yej3.x1n2onr6.xl56j7k.xdt5ytf.x3nfvp2.x9f619.x1a2a7pz.x1lku1pv.x87ps6o.x13rtm0m.x1e5q0jg.x3x9cwd.x1o1ewxj.xggy1nq.x1hl2dhg.x16tdsg8.xkhd6sd.x18d9i69.x4uap5.xexx8yu.x1mh'
             ];
-            
+
             let deletedCount = 0;
             selectorsToDelete.forEach(selector => {
-                try {
-                    document.querySelectorAll(selector).forEach(element => {
-                        if (selector.includes(':contains(')) {
-                            const text = selector.match(/\:contains\("([^"]+)"\)/)?.[1];
-                            if (text) {
-                                const walker = document.createTreeWalker(
-                                    document.body,
-                                    NodeFilter.SHOW_TEXT,
-                                    null,
-                                    false
-                                );
-                                let node;
-                                while (node = walker.nextNode()) {
-                                    if (node.nodeValue.includes(text)) {
-                                        let parent = node.parentElement;
-                                        while (parent && parent !== document.body) {
-                                            if (parent.classList.contains('x1yztbdb') || 
-                                                parent.classList.contains('html-div')) {
-                                                parent.remove();
-                                                deletedCount++;
-                                                break;
-                                            }
-                                            parent = parent.parentElement;
-                                        }
+                // Handle :contains() manually, rest as normal
+                if (selector.includes(':contains(')) {
+                    const text = selector.match(/\:contains\("([^"]+)"\)/)?.[1];
+                    if (text) {
+                        const walker = document.createTreeWalker(
+                            document.body,
+                            NodeFilter.SHOW_TEXT,
+                            null,
+                            false
+                        );
+                        let node;
+                        while (node = walker.nextNode()) {
+                            if (node.nodeValue.includes(text)) {
+                                let parent = node.parentElement;
+                                while (parent && parent !== document.body) {
+                                    if (parent.classList.contains('x1yztbdb') ||
+                                        parent.classList.contains('html-div')) {
+                                        parent.remove();
+                                        deletedCount++;
+                                        break;
                                     }
-                                }
-                            }
-                        } else {
-                            element.remove();
-                            deletedCount++;
-                        }
-                    });
-                } catch (e) {
-                    if (selector.includes(':contains(')) {
-                        const text = selector.match(/\:contains\("([^"]+)"\)/)?.[1];
-                        if (text) {
-                            const walker = document.createTreeWalker(
-                                document.body,
-                                NodeFilter.SHOW_TEXT,
-                                null,
-                                false
-                            );
-                            let node;
-                            while (node = walker.nextNode()) {
-                                if (node.nodeValue.includes(text)) {
-                                    let parent = node.parentElement;
-                                    while (parent && parent !== document.body) {
-                                        if (parent.classList.contains('x1yztbdb') || 
-                                            parent.classList.contains('html-div')) {
-                                            parent.remove();
-                                            deletedCount++;
-                                            break;
-                                        }
-                                        parent = parent.parentElement;
-                                    }
+                                    parent = parent.parentElement;
                                 }
                             }
                         }
                     }
+                } else {
+                    document.querySelectorAll(selector).forEach(element => {
+                        element.remove();
+                        deletedCount++;
+                    });
                 }
             });
-            
-            if (deletedCount > 0) {
-                devLog(`Deleted ${deletedCount} elements for four3four URL`);
-            }
-        }
-    } catch (e) {
-        console.log('Error deleting selectors for specific URL: ' + e.message);
-    }
-};
 
-// Function to delete elements for a specific profile
-const deleteSelectorsForSpecificProfile = () => {
-    try {
-        const currentUrl = window.location.href;
-        const profileId = '100000639309471';
-        
-        if (currentUrl.includes(profileId)) {
-            devLog('Applying selectors for specific profile');
+            if (deletedCount > 0) {
+                devLog(`Deleted ${deletedCount} elements for supported URLs`);
+            }
+        } catch (e) {
+            console.log('Error deleting selectors for specific URLs: ' + e.message);
+        }
+    };
+
+    // FIXED: Function to delete elements for specific profiles - now with proper URL restriction
+    const deleteSelectorsForSpecificProfile = () => {
+        try {
+            const currentUrl = window.location.href;
+            const url = new URL(currentUrl);
+            const profileIds = [
+                '100000639309471'
+                // Add more profile IDs or vanity usernames here
+            ];
+
+            // FIXED: Strictly match only these profile pages
+            const matchesProfile = profileIds.some(profileId => {
+                return (
+                    (url.pathname === '/profile.php' && url.searchParams.get('id') === profileId) ||
+                    (url.pathname === `/${profileId}` || url.pathname === `/${profileId}/`)
+                );
+            });
+            
+            // FIXED: Only run if we're actually on one of the specified profiles
+            if (!matchesProfile) {
+                return; // Exit early if not on specified profile
+            }
+            
+            devLog('Applying selectors for specific profiles');
             const selectorsToDelete = [
-                    '.x1a2a7pz.x1ja2u2z.xh8yej3.x1n2onr6.x10wlt62.x6ikm8r.x1itg65n',
-                    '.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > div > .x1jfb8zj.x1qrby5j.x1n2onr6.x7ja8zs.x1t2pt76.x1lytzrv.xedcshv.xarpa2k.x3igimt.x12ejxvf.x1qhmfi1.x1pdmqnj.x9f619.x178xt8z.xm81vs4.xso031l.xy80clv.xev17xk.x1xmf6yo',
-                    '.xu06nn8.x1jl3cmp.x2r5gy4.xnpuxes.x1hc1fzr.x879a55.x1q0g3np.xozqiw3.x1qjc9v5.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619 > .xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619',
-                    '.xu06nn8.x1jl3cmp.x2r5gy4.xnpuxes.x1hc1fzr.x879a55.x1q0g3np.xozqiw3.x1qjc9v5.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619 > .xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .x1y5dvz6.x16i7wwg.xqdwrps.x1pi30zi.x1swvt13.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619',
-                    '.x78zum5 > .xh8yej3.x1n2onr6.xl56j7k.xdt5ytf.x3nfvp2.x9f619.x1a2a7pz.x1lku1pv.x87ps6o.x13rtm0m.x1e5q0jg.x3x9cwd.x1o1ewxj.xggy1nq.x1hl2dhg.x16tdsg8.xkhd6sd.x18d9i69.x4uap5.xexx8yu.x1mh8g0r.xat24cr.x11i5rnm.xdj266r.html-div',
-                    '.x78zum5 > .xh8yej3.x1n2onr6.xl56j7k.xdt5ytf.x3nfvp2.x9f619.x1a2a7pz.x1lku1pv.x87ps6o.x13rtm0m.x1e5q0jg.x3x9cwd.x1o1ewxj.xggy1nq.x1hl2dhg.x16tdsg8.xkhd6sd.x18d9i69.x4uap5.xexx8yu.x1mh8g0r.xat24cr.x11i5rnm.xdj266r.html-div > .xquyuld.x10wlt62.x6ikm8r.xh8yej3.x9f619.xt3gfkd.xu5ydu1.xdney7k.x1qpq9i9.x1jx94hy.x1ja2u2z.x1n2onr6.x26u7qi.x178xt8z.xm81vs4.xso031l.xy80clv.xev17xk.x1xmf6yo',
-                    '.x1q0g3np.xozqiw3.x6s0dn4.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619 > .xamitd3.xeuugli.x193iq5w.x2lah0s.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .x78zum5',
-                    '.x1q0g3np.xozqiw3.x6s0dn4.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619 > .xamitd3.xeuugli.x193iq5w.x2lah0s.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619',
-                    '.x1y5dvz6.x16i7wwg.xqdwrps.x1pi30zi.x1swvt13.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .x1q0g3np.xozqiw3.x6s0dn4.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619',
-                    '.x2lah0s.xvo6coq.x1ve1bff.x1q0g3np.xozqiw3.x1qjc9v5.xl56j7k.x1n2onr6.x78zum5.x1ja2u2z.x9f619 > .x1y5dvz6.x16i7wwg.xqdwrps.x1pi30zi.x1swvt13.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619',
-                    '.x2lah0s.xvo6coq.x1ve1bff.x1q0g3np.xozqiw3.x1qjc9v5.xl56j7k.x1n2onr6.x78zum5.x1ja2u2z.x9f619',
-                    '.x7wzq59.x1xzczws.x1ja2u2z.x9f619',
-                    'div.xnjli0.x1q8cg2c.xwib8y2.x1y1aw1k.x6s0dn4.x1ja2u2z.x16tdsg8.x1n2onr6.x1gh759c.xnqzcj9.xfvfia3.x1i6fsjq.x2lah0s.x1q0g3np.x78zum5.x1ypdohk.x9f619.xjyslct.x1a2a7pz.x1lku1pv.x87ps6o.x13rtm0m.x1e5q0jg.x3x9cwd.x1o1ewxj.xggy1nq.x1hl2dhg.x13vifvy.x16tdsg8.x1xmf6yo',
-                    'div.x78zum5.x12nagc.x1n2onr6.x1s6qhgt:empty',
-                    '.x7wzq59 > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(2)',
-                    '.x7wzq59 > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(2) > div:nth-child(1) > div:nth-child(1)',
-                    '.x7wzq59 > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1)',
-                    'div.x1nhvcw1:nth-child(1)',
-                    'div.x1nhvcw1:nth-child(1) > div:nth-child(1)',
-                    'div.x1nhvcw1:nth-child(1) > div:nth-child(2)',
-                    'div.x1nhvcw1:nth-child(1) > div:nth-child(2) > div:nth-child(1)',
-                    'div.x1nhvcw1:nth-child(1) > div:nth-child(2) > div:nth-child(1) > div:nth-child(1)',
-                    'div.x1nhvcw1:nth-child(1) > div:nth-child(2) > div:nth-child(1) > div:nth-child(1) > span:nth-child(1)',
-                    'div.xifccgj.x4cne27.xbmpl8g.xykv574.xyamay9.x1swvt13.x1pi30zi.x1q0g3np.xozqiw3.x1qjc9v5.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619:nth-of-type(2)',
-                    'div.x1yztbdb:nth-child(2)',
-                    'div.x1yztbdb:nth-child(2) > div:nth-child(1)',
-                    'div.x1yztbdb:nth-child(2) > div:nth-child(1) > div:nth-child(1)',
-                    'div.x1yztbdb:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1)',
-                    'div.xamitd3:nth-child(1)',
-                    'div.xamitd3:nth-child(2)',
-                    'div.xamitd3:nth-child(2) > div:nth-child(1)',
-                    'div.xamitd3:nth-child(2) > div:nth-child(1) > div:nth-child(1)',
-                    'div.xamitd3:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1)',
-                    'div.xamitd3:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1)',
-                    'div.xamitd3:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1)',
-                    'div.xamitd3:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1)',
-                    'div.xamitd3:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2)',
-                    'div.xamitd3:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > span:nth-child(1)',
-                    'div.xamitd3:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > span:nth-child(1) > span:nth-child(1) > span:nth-child(1)',
-                    'div.xamitd3:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2)',
-                    '.x6d00yu',
-                    'mount_0_0_9k > div > div:nth-child(1) > div > div.x9f619.x1n2onr6.x1ja2u2z > div > div > div.x78zum5.xdt5ytf.x1t2pt76.x1n2onr6.x1ja2u2z.x10cihs4 > div.x78zum5.xdt5ytf.x1t2pt76 > div > div > div.x6s0dn4.x78zum5.xdt5ytf.x193iq5w > div.x9f619.x193iq5w.x1talbiv.x1sltb1f.x3fxtfs.xf7dkkf.xv54qhq.xw7yly9 > div > div.x9f619.x1n2onr6.x1ja2u2z.xeuugli.xs83m0k.xjl7jj.x1xmf6yo.x1xegmmw.x1e56ztr.x13fj5qh.xnp8db0.x1d1medc.x7ep2pv.x1xzczws > div.x7wzq59 > div > div:nth-child(2) > div > div',
-                    'div[aria-label="Suodattimet"]',
-                    'div[aria-label="Filters"]',
-                    'div[aria-label="Suodattimet"][role="button"]',
-                    'div[aria-label="Filters"][role="button"]',
-                    '.x1i10hfl.xjbqb8w.x1ejq31n.x18oe1m7.x1sy0etr.xstzfhl.x972fbf.x10w94by.x1qhh985.x14e42zd.x1ypdohk.xe8uvvx.xdj266r.x14z9mp.xat24cr.x1lziwak.xexx8yu.xyri2b.x18d9i69.x1c1uobl.x16tdsg8.xat24cr.x1mh8g0r.x6s0dn4.x78zum5.xdt5ytf.xjy6m2a.xl56j7k',
-                    '.x1ja2u2z.x78zum5.x2lah0s.x1n2onr6.xl56j7k.x6s0dn4.xozqiw3.x1q0g3np.x14ldlfn.x1b1wa69.xws8118.x5fzff1.x972fbf.x10w94by.x1qhh985.x14e42zd.x9f619.xpdmqnj.x1g0dm76.x1qhmfi1.x1r1pt67',
-                    'h2:contains("Julkaisut")',
-                    'span:contains("Julkaisut")',
-                    'div:contains("Suodattimet")',
-                    'span:contains("Suodattimet")'
+                '.x1a2a7pz.x1ja2u2z.xh8yej3.x1n2onr6.x10wlt62.x6ikm8r.x1itg65n',
+                '.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > div > .x1jfb8zj.x1qrby5j.x1n2onr6.x7ja8zs.x1t2pt76.x1lytzrv.xedcshv.xarpa2k.x3igimt.x12ejxvf.x1qhmfi1.x1pdmqnj.x9f619.x178xt8z.xm81vs4.xso031l.xy80clv.xev17xk.x1xmf6yo',
+                '.xu06nn8.x1jl3cmp.x2r5gy4.xnpuxes.x1hc1fzr.x879a55.x1q0g3np.xozqiw3.x1qjc9v5.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619 > .xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619',
+                '.xu06nn8.x1jl3cmp.x2r5gy4.xnpuxes.x1hc1fzr.x879a55.x1q0g3np.xozqiw3.x1qjc9v5.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619 > .xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .x1y5dvz6.x16i7wwg.xqdwrps.x1pi30zi.x1swvt13.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619',
+                '.x78zum5 > .xh8yej3.x1n2onr6.xl56j7k.xdt5ytf.x3nfvp2.x9f619.x1a2a7pz.x1lku1pv.x87ps6o.x13rtm0m.x1e5q0jg.x3x9cwd.x1o1ewxj.xggy1nq.x1hl2dhg.x16tdsg8.xkhd6sd.x18d9i69.x4uap5.xexx8yu.x1mh8g0r.xat24cr.x11i5rnm.xdj266r.html-div',
+                '.x78zum5 > .xh8yej3.x1n2onr6.xl56j7k.xdt5ytf.x3nfvp2.x9f619.x1a2a7pz.x1lku1pv.x87ps6o.x13rtm0m.x1e5q0jg.x3x9cwd.x1o1ewxj.xggy1nq.x1hl2dhg.x16tdsg8.xkhd6sd.x18d9i69.x4uap5.xexx8yu.x1mh8g0r.xat24cr.x11i5rnm.xdj266r.html-div > .xquyuld.x10wlt62.x6ikm8r.xh8yej3.x9f619.xt3gfkd.xu5ydu1.xdney7k.x1qpq9i9.x1jx94hy.x1ja2u2z.x1n2onr6.x26u7qi.x178xt8z.xm81vs4.xso031l.xy80clv.xev17xk.x1xmf6yo',
+                '.x1q0g3np.xozqiw3.x6s0dn4.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619 > .xamitd3.xeuugli.x193iq5w.x2lah0s.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .x78zum5',
+                '.x1q0g3np.xozqiw3.x6s0dn4.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619 > .xamitd3.xeuugli.x193iq5w.x2lah0s.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619',
+                '.x1y5dvz6.x16i7wwg.xqdwrps.x1pi30zi.x1swvt13.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .x1q0g3np.xozqiw3.x6s0dn4.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619',
+                '.x2lah0s.xvo6coq.x1ve1bff.x1q0g3np.xozqiw3.x1qjc9v5.xl56j7k.x1n2onr6.x78zum5.x1ja2u2z.x9f619 > .x1y5dvz6.x16i7wwg.xqdwrps.x1pi30zi.x1swvt13.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619',
+                '.x2lah0s.xvo6coq.x1ve1bff.x1q0g3np.xozqiw3.x1qjc9v5.xl56j7k.x1n2onr6.x78zum5.x1ja2u2z.x9f619',
+                '.x7wzq59.x1xzczws.x1ja2u2z.x9f619',
+                'div.xnjli0.x1q8cg2c.xwib8y2.x1y1aw1k.x6s0dn4.x1ja2u2z.x16tdsg8.x1n2onr6.x1gh759c.xnqzcj9.xfvfia3.x1i6fsjq.x2lah0s.x1q0g3np.x78zum5.x1ypdohk.x9f619.xjyslct.x1a2a7pz.x1lku1pv.x87ps6o.x13rtm0m.x1e5q0jg.x3x9cwd.x1o1ewxj.xggy1nq.x1hl2dhg.x13vifvy.x16tdsg8.x1xmf6yo',
+                'div.x78zum5.x12nagc.x1n2onr6.x1s6qhgt:empty',
+                '.x7wzq59 > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(2)',
+                '.x7wzq59 > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(2) > div:nth-child(1) > div:nth-child(1)',
+                '.x7wzq59 > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1)',
+                'div.x1nhvcw1:nth-child(1)',
+                'div.x1nhvcw1:nth-child(1) > div:nth-child(1)',
+                'div.x1nhvcw1:nth-child(1) > div:nth-child(2)',
+                'div.x1nhvcw1:nth-child(1) > div:nth-child(2) > div:nth-child(1)',
+                'div.x1nhvcw1:nth-child(1) > div:nth-child(2) > div:nth-child(1) > div:nth-child(1)',
+                'div.x1nhvcw1:nth-child(1) > div:nth-child(2) > div:nth-child(1) > div:nth-child(1) > span:nth-child(1)',
+                'div.xifccgj.x4cne27.xbmpl8g.xykv574.xyamay9.x1swvt13.x1pi30zi.x1q0g3np.xozqiw3.x1qjc9v5.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619:nth-of-type(2)',
+                'div.x1yztbdb:nth-child(2)',
+                'div.x1yztbdb:nth-child(2) > div:nth-child(1)',
+                'div.x1yztbdb:nth-child(2) > div:nth-child(1) > div:nth-child(1)',
+                'div.x1yztbdb:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1)',
+                'div.xamitd3:nth-child(1)',
+                'div.xamitd3:nth-child(2)',
+                'div.xamitd3:nth-child(2) > div:nth-child(1)',
+                'div.xamitd3:nth-child(2) > div:nth-child(1) > div:nth-child(1)',
+                'div.xamitd3:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1)',
+                'div.xamitd3:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1)',
+                'div.xamitd3:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1)',
+                'div.xamitd3:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1)',
+                'div.xamitd3:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2)',
+                'div.xamitd3:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > span:nth-child(1)',
+                'div.xamitd3:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > span:nth-child(1) > span:nth-child(1) > span:nth-child(1)',
+                'div.xamitd3:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2)',
+                '.x6d00yu',
+                'mount_0_0_9k > div > div:nth-child(1) > div > div.x9f619.x1n2onr6.x1ja2u2z > div > div > div.x78zum5.xdt5ytf.x1t2pt76.x1n2onr6.x1ja2u2z.x10cihs4 > div.x78zum5.xdt5ytf.x1t2pt76 > div > div > div.x6s0dn4.x78zum5.xdt5ytf.x193iq5w > div.x9f619.x193iq5w.x1talbiv.x1sltb1f.x3fxtfs.xf7dkkf.xv54qhq.xw7yly9 > div > div.x9f619.x1n2onr6.x1ja2u2z.xeuugli.xs83m0k.xjl7jj.x1xmf6yo.x1xegmmw.x1e56ztr.x13fj5qh.xnp8db0.x1d1medc.x7ep2pv.x1xzczws > div.x7wzq59 > div > div:nth-child(2) > div > div',
+                'div[aria-label="Suodattimet"]',
+                'div[aria-label="Filters"]',
+                'div[aria-label="Suodattimet"][role="button"]',
+                'div[aria-label="Filters"][role="button"]',
+                '.x1i10hfl.xjbqb8w.x1ejq31n.x18oe1m7.x1sy0etr.xstzfhl.x972fbf.x10w94by.x1qhh985.x14e42zd.x1ypdohk.xe8uvvx.xdj266r.x14z9mp.xat24cr.x1lziwak.xexx8yu.xyri2b.x18d9i69.x1c1uobl.x16tdsg8.xat24cr.x1mh8g0r.x6s0dn4.x78zum5.xdt5ytf.xjy6m2a.xl56j7k',
+                '.x1ja2u2z.x78zum5.x2lah0s.x1n2onr6.xl56j7k.x6s0dn4.xozqiw3.x1q0g3np.x14ldlfn.x1b1wa69.xws8118.x5fzff1.x972fbf.x10w94by.x1qhh985.x14e42zd.x9f619.xpdmqnj.x1g0dm76.x1qhmfi1.x1r1pt67',
+                'h2:contains("Julkaisut")',
+                'span:contains("Julkaisut")',
+                'div:contains("Suodattimet")',
+                'span:contains("Suodattimet")'
             ];
             
             let deletedCount = 0;
@@ -1084,155 +1101,189 @@ const deleteSelectorsForSpecificProfile = () => {
             });
             
             if (deletedCount > 0) {
-                devLog(`Deleted ${deletedCount} elements for specific profile`);
+                devLog(`Deleted ${deletedCount} elements for specific profiles`);
             }
+        } catch (e) {
+            console.log('Error deleting selectors for specific profiles: ' + e.message);
         }
-    } catch (e) {
-        console.log('Error deleting selectors for specific profile: ' + e.message);
-    }
-};
+    };
 
-// Function to delete elements for a personal profile
+// FIXED: Function to delete elements for a personal profile - now with proper URL restriction
 const deleteSelectorsForPersonalProfile = () => {
     try {
         const currentUrl = window.location.href;
         
-        if (currentUrl === 'https://www.facebook.com/Haukkis/friends') {
-            devLog('Applying selectors for personal profile');
-            const personalProfileSelectors = [
-                'div.xnjli0.x1q8cg2c.xwib8y2.x1y1aw1k.x6s0dn4.x1ja2u2z.x16tdsg8.x1n2onr6.x1gh759c.xnqzcj9.xfvfia3.x1i6fsjq.x2lah0s.x1q0g3np.x78zum5.x1ypdohk.x9f619.xjyslct.x1a2a7pz.x1lku1pv.x87ps6',
-                'div.xnjli0.x1q8cg2c.xwib8y2.x1y1aw1k.x6s0dn4.x1ja2u2z.x16tdsg8.x1n2onr6.x1gh759c.xnqzcj9.xfvfia3.x1i6fsjq.x2lah0s.x1q0g3np.x78zum5.x1ypdohk.x9f619.xjyslct.x1a2a7pz.x1lku1pv.x87ps6',
-            ];
-            
-            let deletedCount = 0;
-            personalProfileSelectors.forEach(selector => {
+        if (currentUrl !== 'https://www.facebook.com/Haukkis/friends') {
+            return;
+        }
+        
+        devLog('Applying selectors for personal profile');
+        const personalProfileSelectors = [
+            'div.xnjli0.x1q8cg2c.xwib8y2.x1y1aw1k.x6s0dn4.x1ja2u2z.x16tdsg8.x1n2onr6.x1gh759c.xnqzcj9.xfvfia3.x1i6fsjq.x2lah0s.x1q0g3np.x78zum5.x1ypdohk.x9f619.xjyslct.x1a2a7pz.x1lku1pv.x87ps6',
+            'div.xnjli0.x1q8cg2c.xwib8y2.x1y1aw1k.x6s0dn4.x1ja2u2z.x16tdsg8.x1n2onr6.x1gh759c.xnqzcj9.xfvfia3.x1i6fsjq.x2lah0s.x1q0g3np.x78zum5.x1ypdohk.x9f619.xjyslct.x1a2a7pz.x1lku1pv.x87ps6',
+            'span:contains("Poista kavereista")',
+            'div[role="menuitem"] span:contains("Poista kavereista")',
+            'i[style*="BXcBrMYpzXO.png"][style*="background-position: 0px -84px"]',
+        ];
+        
+        let deletedCount = 0;
+        personalProfileSelectors.forEach(selector => {
+            if (selector.includes(':contains(')) {
+                const text = selector.match(/\:contains\("([^"]+)"\)/)?.[1];
+                if (text) {
+                    const walker = document.createTreeWalker(
+                        document.body,
+                        NodeFilter.SHOW_TEXT,
+                        null,
+                        false
+                    );
+                    let node;
+                    while (node = walker.nextNode()) {
+                        if (node.nodeValue.includes(text)) {
+                            let parent = node.parentElement;
+                            while (parent && parent !== document.body) {
+                                if (parent.getAttribute('role') === 'menuitem' && 
+                                    parent.textContent.includes('Poista kavereista')) {
+                                    parent.remove();
+                                    deletedCount++;
+                                    break;
+                                }
+                                parent = parent.parentElement;
+                            }
+                        }
+                    }
+                }
+            } else {
                 document.querySelectorAll(selector).forEach(el => {
                     el.remove();
                     deletedCount++;
                 });
-            });
-            
-            if (deletedCount > 0) {
-                devLog(`Deleted ${deletedCount} elements for personal profile`);
             }
+        });
+        
+        if (deletedCount > 0) {
+            devLog(`Deleted ${deletedCount} elements for personal profile`);
         }
     } catch (e) {
         console.log('Error deleting selectors for personal profile: ' + e.message);
     }
 };
 
-// Intercept navigation to blocked URLs
-const interceptNavigation = () => {
-    try {
-        devLog('Setting up navigation interception');
-        document.addEventListener('click', (event) => {
-            const target = event.target.closest('a');
-            if (target && blockedUrls.some(blockedUrl => blockedUrl.test(target.href))) {
-                event.preventDefault();
-                event.stopPropagation();
-                console.log('Blocked navigation to: ' + target.href);
-            }
-        }, true);
+    // Intercept navigation to blocked URLs
+    const interceptNavigation = () => {
+        try {
+            devLog('Setting up navigation interception');
+            document.addEventListener('click', (event) => {
+                const target = event.target.closest('a');
+                if (target && blockedUrls.some(blockedUrl => blockedUrl.test(target.href))) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    console.log('Blocked navigation to: ' + target.href);
+                }
+            }, true);
 
-        document.addEventListener('submit', (event) => {
-            const form = event.target;
-            const action = form.action || '';
-            if (blockedUrls.some(blockedUrl => blockedUrl.test(action))) {
-                event.preventDefault();
-                event.stopPropagation();
-                console.log('Blocked form submission to: ' + action);
-            }
-        }, true);
-    } catch (e) {
-        console.log('Error setting up navigation interception: ' + e.message);
-    }
-};
+            document.addEventListener('submit', (event) => {
+                const form = event.target;
+                const action = form.action || '';
+                if (blockedUrls.some(blockedUrl => blockedUrl.test(action))) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    console.log('Blocked form submission to: ' + action);
+                }
+            }, true);
+        } catch (e) {
+            console.log('Error setting up navigation interception: ' + e.message);
+        }
+    };
 
-// Observe DOM changes for dynamically loaded content
-const observeDOMChanges = () => {
-    try {
-        devLog('Setting up DOM observer');
-        const observer = new MutationObserver(() => {
+    // FIXED: Observe DOM changes with URL-aware filtering
+    const observeDOMChanges = () => {
+        try {
+            devLog('Setting up DOM observer');
+            const observer = new MutationObserver(() => {
+                hideCriticalElements();
+                deleteBlockedElements();
+                deleteRestrictedWords();
+                deleteRestrictedPhrases();
+                deletePeopleYouMayKnow();
+                // FIXED: These now check URLs internally before running
+                deleteSelectorsForSpecificUrl();
+                deleteSelectorsForSpecificProfile();
+                deleteSelectorsForPersonalProfile();
+                deleteElement();
+            });
+            
+            observer.observe(document.documentElement, { 
+                childList: true, 
+                subtree: true,
+                attributeFilter: ['src', 'href', 'aria-label', 'data-fbid']
+            });
+        } catch (e) {
+            console.log('Error setting up DOM observer: ' + e.message);
+        }
+    };
+
+    // FIXED: Run all filtering functions with URL awareness
+    const runAllFilters = () => {
+        try {
+            handleRedirects();
+            cleanUrl();
             hideCriticalElements();
             deleteBlockedElements();
             deleteRestrictedWords();
             deleteRestrictedPhrases();
             deletePeopleYouMayKnow();
+            // FIXED: These now check URLs internally before running
             deleteSelectorsForSpecificUrl();
             deleteSelectorsForSpecificProfile();
             deleteSelectorsForPersonalProfile();
             deleteElement();
-        });
-        
-        observer.observe(document.documentElement, { 
-            childList: true, 
-            subtree: true,
-            attributeFilter: ['src', 'href', 'aria-label', 'data-fbid']
-        });
-    } catch (e) {
-        console.log('Error setting up DOM observer: ' + e.message);
-    }
-};
+        } catch (e) {
+            console.log('Error running all filters: ' + e.message);
+        }
+    };
 
-// Run all filtering functions
-const runAllFilters = () => {
-    try {
+    // Ensure DOM is ready before initializing
+    const ensureDOMReady = () => {
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => {
+                observeDOMChanges();
+                observeForRestrictedPhrases();
+                interceptNavigation();
+            });
+        } else {
+            observeDOMChanges();
+            observeForRestrictedPhrases();
+            interceptNavigation();
+        }
+    };
+
+    // Initialize the script
+    const init = () => {
+        devLog('Initializing Facebook script');
+        ensureDOMReady();
         handleRedirects();
         cleanUrl();
-        hideCriticalElements();
         deleteBlockedElements();
         deleteRestrictedWords();
         deleteRestrictedPhrases();
         deletePeopleYouMayKnow();
+        // FIXED: These now check URLs internally before running
         deleteSelectorsForSpecificUrl();
         deleteSelectorsForSpecificProfile();
         deleteSelectorsForPersonalProfile();
         deleteElement();
-    } catch (e) {
-        console.log('Error running all filters: ' + e.message);
-    }
-};
+    };
 
-// Ensure DOM is ready before initializing
-const ensureDOMReady = () => {
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => {
-            observeDOMChanges();
-            observeForRestrictedPhrases();
-            interceptNavigation();
-        });
-    } else {
-        observeDOMChanges();
-        observeForRestrictedPhrases();
-        interceptNavigation();
-    }
-};
+    // Start initialization
+    init();
 
-// Initialize the script
-const init = () => {
-    devLog('Initializing Facebook script');
-    ensureDOMReady();
-    handleRedirects();
-    cleanUrl();
-    deleteBlockedElements();
-    deleteRestrictedWords();
-    deleteRestrictedPhrases();
-    deletePeopleYouMayKnow();
-    deleteSelectorsForSpecificUrl();
-    deleteSelectorsForSpecificProfile();
-    deleteSelectorsForPersonalProfile();
-    deleteElement();
-};
+    // Attach event listeners for changes
+    window.addEventListener('DOMContentLoaded', runAllFilters);
+    window.addEventListener('load', runAllFilters);
+    window.addEventListener('popstate', runAllFilters);
 
-// Start initialization
-init();
-
-// Attach event listeners for changes
-window.addEventListener('DOMContentLoaded', runAllFilters);
-window.addEventListener('load', runAllFilters);
-window.addEventListener('popstate', runAllFilters);
-
-// Ultra-frequent interval checks - critical for reels
-setInterval(runAllFilters, 20);
+    // Ultra-frequent interval checks - critical for reels
+    setInterval(runAllFilters, 20);
 
 })();

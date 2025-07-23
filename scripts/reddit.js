@@ -1,9 +1,9 @@
 (function () {
     'use strict';
 
-    // === FIREFOX/ANDROID OPTIMIZED LOGGING ===
+    // === CHROME DEV CONSOLE LOGGING ===
     function devLog(message) {
-        console.log('[REDDIT.JS-FIREFOX]', message);
+        console.log('[REDDIT.JS]', message);
     }
 
     // --- IMMEDIATE PRE-HIDING CSS (Applied before any content loads) ---
@@ -204,8 +204,8 @@
     const keywordsToHide = [
         "porn", "nude", "Alexa", "penetration", "naked", "xxx", "rule34", "r34", "r_34", "rule 34", "ChatGPT", "get hard", "Vince Russo", "Dave Meltzer",
         "deepnude", "nudify", "nudifier", "nudifying", "nudity", "undress", "undressing", "undressifying", "undressify", "getdisciplined", "Mariah",
-        "Toni Storm", "Skye Blue", "Carmella", "Mariah May", "Harley", "Cameron", "Hayter", "Britt Baker", "Ripley", "Rhea Ripley", "Mariah May",
-        "trans", "transvestite", "queer", "LGBT", "LGBTQ", "Pride", "Jessika Carr", "Carr WWE"," Jessica Carr", "Jessika Karr", "Jessika WWE", "sexy",
+        "Toni Storm", "Skye Blue", "Carmella", "Mariah May", "Harley", "Cameron", "Hayter", "Britt Baker", "Ripley", "Rhea Ripley", "Mariah May", "Blake",
+        "trans", "transvestite", "queer", "LGBT", "LGBTQ", "Pride", "Jessika Carr", "Carr WWE"," Jessica Carr", "Jessika Karr", "Jessika WWE", "sexy", "Monroe",
         "prostitute", "escort", "fetish", "adult", "erotic", "explicit", "mature", "blowjob", "sexual", "Jessica WWE", "Jessica Karr", "Analsex", "orgasm",
         "vagina", "pussy", "tushy", "tushi", "genital", "vagena", "booty", "derriere", "busty", "slut", "Karr WWE", "CJ Lana", "raped", "orga5m", "org@sm", 
         "whore", "camgirl", "celeb", "cumslut", "Tiffany Stratton", "Lillian", "Garcia", "Jordynne", "Trish", "Stratus", "Lana Del Rey", "orga$m", "0rg@sm", 
@@ -264,7 +264,7 @@
         /sheer/i, /aikuis viihde/i, /aikuissisältö/i, /aikuissivusto/i, /homo/i, /lesbo/i, /transu/i, /pervo/i, /5yvä/i, /\|\s*\|/i, /\(o\)\(o\)/i, /\(!\)/i, /face plus/i,  /face\+/i, /face+/i, /face\-/i,
         /bg remover/i, /lexi/i, /\bMina\b/i, /Shir/i, /kawa/i, /perver/i, /Mariah/i, /\bAva\b/i, /\bAnal-\b/i, /\b-Anal\b/i, /\bAnal\b/i, /\bCum\b/i, /\bNox\b/i, /\bButt\b/i, /\bNiven\b/i, /\bODB\b/i,
         /\bAnswers BETA\b/i, /\bFuku\b/i, /\bDick\b/i, /\bCock\b/i, /\bCock\b/i, /\bRape\b/i, /\bEmma\b/i, /\bIndi\b/i, /\bTegan\b/i, /\bGirl\b/i, /\bPenis\b/i, /\bLady\b/i, /\bAnus\b/i, /\bNSFW\b/i, 
-	/\bsex\b/i, /\bAdult\b/i, /\bB-Fab\b/i, /\bHMW\b/i,
+	/\bsex\b/i, /\bAdult\b/i, /\bB-Fab\b/i, /\bHMW\b/i, /Elayna/i, /Elayna Black/i, /Elina WWE/i, /Elyna WWE/i, /Elyina/i, /Blake Monroe/i, /\bBlake\b/i, /\bMonroe\b/i,
     ];
 
     const unifiedSelectors = [
@@ -305,30 +305,30 @@
         'div > faceplate-tracker:nth-child(4) > li > a',
     ];
 
-    // --- FIREFOX/ANDROID OPTIMIZED MEMORY MANAGEMENT ---
-    // Smaller memory caps for mobile/older devices
-    const MEMORY_CAP_GB = 4; // Reduced for mobile
-    const MEMORY_WARNING_GB = 3; // Reduced warning threshold
-    const MAX_CACHE_SIZE = 50; // Smaller cache for mobile
-    const MAX_APPROVAL_PERSISTENCE = 25; // Reduced persistence
-    const CLEANUP_INTERVAL = 45000; // 45 seconds cleanup (longer for mobile)
-    const MEMORY_CHECK_INTERVAL = 30000; // Check memory every 30 seconds (longer intervals)
-    const CRITICAL_MEMORY_THRESHOLD = 0.80; // 80% of heap limit (more conservative)
+    // --- OPTIMIZED MEMORY MANAGEMENT FOR ORIGINAL REDDIT PERFORMANCE ---
+    // Memory caps designed to keep usage close to original Reddit (5-8GB)
+    const MEMORY_CAP_GB = 8; // Hard cap at 8GB
+    const MEMORY_WARNING_GB = 6; // Warning at 6GB
+    const MAX_CACHE_SIZE = 100; // Increased for better performance but manageable
+    const MAX_APPROVAL_PERSISTENCE = 50; // Increased for better user experience
+    const CLEANUP_INTERVAL = 30000; // 30 seconds cleanup time
+    const MEMORY_CHECK_INTERVAL = 15000; // Check memory every 15 seconds
+    const CRITICAL_MEMORY_THRESHOLD = 0.85; // 85% of heap limit
 
-    // Firefox-compatible caches - no WeakSet/WeakMap issues
-    const processedElements = new Set();
-    const processedSearchItems = new Set();
+    // Lightweight caches - minimal memory footprint with WeakSet/WeakMap for automatic cleanup
+    const processedElements = new WeakSet();
+    const processedSearchItems = new WeakSet();
     const bannedSubredditCache = new Map();
     const contentBannedCache = new Map();
-    const shadowRootsProcessed = new Set();
-    const permanentlyApprovedElements = new Set();
+    const shadowRootsProcessed = new WeakSet();
+    const permanentlyApprovedElements = new WeakSet();
     const approvalPersistence = new Map();
-    const eventListenersAdded = new Set();
+    const eventListenersAdded = new WeakSet();
 
-    // Tracking for cleanup
+    // Tracking for cleanup with automatic disposal
     const intervalIds = new Set();
     const observerInstances = new Set();
-    const mutationObservers = new Map();
+    const mutationObservers = new WeakMap();
 
     let lastFilterTime = 0;
     let pendingOperations = false;
@@ -336,10 +336,9 @@
     let lastMemoryWarning = 0;
     let isCleaningUp = false;
 
-    // Firefox-compatible memory monitoring
+    // Memory monitoring optimized for Reddit-like performance
     function getMemoryUsage() {
-        // Firefox doesn't always have performance.memory
-        if (typeof performance !== 'undefined' && performance.memory) {
+        if (performance.memory) {
             const memInfo = performance.memory;
             const usedGB = memInfo.usedJSHeapSize / (1024 * 1024 * 1024);
             const limitGB = memInfo.jsHeapSizeLimit / (1024 * 1024 * 1024);
@@ -356,7 +355,7 @@
         return null;
     }
 
-    // Enhanced cache cleanup for Firefox/mobile
+    // Enhanced cache cleanup with better memory leak prevention
     function cleanupCaches(force = false) {
         if (isCleaningUp) return;
         isCleaningUp = true;
@@ -376,19 +375,11 @@
                 contentBannedCache.clear();
                 bannedSubredditCache.clear();
                 
-                // Keep only last 10 approvals when critical (mobile-friendly)
+                // Keep only last 15 approvals when critical
                 if (isCritical || isOverCap) {
-                    const entries = Array.from(approvalPersistence.entries()).slice(-10);
+                    const entries = Array.from(approvalPersistence.entries()).slice(-15);
                     approvalPersistence.clear();
                     entries.forEach(([key, value]) => approvalPersistence.set(key, value));
-                }
-                
-                // Clean up processed elements set (Firefox-specific)
-                if (processedElements.size > 100) {
-                    processedElements.clear();
-                }
-                if (processedSearchItems.size > 50) {
-                    processedSearchItems.clear();
                 }
                 
                 // Clean up any stale observers
@@ -409,17 +400,17 @@
             } else if (isWarning || contentBannedCache.size > MAX_CACHE_SIZE || bannedSubredditCache.size > MAX_CACHE_SIZE) {
                 // Gentle cleanup when approaching limits
                 if (contentBannedCache.size > MAX_CACHE_SIZE) {
-                    const entries = Array.from(contentBannedCache.entries()).slice(-Math.floor(MAX_CACHE_SIZE * 0.6));
+                    const entries = Array.from(contentBannedCache.entries()).slice(-Math.floor(MAX_CACHE_SIZE * 0.7));
                     contentBannedCache.clear();
                     entries.forEach(([key, value]) => contentBannedCache.set(key, value));
                 }
                 if (bannedSubredditCache.size > MAX_CACHE_SIZE) {
-                    const entries = Array.from(bannedSubredditCache.entries()).slice(-Math.floor(MAX_CACHE_SIZE * 0.6));
+                    const entries = Array.from(bannedSubredditCache.entries()).slice(-Math.floor(MAX_CACHE_SIZE * 0.7));
                     bannedSubredditCache.clear();
                     entries.forEach(([key, value]) => bannedSubredditCache.set(key, value));
                 }
                 if (approvalPersistence.size > MAX_APPROVAL_PERSISTENCE) {
-                    const entries = Array.from(approvalPersistence.entries()).slice(-Math.floor(MAX_APPROVAL_PERSISTENCE * 0.7));
+                    const entries = Array.from(approvalPersistence.entries()).slice(-Math.floor(MAX_APPROVAL_PERSISTENCE * 0.8));
                     approvalPersistence.clear();
                     entries.forEach(([key, value]) => approvalPersistence.set(key, value));
                 }
@@ -431,14 +422,24 @@
 
             memoryCleanupCount++;
             
-            // No window.gc() calls for Firefox compatibility
-            
+            // Force garbage collection only when necessary
+            if (window.gc && (force || isOverCap || memoryCleanupCount % 10 === 0)) {
+                try {
+                    window.gc();
+                    const afterMemInfo = getMemoryUsage();
+                    if (afterMemInfo && memInfo) {
+                        devLog(`🗑️ GC - Memory: ${afterMemInfo.usedGB}GB (was ${memInfo.usedGB}GB)`);
+                    }
+                } catch (e) {
+                    // Ignore GC errors
+                }
+            }
         } finally {
             isCleaningUp = false;
         }
     }
 
-    // Firefox-optimized memory pressure monitoring
+    // Memory pressure monitoring optimized for Reddit performance
     function monitorMemoryPressure() {
         const memInfo = getMemoryUsage();
         if (!memInfo) return;
@@ -446,14 +447,14 @@
         const now = Date.now();
         
         if (memInfo.usedGB > MEMORY_CAP_GB) {
-            if (now - lastMemoryWarning > 20000) { // Only warn every 20 seconds
+            if (now - lastMemoryWarning > 15000) { // Only warn every 15 seconds
                 devLog(`🚨 MEMORY CAP EXCEEDED: ${memInfo.usedGB}GB > ${MEMORY_CAP_GB}GB - FORCING CLEANUP`);
                 lastMemoryWarning = now;
             }
             cleanupCaches(true);
             
         } else if (memInfo.usedGB > MEMORY_WARNING_GB) {
-            if (now - lastMemoryWarning > 60000) {
+            if (now - lastMemoryWarning > 45000) {
                 devLog(`⚠️ Memory warning: ${memInfo.usedGB}GB / ${MEMORY_CAP_GB}GB cap (${memInfo.percentage}% of heap)`);
                 lastMemoryWarning = now;
             }
@@ -463,7 +464,7 @@
 
     // Enhanced global cleanup function
     function cleanup() {
-        devLog('🧹 Performing Firefox cleanup...');
+        devLog('🧹 Performing cleanup...');
         
         // Clear all intervals
         intervalIds.forEach(id => {
@@ -492,7 +493,7 @@
         
         const memInfo = getMemoryUsage();
         if (memInfo) {
-            devLog(`🧹 Firefox cleanup completed - Memory: ${memInfo.usedGB}GB`);
+            devLog(`🧹 Cleanup completed - Memory: ${memInfo.usedGB}GB`);
         }
     }
 
@@ -620,7 +621,7 @@
         }
     }
 
-    // Firefox-optimized performance functions
+    // Performance functions with memory monitoring
     function throttle(fn, wait) {
         let lastCall = 0;
         let requestId = null;
@@ -633,12 +634,11 @@
                 lastCall = now;
                 return fn.apply(context, args);
             } else if (!requestId) {
-                // Firefox prefers setTimeout over requestIdleCallback on mobile
-                requestId = setTimeout(() => {
+                requestId = (window.requestIdleCallback || window.requestAnimationFrame)(() => {
                     requestId = null;
                     lastCall = performance.now();
                     return fn.apply(context, args);
-                }, wait - (now - lastCall));
+                });
             }
         };
     }
@@ -664,24 +664,13 @@
         if (pendingOperations) return;
         pendingOperations = true;
         
-        // Firefox-friendly batching
-        if (window.requestAnimationFrame) {
-            requestAnimationFrame(() => {
-                try {
-                    fn();
-                } finally {
-                    pendingOperations = false;
-                }
-            });
-        } else {
-            setTimeout(() => {
-                try {
-                    fn();
-                } finally {
-                    pendingOperations = false;
-                }
-            }, 16); // ~60fps fallback
-        }
+        requestAnimationFrame(() => {
+            try {
+                fn();
+            } finally {
+                pendingOperations = false;
+            }
+        });
     }
 
     // Optimized text checking with memory-conscious caching
@@ -695,10 +684,10 @@
             return contentBannedCache.get(lowerText);
         }
         
-        // Prevent cache from growing too large (mobile-friendly)
+        // Prevent cache from growing too large
         if (contentBannedCache.size >= MAX_CACHE_SIZE) {
             // Keep only most recent entries
-            const entries = Array.from(contentBannedCache.entries()).slice(-Math.floor(MAX_CACHE_SIZE * 0.6));
+            const entries = Array.from(contentBannedCache.entries()).slice(-Math.floor(MAX_CACHE_SIZE * 0.7));
             contentBannedCache.clear();
             entries.forEach(([key, value]) => contentBannedCache.set(key, value));
         }
@@ -798,7 +787,7 @@
         if (identifier) {
             // Prevent approval persistence from growing too large
             if (approvalPersistence.size >= MAX_APPROVAL_PERSISTENCE) {
-                const entries = Array.from(approvalPersistence.entries()).slice(-Math.floor(MAX_APPROVAL_PERSISTENCE * 0.7));
+                const entries = Array.from(approvalPersistence.entries()).slice(-Math.floor(MAX_APPROVAL_PERSISTENCE * 0.8));
                 approvalPersistence.clear();
                 entries.forEach(([key, value]) => approvalPersistence.set(key, value));
             }
@@ -823,7 +812,7 @@
         
         // Prevent cache from growing too large
         if (bannedSubredditCache.size >= MAX_CACHE_SIZE) {
-            const entries = Array.from(bannedSubredditCache.entries()).slice(-Math.floor(MAX_CACHE_SIZE * 0.6));
+            const entries = Array.from(bannedSubredditCache.entries()).slice(-Math.floor(MAX_CACHE_SIZE * 0.7));
             bannedSubredditCache.clear();
             entries.forEach(([key, value]) => bannedSubredditCache.set(key, value));
         }
@@ -1234,7 +1223,7 @@
                 }
             }
         }
-    }, 150); // Increased throttle time for mobile
+    }, 100);
 
     function observeSearchDropdown() {
         const container = document.getElementById('search-dropdown-results-container');
@@ -1292,7 +1281,7 @@
                 if ((exactMatch || regexMatch) || (!isUrlAllowed() && query.includes(redgifsKeyword))) {
                     window.location.replace('https://www.reddit.com');
                 }
-            }, 300); // Increased debounce time for mobile
+            }, 200);
             
             searchInput.addEventListener('input', inputHandler);
             eventListenersAdded.add(searchInput);
@@ -1453,7 +1442,7 @@
     // --- MAIN FILTER FUNCTION ---
     function runAllChecks() {
         const now = performance.now();
-        if (now - lastFilterTime < 100) return; // Increased throttle for mobile
+        if (now - lastFilterTime < 50) return;
         lastFilterTime = now;
         
         if (document.body && !document.body.classList.contains('reddit-filter-ready')) {
@@ -1494,7 +1483,7 @@
         
         runAllChecks();
         
-        const throttledRunChecks = throttle(runAllChecks, 100); // Increased for mobile
+        const throttledRunChecks = throttle(runAllChecks, 50);
         const observer = new MutationObserver(throttledRunChecks);
         
         if (document.body) {
@@ -1507,23 +1496,38 @@
             });
         }
         
-        const minimalInterval = setInterval(hideBannedSubredditsFromSearch, 750); // Increased for mobile
+        const minimalInterval = setInterval(hideBannedSubredditsFromSearch, 500);
         intervalIds.add(minimalInterval);
         
-        const answersButtonInterval = setInterval(hideAnswersButton, 100); // Increased for mobile
+        const answersButtonInterval = setInterval(hideAnswersButton, 50);
         intervalIds.add(answersButtonInterval);
         
-        // Firefox prefers setTimeout over requestIdleCallback on mobile
-        const backgroundInterval = setInterval(() => {
-            batchProcess(() => {
-                hideBannedSubredditsFromAllSearchDropdowns();
-                filterPostsByContent();
-                hideAnswersButton();
-            });
-        }, 1500); // Longer intervals for mobile
-        intervalIds.add(backgroundInterval);
+        if (window.requestIdleCallback) {
+            const idleCallback = () => {
+                if (document.hidden) {
+                    runAllChecks();
+                } else {
+                    hideBannedSubredditsFromAllSearchDropdowns();
+                    filterPostsByContent();
+                    hideAnswersButton();
+                }
+                
+                window.requestIdleCallback(idleCallback, { timeout: 1000 });
+            };
+            
+            window.requestIdleCallback(idleCallback, { timeout: 1000 });
+        } else {
+            const backgroundInterval = setInterval(() => {
+                batchProcess(() => {
+                    hideBannedSubredditsFromAllSearchDropdowns();
+                    filterPostsByContent();
+                    hideAnswersButton();
+                });
+            }, 1000);
+            intervalIds.add(backgroundInterval);
+        }
         
-        // Memory monitoring every 30 seconds (longer for mobile)
+        // Memory monitoring every 20 seconds
         const memoryMonitorInterval = setInterval(() => {
             monitorMemoryPressure();
         }, MEMORY_CHECK_INTERVAL);
@@ -1643,7 +1647,7 @@
         }
         
         hideAnswersButton();
-    }, 100); // Increased throttle for mobile
+    }, 50);
 
     const observer = new MutationObserver(processNewElements);
     observerInstances.add(observer);
@@ -1672,7 +1676,7 @@
                 devLog(`🔄 URL changed - Memory: ${memInfo.usedGB}GB/${MEMORY_CAP_GB}GB`);
             }
         }
-    }, 300); // Increased interval for mobile
+    }, 200);
     intervalIds.add(urlCheckInterval);
 
 })();
