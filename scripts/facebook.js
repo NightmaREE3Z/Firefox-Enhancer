@@ -240,6 +240,9 @@
         'pfbid02F2SbMzUV5aMvUpsnSXsoftD76pCvE7hXVH21dqd96gMVYRxDBUSWnJz6j8jjAqr2l',
 	'pfbid0BXRwmdPq99Pen4NzC6szx7MrZp8krdYyvDgQNyRbzShyMFjNEAMACkp18qQL8vJCl',
 	'pfbid02r5HgTdBcDnPPsbWTrvAMpc32cbDYWCaJwYWCQJz78oGFmEp5Xa1Cr8DrzKR2TgCBl',
+	'pfbid02AWZoqdyLzr85gw6zzoPzBmDfjXEWbh9GX7oqHBSVrR4D8bcnYGQoCvWEkybUXcKal',
+	'pfbid02Etv8PekTAr8YPSnTbg6bDjKEcPCBPXFxnFfMPEQv4Qipd7oXqeaTeynt1PxGdQZwl',
+	'pfbid0WWpHfEpFGSxpPf1aUC2Haix6tjdtwbSW2oAxbc6vbvYBoyB9yMv5SZh53PCWHkG1l',
         '1495428881',
         '1356706889',
         'Cultaholic',
@@ -319,6 +322,8 @@
         /pfbid036f6zK7fAhXTd4CpkSDtayrMrDW6VSNKcoQoPiR3CMPvVCVuMaNX8jMEoYc6WpkZnl/,
         /pfbid0XkSVwYhGrkQ1wcBZHDqvrTXc3nhYzVNnQ6znaLpxwrGeSrpn3VJ4wSaUt1WeywDMl/,
         /pfbid02r7g7nP7vadRLpCU9jtP4yR8bYJtWt7d9JUqC839QUfaySuyzXzMBcExFufQENKaal/,
+	/pfbid02AWZoqdyLzr85gw6zzoPzBmDfjXEWbh9GX7oqHBSVrR4D8bcnYGQoCvWEkybUXcKal/,
+	/pfbid02Etv8PekTAr8YPSnTbg6bDjKEcPCBPXFxnFfMPEQv4Qipd7oXqeaTeynt1PxGdQZwl/,
         /permalink.php?story_fbid=pfbid02XysYZFdPcadPVYXqD9SyzmDChrqfcK4kd6haSDo2WrE4thPhn8WemX4n44GKsmdVl/,
         /permalink.php?story_fbid=940194702678498/,
         /permalink.php?story_fbid=pfbid0xh4ZoQA4XvgYL7iXe238V7o1sxEyULXGhr6Ufk2YeWFMwD4Ct4UYixF5UbycsCyEl/,
@@ -443,7 +448,7 @@
         "Karr WWE", "Carr WWE", "Melina wrestler", "Jillian", "Mickie", "Kanellis", "Beth Phoenix", "Victoria", "Jazz WWE", "Molly Holly", "Shirai", "Priscilla", "Kelly", "Red Velvet", 
         "Gail Kim", "Awesome Kong", "Madison Rayne", "Velvet Sky", "Angelina", "Tessmacher", "Havok", "Su Yung", "Taya Valkyrie", "Bianca Belair", "Skye Blue", "Bordeaux", "Brooke",
         "Purrazzo", "Thekla", "Toni Storm", "Britt Baker", "Jamie Hayter", "Anna Jay", "Hikaru", "Sakazaki", "Nyla Rose", "Sakura", "Penelope Ford", "Julia Hart", "Kamifuku", "Elayna",
-        "Black Ops 6", "Black Ops 7", "Elayna Black", "Blake", "Monroe",
+        "Black Ops 6", "Black Ops 7", "Elayna Black", "Blake", "Monroe", "Hulk", "Hogan", "Hulk Hogan",
     ];
 
     const regexBlockedWords = [
