@@ -265,6 +265,7 @@
         /bg remover/i, /lexi/i, /\bMina\b/i, /Shir/i, /kawa/i, /perver/i, /Mariah/i, /\bAva\b/i, /\bAnal-\b/i, /\b-Anal\b/i, /\bAnal\b/i, /\bCum\b/i, /\bNox\b/i, /\bButt\b/i, /\bNiven\b/i, /\bODB\b/i,
         /\bAnswers BETA\b/i, /\bFuku\b/i, /\bDick\b/i, /\bCock\b/i, /\bCock\b/i, /\bRape\b/i, /\bEmma\b/i, /\bIndi\b/i, /\bTegan\b/i, /\bGirl\b/i, /\bPenis\b/i, /\bLady\b/i, /\bAnus\b/i, /\bNSFW\b/i, 
 	/\bsex\b/i, /\bAdult\b/i, /\bB-Fab\b/i, /\bHMW\b/i, /Elayna/i, /Elayna Black/i, /Elina WWE/i, /Elyna WWE/i, /Elyina/i, /Blake Monroe/i, /\bBlake\b/i, /\bMonroe\b/i, /Hogan/i, /Hulk Hogan/i, 
+	/Fantop/i, /Fan top/i, /Fan-top/i, /Topfan/i, /Top fan/i, /Top-fan/i,
     ];
 
     const unifiedSelectors = [
