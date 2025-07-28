@@ -51,7 +51,7 @@
         /Electra Lopez/i, /Wendy Choo/i, /Yulisa Leon/i, /Gina Adam/i, /Valentina Feroz/i, /Amari Miller/i, /Arianna Grace/i, /Courtney Ryan/i, /Venice/i, /Venoice/i, /Venise/i, /Venoise/i, /Sharia/i,
         /\bLin\b/i, /Watchorn/i, /@LinWatchorn/i, /HorizonMW/i, /Horizon MW/i, /MW2 Remaster/i, /MW3 Remaster/i, /MW2 Multiplayer Remaster/i, /MW3 Multiplayer Remastered/i, /Horizon Modern Warfare/i,
 	/MW2 MP Remaster/i, /MW3 MP Remaster/i, /\bBO6\b/i, /\bBO7\b/i, /Black Ops 6/i, /Black Ops 7/i, /Black Ops VI/i, /Black Ops VII/i, /wondershare/i, /wonder share/i, /filmora/i, /dreambooth/i,
-	/dream booth/i, /dream boot/i, /dreamboot/i, /diffusion/i, /Elina WWE/i, /Elyna WWE/i, /Elyina/i,
+	/dream booth/i, /dream boot/i, /dreamboot/i, /diffusion/i, /Elina WWE/i, /Elyna WWE/i, /Elyina/i, /Fantop/i, /Fan top/i, /Fan-top/i, /Topfan/i, /Top fan/i, /Top-fan/i,
     ];
 
     // List of keywords or phrases to allow (overrides blockKeywords in search queries)
