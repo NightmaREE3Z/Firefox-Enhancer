@@ -237,22 +237,6 @@
         '935807304949049',
         '8812088588802292',
         'kiviahosirja',
-        'pfbid06VXAEGvWCcsPbk553v88NMB8uWRnRGHffB5s9kEpKRyYmfEJtt4fULTnQ82LnieDl',
-        'pfbid0BAztBKYfE98ef3C48UxyERkVFBhbBvkd9DH6x6SP6vTnEEvxyHEBuLE8dopJtoXgl',
-        'pfbid036a61fZB9RjeBnRYcwN72Fs5RGmMjqDV9JmLRuujzh7MUYirPJjNDZ68KVfK9TdBHl',
-        'pfbid02F2SbMzUV5aMvUpsnSXsoftD76pCvE7hXVH21dqd96gMVYRxDBUSWnJz6j8jjAqr2l',
-	'pfbid0BXRwmdPq99Pen4NzC6szx7MrZp8krdYyvDgQNyRbzShyMFjNEAMACkp18qQL8vJCl',
-	'pfbid02r5HgTdBcDnPPsbWTrvAMpc32cbDYWCaJwYWCQJz78oGFmEp5Xa1Cr8DrzKR2TgCBl',
-	'pfbid02AWZoqdyLzr85gw6zzoPzBmDfjXEWbh9GX7oqHBSVrR4D8bcnYGQoCvWEkybUXcKal',
-	'pfbid02Etv8PekTAr8YPSnTbg6bDjKEcPCBPXFxnFfMPEQv4Qipd7oXqeaTeynt1PxGdQZwl',
-	'pfbid0WWpHfEpFGSxpPf1aUC2Haix6tjdtwbSW2oAxbc6vbvYBoyB9yMv5SZh53PCWHkG1l',
-	'pfbid06xvcvULz9eHgge39HMCS4TYPLs6pM3itRyRqUQGHZAZbZAvR6DbQfAskMFTRm1X8l',
-	'pfbid02FCiefA3vB2vd4u8MSaD6JhB438oZ1o8DB9bhY4xjB8fBXavvtKd87PwE7QCjArp1l',
-	'pfbid02ApNL79Gp1AKQf55yHVLeQvGAakCwm4STcNQwCVyG26Wk17dt5FZhA3jgAVfgqVt1l',
-	'pfbid02AeDKp115BTU1qD4QzLZ8V2NWm7NmZUe9V9cghxu5YyasXHDwvJCLgBr9GEtv6qmjl',
-	'pfbid02aC6zYmULJUrbWKVB8MuP2c23ThvKkpR8AhktLykJCdGeas6TA3S8Sgd7sVAWHBByl',
-	'pfbid02AuWMkj4XYtGbaneoq8JWomieFk1UuVTPDTSvL3avK74mXykwe87GSA5G4dsaYJ3rl',
-	'pfbid02aTQ2VVXnfkxpy38cZ5Ey179t4qcxZugQtAmNU5o4eerHn81h6ETiXcY76XEgAx5ul',
         '1495428881',
         '1356706889',
         'Cultaholic',
@@ -472,7 +456,7 @@
         "Karr WWE", "Carr WWE", "Melina wrestler", "Jillian", "Mickie", "Kanellis", "Beth Phoenix", "Victoria", "Jazz WWE", "Molly Holly", "Shirai", "Priscilla", "Kelly", "Red Velvet", 
         "Gail Kim", "Awesome Kong", "Madison Rayne", "Velvet Sky", "Angelina", "Tessmacher", "Havok", "Su Yung", "Taya Valkyrie", "Bianca Belair", "Skye Blue", "Bordeaux", "Brooke",
         "Purrazzo", "Thekla", "Toni Storm", "Britt Baker", "Jamie Hayter", "Anna Jay", "Hikaru", "Sakazaki", "Nyla Rose", "Sakura", "Penelope Ford", "Julia Hart", "Kamifuku", "Elayna",
-        "Black Ops 6", "Black Ops 7", "Elayna Black", "Blake", "Monroe", "Hulk", "Hogan", "Hulk Hogan", "Sisältö ei ole käytettävissä tällä hetkellä", "Näytä suositukset",
+        "Black Ops 6", "Black Ops 7", "Elayna Black", "Blake", "Monroe", "Hulk", "Hogan", "Hulk Hogan", "Sisältö ei ole käytettävissä tällä hetkellä", "Näytä suositukset", "20. heinäkuu klo",
     ];
 
     const regexBlockedWords = [
@@ -606,7 +590,9 @@
                 'div.xieb3on:nth-child(1)',
                 'div.xieb3on:nth-child(1) > svg:nth-child(1)',
                 '.x1p5oq8j > div:nth-child(2)',
-                'div.x6s0dn4.x78zum5.x1qughib.x1iorvi4.xjkvuk6'
+                'div.x6s0dn4.x78zum5.x1qughib.x1iorvi4.xjkvuk6',
+		'a[aria-label*="20. heinäkuu klo 14.53"]',
+		'a[href*="facebook.com/permalink"][aria-label*="20. heinäkuu klo 14.53"]'
             ];
 
             let removedCount = 0;
