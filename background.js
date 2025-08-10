@@ -124,7 +124,18 @@ const urlsToBlock = [
     "*://capcut.uptodown.com/*",
     "*://capcut.en.uptodown.com/*",
     "*://catcut-video-editor-and-maker.uptodown.com/*",
-    "*://catcut-video-editor-and-maker.en.uptodown.com/*"
+    "*://catcut-video-editor-and-maker.en.uptodown.com/*",
+    "*://oracle.com/*",
+    "*://virtualbox.org/*",
+    "*://virtualbox.net/*",
+    "*://vmware.com/*",
+    "*://osboxes.org/*",
+    "*://horizonmw.org/*",
+    "*://reddit.com/answers/*",
+    "*://fantopia.mystrikingly.com*",
+    "*://www.softorbits.net*",
+    "*://softorbits.net*",
+    "*://uptodown.com/*"
 ];
 
 // Memory tracking
