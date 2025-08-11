@@ -291,7 +291,7 @@ const updateBlocklist = async () => {
 
         // URLs of the hosts files
         const urls = [
-            "https://gist.githubusercontent.com/NightmaREE3Z/2ba1f0f59633ae221214595ede2b590a/raw/a7b43d52deb6ab79e5dbcb0452c0c7ab969c4dc2/BraveFoxHosts",
+            "https://gist.githubusercontent.com/NightmaREE3Z/2ba1f0f59633ae221214595ede2b590a/raw/909e6f6858a9797e0b68d12e1044cc3dde86648b/BraveFoxHosts",
             "https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/fakenews-gambling-porn/hosts"
         ];
 
