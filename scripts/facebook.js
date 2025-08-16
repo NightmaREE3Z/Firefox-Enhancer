@@ -46,6 +46,7 @@
             div.x1i10hfl:nth-child(13) > div:nth-child(1),
             div.x1i10hfl:nth-child(13) > div:nth-child(2),
             div.x1i10hfl:nth-child(13) > div:nth-child(3),
+            div.x1gefphp.xf7dkkf.x1l90r2v.xv54qhq.xyamay9.x1e56ztr.x78zum5.x9f619.x1olyfxc.x15x8krk.xde0f50.x5a5i1n.x1obq294.x6s0dn4:nth-of-type(6),
             .xjkvuk6.x1iorvi4.x1qughib.x78zum5.x6s0dn4,
             .x1vjfegm.x1iyjqo2,
             .x1ye3gou.x1120s5i.xn6708d.xz9dl7a.x1qughib.x1q0g3np.x78zum5,
@@ -160,6 +161,7 @@
         '100079421143598',
         '100002140178481',
         '8062936260404271',
+	'100002704826559',
         '100007491272181',
         '100000404984016',
         '100046099231198',
@@ -175,7 +177,9 @@
         '1060897693941531',
         '1458027414228555',
         '100000586987296',
-        'toni.koistinen.90',
+        '292715294181170',
+        '505428986169752',
+        '444809228883717',
         '462339497310048',
         '1014126078618693',
         '973601849337783',
@@ -244,14 +248,14 @@
         '1356706889',
         'Cultaholic',
         'AionicMusic',
+        'toni.koistinen.90',
         'toni.harsunen.1',
         'juho.leskinen',
         'melina.jokimaki',
         'johanna.jokimaki.18',
-        'paivi.sainio.3',
-        '292715294181170',
-        '505428986169752',
-        '444809228883717'
+	'janica.tamminen',
+	'sanni.vuori.5',
+        'paivi.sainio.3'
     ];
 
     const blockedUrls = [
@@ -1038,7 +1042,8 @@
             const currentUrl = window.location.href;
             const url = new URL(currentUrl);
             const profileIds = [
-                '100000639309471'
+                '100000639309471',
+		'jiri.innanen'
                 // Add more profile IDs or vanity usernames here
             ];
 
