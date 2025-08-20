@@ -49,16 +49,21 @@
                 display: none !important;
             }
             
-            /* Hide Answers BETA button - Using improved selectors */
-            span.text-global-admin.font-semibold.text-12,
+            /* Hide Answers BETA button - Simplified selectors */
             a[href="/answers/"],
-            a.flex.justify-between.relative.px-md[href="/answers/"],
-            a[href="/answers/"][class*="gap-[0.5rem]"],
-            a.gap-\\[0\\.5rem\\][href="/answers/"],
+            a[href^="/answers"],
             faceplate-tracker[noun="gen_guides_sidebar"],
-            faceplate-tracker[source="nav"][action="click"][noun="gen_guides_sidebar"],
+            span:contains("BETA"),
+            span:contains("Answers BETA"),
+            a[href="/answers/"],
+            .flex.justify-between.relative.px-md.gap-\\[0\\.5rem\\].text-secondary.hover\\:text-secondary-hover.active\\:bg-interactive-pressed.hover\\:bg-neutral-background-hover.hover\\:no-underline.cursor-pointer.py-2xs.-outline-offset-1.s\\:rounded-2.bg-transparent.no-underline,
+            .flex.justify-between.relative.px-md.gap-\\[0\\.5rem\\],
+            span.text-global-admin.font-semibold.text-12:contains("BETA"),
+            span.text-global-admin.font-semibold.text-12:contains("Answers BETA"),
             svg[icon-name="answers-outline"],
-            svg[rpl][icon-name="answers-outline"] {
+            .text-14 > div.flex.gap-xs.items-baseline,
+            span:contains("Answers"),
+            *[href="/answers/"] {
                 display: none !important;
                 visibility: hidden !important;
                 opacity: 0 !important;
@@ -198,25 +203,27 @@
         "r/AskReddit",
         "r/DimensionJumping",
         "r/BestofRedditorUpdates",
-        "r/Glitch_in_the_Matrix"
+        "r/Glitch_in_the_Matrix",
+        "r/niceguys",
+        "r/nicegirls",
     ];
 
     const keywordsToHide = [
         "porn", "nude", "Alexa", "penetration", "naked", "xxx", "rule34", "r34", "r_34", "rule 34", "ChatGPT", "get hard", "Vince Russo", "Dave Meltzer",
         "deepnude", "nudify", "nudifier", "nudifying", "nudity", "undress", "undressing", "undressifying", "undressify", "getdisciplined", "Mariah",
         "Toni Storm", "Skye Blue", "Carmella", "Mariah May", "Harley", "Cameron", "Hayter", "Britt Baker", "Ripley", "Rhea Ripley", "Mariah May", "Blake",
-        "trans", "transvestite", "queer", "LGBT", "LGBTQ", "Pride", "Jessika Carr", "Carr WWE"," Jessica Carr", "Jessika Karr", "Jessika WWE", "sexy", "Monroe",
-        "prostitute", "escort", "fetish", "adult", "erotic", "explicit", "mature", "blowjob", "sexual", "Jessica WWE", "Jessica Karr", "Analsex", "orgasm",
-        "vagina", "pussy", "tushy", "tushi", "genital", "vagena", "booty", "derriere", "busty", "slut", "Karr WWE", "CJ Lana", "raped", "orga5m", "org@sm", 
+        "trans", "transvestite", "queer", "LGBT", "LGBTQ", "Pride", "Jessika Carr", "Carr"," Jessica Carr", "Jessika Karr", "Jessika", "sexy", "Monroe",
+        "prostitute", "escort", "fetish", "adult", "erotic", "explicit", "mature", "blowjob", "sexual", "Jessica", "Jessica Karr", "Analsex", "orgasm",
+        "vagina", "pussy", "tushy", "tushi", "genital", "vagena", "booty", "derriere", "busty", "slut", "Karr", "CJ Lana", "raped", "orga5m", "org@sm", 
         "whore", "camgirl", "celeb", "cumslut", "Tiffany Stratton", "Lillian", "Garcia", "Jordynne", "Trish", "Stratus", "Lana Del Rey", "orga$m", "0rg@sm", 
         "DeepSeek", "DeepSeek AI", "nudyi", "ai app", "onlyfans", "fantime", "fansly", "justforfans", "patreon", "CJ Perry", "Lana Perry", "orga5m", "org@5m", 
-        "manyvids", "chaturbate", "myfreecams", "cam4", "fat fetish", "camsoda", "stripchat", "bongacams", "livejasmin", "Lana WWE", "Mandy", "0rgasm", "org@sm",  
-        "WWE woman", "WWE women", "WWE Xoxo", "Liv Xoxo", "Xoxo", "Chelsey", "Chelsea", "Piper Niven", "Hardwell", "Indi WWE", "Del Rey", "Del Ray", "breast",
-        "amateur", "alexa", "bliss", "alexa bliss", "her ass", "she ass", "her's ass", "hers ass", "venice", "Alexa WWE", "5 feet of fury", "Morgan Xoxo", "0rga$m", 
-        "Tiffany Stratton", "Tiffy time", "Stratton", "Tiffany", "Mandy Rose", "Chelsea Green", "Zelina", "Zelina Vega", "Valhalla", "poses", "posing", "vagene",
-        "IYO SKY", "Io Shirai", "Iyo Shirai", "IO SKY", "Dakota Kai", "Asuka", "Perez", "Kairi Sane", "Meiko", "Satomura", "playboy", "Dynamite", "jizz", "Sportskeeda",
+        "manyvids", "chaturbate", "myfreecams", "cam4", "fat fetish", "camsoda", "stripchat", "bongacams", "livejasmin", "Mandy", "0rgasm", "org@sm", "0rga$m",
+        "woman", "women", "Liv Xoxo", "Xoxo", "Chelsey", "Chelsea", "Piper Niven", "Hardwell", "Del Rey", "Del Ray", "breast", "5 feet of fury", "0rg@5m",
+        "amateur", "alexa", "bliss", "alexa bliss", "her ass", "she ass", "her's ass", "hers ass", "venice", "Alexa", "Morgan Xoxo", "poses", "posing", 
+        "Tiffany Stratton", "Tiffy time", "Stratton", "Tiffany", "Mandy Rose", "Chelsea Green", "Zelina", "Zelina Vega", "Valhalla", "vagene", "Sportskeeda",
+        "IYO SKY", "Io Shirai", "Iyo Shirai", "IO SKY", "Dakota Kai", "Asuka", "Perez", "Kairi Sane", "Meiko", "Satomura", "playboy", "Dynamite", "jizz", 
         "Shayna Baszler", "Ronda Rousey", "Carmella", "Dana Brooke", "Tamina", "Alicia Fox", "Summer Rae", "MS Edge", "Microsoft Edge", "jizzed", "Torrie", "Sasha", 
-        "Layla", "Michelle McCool", "Eve Torres", "Kelly Kelly", "Melina WWE", "Melina wrestler", "Jillian Hall", "five feet of fury", "Rampage", "raepd", "Wilson",
+        "Layla", "Michelle McCool", "Eve Torres", "Kelly Kelly", "Melina", "Melina wrestler", "Jillian Hall", "five feet of fury", "Rampage", "raepd", "Wilson",
         "Mickie James", "Maria", "Kanellis", "Beth Phoenix", "Victoria", "Jazz", "Molly Holly", "Gail Kim", "Awesome Kong", "Goddess", "Rampaige", "breasts", "Liv Xoxo",
         "Madison Rayne", "Velvet Sky", "Angelina", "filmora", "wondershare", "Tessmacher", "Havok", "Su Yung", "Miko Satomura", "Opera GX", "Sweeney", "Mickie", "Mercedes",
         "Taya", "Valkyrie", "Deonna", "Purrazzo", "Vaquer", "Vaqueer", "Vaguer", "Vagueer", "Saraya", "Britt Baker", "Jamie Hayter", "Anna Jay", "Tay Conti", "Tay Melo", 
@@ -225,12 +232,14 @@
         "Becky Lynch", "Bayley", "Bailey", "Giulia", "Michin", "Mia Yim", "AJ Lee", "Paige", "Bella", "Bianca", "Belair", "Alicia", "Atout", "stephanie", "ra*e", "nofap", "No nut",
         "Stephanie", "Thekla", "Liv Morgan", "Piper Niven", "Jordynne Grace", "Jordynne", "NXT Womens", "NXT Women", "NXT Woman", "Aubrey", "Edwards", "Renee", "rap*", "Sasha Banks", 
         "Maryse", "Tessa", "Brooke", "Jackson", "Jakara", "Lash Legend", "Velvet Sky", "Izzi Dame", "Alba Fyre", "Isla Dawn", "Tamina", "Sydney", "Gina Adams", "Kelly2", "Russo", 
-        "Raquel Rodriguez", "Scarlett", "Bordeaux", "Kayden", "Carter", "Katana Chance", "Valkyria", "Tamina Snuka", "Renee Young", "Sydney Sweeney", "Priscilla", "0rg@5m",
+        "Raquel Rodriguez", "Scarlett", "Bordeaux", "Kayden", "Carter", "Katana Chance", "Valkyria", "Tamina Snuka", "Renee Young", "Sydney Sweeney", "Priscilla", 
         "Roxanne Perez", "Indi Hartwell", "Hartwell", "Blair", "Davenport", "wonder share", "Lola Vice", "Maxxine Dupri", "Karmen", "Karmen Petrovic", "Brittany", "Renee Paquette",
         "Ava Raine", "Cora Jade", "Jacy Jayne", "Gigi Dolin", "Thea Hail", "Tatum", "Paxley", "Fallon Henley", "Sky wrestle", "Women's", "Women", "venoisi",  "rawdog", "rawdogging", 
-        "Kelani Jordan", "Electra", "Wendy Choo", "Yulisa", "Valentina", "Valentine", "Amari Miller", "Sky WWE", "Woman", "Lady", "Girls", "Girl's", "venoise", "AlexaBliss", 
+        "Kelani Jordan", "Electra", "Wendy Choo", "Yulisa", "Valentina", "Valentine", "Amari Miller", "Woman", "Lady", "Girls", "Girl's", "venoise", "AlexaBliss", 
         "Sol Ruca", "lexi", "AlexaPearl", "Arianna", "Natalya", "Nattie", "Young Bucks", "Matt Jackson", "Nick Jackson", "AEW", "Woman's", "Lady's", "Girl's", "HorizonMW", "Horizon MW",
-	"Horizon Modern Warfare", "HorizonModern", "HorizonWarfare", "Horizon ModernWarfare", "Diffusion", "StableDiffusion", "UnStableDiffusion", "Dreambooth", "Dream booth", "comfyui"
+        "Horizon Modern Warfare", "HorizonModern", "HorizonWarfare", "Horizon ModernWarfare", "Diffusion", "StableDiffusion", "UnStableDiffusion", "Dreambooth", "Dream booth", "comfyui",
+        "sperm", "boyfriend", "girlfriend", "AI generated", "AI-generated", "generated", "artificial intelligence", "machine learning", "neural network", "deep learning",
+        "Midjourney", "stable diffusion", "artificial", "synthetic", "computer generated", "algorithm", "chatbot", "bot", "automated", "text to image", "Answers BETA",
     ];
 
     const redgifsKeyword = "www.redgifs.com";
@@ -248,10 +257,10 @@
         /Tiffa/i, /Strat/i, /puz/i, /Sweee/i, /Kristen Stewart/i, /Steward/i, /Perze/i, /Brave/i, /Roxan/i, /Browser/i, /Selain/i, /TOR-Selain/i, /Brit Bake/i, /vega/i, /\bSlut\b/i, /3dit/i, /ed1t/i,
         /Liv org/i, /pant/i, /off pant/i, /rem pant/i, /del pant/i, /eras pant/i, /her pant/i, /she pant/i, /pussy/i, /adult content/i, /content adult/i, /porn/i, /\bTor\b/i, /editing/i, /3d1t/i, /\bAi\b/i,
         /Sydney Sweeney/i, /Sweeney/i, /fap/i, /Sydnee/i, /Stee/i, /Waaa/i, /Stewart/i, /MS Edge/i, /TOR-browser/i, /Opera/i, /\bAi\b/i, /\bADM\b/i, /\bAis\b/i, /\b-Ai\b/i, /\bedit\b/i, /Feikki/i,
-        /\bAnall\b/i, /\bAlexa\b/i, /\bAleksa\b/i, /AI Tool/i, /aitool/i, /\bHer\b/i, /\bShe\b/i, /\bADMX\b/i, /\bAss\b/i, /\bSol\b/i, /\bEmma\b/i, /\bRiho\b/i, /\bJaida\b/i, /\bCum\b/i, /\bAi-\b/i,
-        /\bIzzi\b/i, /\bDame\b/i, /\bNox\b/i, /\bLiv\b/i, /Chelsey/i, /Zel Veg/i, /Ch3l/i, /Chel5/i, /\bTay\b/i, /\balexa wwe\b/i, /\bazz\b/i, /\bjaida\b/i, /Steph/i, /St3ph/i, /editation/i, /3d!7/i,
-        /P4IG3/i, /Paig3/i, /P4ige/i, /pa1g/i, /pa!g/i, /palg3/i, /palge/i, /Br1tt/i, /Br!tt/i, /Brltt/i, /Lana WWE/i, /Lana Del Rey/i, /\bLana\b/i, /CJ WWE/i, /image app/i, /edi7/i, /syvavaarennos/i,
-        /Diipfeikki/i, /Diipfeik/i, /deep feik/i, /deepfeik/i, /Diip feik/i, /Diip feikki/i, /syva vaarennos/i, /syvä vaarennos/i, /picture app/i, /edit app/i, /pic app/i, /photo app/i, /syvävääre/i,
+        /\bAnall\b/i, /\bAlexa\b/i, /\bAleksa\b/i, /AI Tool/i, /aitool/i, /\bHer\b/i, /\bShe\b/i, /\bADMX\b/i, /\bSol\b/i, /\bEmma\b/i, /\bRiho\b/i, /\bJaida\b/i, /\bCum\b/i, /Amber/i, /\bAi-\b/i, /\bAi\b/i,
+        /\bIzzi\b/i, /\bDame\b/i, /\bNox\b/i, /\bLiv\b/i, /Chelsey/i, /Zel Veg/i, /Ch3l/i, /Chel5/i, /\bTay\b/i, /\balexa\b/i, /\bazz\b/i, /\bjaida\b/i, /Steph/i, /St3ph/i, /editation/i, /3d!7/i, 
+        /P4IG3/i, /Paig3/i, /P4ige/i, /pa1g/i, /pa!g/i, /palg3/i, /palge/i, /Br1tt/i, /Br!tt/i, /Brltt/i, /Lana Del Rey/i, /\bLana\b/i, /image app/i, /edi7/i, /syvavaarennos/i, /boy friend/i, /photo app/i,
+        /Diipfeikki/i, /Diipfeik/i, /deep feik/i, /deepfeik/i, /Diip feik/i, /Diip feikki/i, /syva vaarennos/i, /syvä vaarennos/i, /picture app/i, /edit app/i, /pic app/i, /syvävääre/i, /girl friend/i, 
         /pillu/i, /perse/i, /pylly/i, /peppu/i, /pimppi/i, /pinppi/i, /\bPeba\b/i, /\bBeba\b/i, /\bBabe\b/i, /\bBepa\b/i, /\bAnaali\b/i, /\bAnus\b/i, /sexuaali/i, /\bSeksi\b/i, /yhdyntä/i, /\bGina\b/i,
         /application/i, /sukupuoliyhteys/i, /penetraatio/i, /penetration/i, /vaatepoisto/i, /vaatteidenpoisto/i, /poista vaatteet/i, /(?:poista|poisto|poistaminen)[ -]?(?:vaatteet|vaatteiden)/i, /seksi/i,
         /vaateiden poisto/i, /kuvankäsittely/i, /paneminen/i, /seksikuva/i, /seksi kuvia/i, /uncensor app/i, /xray/i, /see[- ]?through/i, /clothes remover/i, /nsfw/i, /not safe for work/i, /alaston/i,
@@ -264,18 +273,20 @@
         /sheer/i, /aikuis viihde/i, /aikuissisältö/i, /aikuissivusto/i, /homo/i, /lesbo/i, /transu/i, /pervo/i, /5yvä/i, /\|\s*\|/i, /\(o\)\(o\)/i, /\(!\)/i, /face plus/i,  /face\+/i, /face+/i, /face\-/i,
         /bg remover/i, /lexi/i, /\bMina\b/i, /Shir/i, /kawa/i, /perver/i, /Mariah/i, /\bAva\b/i, /\bAnal-\b/i, /\b-Anal\b/i, /\bAnal\b/i, /\bCum\b/i, /\bNox\b/i, /\bButt\b/i, /\bNiven\b/i, /\bODB\b/i,
         /\bAnswers BETA\b/i, /\bFuku\b/i, /\bDick\b/i, /\bCock\b/i, /\bCock\b/i, /\bRape\b/i, /\bEmma\b/i, /\bIndi\b/i, /\bTegan\b/i, /\bGirl\b/i, /\bPenis\b/i, /\bLady\b/i, /\bAnus\b/i, /\bNSFW\b/i, 
-	/\bsex\b/i, /\bAdult\b/i, /\bB-Fab\b/i, /Elayna/i, /Eleyna/i, /Eliyna/i, /Elina Black/i, /Elena Black/i, /Elyna Black/i, /Elina WWE/i, /Elyna WWE/i, /Elyina/i, /Aikusviihde/i, /Aikus viihde/i, 
-	/Fantop/i, /Fan top/i, /Fan-top/i, /Topfan/i, /Top fan/i, /Top-fan/i, /Top-fans/i, /fanstopia/i, /Jenni/i,  /fans top/i, /topiafan/i, /topia fan/i, /topia-fan/i, /topifan/i, /topi fan/i, 
-	/topi-fan/i, /topaifan/i, /topai fan/i, /topai-fan/i, /fans-topia/i, /fans-topai/i, /Henni/i, /Lawren/i, /Lawrenc/i, /Lawrence/i, /Jenny/i, /Jenna/i, /softorbit/i, /softorbits/i, /soft-orbit/i, 
-	/soft-orbits/i, /VMWare/i, /VM Ware/i, /\bVM\b/i, /Virtual Machine/i, /\bVMs\b/i, /Virtualbox/i, /Virtual box/i, /Virtual laatikko/i, /Virtuaali laatikko/i, /Virtuaalilaatikko/i, /hyper-v/i,
-	/VMWare/i, /VM Ware/i, /\bVM\b/i, /Virtual Machine/i, /\bVMs\b/i, /Virtualbox/i, /Virtual box/i, /Virtual laatikko/i, /Virtuaali laatikko/i, /Virtuaalilaatikko/i, /Virtuaalibox/i, /OracleVM/i, 
-	/virtualmachine/i, /virtual machine/i, /virtuaalikone/i, /virtuaali kone/i, /virtuaali tietokone/i, /virtuaalitietokone/i, /hyper-v/i, /hyper v/i, /virtuaalimasiina/i, /virtuaali masiina/i, 
-	/virtuaalimasiini/i, /virtuaali masiini/i, /virtuaali workstation/i, /virtual workstation/i, /virtualworkstation/i, /virtual workstation/i, /virtuaaliworkstation/i, /hypervisor/i, /hyper visor/i, 
-	/hyperv/i, /vbox/i, /virbox/i, /virtbox/i, /vir box/i, /virt box/i, /virtual box/i, /vrbox/i, /vibox/i, /virbox virtual/i, /virtbox virtual/i, /vibox virtual/i, /vbox virtual/i, /v-machine/i, 
-	/vmachine/i, /v machine/i, /vimachine/i, /vi-machine/i, /vi machine/i, /virmachine/i, /vir-machine/i, /vir machine/i, /virt machine/i, /virtmachine/i, /virt-machine/i, /virtumachine/i, /vir mach/i,
-	/virtu-machine/i, /virtu machine/i, /virtuamachine/i, /virtua-machine/i, /virtua machine/i, /\bMachaine\b/i, /\bMachiine\b/i, /\bMacheine\b/i, /\bMachiene\b/i, /vi mach/i, /virtual machi/i,
-	/virt mach/i, /virtu mach/i, /virtua mach/i, /virtual mach/i, /vi mac/i, /vir mac/i, /virt mac/i, /virtu mac/i, /virtua mac/i, /birppis/i, /irpp4/i, /b1rppis/i, /birpp1s/i, /b1rpp1s/i, /comfyui/i,
-	/comfy ui/i, /comfy ai/i, /comfyai/i, /comfy-ui/i, /comfy-ai/i, /comfy-ai/i,
+        /\bsex\b/i, /\bAdult\b/i, /\bB-Fab\b/i, /Elayna/i, /Eleyna/i, /Eliyna/i, /Elina Black/i, /Elena Black/i, /Elyna Black/i, /Elina/i, /Elyna/i, /Elyina/i, /Aikusviihde/i, /Aikus viihde/i, 
+        /Fantop/i, /Fan top/i, /Fan-top/i, /Topfan/i, /Top fan/i, /Top-fan/i, /Top-fans/i, /fanstopia/i, /Jenni/i,  /fans top/i, /topiafan/i, /topia fan/i, /topia-fan/i, /topifan/i, /topi fan/i, 
+        /topi-fan/i, /topaifan/i, /topai fan/i, /topai-fan/i, /fans-topia/i, /fans-topai/i, /Henni/i, /Lawren/i, /Lawrenc/i, /Lawrence/i, /Jenny/i, /Jenna/i, /softorbit/i, /softorbits/i, /soft-orbit/i, 
+        /soft-orbits/i, /VMWare/i, /VM Ware/i, /\bVM\b/i, /Virtual Machine/i, /\bVMs\b/i, /Virtualbox/i, /Virtual box/i, /Virtual laatikko/i, /Virtuaali laatikko/i, /Virtuaalilaatikko/i, /hyper-v/i,
+        /VMWare/i, /VM Ware/i, /\bVM\b/i, /Virtual Machine/i, /\bVMs\b/i, /Virtualbox/i, /Virtual box/i, /Virtual laatikko/i, /Virtuaali laatikko/i, /Virtuaalilaatikko/i, /Virtuaalibox/i, /OracleVM/i, 
+        /virtualmachine/i, /virtual machine/i, /virtuaalikone/i, /virtuaali kone/i, /virtuaali tietokone/i, /virtuaalitietokone/i, /hyper-v/i, /hyper v/i, /virtuaalimasiina/i, /virtuaali masiina/i, 
+        /virtuaalimasiini/i, /virtuaali masiini/i, /virtuaali workstation/i, /virtual workstation/i, /virtualworkstation/i, /virtual workstation/i, /virtuaaliworkstation/i, /hypervisor/i, /hyper visor/i, 
+        /hyperv/i, /vbox/i, /virbox/i, /virtbox/i, /vir box/i, /virt box/i, /virtual box/i, /vrbox/i, /vibox/i, /virbox virtual/i, /virtbox virtual/i, /vibox virtual/i, /vbox virtual/i, /v-machine/i, 
+        /vmachine/i, /v machine/i, /vimachine/i, /vi-machine/i, /vi machine/i, /virmachine/i, /vir-machine/i, /vir machine/i, /virt machine/i, /virtmachine/i, /virt-machine/i, /virtumachine/i, /vir mach/i,
+        /virtu-machine/i, /virtu machine/i, /virtuamachine/i, /virtua-machine/i, /virtua machine/i, /\bMachaine\b/i, /\bMachiine\b/i, /\bMacheine\b/i, /\bMachiene\b/i, /vi mach/i, /virtual machi/i,
+        /virt mach/i, /virtu mach/i, /virtua mach/i, /virtual mach/i, /vi mac/i, /vir mac/i, /virt mac/i, /virtu mac/i, /virtua mac/i, /birppis/i, /irpp4/i, /b1rppis/i, /birpp1s/i, /b1rpp1s/i, /comfyui/i,
+        /comfy ui/i, /comfy ai/i, /comfyai/i, /comfy-ui/i, /comfy-ai/i, /comfy-ai/i, /Becky/i, /Becki/i, /Rebecca/i, /Amber Heard/i, /girlfriend/i, /boyfriend/i, /mid journey/i, /unstable diffusion/i,
+        /AI[ -]?generated/i, /generated[ -]?by[ -]?AI/i, /artificial[ -]?intelligence/i, /machine[ -]?learning/i, /neural[ -]?network/i, /deep[ -]?learning/i, /midjourney/i, /dall[ -]?e/i, /stable[ -]?diffusion/i,
+        /computer[ -]?generated/i, /text[ -]?to[ -]?image/i, /image[ -]?generation/i, /AI[ -]?art/i, /synthetic[ -]?media/i, /algorithmically/i, /bot[ -]?generated/i, /automated[ -]?content/i, /stablediffused/i, 
     ];
 
     const unifiedSelectors = [
@@ -304,27 +315,22 @@
         "community-highlight-carousel shreddit-gallery-carousel"
     ];
 
-    // Specific selectors for Answers button based on your HTML
+    // Simplified and more effective Answers button selectors
     const answersButtonSelectors = [
         'a[href="/answers/"]',
-        'a.flex.justify-between.relative.px-md[href="/answers/"]',
+        'a[href^="/answers"]',
         'faceplate-tracker[noun="gen_guides_sidebar"]',
-        'faceplate-tracker[source="nav"][action="click"][noun="gen_guides_sidebar"]',
-        'svg[icon-name="answers-outline"]',
-        'svg[rpl][icon-name="answers-outline"]',
-        'span.text-global-admin.font-semibold.text-12',
-        'div > faceplate-tracker:nth-child(4) > li > a',
+        'span.text-global-admin.font-semibold.text-12'
     ];
 
-    // --- OPTIMIZED MEMORY MANAGEMENT FOR ORIGINAL REDDIT PERFORMANCE ---
-    // Memory caps designed to keep usage close to original Reddit (5-8GB)
-    const MEMORY_CAP_GB = 8; // Hard cap at 8GB
-    const MEMORY_WARNING_GB = 6; // Warning at 6GB
-    const MAX_CACHE_SIZE = 100; // Increased for better performance but manageable
-    const MAX_APPROVAL_PERSISTENCE = 50; // Increased for better user experience
-    const CLEANUP_INTERVAL = 30000; // 30 seconds cleanup time
-    const MEMORY_CHECK_INTERVAL = 15000; // Check memory every 15 seconds
-    const CRITICAL_MEMORY_THRESHOLD = 0.85; // 85% of heap limit
+    // --- OPTIMIZED MEMORY MANAGEMENT ---
+    const MEMORY_CAP_GB = 6; // Reduced to 6GB for stability
+    const MEMORY_WARNING_GB = 3; // Reduced warning threshold
+    const MAX_CACHE_SIZE = 50; // Reduced cache size
+    const MAX_APPROVAL_PERSISTENCE = 40; // Reduced approval persistence
+    const CLEANUP_INTERVAL = 10000; // 10 seconds cleanup (more frequent)
+    const MEMORY_CHECK_INTERVAL = 5000; // Check memory every 5 seconds (more frequent)
+    const CRITICAL_MEMORY_THRESHOLD = 0.7; // 70% of heap limit (reduced)
 
     // Lightweight caches - minimal memory footprint with WeakSet/WeakMap for automatic cleanup
     const processedElements = new WeakSet();
@@ -347,7 +353,7 @@
     let lastMemoryWarning = 0;
     let isCleaningUp = false;
 
-    // Memory monitoring optimized for Reddit-like performance
+    // Memory monitoring optimized for stability
     function getMemoryUsage() {
         if (performance.memory) {
             const memInfo = performance.memory;
@@ -386,9 +392,9 @@
                 contentBannedCache.clear();
                 bannedSubredditCache.clear();
                 
-                // Keep only last 15 approvals when critical
+                // Keep only last 10 approvals when critical
                 if (isCritical || isOverCap) {
-                    const entries = Array.from(approvalPersistence.entries()).slice(-15);
+                    const entries = Array.from(approvalPersistence.entries()).slice(-10);
                     approvalPersistence.clear();
                     entries.forEach(([key, value]) => approvalPersistence.set(key, value));
                 }
@@ -411,17 +417,17 @@
             } else if (isWarning || contentBannedCache.size > MAX_CACHE_SIZE || bannedSubredditCache.size > MAX_CACHE_SIZE) {
                 // Gentle cleanup when approaching limits
                 if (contentBannedCache.size > MAX_CACHE_SIZE) {
-                    const entries = Array.from(contentBannedCache.entries()).slice(-Math.floor(MAX_CACHE_SIZE * 0.7));
+                    const entries = Array.from(contentBannedCache.entries()).slice(-Math.floor(MAX_CACHE_SIZE * 0.5));
                     contentBannedCache.clear();
                     entries.forEach(([key, value]) => contentBannedCache.set(key, value));
                 }
                 if (bannedSubredditCache.size > MAX_CACHE_SIZE) {
-                    const entries = Array.from(bannedSubredditCache.entries()).slice(-Math.floor(MAX_CACHE_SIZE * 0.7));
+                    const entries = Array.from(bannedSubredditCache.entries()).slice(-Math.floor(MAX_CACHE_SIZE * 0.5));
                     bannedSubredditCache.clear();
                     entries.forEach(([key, value]) => bannedSubredditCache.set(key, value));
                 }
                 if (approvalPersistence.size > MAX_APPROVAL_PERSISTENCE) {
-                    const entries = Array.from(approvalPersistence.entries()).slice(-Math.floor(MAX_APPROVAL_PERSISTENCE * 0.8));
+                    const entries = Array.from(approvalPersistence.entries()).slice(-Math.floor(MAX_APPROVAL_PERSISTENCE * 0.7));
                     approvalPersistence.clear();
                     entries.forEach(([key, value]) => approvalPersistence.set(key, value));
                 }
@@ -434,7 +440,7 @@
             memoryCleanupCount++;
             
             // Force garbage collection only when necessary
-            if (window.gc && (force || isOverCap || memoryCleanupCount % 10 === 0)) {
+            if (window.gc && (force || isOverCap || memoryCleanupCount % 3 === 0)) {
                 try {
                     window.gc();
                     const afterMemInfo = getMemoryUsage();
@@ -450,7 +456,7 @@
         }
     }
 
-    // Memory pressure monitoring optimized for Reddit performance
+    // Memory pressure monitoring optimized for stability
     function monitorMemoryPressure() {
         const memInfo = getMemoryUsage();
         if (!memInfo) return;
@@ -458,14 +464,14 @@
         const now = Date.now();
         
         if (memInfo.usedGB > MEMORY_CAP_GB) {
-            if (now - lastMemoryWarning > 15000) { // Only warn every 15 seconds
+            if (now - lastMemoryWarning > 5000) { // Only warn every 5 seconds
                 devLog(`🚨 MEMORY CAP EXCEEDED: ${memInfo.usedGB}GB > ${MEMORY_CAP_GB}GB - FORCING CLEANUP`);
                 lastMemoryWarning = now;
             }
             cleanupCaches(true);
             
         } else if (memInfo.usedGB > MEMORY_WARNING_GB) {
-            if (now - lastMemoryWarning > 45000) {
+            if (now - lastMemoryWarning > 15000) {
                 devLog(`⚠️ Memory warning: ${memInfo.usedGB}GB / ${MEMORY_CAP_GB}GB cap (${memInfo.percentage}% of heap)`);
                 lastMemoryWarning = now;
             }
@@ -526,110 +532,55 @@
         return url.includes('/comments/') && !url.includes('/s/') && !url.includes('?') && url.split('/').length >= 7;
     }
 
-    // --- ANSWERS BUTTON HIDING FUNCTIONS ---
+    // --- SIMPLIFIED ANSWERS BUTTON HIDING FUNCTIONS ---
     function hideAnswersButton() {
-        // Method 1: Hide by href="/answers/" (most specific)
-        const answersLinks = document.querySelectorAll('a[href="/answers/"]');
-        for (let i = 0; i < answersLinks.length; i++) {
-            answersLinks[i].remove();
-        }
+        // Method 1: Direct removal by href (most effective)
+        try {
+            document.querySelectorAll('a[href="/answers/"], a[href^="/answers"]').forEach(el => el.remove());
+        } catch (e) {}
 
-        // Method 2: Hide by full class + href combination
-        const specificAnswersLinks = document.querySelectorAll('a.flex.justify-between.relative.px-md[href="/answers/"]');
-        for (let i = 0; i < specificAnswersLinks.length; i++) {
-            specificAnswersLinks[i].remove();
-        }
+        // Method 2: Remove by faceplate-tracker
+        try {
+            document.querySelectorAll('faceplate-tracker[noun="gen_guides_sidebar"]').forEach(el => el.remove());
+        } catch (e) {}
 
-        // Method 3: Hide using your original selectors
-        for (let i = 0; i < answersButtonSelectors.length; i++) {
-            const elements = document.querySelectorAll(answersButtonSelectors[i]);
-            for (let j = 0; j < elements.length; j++) {
-                elements[j].remove();
-            }
-        }
-
-        // Method 4: Hide by answers icon and traverse up
-        const answersIcons = document.querySelectorAll('svg[icon-name="answers-outline"], svg[rpl][icon-name="answers-outline"]');
-        for (let i = 0; i < answersIcons.length; i++) {
-            const icon = answersIcons[i];
-            const linkElement = icon.closest('a[href="/answers/"]');
-            if (linkElement) {
-                linkElement.remove();
-                continue;
-            }
-            
-            const containers = [
-                icon.closest('faceplate-tracker[noun="gen_guides_sidebar"]'),
-                icon.closest('faceplate-tracker'),
-                icon.closest('li[role="presentation"]'),
-                icon.closest('a'),
-                icon.closest('div'),
-                icon.closest('section'),
-                icon.closest('nav')
-            ];
-            
-            for (let k = 0; k < containers.length; k++) {
-                const container = containers[k];
-                if (container) {
-                    container.remove();
-                    break;
+        // Method 3: Remove BETA spans and their parents
+        try {
+            document.querySelectorAll('span.text-global-admin.font-semibold.text-12').forEach(span => {
+                if (span.textContent && span.textContent.trim() === 'BETA') {
+                    const parent = span.closest('a, li, div, faceplate-tracker');
+                    if (parent) {
+                        parent.remove();
+                    } else {
+                        span.remove();
+                    }
                 }
-            }
-        }
+            });
+        } catch (e) {}
 
-        // Method 5: Hide elements containing "Answers" and "BETA" text
-        const allElements = document.querySelectorAll('*');
-        for (let i = 0; i < allElements.length; i++) {
-            const element = allElements[i];
-            
-            if (element.hasAttribute('data-answers-processed') || 
-                element.textContent.length > 200) continue;
-            
-            const textContent = element.textContent || '';
-            
-            if (textContent.includes('Answers') && textContent.includes('BETA')) {
-                element.setAttribute('data-answers-processed', 'true');
-                
-                const parentLink = element.closest('a[href="/answers/"]');
-                if (parentLink) {
-                    parentLink.remove();
-                    continue;
+        // Method 4: Text-based removal for "Answers" + "BETA"
+        try {
+            document.querySelectorAll('*').forEach(element => {
+                if (element.children.length === 0 && element.textContent) {
+                    const text = element.textContent.trim();
+                    if ((text.includes('Answers') && text.includes('BETA')) || text === 'Answers BETA') {
+                        const container = element.closest('a, li, div[class*="nav"], faceplate-tracker');
+                        if (container) {
+                            container.remove();
+                        } else {
+                            element.remove();
+                        }
+                    }
                 }
-                
-                const rootContainer = element.closest('faceplate-tracker, li[role="presentation"], nav, section, div[class*="nav"]');
-                if (rootContainer) {
-                    rootContainer.remove();
-                } else {
-                    element.remove();
-                }
-            }
-        }
+            });
+        } catch (e) {}
 
-        // Method 6: Hide BETA spans specifically
-        const betaSpans = document.querySelectorAll('span.text-global-admin.font-semibold.text-12');
-        for (let i = 0; i < betaSpans.length; i++) {
-            const span = betaSpans[i];
-            if (span.textContent.trim() === 'BETA') {
-                const parentLink = span.closest('a[href="/answers/"]');
-                if (parentLink) {
-                    parentLink.remove();
-                    continue;
-                }
-                
-                const rootContainer = span.closest('faceplate-tracker, li[role="presentation"], div, section, nav');
-                if (rootContainer) {
-                    rootContainer.remove();
-                } else {
-                    span.remove();
-                }
-            }
-        }
-
-        // Method 7: Target the exact gap class structure
-        const gapElements = document.querySelectorAll('a.gap-\\[0\\.5rem\\][href="/answers/"]');
-        for (let i = 0; i < gapElements.length; i++) {
-            gapElements[i].remove();
-        }
+        // Method 5: Add CSS class to hide any remaining answers elements
+        try {
+            document.querySelectorAll('a[href*="answers"], *[class*="answers"], *[data-testid*="answers"]').forEach(el => {
+                el.classList.add('reddit-answers-hidden');
+            });
+        } catch (e) {}
     }
 
     // Performance functions with memory monitoring
@@ -684,11 +635,138 @@
         });
     }
 
-    // Optimized text checking with memory-conscious caching
+    // ENHANCED: Function to scan FULL post content - now with better extraction
+    function extractCompletePostContent(element) {
+        try {
+            // Skip expensive operations for safe subreddits
+            if (isElementInSafeSubreddit(element)) {
+                devLog('✅ Safe subreddit - using basic content extraction');
+                const basicContent = element.textContent || element.innerText || '';
+                return basicContent;
+            }
+            
+            // ENHANCED: Extract ALL available text from the element more thoroughly
+            const allTextContent = [];
+            
+            // Method 1: Get main element text content
+            const mainText = element.textContent || element.innerText || '';
+            if (mainText.trim()) {
+                allTextContent.push(mainText);
+            }
+            
+            // Method 2: Get specific content from known selectors (more comprehensive)
+            const contentSelectors = [
+                // Post titles
+                'h1, h2, h3, h4, h5, h6',
+                '[slot="title"]',
+                '#post-title, [id*="post-title"]',
+                '.title',
+                'a[data-click-id="body"]',
+                
+                // Post content areas
+                '.md',
+                '.md.feed-card-text-preview',
+                '.md.text-14-scalable',
+                '[slot="text-body"]',
+                '[data-post-click-location="text-body"]',
+                '.post-content',
+                '.usertext-body',
+                '.text-body',
+                '.text-ellipsis',
+                'p',
+                'div[class*="text"]',
+                'span[class*="text"]',
+                
+                // Reddit-specific content containers
+                '[data-testid="post-content"]',
+                '[about*="_"]',
+                '[id*="post-rtjson-content"]',
+                '.entry .usertext-body',
+                
+                // Additional selectors for better content extraction
+                'faceplate-screen-reader-content',
+                '.line-clamp-3',
+                '.line-clamp-6',
+                '[aria-label]',
+                '[title]'
+            ];
+            
+            // Extract text from all matching elements
+            for (let i = 0; i < contentSelectors.length; i++) {
+                const elements = element.querySelectorAll(contentSelectors[i]);
+                for (let j = 0; j < elements.length; j++) {
+                    const elem = elements[j];
+                    let text = elem.textContent || elem.innerText || '';
+                    
+                    // Also check aria-label and title attributes
+                    if (!text && elem.getAttribute) {
+                        text = elem.getAttribute('aria-label') || elem.getAttribute('title') || '';
+                    }
+                    
+                    if (text.trim() && text.length > 2) { // Only include meaningful text
+                        allTextContent.push(text);
+                    }
+                }
+            }
+            
+            // Method 3: Check href attributes for additional text
+            const links = element.querySelectorAll('a[href]');
+            for (let i = 0; i < links.length; i++) {
+                const href = links[i].getAttribute('href');
+                if (href && href.includes('/comments/')) {
+                    const linkText = links[i].textContent || links[i].innerText || '';
+                    if (linkText.trim()) {
+                        allTextContent.push(linkText);
+                    }
+                }
+            }
+            
+            // Method 4: Extract from data attributes that might contain text
+            const dataAttributes = ['data-permalink', 'data-testid', 'aria-label', 'title', 'alt'];
+            for (let i = 0; i < dataAttributes.length; i++) {
+                const attr = dataAttributes[i];
+                const value = element.getAttribute(attr);
+                if (value && typeof value === 'string' && value.length > 2) {
+                    allTextContent.push(value);
+                }
+            }
+            
+            // Method 5: Look for truncated content indicators and try to get more
+            const truncatedElements = element.querySelectorAll('.text-ellipsis, .line-clamp-3, .line-clamp-6');
+            for (let i = 0; i < truncatedElements.length; i++) {
+                const elem = truncatedElements[i];
+                const fullText = elem.textContent || elem.innerText || '';
+                if (fullText.trim()) {
+                    allTextContent.push(fullText);
+                }
+            }
+            
+            const combinedContent = allTextContent.join(' ').trim();
+            
+            // Debug logging for posts that contain "AI"
+            if (combinedContent.toLowerCase().includes('ai')) {
+                devLog(`🔍 FOUND AI CONTENT: "${combinedContent.substring(0, 200)}..." (${combinedContent.length} chars total)`);
+            }
+            
+            devLog(`📄 Extracted content: ${combinedContent.length} characters from element`);
+            return combinedContent;
+            
+        } catch (error) {
+            devLog(`❌ Error in extractCompletePostContent: ${error.message}`);
+            // Fallback to basic text content
+            return element.textContent || element.innerText || '';
+        }
+    }
+
+    // ENHANCED: Text checking with improved keyword matching and debug logging
     function checkTextForKeywords(textContent) {
         if (!textContent) return false;
         
-        const lowerText = textContent.toLowerCase();
+        // Normalize text for better matching
+        const lowerText = textContent.toLowerCase()
+            .replace(/[^\w\s]/g, ' ') // Replace special chars with spaces
+            .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+            .trim();
         
         // Check cache first
         if (contentBannedCache.has(lowerText)) {
@@ -697,30 +775,40 @@
         
         // Prevent cache from growing too large
         if (contentBannedCache.size >= MAX_CACHE_SIZE) {
-            // Keep only most recent entries
-            const entries = Array.from(contentBannedCache.entries()).slice(-Math.floor(MAX_CACHE_SIZE * 0.7));
+            const entries = Array.from(contentBannedCache.entries()).slice(-Math.floor(MAX_CACHE_SIZE * 0.5));
             contentBannedCache.clear();
             entries.forEach(([key, value]) => contentBannedCache.set(key, value));
         }
         
-        // Check for exact keyword matches (most efficient)
+        // ENHANCED: Check for exact keyword matches (includes the word boundary logic you want to keep)
         for (let i = 0; i < keywordsToHide.length; i++) {
-            if (lowerText.includes(keywordsToHide[i].toLowerCase())) {
-                contentBannedCache.set(lowerText, true);
-                if (isPostPage()) {
-                    devLog(`Blocked by keyword: "${keywordsToHide[i]}" in text: "${textContent.substring(0, 100)}..."`);
+            const keyword = keywordsToHide[i].toLowerCase();
+            
+            // Check both exact match and word boundary match
+            if (lowerText.includes(keyword)) {
+                // For very short keywords (3 chars or less), use word boundary check for precision
+                // For longer keywords, simple inclusion is sufficient
+                if (keyword.length <= 3) {
+                    const wordBoundaryRegex = new RegExp('\\b' + keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i');
+                    if (wordBoundaryRegex.test(lowerText)) {
+                        contentBannedCache.set(lowerText, true);
+                        devLog(`🚫 Blocked by keyword: "${keywordsToHide[i]}" in text: "${textContent.substring(0, 150)}..."`);
+                        return true;
+                    }
+                } else {
+                    // For longer keywords, simple inclusion is fine
+                    contentBannedCache.set(lowerText, true);
+                    devLog(`🚫 Blocked by keyword: "${keywordsToHide[i]}" in text: "${textContent.substring(0, 150)}..."`);
+                    return true;
                 }
-                return true;
             }
         }
         
-        // Only check regex patterns if needed (more expensive)
-        for (let i = 0; i < regexKeywordsToHide.length; i++) {
+        // ENHANCED: Check regex patterns with improved efficiency (limited to first 25 for performance)
+        for (let i = 0; i < Math.min(regexKeywordsToHide.length, 25); i++) {
             if (regexKeywordsToHide[i].test(lowerText)) {
                 contentBannedCache.set(lowerText, true);
-                if (isPostPage()) {
-                    devLog(`Blocked by regex: ${regexKeywordsToHide[i]} in text: "${textContent.substring(0, 100)}..."`);
-                }
+                devLog(`🚫 Blocked by regex: ${regexKeywordsToHide[i]} in text: "${textContent.substring(0, 150)}..."`);
                 return true;
             }
         }
@@ -731,6 +819,16 @@
 
     // Better post identifier that works across feed and post pages
     function getPostIdentifier(element) {
+        // Check data-ks-id first (most reliable)
+        const dataKsElement = element.querySelector('[data-ks-id*="t3_"]');
+        if (dataKsElement) {
+            const dataKsId = dataKsElement.getAttribute('data-ks-id');
+            const match = dataKsId.match(/t3_([a-zA-Z0-9]+)/);
+            if (match) {
+                return `post_${match[1]}`;
+            }
+        }
+        
         const postLinks = element.querySelectorAll && element.querySelectorAll('a[href*="/comments/"]');
         if (postLinks && postLinks.length > 0) {
             for (let i = 0; i < postLinks.length; i++) {
@@ -772,7 +870,7 @@
         }
         
         const subreddit = getSubredditForAnyRedditPost(element);
-        const titleElement = element.querySelector && element.querySelector('h1, h2, h3, [data-testid="post-content"] h1, [data-testid="post-content"] h2, [data-testid="post-content"] h3');
+        const titleElement = element.querySelector && element.querySelector('h1, h2, h3, [data-testid="post-content"] h1, [data-testid="post-content"] h2, [data-testid="post-content"] h3, [slot="title"]');
         const title = titleElement ? titleElement.textContent : '';
         
         if (subreddit && title) {
@@ -786,7 +884,7 @@
         const identifier = getPostIdentifier(element);
         if (identifier && approvalPersistence.has(identifier)) {
             if (isPostPage()) {
-                devLog(`Post was previously approved: ${identifier}`);
+                devLog(`✅ Post was previously approved: ${identifier}`);
             }
             return approvalPersistence.get(identifier);
         }
@@ -798,14 +896,14 @@
         if (identifier) {
             // Prevent approval persistence from growing too large
             if (approvalPersistence.size >= MAX_APPROVAL_PERSISTENCE) {
-                const entries = Array.from(approvalPersistence.entries()).slice(-Math.floor(MAX_APPROVAL_PERSISTENCE * 0.8));
+                const entries = Array.from(approvalPersistence.entries()).slice(-Math.floor(MAX_APPROVAL_PERSISTENCE * 0.7));
                 approvalPersistence.clear();
                 entries.forEach(([key, value]) => approvalPersistence.set(key, value));
             }
             
             approvalPersistence.set(identifier, true);
             if (isPostPage()) {
-                devLog(`Marked post as approved: ${identifier}`);
+                devLog(`✅ Marked post as approved: ${identifier}`);
             }
         }
         element.classList.add('reddit-approved');
@@ -823,7 +921,7 @@
         
         // Prevent cache from growing too large
         if (bannedSubredditCache.size >= MAX_CACHE_SIZE) {
-            const entries = Array.from(bannedSubredditCache.entries()).slice(-Math.floor(MAX_CACHE_SIZE * 0.7));
+            const entries = Array.from(bannedSubredditCache.entries()).slice(-Math.floor(MAX_CACHE_SIZE * 0.5));
             bannedSubredditCache.clear();
             entries.forEach(([key, value]) => bannedSubredditCache.set(key, value));
         }
@@ -832,7 +930,7 @@
             if (lowerSub === adultSubreddits[i].toLowerCase()) {
                 bannedSubredditCache.set(lowerSub, true);
                 if (isPostPage()) {
-                    devLog(`Blocked by banned subreddit: ${subName}`);
+                    devLog(`🚫 Blocked by banned subreddit: ${subName}`);
                 }
                 return true;
             }
@@ -842,17 +940,17 @@
             if (lowerSub.includes(keywordsToHide[i].toLowerCase())) {
                 bannedSubredditCache.set(lowerSub, true);
                 if (isPostPage()) {
-                    devLog(`Blocked subreddit "${subName}" by keyword: "${keywordsToHide[i]}"`);
+                    devLog(`🚫 Blocked subreddit "${subName}" by keyword: "${keywordsToHide[i]}"`);
                 }
                 return true;
             }
         }
         
-        for (let i = 0; i < regexKeywordsToHide.length; i++) {
+        for (let i = 0; i < Math.min(regexKeywordsToHide.length, 25); i++) { // Limit regex checks
             if (regexKeywordsToHide[i].test(lowerSub)) {
                 bannedSubredditCache.set(lowerSub, true);
                 if (isPostPage()) {
-                    devLog(`Blocked subreddit "${subName}" by regex: ${regexKeywordsToHide[i]}`);
+                    devLog(`🚫 Blocked subreddit "${subName}" by regex: ${regexKeywordsToHide[i]}`);
                 }
                 return true;
             }
@@ -871,11 +969,20 @@
         return checkTextForKeywords(contentText);
     }
 
+    // Enhanced to work for both feed pages and individual post pages
     function isSafeSubredditUrl() {
         const url = window.location.href.toLowerCase();
-        return safeSubreddits.some(sub =>
-            url.match(new RegExp(`/r/${sub.replace(/^r\//, '').toLowerCase()}([/?#]|$)`))
-        );
+        
+        // Check if current page is in a safe subreddit
+        for (let i = 0; i < safeSubreddits.length; i++) {
+            const safeSub = safeSubreddits[i].replace(/^r\//, '').toLowerCase();
+            // Match both feed pages (/r/subreddit) and post pages (/r/subreddit/comments/...)
+            if (url.match(new RegExp(`/r/${safeSub}([/?#]|$|/comments/)`))) {
+                return true;
+            }
+        }
+        
+        return false;
     }
 
     function isUrlAllowed() {
@@ -925,7 +1032,47 @@
         return isSubredditNameBanned(sub);
     }
 
-    // Enhanced content evaluation function - POSTS ONLY (NO COMMENT FILTERING)
+    // ENHANCED: Enhanced safe subreddit detection that works on both URL and element
+    function isElementInSafeSubreddit(element) {
+        // Method 1: Check current URL first
+        if (isSafeSubredditUrl()) {
+            return true;
+        }
+        
+        // Method 2: Check element attributes
+        const subredditPrefixedName = element.getAttribute && element.getAttribute('subreddit-prefixed-name');
+        if (subredditPrefixedName) {
+            const normalizedName = subredditPrefixedName.startsWith('r/') ? subredditPrefixedName : 'r/' + subredditPrefixedName;
+            if (safeSubreddits.some(safeSub => safeSub.toLowerCase() === normalizedName.toLowerCase())) {
+                devLog(`Element is in safe subreddit: ${normalizedName}`);
+                return true;
+            }
+        }
+        
+        // Method 3: Check subreddit-name attribute
+        const subredditName = element.getAttribute && element.getAttribute('subreddit-name');
+        if (subredditName) {
+            const normalizedName = 'r/' + subredditName;
+            if (safeSubreddits.some(safeSub => safeSub.toLowerCase() === normalizedName.toLowerCase())) {
+                devLog(`Element is in safe subreddit: ${normalizedName}`);
+                return true;
+            }
+        }
+        
+        // Method 4: Check through getSubredditForAnyRedditPost
+        const subreddit = getSubredditForAnyRedditPost(element);
+        if (subreddit) {
+            const normalizedName = subreddit.startsWith('r/') ? subreddit : 'r/' + subreddit;
+            if (safeSubreddits.some(safeSub => safeSub.toLowerCase() === normalizedName.toLowerCase())) {
+                devLog(`Element is in safe subreddit: ${normalizedName}`);
+                return true;
+            }
+        }
+        
+        return false;
+    }
+
+    // ENHANCED: Content evaluation function - now with complete content scanning
     function evaluateElementForBanning(element) {
         if (permanentlyApprovedElements.has(element) || wasElementPreviouslyApproved(element)) {
             return false;
@@ -933,55 +1080,72 @@
         
         const identifier = getPostIdentifier(element);
         if (isPostPage() && identifier) {
-            devLog(`Evaluating element: ${identifier}`);
+            devLog(`🔍 Evaluating element: ${identifier}`);
         }
-        
+
+        // Check if element is in a safe subreddit FIRST
+        if (isElementInSafeSubreddit(element)) {
+            devLog(`✅ Element is in safe subreddit - auto-approving`);
+            return false; // Auto-approve safe subreddit posts
+        }
+
+        // For non-safe subreddits, do COMPLETE content scanning
+        const fullContent = extractCompletePostContent(element);
+
+        // Check if element is from a banned subreddit
         if (isElementFromAdultSubreddit(element)) {
             if (isPostPage()) {
                 const sub = getSubredditForAnyRedditPost(element);
-                devLog(`Blocked by subreddit: ${sub}`);
+                devLog(`🚫 Blocked by subreddit: ${sub}`);
             }
             return true;
         }
         
-        if (checkContentForKeywords(element)) {
+        // Check ALL keywords using COMPLETE content scan
+        if (checkTextForKeywords(fullContent)) {
+            if (isPostPage()) {
+                devLog(`🚫 Blocked by full content scan`);
+            }
             return true;
         }
         
+        // Also check individual elements for thorough scanning
         const titleElement = element.querySelector && element.querySelector('h1, h2, h3, a[data-click-id="body"], .title, [slot="title"]');
         if (titleElement && checkContentForKeywords(titleElement)) {
             if (isPostPage()) {
-                devLog('Blocked by title content');
+                devLog(`🚫 Blocked by title content`);
             }
             return true;
         }
         
+        // Check post body content
         const contentElement = element.querySelector && element.querySelector('.post-content, .md-container, p, [slot="text-body"], [data-testid="post-content"]');
         if (contentElement && checkContentForKeywords(contentElement)) {
             if (isPostPage()) {
-                devLog('Blocked by post content');
+                devLog(`🚫 Blocked by post content`);
             }
             return true;
         }
         
+        // Check for NSFW indicators
         const nsfwIndicators = element.querySelectorAll && element.querySelectorAll('.nsfw, [data-nsfw="true"], svg[icon-name="nsfw-outline"], .text-category-nsfw');
         if (nsfwIndicators && nsfwIndicators.length > 0) {
             if (isPostPage()) {
-                devLog('Blocked by NSFW indicator');
+                devLog(`🚫 Blocked by NSFW indicator`);
             }
             return true;
         }
         
         if (isPostPage() && identifier) {
-            devLog(`Element passed all checks: ${identifier}`);
+            devLog(`✅ Element passed all checks: ${identifier}`);
         }
         
         return false;
     }
 
-    // --- MAIN FILTERING FUNCTIONS (POSTS ONLY - NO COMMENT FILTERING) ---
+    // OPTIMIZED: Main filtering functions with synchronous processing
     function filterAdultSubredditPosts() {
-        // Only filter posts, NOT comments
+        // Only filter posts, NOT comments - optimized for performance
         const postSelectors = [
             'article:not(.prehide):not(.reddit-approved)',
             'shreddit-post:not(.prehide):not(.reddit-approved)', 
@@ -996,7 +1160,8 @@
                 if (processedElements.has(element)) continue;
                 processedElements.add(element);
                 
-                if (evaluateElementForBanning(element)) {
+                const shouldBan = evaluateElementForBanning(element);
+                if (shouldBan) {
                     element.classList.add('prehide', 'reddit-banned');
                     removeElementAndRelated(element);
                 } else {
@@ -1072,7 +1237,8 @@
             if (processedElements.has(post)) continue;
             processedElements.add(post);
             
-            if (evaluateElementForBanning(post)) {
+            const shouldBan = evaluateElementForBanning(post);
+            if (shouldBan) {
                 post.classList.add('prehide', 'reddit-banned');
                 removeElementAndRelated(post);
             } else {
@@ -1089,7 +1255,8 @@
             if (processedElements.has(post)) continue;
             processedElements.add(post);
             
-            if (evaluateElementForBanning(post)) {
+            const shouldBan = evaluateElementForBanning(post);
+            if (shouldBan) {
                 post.classList.add('prehide', 'reddit-banned');
                 removeElementAndRelated(post);
             } else {
@@ -1337,7 +1504,7 @@
             }
         }
         
-        for (let i = 0; i < regexKeywordsToHide.length; i++) {
+        for (let i = 0; i < Math.min(regexKeywordsToHide.length, 25); i++) { // Limit regex checks for performance
             if (regexKeywordsToHide[i].test(currentUrl)) {
                 if (!isUrlAllowed()) {
                     window.location.replace('https://www.reddit.com');
@@ -1431,7 +1598,8 @@
                 if (processedElements.has(post)) continue;
                 processedElements.add(post);
                 
-                if (evaluateElementForBanning(post)) {
+                const shouldBan = evaluateElementForBanning(post);
+                if (shouldBan) {
                     post.classList.add('prehide', 'reddit-banned');
                     post.remove();
                 } else {
@@ -1468,7 +1636,7 @@
         
         processShadowDOM();
         
-        // Filter ONLY posts, NOT comments
+        // Filter ONLY posts, NOT comments - optimized performance
         filterAdultSubredditPosts();
         hideKeywordPosts();
         filterPostsByContent();
@@ -1494,7 +1662,7 @@
         
         runAllChecks();
         
-        const throttledRunChecks = throttle(runAllChecks, 50);
+        const throttledRunChecks = throttle(() => runAllChecks(), 75);
         const observer = new MutationObserver(throttledRunChecks);
         
         if (document.body) {
@@ -1507,10 +1675,10 @@
             });
         }
         
-        const minimalInterval = setInterval(hideBannedSubredditsFromSearch, 500);
+        const minimalInterval = setInterval(hideBannedSubredditsFromSearch, 1000);
         intervalIds.add(minimalInterval);
         
-        const answersButtonInterval = setInterval(hideAnswersButton, 50);
+        const answersButtonInterval = setInterval(hideAnswersButton, 150);
         intervalIds.add(answersButtonInterval);
         
         if (window.requestIdleCallback) {
@@ -1523,10 +1691,10 @@
                     hideAnswersButton();
                 }
                 
-                window.requestIdleCallback(idleCallback, { timeout: 1000 });
+                window.requestIdleCallback(idleCallback, { timeout: 3000 });
             };
             
-            window.requestIdleCallback(idleCallback, { timeout: 1000 });
+            window.requestIdleCallback(idleCallback, { timeout: 3000 });
         } else {
             const backgroundInterval = setInterval(() => {
                 batchProcess(() => {
@@ -1534,17 +1702,17 @@
                     filterPostsByContent();
                     hideAnswersButton();
                 });
-            }, 1000);
+            }, 3000);
             intervalIds.add(backgroundInterval);
         }
         
-        // Memory monitoring every 20 seconds
+        // Memory monitoring every 5 seconds
         const memoryMonitorInterval = setInterval(() => {
             monitorMemoryPressure();
         }, MEMORY_CHECK_INTERVAL);
         intervalIds.add(memoryMonitorInterval);
         
-        // Cache cleanup every 45 seconds
+        // Cache cleanup every 10 seconds
         const cleanupInterval = setInterval(() => {
             cleanupCaches();
         }, CLEANUP_INTERVAL);
@@ -1583,12 +1751,13 @@
                     hideAnswersButton();
                 }
                 
-                // Process ONLY posts, NOT comments
+                // Process ONLY posts, NOT comments - optimized
                 if (node.tagName === 'ARTICLE' || node.tagName === 'SHREDDIT-POST') {
                     if (!processedElements.has(node)) {
                         processedElements.add(node);
                         
-                        if (evaluateElementForBanning(node)) {
+                        const shouldBan = evaluateElementForBanning(node);
+                        if (shouldBan) {
                             node.classList.add('prehide', 'reddit-banned');
                             removeElementAndRelated(node);
                         } else {
@@ -1608,14 +1777,15 @@
                     
                     processShadowSearchItems(node.shadowRoot);
                     
-                    // Process ONLY posts in shadow DOM, NOT comments
+                    // Process ONLY posts in shadow DOM, NOT comments - optimized
                     const shadowPosts = node.shadowRoot.querySelectorAll('article, shreddit-post');
                     for (let k = 0; k < shadowPosts.length; k++) {
                         const shadowPost = shadowPosts[k];
                         if (!processedElements.has(shadowPost)) {
                             processedElements.add(shadowPost);
                             
-                            if (evaluateElementForBanning(shadowPost)) {
+                            const shouldBan = evaluateElementForBanning(shadowPost);
+                            if (shouldBan) {
                                 shadowPost.classList.add('prehide', 'reddit-banned');
                                 shadowPost.remove();
                             } else {
@@ -1658,7 +1828,7 @@
         }
         
         hideAnswersButton();
-    }, 50);
+    }, 75);
 
     const observer = new MutationObserver(processNewElements);
     observerInstances.add(observer);
@@ -1687,7 +1857,7 @@
                 devLog(`🔄 URL changed - Memory: ${memInfo.usedGB}GB/${MEMORY_CAP_GB}GB`);
             }
         }
-    }, 200);
+    }, 500);
     intervalIds.add(urlCheckInterval);
 
 })();

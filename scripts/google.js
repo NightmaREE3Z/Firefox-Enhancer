@@ -78,7 +78,9 @@
 	/LustTheory/i, /Lust Theory/i, /Lu-Theory/i, /Lus-Theory/i, /Lust-Theory/i, /ComfyUI/i, /Comfy-UI/i, /ComfyAI/i, /Comfy-AI/i, /Midjourney/i, /StaphMc/i, /Staph McMahon/i, /MeekMahan/i, /MekMahan/i, /MekMahaan/i, /Mek Mahaan/i, /4ut0/i,
 	/Meek Mahaan/i, /Meek Mahan/i, /Meek Mahon/i, /Mek Mahon/i, /MeekMahon/i, /MekMahon/i, /CoAi/i, /ComAi/i, /ComfAi/i, /ComfoAi/i, /ComforAi/i, /ComfortAi/i, /ComfortaAi/i, /ComfortabAi/i, /ComfortablAi/i, /ComfortableAi/i, /Aut0/i, /4uto/i,
 	/Co-Ai/i, /Com-Ai/i, /Comf-Ai/i, /Comfo-Ai/i, /Comfor-Ai/i, /Comfort-Ai/i, /Comforta-Ai/i, /Comfortab-Ai/i, /Comfortabl-Ai/i, /Comfortable-Ai/i, /Runcomfy/i, /Run comfy/i, /Run-comfy/i, /Aut1111/i, /Automatic11/i, /Automatic 11/i, /m4t1c/i,
-	/m4t1c/i, /mat1c/i, /m4tic/i, /m47ic/i, /ma7ic/i, /ma71c/i, /m471c/i,
+	/m4t1c/i, /mat1c/i, /m4tic/i, /m47ic/i, /ma7ic/i, /ma71c/i, /m471c/i, /Becky/i, /Becki/i, /Rebecca/i, /Amber/i, /Amber Heard/i, /without cloth/i, /without pant/i, /without tshirt/i, /without t-shirt/i, /without boxer/i, /b0x3r/i, /box3r/i,
+	/b0xer/i, /woman without/i, /women without/i, /girl without/i, /lady without/i, /ladies without/i, /tyttöjä/i, /naisia/i, /tytöt/i, /naiset/i, /nainen/i, /naikkoset/i, /mimmejä/i, /misu/i, /pimu/i, /lortto/i, /lutka/i, /lumppu/i, /narttu/i, 
+	/horo/i, /huora/i, /huoru/i, /Becky/i, /Becki/i, /Rebecca/i, /Amber Heard/i, /girlfriend/i, /boyfriend/i, /girl friend/i, /boy friend/i, /sperm/i, /bikini/i, /linger/i, /underwear/i, /under wear/i, /without dres/i, /with out dres/i, /bik1/i,
     ];  
 
     const stringKeywordsToHide = [
