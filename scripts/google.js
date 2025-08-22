@@ -81,6 +81,7 @@
 	/m4t1c/i, /mat1c/i, /m4tic/i, /m47ic/i, /ma7ic/i, /ma71c/i, /m471c/i, /Becky/i, /Becki/i, /Rebecca/i, /Amber/i, /Amber Heard/i, /without cloth/i, /without pant/i, /without tshirt/i, /without t-shirt/i, /without boxer/i, /b0x3r/i, /box3r/i,
 	/b0xer/i, /woman without/i, /women without/i, /girl without/i, /lady without/i, /ladies without/i, /tyttöjä/i, /naisia/i, /tytöt/i, /naiset/i, /nainen/i, /naikkoset/i, /mimmejä/i, /misu/i, /pimu/i, /lortto/i, /lutka/i, /lumppu/i, /narttu/i, 
 	/horo/i, /huora/i, /huoru/i, /Becky/i, /Becki/i, /Rebecca/i, /Amber Heard/i, /girlfriend/i, /boyfriend/i, /girl friend/i, /boy friend/i, /sperm/i, /bikini/i, /linger/i, /underwear/i, /under wear/i, /without dres/i, /with out dres/i, /bik1/i,
+	/Dualipa/i, /Dua Lipa/i, /Dual Lipa/i, /Dual ipa/i,
     ];  
 
     const stringKeywordsToHide = [

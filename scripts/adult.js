@@ -44,7 +44,7 @@
     const blockedRegexWords = [
     	/deepn/i, /deepf/i, /deeps/i, /udif/i, /nudif/i, /alexa/i, /ndres/i, /poshspisy/i, /alexa_poshspisy/i, /Liv Morgan/i, /Liv Xoxo/i, /Morgan Xoxo/i, /Sweeney/i, /Sydne/i, /Kristen Stewart/i, /Steward/i, /facemorph/i, /face morph/i, /morphface/i, /morph face/i, 
     	/Bella/i, /Nikki/i, /Brie/i, /Chyna/i, /China/i, /Hulk/i, /lex bl/i, /leks bl/i, /Hogan/i, /Alexa Bliss/i, /Tiffy/i, /Bliss/i, /app/i, /Sydney Sweeney/i, /Sweee/i, /Stee/i, /Waaa/i, /Stewart/i, /face swap/i, /swap face/i, /faceswap/i, /swapface/i, /Sweee/i, /Kriis/i, 
-    	/LGBT/i, /wondershare/i, /filmora/i, /dreambooth/i, /dream booth/i, /Marg Robb/i, /Margo/i, /Robbie/i, /Elina/i, /Elyna/i, /Elyina/i, /Eliyna/i, /Eliyina/i,
+    	/LGBT/i, /wondershare/i, /filmora/i, /dreambooth/i, /dream booth/i, /Marg Robb/i, /Margo/i, /Robbie/i, /Elina/i, /Elyna/i, /Elyina/i, /Eliyna/i, /Eliyina/i, /Dualipa/i, /Dua Lipa/i,
     ];
 
     // List of selectors to check for blocked keywords on video pages
