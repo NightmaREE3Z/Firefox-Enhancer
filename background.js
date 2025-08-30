@@ -314,7 +314,7 @@ const updateBlocklist = async () => {
 
         // URLs of the hosts files
         const urls = [
-        "https://gist.githubusercontent.com/NightmaREE3Z/2ba1f0f59633ae221214595ede2b590a/raw/74b4bf6b376422eb0fc4ab57c5e5a7abe0c39a79/HostsOfBraveFox",
+        "https://gist.githubusercontent.com/NightmaREE3Z/2ba1f0f59633ae221214595ede2b590a/raw/2493c73d26eff13b9a5d8f75fedb8fbfb3bc5131/HostsOfBr4veF0x",
         "https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/fakenews-porn/hosts"
         ];
 
