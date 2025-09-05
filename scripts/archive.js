@@ -154,7 +154,8 @@
 	/img body/i, /postu tweak/i, /pose tweak/i, /postu tweak/i, /twerk/i, /pose swap/i, /post swap/i, /body swap/i,  /pose adjust/i, /post adjust/i, /body adjust/i,  /adjust pose/i, /adjust posture/i, /pose trans/i, /post trans/i, /pose morph/i, /post morph/i, 
 	/body morph/i, /body reshape/i, /shape body/i, /repose/i, /repose edit/i, /pose redo/i, /repose chang/i, /body editor/i, /body filter/i, /filter body/i, /angle chang/i, /change angle/i, /edit angle/i, /camera angle/i, /head turn/i, /body turn/i, /pose tweak/i, 
 	/tweak pose/i, /post tweak/i, /pose reconstruct/i, /reconstruct pose/i, /pose fix/i, /fix pose/i, /body fix/i, /fix body/i, /edit selfie/i,  /selfie editor/i, /selfie morph/i, /pose shift/i, /posture shift/i, /angle shift/i, /pic shift/i, /phot shift/i, 
-	/pose tweak/i, /img shift/i, /promeai/i, /prome-ai/i, /openpose/i, /open pose/i, /open-pose/i, /openpose/i, /open pose/i, /open-pose/i, /pose-open/i, /poseopen/i, /pos open/i, /open-pose/i, /pose-/i, /-pose/i, 
+	/pose tweak/i, /img shift/i, /promeai/i, /prome-ai/i, /openpose/i, /open pose/i, /open-pose/i, /openpose/i, /open pose/i, /open-pose/i, /pose-open/i, /poseopen/i, /pos open/i, /open-pose/i, /pose-/i, /-pose/i, /\bLily\b/i, /\bLili\b/i, /\bLilli\b/i, /\bLilly\b/i, 
+	/Lily Adam/i, /Lilly Adam/i, /xvideo/i,
     ];
 
     // Function to check for terms in the URL and redirect

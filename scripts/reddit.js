@@ -239,7 +239,7 @@
         "Sol Ruca", "lexi", "AlexaPearl", "Arianna", "Natalya", "Nattie", "Young Bucks", "Matt Jackson", "Nick Jackson", "AEW", "Woman's", "Lady's", "Girl's", "HorizonMW", "Horizon MW",
         "Horizon Modern Warfare", "HorizonModern", "HorizonWarfare", "Horizon ModernWarfare", "Diffusion", "StableDiffusion", "UnStableDiffusion", "Dreambooth", "Dream booth", "comfyui",
         "sperm", "boyfriend", "girlfriend", "AI generated", "AI-generated", "generated", "artificial intelligence", "machine learning", "neural network", "deep learning",
-        "Midjourney", "stable diffusion", "artificial", "synthetic", "computer generated", "algorithm", "chatbot", "automated", "text to image", "Answers BETA",
+        "Midjourney", "stable diffusion", "artificial", "synthetic", "computer generated", "algorithm", "chatbot", "automated", "text to image", "Answers BETA", "Birppis",
     ];
 
     const redgifsKeyword = "www.redgifs.com";
@@ -287,7 +287,7 @@
         /comfy ui/i, /comfy ai/i, /comfyai/i, /comfy-ui/i, /comfy-ai/i, /comfy-ai/i, /Becky/i, /Becki/i, /Rebecca/i, /Amber Heard/i, /girlfriend/i, /boyfriend/i, /mid journey/i, /unstable diffusion/i,
         /AI[ -]?generated/i, /generated[ -]?by[ -]?AI/i, /artificial[ -]?intelligence/i, /machine[ -]?learning/i, /neural[ -]?network/i, /deep[ -]?learning/i, /midjourney/i, /dall[ -]?e/i, /stable[ -]?diffusion/i,
         /computer[ -]?generated/i, /text[ -]?to[ -]?image/i, /image[ -]?generation/i, /AI[ -]?art/i, /synthetic[ -]?media/i, /algorithmically/i, /bot[ -]?generated/i, /automated[ -]?content/i, /stablediffused/i, 
-	/Dualipa/i, /Dua Lipa/i,
+	/Dualipa/i, /Dua Lipa/i, /\bLily\b/i, /\bLili\b/i, /\bLilli\b/i, /\bLilly\b/i, /Lily Adam/i, /Lilly Adam/i,
     ];
 
     const unifiedSelectors = [
