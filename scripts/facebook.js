@@ -9,12 +9,47 @@
     // Variable to cache redirects
     let lastRedirect = null;
 
-    // Inject CSS immediately for instant hiding
+    // FIXED: Inject CSS immediately for instant hiding - ENHANCED with instant search hiding
     const injectInlineCSS = () => {
         try {
-            devLog('Injecting inline CSS');
+            devLog('Injecting inline CSS with instant search hiding');
             const style = document.createElement('style');
             style.textContent = `
+            /* INSTANT SEARCH HIDING - Hide search results by default until approved */
+            li[role="row"]:not(.fb-search-approved),
+            a[aria-describedby]:not(.fb-search-approved),
+            div[role="option"]:not(.fb-search-approved),
+            div[data-testid="search-result"]:not(.fb-search-approved),
+            div[role="presentation"] a:not(.fb-search-approved) {
+                visibility: hidden !important;
+                opacity: 0 !important;
+                display: none !important;
+                pointer-events: none !important;
+            }
+            
+            /* Show only approved search results */
+            li[role="row"].fb-search-approved,
+            a[aria-describedby].fb-search-approved,
+            div[role="option"].fb-search-approved,
+            div[data-testid="search-result"].fb-search-approved,
+            div[role="presentation"] a.fb-search-approved {
+                visibility: visible !important;
+                opacity: 1 !important;
+                display: block !important;
+                pointer-events: auto !important;
+            }
+            
+            /* Permanently hide banned search results */
+            .fb-search-banned {
+                visibility: hidden !important;
+                display: none !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
+                position: absolute !important;
+                left: -9999px !important;
+                top: -9999px !important;
+            }
+
             /* Immediately hide elements related to "friends" */
             div[aria-label="People You May Know"],
             div[aria-label="Ihmisiä, jotka saatat tuntea"],
@@ -48,7 +83,7 @@
             div.x1i10hfl:nth-child(13) > div:nth-child(1),
             div.x1i10hfl:nth-child(13) > div:nth-child(2),
             div.x1i10hfl:nth-child(13) > div:nth-child(3),
-	    .x6s0dn4.x1obq294.x5a5i1n:has(.x1gslohp > span:empty),
+            .x6s0dn4.x1obq294.x5a5i1n:has(.x1gslohp > span:empty),
             svg[aria-label="Meta AI:n profiilikuva"],
             svg[aria-label*="Meta AI profile"],
             div.x1gefphp.xf7dkkf.x1l90r2v.xv54qhq.xyamay9.x1e56ztr.x78zum5.x9f619.x1olyfxc.x15x8krk.xde0f50.x5a5i1n.x1obq294.x6s0dn4:nth-of-type(6),
@@ -56,7 +91,14 @@
             .x1vjfegm.x1iyjqo2,
             .x1ye3gou.x1120s5i.xn6708d.xz9dl7a.x1qughib.x1q0g3np.x78zum5,
             .xbbxn1n.xwxc41k.xxbr6pl.x1p5oq8j.xl56j7k.xdt5ytf.x78zum5.x6s0dn4.x1mh8g0r.xat24cr.x11i5rnm.xdj266r.html-div,
-            .x1exxf4d.x1y71gwh.x1nb4dca.xu1343h.x1lq5wgf.xgqcy7u.x30kzoy.x9jhf4c.x13fuv20.xu3j5b3.x1q0q8m5.x26u7qi.x178xt8z.xm81vs4.xso031l.xy80clv.xev17xk.x1xmf6yo {
+            .x1exxf4d.x1y71gwh.x1nb4dca.xu1343h.x1lq5wgf.xgqcy7u.x30kzoy.x9jhf4c.x13fuv20.xu3j5b3.x1q0q8m5.x26u7qi.x178xt8z.xm81vs4.xso031l.xy80clv.xev17xk.x1xmf6yo,
+            /* ENHANCED: All PYMK selectors for instant hiding */
+            .xquyuld.x10wlt62.x6ikm8r.xh8yej3.x9f619.xt3gfkd.xu5ydu1.xdney7k.x1qpq9i9.x1jx94hy.x1ja2u2z.x1n2onr6,
+            .x1xmf6yo.xev17xk.xy80clv.xso031l.xm81vs4.x178xt8z.x26u7qi.x1q0q8m5.xu3j5b3.x13fuv20.x9jhf4c.x30kzoy.xgqcy7u.x1lq5wgf.xu1343h.x1nb4dca.x1y71gwh.x1exxf4d,
+            svg[viewBox="0 0 112 112"][width="112"][height="112"].xfx01vb.x1lliihq.x1tzjh5l.x1k90msu.x2h7rmj.x1qfuztq,
+            div.html-div.xdj266r.x14z9mp.xat24cr.x1lziwak.x6s0dn4.x78zum5.xdt5ytf.xl56j7k.x1p5oq8j.x64bnmy.xwxc41k.x13jy36j,
+            div.html-div.xdj266r.x14z9mp.xat24cr.x1lziwak.xexx8yu.xyri2b.x18d9i69.x1c1uobl.x8cjs6t.x13fuv20.x178xt8z,
+            div.x1exxf4d.xpv9jar.x1nb4dca.x1nmn18.x1obq294.x5a5i1n.xde0f50.x15x8krk.x13fuv20.x18b5jzi.x1q0q8m5.x1t7ytsu.x178xt8z.x1lun4ml.xso031l.xpilrb4.xev17xk.x1xmf6yo {
                 visibility: hidden !important; /* Instantly make elements invisible */
                 display: none !important; /* Fully remove them */
                 opacity: 0 !important; /* Triple-layer hiding */
@@ -109,7 +151,7 @@
                 'svg[aria-label="Meta AI:n profiilikuva"]',
                 'svg[aria-label*="Meta AI profile"]', 
                 'a[aria-label="Meta AI"]',
-		'.x6s0dn4.x1obq294.x5a5i1n:has(.x1gslohp > span:empty)',
+        		'.x6s0dn4.x1obq294.x5a5i1n:has(.x1gslohp > span:empty)',
                 'div[aria-label="Meta AI"]',
                 'span[aria-label="Meta AI"]',
                 'svg[viewBox="0 0 112 112"][width="112"][height="112"].xfx01vb.x1lliihq.x1tzjh5l.x1k90msu.x2h7rmj.x1qfuztq',
@@ -198,6 +240,7 @@
         '1014126078618693',
         '973601849337783',
         '970049886359646',
+	'100001581857271',
         '940194702678498',
         '9761862833844930',
         '936445033053465',
@@ -272,7 +315,8 @@
         'johanna.jokimaki.18',
 	'janica.tamminen',
 	'sanni.vuori.5',
-        'paivi.sainio.3'
+        'paivi.sainio.3',
+	'minna.kaipio.5'
     ];
 
     const blockedUrls = [
@@ -321,6 +365,7 @@
         /permalink.php?story_fbid=907980612566574/,
         /permalink.php?story_fbid=pfbid02ERbU7QHGJLQ8CwgMz2wdNjnQJdZ8fJje85i1LcExk5CLCXkDuTyyRp5uat4aKkAYl/,
         /permalink.php?story_fbid=907631116865858/,
+	/pfbid0oH97BQX6SJFFD1fVrd5QdFruFfpBMWZp452ZHkxK6arLR68RzbrrBuruEye6dwqEl/,
 	/pfbid02AeDKp115BTU1qD4QzLZ8V2NWm7NmZUe9V9cghxu5YyasXHDwvJCLgBr9GEtv6qmjl/,
 	/permalink\.php\?story_fbid=pfbid02AeDKp115BTU1qD4QzLZ8V2NWm7NmZUe9V9cghxu5YyasXHDwvJCLgBr9GEtv6qmjl/,
 	/permalink.php?story_fbid=pfbid02aTQ2VVXnfkxpy38cZ5Ey179t4qcxZugQtAmNU5o4eerHn81h6ETiXcY76XEgAx5ul/,
@@ -336,6 +381,12 @@
         /permalink.php?story_fbid=1062802150417752/,
         /permalink.php?story_fbid=1014126078618693/,
         /permalink.php?story_fbid=970049886359646/,
+	/\/facebook\.com\/search\/top\/\?q=Tatu%20Toiviainen/,
+	/Tatu%20Toiviainen/,
+	/Janica%20Tamminen/,
+	/Mimmi%20Wikman/,
+	/Ira%20Nyman/,
+	/Sanni%20Vuori/,
 	/pfbid02Eho4BczZu7Vbg2iJDF6jr89KwHBy1iGr3GzAwPREbrNr6gjPDXpSy7JwJqvN4fZdl/,
 	/pfbid02AuWMkj4XYtGbaneoq8JWomieFk1UuVTPDTSvL3avK74mXykwe87GSA5G4dsaYJ3rl/,
 	/permalink.php?story_fbid=pfbid02AuWMkj4XYtGbaneoq8JWomieFk1UuVTPDTSvL3avK74mXykwe87GSA5G4dsaYJ3rl/,
@@ -390,6 +441,7 @@
         /irpppas\.blogspot\.com/,
         /irpppas\.blogspot\.fi/,
         /www\.facebook\.com\/toni\.harsunen\.1/,
+        /www\.facebook\.com\/minna\.kaipio\.5/,
         /www\.tiktok\.com/,
         /sportskeeda\.com\/.*/,
         /sportskeeda\.com/,
@@ -478,7 +530,7 @@
         "Thea Hail", "Tatum Paxley", "Fallon Henley", "Kelani Jordan", "Electra Lopez", "Wendy Choo", "Yulisa Leon", "Valentina", "Amari Miller", "Young Bucks", "Torrie Wilson", "Ripley!", 
         "Arianna Grace", "Natalya", "Nattie", "IYO SKY", "Dakota Kai", "Asuka", "Perez", "Kairi Sane", "Satomura", "Candice", "LeRae", "Nia Jax", "Naomi", "Trish", "Stratus", "Roxanne", 
         "Sarray", "Xia Li", "Shayna", "Baszler", "Ronda", "Rousey", "Velvet Sky", "Carmella", "Dana Brooke", "Mercedes", "Martinez", "Marina", "Shafir", "Stacy", "Keibler", "Valkyria", 
-        "Summer Rae", "Layla", "Michelle McCool", "Eve Torres", "Kelly Kelly", "Jessika Carr", "Jessica Karr", "Venice", "Jessica Carr", "Jessika WWE", "Jessica WWE", "Matt Jackson", 
+        "Summer Rae", "Layla", "Michelle McCool", "Eve Torres", "Kelly Kelly", "Tatu Toiviainen", "Jessika Carr", "Jessica Karr", "Venice", "Jessica Carr", "Jessika WWE", "Jessica WWE", "Matt Jackson", 
         "Karr WWE", "Carr WWE", "Melina wrestler", "Jillian", "Mickie", "Kanellis", "Beth Phoenix", "Victoria", "Jazz WWE", "Molly Holly", "Shirai", "Priscilla", "Kelly", "Red Velvet", "Meta AI",
         "Gail Kim", "Awesome Kong", "Madison Rayne", "Velvet Sky", "Angelina", "Tessmacher", "Havok", "Su Yung", "Taya Valkyrie", "Bianca Belair", "Skye Blue", "Bordeaux", "Brooke", "Mimmi Wikman",
         "Purrazzo", "Thekla", "Toni Storm", "Britt Baker", "Jamie Hayter", "Anna Jay", "Hikaru", "Sakazaki", "Nyla Rose", "Sakura", "Penelope Ford", "Julia Hart", "Kamifuku", "Elayna",
@@ -495,11 +547,11 @@
         /\bSasha\b/i, /\bAnal\b/i, /\bBliss\b/i, /\bGay\b/i, /\bTrans\b/i, /\bTransvestite\b/i, /\bTransu\b/i, /\bPride\b/i, /\bLesbian\b/i, /\bLesbo\b/i, /\bHomo\b/i, /\bQueer\b/i, /\bSable\b/i, /\bposed\b/i, /\bLayla\b/i, /\bLana\b/i, /\bSol\b/i, /\bJacy\b/i,
         /\bBella\b/i, /\bNikki\b/i, /\bBrie\b/i, /\bTegan\b/i, /\bNox\b/i, /\b Goddess\b/i, /\bLita\b/i, /\bRusso\b/i, /\bLGBT\b/i, /\bLGBTQ\b/i, /\bLGBTQ\b/i, /\bMami\b/i, /\bTrish\b/i, /\bStratus\b/i, /\bYung\b/i, /\bHavok\b/i, /\bJade\b/i, /\bAthena\b/i,
         /\bIzzi\b/i, /\bFuku\b/i, /\bDame\b/i, /\bGiulia\b/i, /\bMichin\b/i, /\bJayne\b/i, /\bLLM\b/i, /\bMLM\b/i, /Shira/i, /Steph's place/i, /Stephanie's place/i, /Steph McMahon/i, /Stepan/i, /Stratu/i, /Stratt/i, /Tiffa/i, /Tiffy/i, /\bGina\b/i, /Dreambooth/i, 
-	/Dream booth/i, /Dualipa/i, /Dua Lipa/i, /Meta AI/i,
+    	/Dream booth/i, /Dualipa/i, /Dua Lipa/i, /Meta AI/i, /Tatu Toiviainen/i,
     ];
 
     const restrictedPhrases = [
-        "Ryhmiä Sinulle", "Liity", "Meta AI", "Ihmisiä,", "Joita saatat tuntea", "Ihmisiä, joita saatat tuntea", "Kun lisäät kavereita, näet tässä listan ihmisistä, jotka saatat tuntea.", "Lisää kavereita saadaksesi suosituksia", "Sisältö ei ole käytettävissä tällä hetkellä",
+        "Ryhmiä Sinulle", "Liity", "Meta AI", "Ihmisiä,", "Joita saatat tuntea", "Ihmisiä, joita saatat tuntea", "Kun lisäät kavereita, näet tässä listan ihmisistä, jotka saatat tuntea.", "Lisää kavereita saadaksesi suosituksia", "Sisältö ei ole käytettävissä tällä hetkellä", "Sinulle ehdotettua",
     ].map(s => s.toLowerCase());
 
     // Function to check if current path is excluded
@@ -607,11 +659,11 @@
                 '[role="article"] .x1yztbdb',
                 '[role="article"] .x1hc1fzr',
                 'div.x1iyjqo2.x1vjfegm',
-		'svg[aria-label="Meta AI:n profiilikuva"]',
-    		'svg[aria-label*="Meta AI profile"]', 
-    		'a[aria-label="Meta AI"]',
-    		'div[aria-label="Meta AI"]',
-    		'span[aria-label="Meta AI"]',
+        		'svg[aria-label="Meta AI:n profiilikuva"]',
+        		'svg[aria-label*="Meta AI profile"]', 
+        		'a[aria-label="Meta AI"]',
+        		'div[aria-label="Meta AI"]',
+        		'span[aria-label="Meta AI"]',
                 'div.x78zum5.x1q0g3np.x1qughib.xz9dl7a.xn6708d.x1120s5i.x1ye3gou',
                 'div.x10l6tqk.xwa60dl.x1d8287x.x19991ni.xwji4o3.x1vjfegm.xg01cxk.x47corl',
                 'div.x1iyjqo2.x1vjfegm',
@@ -622,8 +674,8 @@
                 'div.xieb3on:nth-child(1) > svg:nth-child(1)',
                 '.x1p5oq8j > div:nth-child(2)',
                 'div.x6s0dn4.x78zum5.x1qughib.x1iorvi4.xjkvuk6',
-		'a[aria-label*="20. heinäkuu klo 14.53"]',
-		'a[href*="facebook.com/permalink"][aria-label*="20. heinäkuu klo 14.53"]'
+        		'a[aria-label*="20. heinäkuu klo 14.53"]',
+        		'a[href*="facebook.com/permalink"][aria-label*="20. heinäkuu klo 14.53"]'
             ];
 
             let removedCount = 0;
@@ -650,13 +702,117 @@
         }
     };
 
+    // ENHANCED: Instant search result filtering with comprehensive blocking
+    const processSearchResults = () => {
+        try {
+            devLog('Processing search results with instant filtering');
+            const searchSelectors = [
+                'li[role="row"]',
+                'a[aria-describedby]',
+                'div[role="option"]',
+                'div[data-testid="search-result"]',
+                'div[role="presentation"] a',
+                'a[href*="facebook.com/profile.php"]',
+                'a[href*="facebook.com/"][aria-describedby]'
+            ];
+
+            let processedCount = 0;
+            searchSelectors.forEach(selector => {
+                document.querySelectorAll(selector + ':not(.fb-search-processed)').forEach(result => {
+                    result.classList.add('fb-search-processed');
+                    
+                    // Extract comprehensive content from search result
+                    const textContent = (result.textContent || result.innerText || '').toLowerCase();
+                    const href = result.href || '';
+                    const ariaLabel = result.getAttribute('aria-label') || '';
+                    const dataHover = result.getAttribute('data-hovercard') || '';
+                    
+                    // Check against all blocking criteria
+                    let isBlocked = false;
+                    
+                    // Check restricted words
+                    if (restrictedWords.some(word => 
+                        textContent.includes(word.toLowerCase()) || 
+                        ariaLabel.toLowerCase().includes(word.toLowerCase())
+                    )) {
+                        isBlocked = true;
+                        devLog(`🚫 Search blocked by restricted word: "${textContent.substring(0, 30)}..."`);
+                    }
+                    
+                    // Check regex blocked words
+                    if (!isBlocked && regexBlockedWords.some(regex => 
+                        regex.test(textContent) || regex.test(ariaLabel) || regex.test(href)
+                    )) {
+                        isBlocked = true;
+                        devLog(`🚫 Search blocked by regex: "${textContent.substring(0, 30)}..."`);
+                    }
+                    
+                    // Check blocked FBIDs in href or data attributes
+                    if (!isBlocked && blockedFbids.some(fbid => 
+                        href.includes(fbid) || 
+                        dataHover.includes(fbid) ||
+                        href.includes(`id=${fbid}`) ||
+                        href.includes(`profile.php?id=${fbid}`)
+                    )) {
+                        isBlocked = true;
+                        devLog(`🚫 Search blocked by FBID: "${textContent.substring(0, 30)}..."`);
+                    }
+                    
+                    // Check blocked URLs
+                    if (!isBlocked && blockedUrls.some(blockedUrl => 
+                        blockedUrl.test(href)
+                    )) {
+                        isBlocked = true;
+                        devLog(`🚫 Search blocked by URL pattern: "${textContent.substring(0, 30)}..."`);
+                    }
+                    
+                    if (isBlocked) {
+                        // Apply instant hiding and permanent banning
+                        result.style.setProperty('display', 'none', 'important');
+                        result.style.setProperty('visibility', 'hidden', 'important');
+                        result.style.setProperty('opacity', '0', 'important');
+                        result.style.setProperty('pointer-events', 'none', 'important');
+                        result.style.setProperty('position', 'absolute', 'important');
+                        result.style.setProperty('left', '-9999px', 'important');
+                        result.classList.add('fb-search-banned');
+                        
+                        // Also hide parent containers
+                        const parentLi = result.closest('li');
+                        if (parentLi && parentLi !== result) {
+                            parentLi.style.setProperty('display', 'none', 'important');
+                            parentLi.style.setProperty('visibility', 'hidden', 'important');
+                            parentLi.classList.add('fb-search-banned');
+                        }
+                    } else {
+                        // Approve and show the search result
+                        result.classList.add('fb-search-approved');
+                        result.style.removeProperty('display');
+                        result.style.removeProperty('visibility');
+                        result.style.removeProperty('opacity');
+                        result.style.removeProperty('pointer-events');
+                        result.style.removeProperty('position');
+                        result.style.removeProperty('left');
+                    }
+                    
+                    processedCount++;
+                });
+            });
+            
+            if (processedCount > 0) {
+                devLog(`Processed ${processedCount} search results with instant filtering`);
+            }
+        } catch (e) {
+            console.log('Error processing search results: ' + e.message);
+        }
+    };
+
     // IMPORTANT: This function must be separate to ensure reels are removed from feed
     const deleteRestrictedPhrases = () => {
         try {
             // Cache restricted phrases in lowercase for faster matching
             const restrictedPhrasesLower = [
                 "liity", "reels", "kelat", "sinulle suositeltua", "suositeltua", "tilaa", "ryhmiä sinulle", "Meta AI", "ihmisiä,", "joita saatat tuntea", "ihmisiä, joita saatat tuntea", 
-                "kun lisäät kavereita, näet tässä listan ihmisistä, jotka saatat tuntea.", "lisää kavereita saadaksesi suosituksia", "Sisältö ei ole käytettävissä tällä hetkellä",
+                "kun lisäät kavereita, näet tässä listan ihmisistä, jotka saatat tuntea.", "lisää kavereita saadaksesi suosituksia", "Sisältö ei ole käytettävissä tällä hetkellä", "Sinulle ehdotettua",
             ];
 
             // Use a Set for faster lookups
@@ -923,8 +1079,8 @@
                 'div.xsgj6o6.xw3qccf.x1xmf6yo.x1w6jkce.xusnbm3 div[aria-label="Näytä suosituksia"] .x1ja2u2z.x78zum5.x2lah0s.x1n2onr6.xl56j7k.x6s0dn4.xozqiw3.x1q0g3np.xi112ho.x17zwfj4.x585lrc.x1403ito.x',
                 'div.xsgj6o6.xw3qccf.x1xmf6yo.x1w6jkce.xusnbm3 div[aria-label="Näytä suosituksia"] .x1ey2m1c.xds687c.x17qophe.xg01cxk.x47corl.x10l6tqk.x13vifvy.x1ebt8du.x19991ni.x1dhq9h.x1o1ewxj.x3x9cwd',
                 'div.x1exxf4d.x1y71gwh.x1nb4dca.xu1343h.x1lq5wgf.xgqcy7u.x30kzoy.x9jhf4c.x13fuv20.xu3j5b3.x1q0q8m5.x26u7qi.x178xt8z.xm81vs4.xso031l.xy80clv.xev17xk.x1xmf6yo',
-		'[aria-label="Näytä suositukset"]',
-            	'[role="button"][aria-label="Näytä suositukset"]'
+        		'[aria-label="Näytä suositukset"]',
+                '[role="button"][aria-label="Näytä suositukset"]'
             ];
 
             let deletedCount = 0;
@@ -1067,7 +1223,7 @@
             const url = new URL(currentUrl);
             const profileIds = [
                 '100000639309471',
-		'jiri.innanen'
+        		'jiri.innanen'
                 // Add more profile IDs or vanity usernames here
             ];
 
@@ -1245,11 +1401,32 @@ const deleteSelectorsForPersonalProfile = () => {
         }
     };
 
-    // FIXED: Observe DOM changes with URL-aware filtering
+    // ENHANCED: DOM observer with instant search result processing
     const observeDOMChanges = () => {
         try {
-            devLog('Setting up DOM observer');
-            const observer = new MutationObserver(() => {
+            devLog('Setting up DOM observer with instant search processing');
+            const observer = new MutationObserver((mutations) => {
+                // Check for search-related changes first for instant processing
+                let hasSearchChanges = false;
+                mutations.forEach(mutation => {
+                    mutation.addedNodes.forEach(node => {
+                        if (node.nodeType === 1 && node.matches && (
+                            node.matches('li[role="row"]') ||
+                            node.matches('a[aria-describedby]') ||
+                            node.matches('div[role="option"]') ||
+                            node.matches('div[role="presentation"]')
+                        )) {
+                            hasSearchChanges = true;
+                        }
+                    });
+                });
+
+                // Process search results immediately if detected
+                if (hasSearchChanges) {
+                    processSearchResults();
+                }
+
+                // Then run other filtering functions
                 hideCriticalElements();
                 deleteBlockedElements();
                 deleteRestrictedWords();
@@ -1272,7 +1449,7 @@ const deleteSelectorsForPersonalProfile = () => {
         }
     };
 
-    // FIXED: Run all filtering functions with URL awareness
+    // ENHANCED: Run all filtering functions with search result processing
     const runAllFilters = () => {
         try {
             handleRedirects();
@@ -1280,6 +1457,7 @@ const deleteSelectorsForPersonalProfile = () => {
             hideCriticalElements();
             deleteBlockedElements();
             deleteRestrictedWords();
+            processSearchResults(); // Added search result processing
             deleteRestrictedPhrases();
             deletePeopleYouMayKnow();
             // FIXED: These now check URLs internally before running
@@ -1309,12 +1487,13 @@ const deleteSelectorsForPersonalProfile = () => {
 
     // Initialize the script
     const init = () => {
-        devLog('Initializing Facebook script');
+        devLog('Initializing Facebook script with instant search hiding');
         ensureDOMReady();
         handleRedirects();
         cleanUrl();
         deleteBlockedElements();
         deleteRestrictedWords();
+        processSearchResults(); // Added search result processing to initialization
         deleteRestrictedPhrases();
         deletePeopleYouMayKnow();
         // FIXED: These now check URLs internally before running
@@ -1332,7 +1511,7 @@ const deleteSelectorsForPersonalProfile = () => {
     window.addEventListener('load', runAllFilters);
     window.addEventListener('popstate', runAllFilters);
 
-    // Ultra-frequent interval checks - critical for reels
+    // Ultra-frequent interval checks - critical for reels and instant search hiding
     setInterval(runAllFilters, 20);
 
 })();
