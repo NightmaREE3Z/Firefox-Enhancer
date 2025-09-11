@@ -313,7 +313,8 @@
     const selectorsToDelete = [
         "community-highlight-carousel",
         "community-highlight-carousel h3",
-        "community-highlight-carousel shreddit-gallery-carousel"
+        "community-highlight-carousel shreddit-gallery-carousel",
+        "span.text-global-admin.font-semibold.text-12"
     ];
 
     // Simplified and more effective Answers button selectors
@@ -324,37 +325,101 @@
         'span.text-global-admin.font-semibold.text-12'
     ];
 
-    // --- OPTIMIZED MEMORY MANAGEMENT ---
-    const MEMORY_CAP_GB = 6; // Reduced to 6GB for stability
-    const MEMORY_WARNING_GB = 3; // Reduced warning threshold
-    const MAX_CACHE_SIZE = 50; // Reduced cache size
-    const MAX_APPROVAL_PERSISTENCE = 40; // Reduced approval persistence
-    const CLEANUP_INTERVAL = 10000; // 10 seconds cleanup (more frequent)
-    const MEMORY_CHECK_INTERVAL = 5000; // Check memory every 5 seconds (more frequent)
-    const CRITICAL_MEMORY_THRESHOLD = 0.7; // 70% of heap limit (reduced)
+    // --- OPTIMIZED MEMORY MANAGEMENT WITH ZERO LEAKS ---
+    const MEMORY_CAP_GB = 4;
+    const MEMORY_WARNING_GB = 3;
+    const MAX_CACHE_SIZE = 40;
+    const MAX_APPROVAL_PERSISTENCE = 20;
+    const CLEANUP_INTERVAL = 8000;
+    const MEMORY_CHECK_INTERVAL = 4000;
+    const CRITICAL_MEMORY_THRESHOLD = 0.6;
+    const CACHE_TTL_MS = 300000; // 5 minutes TTL for cache entries
 
-    // Lightweight caches - minimal memory footprint with WeakSet/WeakMap for automatic cleanup
+    // Enhanced caches with TTL and automatic expiration
+    class TTLCache extends Map {
+        constructor(maxSize = 50, ttlMs = CACHE_TTL_MS) {
+            super();
+            this.maxSize = maxSize;
+            this.ttlMs = ttlMs;
+            this.timers = new Map();
+        }
+        
+        set(key, value) {
+            // Clear existing timer if key exists
+            if (this.timers.has(key)) {
+                clearTimeout(this.timers.get(key));
+            }
+            
+            // Enforce size limit
+            if (this.size >= this.maxSize && !this.has(key)) {
+                const firstKey = this.keys().next().value;
+                this.delete(firstKey);
+            }
+            
+            // Set with TTL
+            super.set(key, value);
+            const timer = setTimeout(() => {
+                this.delete(key);
+            }, this.ttlMs);
+            this.timers.set(key, timer);
+            
+            return this;
+        }
+        
+        delete(key) {
+            if (this.timers.has(key)) {
+                clearTimeout(this.timers.get(key));
+                this.timers.delete(key);
+            }
+            return super.delete(key);
+        }
+        
+        clear() {
+            for (const timer of this.timers.values()) {
+                clearTimeout(timer);
+            }
+            this.timers.clear();
+            return super.clear();
+        }
+        
+        cleanup() {
+            // Force cleanup of expired entries
+            const now = Date.now();
+            for (const [key, timer] of this.timers.entries()) {
+                if (timer._idleStart && now - timer._idleStart > this.ttlMs) {
+                    this.delete(key);
+                }
+            }
+        }
+    }
+
+    // Memory-efficient caches with automatic cleanup
     const processedElements = new WeakSet();
     const processedSearchItems = new WeakSet();
-    const bannedSubredditCache = new Map();
-    const contentBannedCache = new Map();
     const shadowRootsProcessed = new WeakSet();
     const permanentlyApprovedElements = new WeakSet();
-    const approvalPersistence = new Map();
     const eventListenersAdded = new WeakSet();
+    
+    // TTL caches for content that can expire
+    const bannedSubredditCache = new TTLCache(MAX_CACHE_SIZE);
+    const contentBannedCache = new TTLCache(MAX_CACHE_SIZE);
+    const approvalPersistence = new TTLCache(MAX_APPROVAL_PERSISTENCE);
 
-    // Tracking for cleanup with automatic disposal
+    // Enhanced tracking for complete cleanup
     const intervalIds = new Set();
+    const timeoutIds = new Set();
     const observerInstances = new Set();
-    const mutationObservers = new WeakMap();
+    const eventListenerCleanupFunctions = new Set();
+    const throttledFunctions = new WeakMap();
 
     let lastFilterTime = 0;
     let pendingOperations = false;
     let memoryCleanupCount = 0;
     let lastMemoryWarning = 0;
     let isCleaningUp = false;
+    let isShuttingDown = false;
 
-    // Memory monitoring optimized for stability
+    // Enhanced memory monitoring
     function getMemoryUsage() {
         if (performance.memory) {
             const memInfo = performance.memory;
@@ -373,9 +438,9 @@
         return null;
     }
 
-    // Enhanced cache cleanup with better memory leak prevention
+    // Enhanced cache cleanup with leak prevention
     function cleanupCaches(force = false) {
-        if (isCleaningUp) return;
+        if (isCleaningUp || isShuttingDown) return;
         isCleaningUp = true;
         
         try {
@@ -385,7 +450,7 @@
             const isCritical = memInfo ? memInfo.percentage > CRITICAL_MEMORY_THRESHOLD * 100 : false;
             
             if (force || isOverCap || isCritical) {
-                // Aggressive cleanup when over cap
+                // Aggressive cleanup
                 const beforeContent = contentBannedCache.size;
                 const beforeSubreddit = bannedSubredditCache.size;
                 const beforeApproval = approvalPersistence.size;
@@ -393,55 +458,46 @@
                 contentBannedCache.clear();
                 bannedSubredditCache.clear();
                 
-                // Keep only last 10 approvals when critical
+                // Keep only most recent approvals
                 if (isCritical || isOverCap) {
-                    const entries = Array.from(approvalPersistence.entries()).slice(-10);
                     approvalPersistence.clear();
-                    entries.forEach(([key, value]) => approvalPersistence.set(key, value));
                 }
                 
-                // Clean up any stale observers
-                observerInstances.forEach(observer => {
+                // Clean up throttled function references
+                throttledFunctions.clear?.();
+                
+                // Force cleanup of observers that might be leaking
+                let cleanedObservers = 0;
+                for (const observer of observerInstances) {
                     try {
                         if (observer && typeof observer.disconnect === 'function') {
                             observer.disconnect();
+                            cleanedObservers++;
                         }
                     } catch (e) {
                         // Ignore cleanup errors
                     }
-                });
-                
-                if (memInfo) {
-                    devLog(`🧹 MEMORY CAP CLEANUP - Memory: ${memInfo.usedGB}GB/${MEMORY_CAP_GB}GB | Cleared: Content(${beforeContent}), Subreddit(${beforeSubreddit}), Approval(${beforeApproval}→${approvalPersistence.size})`);
-                }
-                
-            } else if (isWarning || contentBannedCache.size > MAX_CACHE_SIZE || bannedSubredditCache.size > MAX_CACHE_SIZE) {
-                // Gentle cleanup when approaching limits
-                if (contentBannedCache.size > MAX_CACHE_SIZE) {
-                    const entries = Array.from(contentBannedCache.entries()).slice(-Math.floor(MAX_CACHE_SIZE * 0.5));
-                    contentBannedCache.clear();
-                    entries.forEach(([key, value]) => contentBannedCache.set(key, value));
-                }
-                if (bannedSubredditCache.size > MAX_CACHE_SIZE) {
-                    const entries = Array.from(bannedSubredditCache.entries()).slice(-Math.floor(MAX_CACHE_SIZE * 0.5));
-                    bannedSubredditCache.clear();
-                    entries.forEach(([key, value]) => bannedSubredditCache.set(key, value));
-                }
-                if (approvalPersistence.size > MAX_APPROVAL_PERSISTENCE) {
-                    const entries = Array.from(approvalPersistence.entries()).slice(-Math.floor(MAX_APPROVAL_PERSISTENCE * 0.7));
-                    approvalPersistence.clear();
-                    entries.forEach(([key, value]) => approvalPersistence.set(key, value));
                 }
                 
                 if (memInfo) {
-                    devLog(`🧹 Gentle cleanup - Memory: ${memInfo.usedGB}GB/${MEMORY_CAP_GB}GB (${memInfo.percentage}%)`);
+                    devLog(`🧹 AGGRESSIVE CLEANUP - Memory: ${memInfo.usedGB}GB/${MEMORY_CAP_GB}GB | Cleared: Content(${beforeContent}), Subreddit(${beforeSubreddit}), Approval(${beforeApproval}), Observers(${cleanedObservers})`);
+                }
+                
+            } else if (isWarning) {
+                // Gentle cleanup with TTL expiration
+                bannedSubredditCache.cleanup();
+                contentBannedCache.cleanup();
+                approvalPersistence.cleanup();
+                
+                if (memInfo) {
+                    devLog(`🧹 TTL cleanup - Memory: ${memInfo.usedGB}GB/${MEMORY_CAP_GB}GB (${memInfo.percentage}%)`);
                 }
             }
 
             memoryCleanupCount++;
             
-            // Force garbage collection only when necessary
-            if (window.gc && (force || isOverCap || memoryCleanupCount % 3 === 0)) {
+            // Force GC more strategically
+            if (window.gc && (force || isOverCap || memoryCleanupCount % 5 === 0)) {
                 try {
                     window.gc();
                     const afterMemInfo = getMemoryUsage();
@@ -457,7 +513,7 @@
         }
     }
 
-    // Memory pressure monitoring optimized for stability
+    // Enhanced memory monitoring with smarter thresholds
     function monitorMemoryPressure() {
         const memInfo = getMemoryUsage();
         if (!memInfo) return;
@@ -465,14 +521,14 @@
         const now = Date.now();
         
         if (memInfo.usedGB > MEMORY_CAP_GB) {
-            if (now - lastMemoryWarning > 5000) { // Only warn every 5 seconds
+            if (now - lastMemoryWarning > 3000) {
                 devLog(`🚨 MEMORY CAP EXCEEDED: ${memInfo.usedGB}GB > ${MEMORY_CAP_GB}GB - FORCING CLEANUP`);
                 lastMemoryWarning = now;
             }
             cleanupCaches(true);
             
         } else if (memInfo.usedGB > MEMORY_WARNING_GB) {
-            if (now - lastMemoryWarning > 15000) {
+            if (now - lastMemoryWarning > 10000) {
                 devLog(`⚠️ Memory warning: ${memInfo.usedGB}GB / ${MEMORY_CAP_GB}GB cap (${memInfo.percentage}% of heap)`);
                 lastMemoryWarning = now;
             }
@@ -480,52 +536,93 @@
         }
     }
 
-    // Enhanced global cleanup function
+    // Enhanced global cleanup with complete resource deallocation
     function cleanup() {
-        devLog('🧹 Performing cleanup...');
+        if (isShuttingDown) return;
+        isShuttingDown = true;
         
-        // Clear all intervals
-        intervalIds.forEach(id => {
-            try {
-                clearInterval(id);
-            } catch (e) {
-                // Ignore cleanup errors
-            }
-        });
-        intervalIds.clear();
-
-        // Disconnect all observers
-        observerInstances.forEach(observer => {
-            try {
-                if (observer && typeof observer.disconnect === 'function') {
-                    observer.disconnect();
-                }
-            } catch (e) {
-                // Ignore cleanup errors
-            }
-        });
-        observerInstances.clear();
-
-        // Force cache cleanup
-        cleanupCaches(true);
+        devLog('🧹 Performing complete cleanup...');
         
-        const memInfo = getMemoryUsage();
-        if (memInfo) {
-            devLog(`🧹 Cleanup completed - Memory: ${memInfo.usedGB}GB`);
+        try {
+            // Clear all intervals
+            intervalIds.forEach(id => {
+                try {
+                    clearInterval(id);
+                } catch (e) {}
+            });
+            intervalIds.clear();
+
+            // Clear all timeouts
+            timeoutIds.forEach(id => {
+                try {
+                    clearTimeout(id);
+                } catch (e) {}
+            });
+            timeoutIds.clear();
+
+            // Disconnect all observers
+            observerInstances.forEach(observer => {
+                try {
+                    if (observer && typeof observer.disconnect === 'function') {
+                        observer.disconnect();
+                    }
+                } catch (e) {}
+            });
+            observerInstances.clear();
+
+            // Execute all event listener cleanup functions
+            eventListenerCleanupFunctions.forEach(cleanup => {
+                try {
+                    cleanup();
+                } catch (e) {}
+            });
+            eventListenerCleanupFunctions.clear();
+
+            // Force cache cleanup
+            cleanupCaches(true);
+            
+            // Clear throttled function references
+            throttledFunctions.clear?.();
+            
+            const memInfo = getMemoryUsage();
+            if (memInfo) {
+                devLog(`🧹 Complete cleanup finished - Memory: ${memInfo.usedGB}GB`);
+            }
+            
+            // Final GC attempt
+            if (window.gc) {
+                try {
+                    window.gc();
+                } catch (e) {}
+            }
+        } catch (e) {
+            devLog(`❌ Error during cleanup: ${e.message}`);
         }
     }
 
     // Enhanced page visibility cleanup
-    document.addEventListener('visibilitychange', () => {
+    const visibilityHandler = () => {
         if (document.hidden) {
             cleanupCaches();
             monitorMemoryPressure();
         }
+    };
+    document.addEventListener('visibilitychange', visibilityHandler);
+    eventListenerCleanupFunctions.add(() => {
+        document.removeEventListener('visibilitychange', visibilityHandler);
     });
 
     // Enhanced cleanup before page unload
-    window.addEventListener('beforeunload', cleanup);
-    window.addEventListener('pagehide', cleanup);
+    const unloadHandler = () => cleanup();
+    const pagehideHandler = () => cleanup();
+    
+    window.addEventListener('beforeunload', unloadHandler);
+    window.addEventListener('pagehide', pagehideHandler);
+    
+    eventListenerCleanupFunctions.add(() => {
+        window.removeEventListener('beforeunload', unloadHandler);
+        window.removeEventListener('pagehide', pagehideHandler);
+    });
 
     // Check if we're on a single post page (not feed or subreddit)
     function isPostPage() {
@@ -584,189 +681,182 @@
         } catch (e) {}
     }
 
-    // Performance functions with memory monitoring
-    function throttle(fn, wait) {
+    // Enhanced performance functions with leak prevention
+    function createThrottle(fn, wait) {
         let lastCall = 0;
-        let requestId = null;
+        let timeoutId = null;
         
-        return function(...args) {
+        const throttled = function(...args) {
             const now = performance.now();
             const context = this;
             
+            const cleanup = () => {
+                if (timeoutId) {
+                    timeoutIds.delete(timeoutId);
+                    timeoutId = null;
+                }
+            };
+            
             if (now - lastCall >= wait) {
                 lastCall = now;
+                cleanup();
                 return fn.apply(context, args);
-            } else if (!requestId) {
-                requestId = (window.requestIdleCallback || window.requestAnimationFrame)(() => {
-                    requestId = null;
+            } else if (!timeoutId) {
+                timeoutId = setTimeout(() => {
+                    cleanup();
                     lastCall = performance.now();
                     return fn.apply(context, args);
-                });
+                }, wait - (now - lastCall));
+                timeoutIds.add(timeoutId);
             }
         };
+        
+        // Store reference for cleanup
+        throttledFunctions.set(throttled, { fn, cleanup: () => {
+            if (timeoutId) {
+                clearTimeout(timeoutId);
+                timeoutIds.delete(timeoutId);
+            }
+        }});
+        
+        return throttled;
     }
 
-    function debounce(fn, wait, immediate = false) {
-        let timeout;
-        return function(...args) {
+    function createDebounce(fn, wait, immediate = false) {
+        let timeoutId = null;
+        
+        const debounced = function(...args) {
             const context = this;
-            const callNow = immediate && !timeout;
+            const callNow = immediate && !timeoutId;
             
-            clearTimeout(timeout);
+            const cleanup = () => {
+                if (timeoutId) {
+                    timeoutIds.delete(timeoutId);
+                    timeoutId = null;
+                }
+            };
             
-            timeout = setTimeout(() => {
-                timeout = null;
+            if (timeoutId) {
+                clearTimeout(timeoutId);
+                timeoutIds.delete(timeoutId);
+            }
+            
+            timeoutId = setTimeout(() => {
+                cleanup();
                 if (!immediate) fn.apply(context, args);
             }, wait);
+            timeoutIds.add(timeoutId);
             
             if (callNow) return fn.apply(context, args);
         };
+        
+        // Store reference for cleanup
+        throttledFunctions.set(debounced, { fn, cleanup: () => {
+            if (timeoutId) {
+                clearTimeout(timeoutId);
+                timeoutIds.delete(timeoutId);
+            }
+        }});
+        
+        return debounced;
     }
 
     function batchProcess(fn) {
-        if (pendingOperations) return;
+        if (pendingOperations || isShuttingDown) return;
         pendingOperations = true;
         
-        requestAnimationFrame(() => {
+        const processFrame = (callback) => {
+            if (window.requestIdleCallback) {
+                return window.requestIdleCallback(callback, { timeout: 1000 });
+            } else {
+                return requestAnimationFrame(callback);
+            }
+        };
+        
+        processFrame(() => {
             try {
-                fn();
+                if (!isShuttingDown) {
+                    fn();
+                }
             } finally {
                 pendingOperations = false;
             }
         });
     }
 
-    // ENHANCED: Function to scan FULL post content - now with better extraction
+    // ENHANCED: Function to scan FULL post content - now with better extraction and memory management
     function extractCompletePostContent(element) {
         try {
-            // Skip expensive operations for safe subreddits
+            // Early return for safe subreddits to save processing
             if (isElementInSafeSubreddit(element)) {
-                devLog('✅ Safe subreddit - using basic content extraction');
                 const basicContent = element.textContent || element.innerText || '';
-                return basicContent;
+                return basicContent.substring(0, 2000); // Limit to prevent memory bloat
             }
             
-            // ENHANCED: Extract ALL available text from the element more thoroughly
-            const allTextContent = [];
+            // Use a more memory-efficient approach
+            const textParts = [];
+            const maxContentLength = 5000; // Prevent excessive memory usage
+            let totalLength = 0;
             
-            // Method 1: Get main element text content
+            // Method 1: Get main element text content (truncated)
             const mainText = element.textContent || element.innerText || '';
-            if (mainText.trim()) {
-                allTextContent.push(mainText);
+            if (mainText.trim() && totalLength < maxContentLength) {
+                const chunk = mainText.substring(0, Math.min(1000, maxContentLength - totalLength));
+                textParts.push(chunk);
+                totalLength += chunk.length;
             }
             
-            // Method 2: Get specific content from known selectors (more comprehensive)
-            const contentSelectors = [
-                // Post titles
-                'h1, h2, h3, h4, h5, h6',
-                '[slot="title"]',
-                '#post-title, [id*="post-title"]',
-                '.title',
-                'a[data-click-id="body"]',
+            // Method 2: Get specific content from key selectors only if we haven't hit limit
+            if (totalLength < maxContentLength) {
+                const contentSelectors = [
+                    'h1, h2, h3, h4, h5, h6',
+                    '[slot="title"]',
+                    '.md',
+                    '[slot="text-body"]',
+                    'p',
+                    '[data-testid="post-content"]'
+                ];
                 
-                // Post content areas
-                '.md',
-                '.md.feed-card-text-preview',
-                '.md.text-14-scalable',
-                '[slot="text-body"]',
-                '[data-post-click-location="text-body"]',
-                '.post-content',
-                '.usertext-body',
-                '.text-body',
-                '.text-ellipsis',
-                'p',
-                'div[class*="text"]',
-                'span[class*="text"]',
-                
-                // Reddit-specific content containers
-                '[data-testid="post-content"]',
-                '[about*="_"]',
-                '[id*="post-rtjson-content"]',
-                '.entry .usertext-body',
-                
-                // Additional selectors for better content extraction
-                'faceplate-screen-reader-content',
-                '.line-clamp-3',
-                '.line-clamp-6',
-                '[aria-label]',
-                '[title]'
-            ];
-            
-            // Extract text from all matching elements
-            for (let i = 0; i < contentSelectors.length; i++) {
-                const elements = element.querySelectorAll(contentSelectors[i]);
-                for (let j = 0; j < elements.length; j++) {
-                    const elem = elements[j];
-                    let text = elem.textContent || elem.innerText || '';
-                    
-                    // Also check aria-label and title attributes
-                    if (!text && elem.getAttribute) {
-                        text = elem.getAttribute('aria-label') || elem.getAttribute('title') || '';
-                    }
-                    
-                    if (text.trim() && text.length > 2) { // Only include meaningful text
-                        allTextContent.push(text);
+                for (let i = 0; i < contentSelectors.length && totalLength < maxContentLength; i++) {
+                    const elements = element.querySelectorAll(contentSelectors[i]);
+                    for (let j = 0; j < Math.min(elements.length, 5) && totalLength < maxContentLength; j++) {
+                        const elem = elements[j];
+                        let text = elem.textContent || elem.innerText || '';
+                        
+                        if (text.trim() && text.length > 2) {
+                            const chunk = text.substring(0, Math.min(500, maxContentLength - totalLength));
+                            textParts.push(chunk);
+                            totalLength += chunk.length;
+                        }
                     }
                 }
             }
             
-            // Method 3: Check href attributes for additional text
-            const links = element.querySelectorAll('a[href]');
-            for (let i = 0; i < links.length; i++) {
-                const href = links[i].getAttribute('href');
-                if (href && href.includes('/comments/')) {
-                    const linkText = links[i].textContent || links[i].innerText || '';
-                    if (linkText.trim()) {
-                        allTextContent.push(linkText);
-                    }
-                }
+            const combinedContent = textParts.join(' ').trim();
+            
+            // Debug logging for AI content (limited to prevent log spam)
+            if (combinedContent.toLowerCase().includes('ai') && Math.random() < 0.1) {
+                devLog(`🔍 FOUND AI CONTENT: "${combinedContent.substring(0, 100)}..." (${combinedContent.length} chars total)`);
             }
             
-            // Method 4: Extract from data attributes that might contain text
-            const dataAttributes = ['data-permalink', 'data-testid', 'aria-label', 'title', 'alt'];
-            for (let i = 0; i < dataAttributes.length; i++) {
-                const attr = dataAttributes[i];
-                const value = element.getAttribute(attr);
-                if (value && typeof value === 'string' && value.length > 2) {
-                    allTextContent.push(value);
-                }
-            }
-            
-            // Method 5: Look for truncated content indicators and try to get more
-            const truncatedElements = element.querySelectorAll('.text-ellipsis, .line-clamp-3, .line-clamp-6');
-            for (let i = 0; i < truncatedElements.length; i++) {
-                const elem = truncatedElements[i];
-                const fullText = elem.textContent || elem.innerText || '';
-                if (fullText.trim()) {
-                    allTextContent.push(fullText);
-                }
-            }
-            
-            const combinedContent = allTextContent.join(' ').trim();
-            
-            // Debug logging for posts that contain "AI"
-            if (combinedContent.toLowerCase().includes('ai')) {
-                devLog(`🔍 FOUND AI CONTENT: "${combinedContent.substring(0, 200)}..." (${combinedContent.length} chars total)`);
-            }
-            
-            devLog(`📄 Extracted content: ${combinedContent.length} characters from element`);
             return combinedContent;
             
         } catch (error) {
             devLog(`❌ Error in extractCompletePostContent: ${error.message}`);
             // Fallback to basic text content
-            return element.textContent || element.innerText || '';
+            return (element.textContent || element.innerText || '').substring(0, 1000);
         }
     }
 
-    // ENHANCED: Text checking with improved keyword matching and debug logging
+    // ENHANCED: Text checking with improved keyword matching and memory-efficient caching
     function checkTextForKeywords(textContent) {
-        if (!textContent) return false;
+        if (!textContent || textContent.length < 2) return false;
         
-        // Normalize text for better matching
+        // Normalize text for better matching (memory-efficient)
         const lowerText = textContent.toLowerCase()
-            .replace(/[^\w\s]/g, ' ') // Replace special chars with spaces
-            .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+            .substring(0, 2000) // Limit to prevent memory bloat
+            .replace(/[^\w\s]/g, ' ')
+            .replace(/\s+/g, ' ')
             .trim();
         
         // Check cache first
@@ -774,43 +864,34 @@
             return contentBannedCache.get(lowerText);
         }
         
-        // Prevent cache from growing too large
-        if (contentBannedCache.size >= MAX_CACHE_SIZE) {
-            const entries = Array.from(contentBannedCache.entries()).slice(-Math.floor(MAX_CACHE_SIZE * 0.5));
-            contentBannedCache.clear();
-            entries.forEach(([key, value]) => contentBannedCache.set(key, value));
-        }
-        
-        // ENHANCED: Check for exact keyword matches (includes the word boundary logic you want to keep)
+        // Check for exact keyword matches
         for (let i = 0; i < keywordsToHide.length; i++) {
             const keyword = keywordsToHide[i].toLowerCase();
             
-            // Check both exact match and word boundary match
             if (lowerText.includes(keyword)) {
-                // For very short keywords (3 chars or less), use word boundary check for precision
-                // For longer keywords, simple inclusion is sufficient
                 if (keyword.length <= 3) {
                     const wordBoundaryRegex = new RegExp('\\b' + keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i');
                     if (wordBoundaryRegex.test(lowerText)) {
                         contentBannedCache.set(lowerText, true);
-                        devLog(`🚫 Blocked by keyword: "${keywordsToHide[i]}" in text: "${textContent.substring(0, 150)}..."`);
                         return true;
                     }
                 } else {
-                    // For longer keywords, simple inclusion is fine
                     contentBannedCache.set(lowerText, true);
-                    devLog(`🚫 Blocked by keyword: "${keywordsToHide[i]}" in text: "${textContent.substring(0, 150)}..."`);
                     return true;
                 }
             }
         }
         
-        // ENHANCED: Check regex patterns with improved efficiency (limited to first 25 for performance)
-        for (let i = 0; i < Math.min(regexKeywordsToHide.length, 25); i++) {
-            if (regexKeywordsToHide[i].test(lowerText)) {
-                contentBannedCache.set(lowerText, true);
-                devLog(`🚫 Blocked by regex: ${regexKeywordsToHide[i]} in text: "${textContent.substring(0, 150)}..."`);
-                return true;
+        // Check regex patterns (limited for performance)
+        for (let i = 0; i < Math.min(regexKeywordsToHide.length, 20); i++) {
+            try {
+                if (regexKeywordsToHide[i].test(lowerText)) {
+                    contentBannedCache.set(lowerText, true);
+                    return true;
+                }
+            } catch (e) {
+                // Skip problematic regex
+                continue;
             }
         }
         
@@ -820,65 +901,56 @@
 
     // Better post identifier that works across feed and post pages
     function getPostIdentifier(element) {
-        // Check data-ks-id first (most reliable)
-        const dataKsElement = element.querySelector('[data-ks-id*="t3_"]');
-        if (dataKsElement) {
-            const dataKsId = dataKsElement.getAttribute('data-ks-id');
-            const match = dataKsId.match(/t3_([a-zA-Z0-9]+)/);
-            if (match) {
-                return `post_${match[1]}`;
+        try {
+            // Check data-ks-id first (most reliable)
+            const dataKsElement = element.querySelector('[data-ks-id*="t3_"]');
+            if (dataKsElement) {
+                const dataKsId = dataKsElement.getAttribute('data-ks-id');
+                const match = dataKsId.match(/t3_([a-zA-Z0-9]+)/);
+                if (match) {
+                    return `post_${match[1]}`;
+                }
             }
-        }
-        
-        const postLinks = element.querySelectorAll && element.querySelectorAll('a[href*="/comments/"]');
-        if (postLinks && postLinks.length > 0) {
-            for (let i = 0; i < postLinks.length; i++) {
-                const href = postLinks[i].getAttribute('href');
-                if (href) {
-                    const match = href.match(/\/comments\/([a-zA-Z0-9]+)/);
-                    if (match) {
-                        return `post_${match[1]}`;
+            
+            const postLinks = element.querySelectorAll && element.querySelectorAll('a[href*="/comments/"]');
+            if (postLinks && postLinks.length > 0) {
+                for (let i = 0; i < Math.min(postLinks.length, 3); i++) { // Limit iterations
+                    const href = postLinks[i].getAttribute('href');
+                    if (href) {
+                        const match = href.match(/\/comments\/([a-zA-Z0-9]+)/);
+                        if (match) {
+                            return `post_${match[1]}`;
+                        }
                     }
                 }
             }
-        }
-        
-        if (isPostPage()) {
-            const currentUrl = window.location.href;
-            const match = currentUrl.match(/\/comments\/([a-zA-Z0-9]+)/);
-            if (match) {
-                return `post_${match[1]}`;
-            }
-        }
-        
-        const permalink = element.getAttribute && element.getAttribute('data-permalink');
-        if (permalink) return permalink;
-        
-        const postId = element.getAttribute && element.getAttribute('data-post-id');
-        if (postId) return `post_${postId}`;
-        
-        const allLinks = element.querySelectorAll && element.querySelectorAll('a[href]');
-        if (allLinks) {
-            for (let i = 0; i < allLinks.length; i++) {
-                const href = allLinks[i].getAttribute('href');
-                if (href && href.includes('/r/') && href.includes('/comments/')) {
-                    const match = href.match(/\/comments\/([a-zA-Z0-9]+)/);
-                    if (match) {
-                        return `post_${match[1]}`;
-                    }
+            
+            if (isPostPage()) {
+                const currentUrl = window.location.href;
+                const match = currentUrl.match(/\/comments\/([a-zA-Z0-9]+)/);
+                if (match) {
+                    return `post_${match[1]}`;
                 }
             }
+            
+            const permalink = element.getAttribute && element.getAttribute('data-permalink');
+            if (permalink) return permalink;
+            
+            const postId = element.getAttribute && element.getAttribute('data-post-id');
+            if (postId) return `post_${postId}`;
+            
+            const subreddit = getSubredditForAnyRedditPost(element);
+            const titleElement = element.querySelector && element.querySelector('h1, h2, h3, [data-testid="post-content"] h1, [slot="title"]');
+            const title = titleElement ? titleElement.textContent : '';
+            
+            if (subreddit && title) {
+                return `${subreddit}:${title.substring(0, 30).replace(/[^a-zA-Z0-9]/g, '_')}`;
+            }
+            
+            return null;
+        } catch (error) {
+            return null;
         }
-        
-        const subreddit = getSubredditForAnyRedditPost(element);
-        const titleElement = element.querySelector && element.querySelector('h1, h2, h3, [data-testid="post-content"] h1, [data-testid="post-content"] h2, [data-testid="post-content"] h3, [slot="title"]');
-        const title = titleElement ? titleElement.textContent : '';
-        
-        if (subreddit && title) {
-            return `${subreddit}:${title.substring(0, 50).replace(/[^a-zA-Z0-9]/g, '_')}`;
-        }
-        
-        return null;
     }
 
     function wasElementPreviouslyApproved(element) {
@@ -895,13 +967,6 @@
     function markElementAsApproved(element) {
         const identifier = getPostIdentifier(element);
         if (identifier) {
-            // Prevent approval persistence from growing too large
-            if (approvalPersistence.size >= MAX_APPROVAL_PERSISTENCE) {
-                const entries = Array.from(approvalPersistence.entries()).slice(-Math.floor(MAX_APPROVAL_PERSISTENCE * 0.7));
-                approvalPersistence.clear();
-                entries.forEach(([key, value]) => approvalPersistence.set(key, value));
-            }
-            
             approvalPersistence.set(identifier, true);
             if (isPostPage()) {
                 devLog(`✅ Marked post as approved: ${identifier}`);
@@ -918,13 +983,6 @@
         
         if (bannedSubredditCache.has(lowerSub)) {
             return bannedSubredditCache.get(lowerSub);
-        }
-        
-        // Prevent cache from growing too large
-        if (bannedSubredditCache.size >= MAX_CACHE_SIZE) {
-            const entries = Array.from(bannedSubredditCache.entries()).slice(-Math.floor(MAX_CACHE_SIZE * 0.5));
-            bannedSubredditCache.clear();
-            entries.forEach(([key, value]) => bannedSubredditCache.set(key, value));
         }
         
         for (let i = 0; i < adultSubreddits.length; i++) {
@@ -947,13 +1005,17 @@
             }
         }
         
-        for (let i = 0; i < Math.min(regexKeywordsToHide.length, 25); i++) { // Limit regex checks
-            if (regexKeywordsToHide[i].test(lowerSub)) {
-                bannedSubredditCache.set(lowerSub, true);
-                if (isPostPage()) {
-                    devLog(`🚫 Blocked subreddit "${subName}" by regex: ${regexKeywordsToHide[i]}`);
+        for (let i = 0; i < Math.min(regexKeywordsToHide.length, 20); i++) {
+            try {
+                if (regexKeywordsToHide[i].test(lowerSub)) {
+                    bannedSubredditCache.set(lowerSub, true);
+                    if (isPostPage()) {
+                        devLog(`🚫 Blocked subreddit "${subName}" by regex: ${regexKeywordsToHide[i]}`);
+                    }
+                    return true;
                 }
-                return true;
+            } catch (e) {
+                continue;
             }
         }
         
@@ -1015,7 +1077,7 @@
         
         const links = el.querySelectorAll && el.querySelectorAll('a[href*="/r/"]');
         if (links) {
-            for (let i = 0; i < links.length; i++) {
+            for (let i = 0; i < Math.min(links.length, 5); i++) { // Limit iterations
                 const href = links[i].getAttribute('href');
                 const match = href && href.match(/\/r\/([A-Za-z0-9_]+)/);
                 if (match) {
@@ -1045,7 +1107,6 @@
         if (subredditPrefixedName) {
             const normalizedName = subredditPrefixedName.startsWith('r/') ? subredditPrefixedName : 'r/' + subredditPrefixedName;
             if (safeSubreddits.some(safeSub => safeSub.toLowerCase() === normalizedName.toLowerCase())) {
-                devLog(`Element is in safe subreddit: ${normalizedName}`);
                 return true;
             }
         }
@@ -1055,7 +1116,6 @@
         if (subredditName) {
             const normalizedName = 'r/' + subredditName;
             if (safeSubreddits.some(safeSub => safeSub.toLowerCase() === normalizedName.toLowerCase())) {
-                devLog(`Element is in safe subreddit: ${normalizedName}`);
                 return true;
             }
         }
@@ -1065,7 +1125,6 @@
         if (subreddit) {
             const normalizedName = subreddit.startsWith('r/') ? subreddit : 'r/' + subreddit;
             if (safeSubreddits.some(safeSub => safeSub.toLowerCase() === normalizedName.toLowerCase())) {
-                devLog(`Element is in safe subreddit: ${normalizedName}`);
                 return true;
             }
         }
@@ -1086,7 +1145,6 @@
 
         // Check if element is in a safe subreddit FIRST
         if (isElementInSafeSubreddit(element)) {
-            devLog(`✅ Element is in safe subreddit - auto-approving`);
             return false; // Auto-approve safe subreddit posts
         }
 
@@ -1207,7 +1265,7 @@
         
         const aTags = post.querySelectorAll && post.querySelectorAll('a[href*="/r/"]');
         if (aTags) {
-            for (let i = 0; i < aTags.length; i++) {
+            for (let i = 0; i < Math.min(aTags.length, 3); i++) { // Limit iterations
                 const match = aTags[i].getAttribute('href').match(/\/r\/([A-Za-z0-9_]+)/);
                 if (match) return 'r/' + match[1];
             }
@@ -1365,13 +1423,13 @@
                 });
                 
                 const shadowChildren = node.shadowRoot.querySelectorAll('*');
-                for (let i = 0; i < shadowChildren.length; i++) {
+                for (let i = 0; i < Math.min(shadowChildren.length, 50); i++) { // Limit iterations
                     processShadowRoots(shadowChildren[i]);
                 }
             }
             
             if (node.children) {
-                for (let i = 0; i < node.children.length; i++) {
+                for (let i = 0; i < Math.min(node.children.length, 50); i++) { // Limit iterations
                     processShadowRoots(node.children[i]);
                 }
             }
@@ -1389,7 +1447,7 @@
         }
     }
 
-    const throttledShadowRootHandler = throttle((mutations) => {
+    const throttledShadowRootHandler = createThrottle((mutations) => {
         for (const mutation of mutations) {
             for (const node of mutation.addedNodes) {
                 if (node.nodeType === 1) {
@@ -1448,7 +1506,7 @@
     function interceptSearchInputChanges() {
         const searchInput = document.querySelector('input[name="q"]');
         if (searchInput && !eventListenersAdded.has(searchInput)) {
-            const inputHandler = debounce(() => {
+            const inputHandler = createDebounce(() => {
                 const query = searchInput.value.toLowerCase();
                 const exactMatch = keywordsToHide.some(keyword =>
                     query.includes(keyword.toLowerCase())
@@ -1464,6 +1522,11 @@
             
             searchInput.addEventListener('input', inputHandler);
             eventListenersAdded.add(searchInput);
+            
+            // Store cleanup function
+            eventListenerCleanupFunctions.add(() => {
+                searchInput.removeEventListener('input', inputHandler);
+            });
         }
     }
 
@@ -1488,6 +1551,11 @@
             
             searchForm.addEventListener('submit', submitHandler);
             eventListenersAdded.add(searchForm);
+            
+            // Store cleanup function
+            eventListenerCleanupFunctions.add(() => {
+                searchForm.removeEventListener('submit', submitHandler);
+            });
         }
     }
 
@@ -1505,12 +1573,16 @@
             }
         }
         
-        for (let i = 0; i < Math.min(regexKeywordsToHide.length, 25); i++) { // Limit regex checks for performance
-            if (regexKeywordsToHide[i].test(currentUrl)) {
-                if (!isUrlAllowed()) {
-                    window.location.replace('https://www.reddit.com');
-                    return;
+        for (let i = 0; i < Math.min(regexKeywordsToHide.length, 20); i++) { // Limit regex checks for performance
+            try {
+                if (regexKeywordsToHide[i].test(currentUrl)) {
+                    if (!isUrlAllowed()) {
+                        window.location.replace('https://www.reddit.com');
+                        return;
+                    }
                 }
+            } catch (e) {
+                continue;
             }
         }
     }
@@ -1622,7 +1694,7 @@
     // --- MAIN FILTER FUNCTION ---
     function runAllChecks() {
         const now = performance.now();
-        if (now - lastFilterTime < 50) return;
+        if (now - lastFilterTime < 50 || isShuttingDown) return;
         lastFilterTime = now;
         
         if (document.body && !document.body.classList.contains('reddit-filter-ready')) {
@@ -1663,7 +1735,7 @@
         
         runAllChecks();
         
-        const throttledRunChecks = throttle(() => runAllChecks(), 75);
+        const throttledRunChecks = createThrottle(() => runAllChecks(), 75);
         const observer = new MutationObserver(throttledRunChecks);
         
         if (document.body) {
@@ -1684,6 +1756,8 @@
         
         if (window.requestIdleCallback) {
             const idleCallback = () => {
+                if (isShuttingDown) return;
+                
                 if (document.hidden) {
                     runAllChecks();
                 } else {
@@ -1698,6 +1772,7 @@
             window.requestIdleCallback(idleCallback, { timeout: 3000 });
         } else {
             const backgroundInterval = setInterval(() => {
+                if (isShuttingDown) return;
                 batchProcess(() => {
                     hideBannedSubredditsFromAllSearchDropdowns();
                     filterPostsByContent();
@@ -1707,15 +1782,19 @@
             intervalIds.add(backgroundInterval);
         }
         
-        // Memory monitoring every 5 seconds
+        // Memory monitoring every 4 seconds
         const memoryMonitorInterval = setInterval(() => {
-            monitorMemoryPressure();
+            if (!isShuttingDown) {
+                monitorMemoryPressure();
+            }
         }, MEMORY_CHECK_INTERVAL);
         intervalIds.add(memoryMonitorInterval);
         
-        // Cache cleanup every 10 seconds
+        // Cache cleanup every 8 seconds
         const cleanupInterval = setInterval(() => {
-            cleanupCaches();
+            if (!isShuttingDown) {
+                cleanupCaches();
+            }
         }, CLEANUP_INTERVAL);
         intervalIds.add(cleanupInterval);
     }
@@ -1726,7 +1805,7 @@
         init();
     }
 
-    const processNewElements = throttle((mutations) => {
+    const processNewElements = createThrottle((mutations) => {
         let needsSearchUpdate = false;
         
         for (let i = 0; i < mutations.length; i++) {
@@ -1829,7 +1908,7 @@
         }
         
         hideAnswersButton();
-    }, 75);
+    }, 20);
 
     const observer = new MutationObserver(processNewElements);
     observerInstances.add(observer);
@@ -1858,7 +1937,7 @@
                 devLog(`🔄 URL changed - Memory: ${memInfo.usedGB}GB/${MEMORY_CAP_GB}GB`);
             }
         }
-    }, 500);
+    }, 100);
     intervalIds.add(urlCheckInterval);
 
 })();
