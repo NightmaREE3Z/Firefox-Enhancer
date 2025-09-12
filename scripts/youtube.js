@@ -2,7 +2,7 @@
 // @name         YoutubEnhancer
 // @version      3.9
 // @description  Enhances my YouTube experience by blocking trackers and hiding garbage.
-// @match        https://www.youtube.com/*
+// @match        https://*.youtube.com/*
 // @grant        none
 // ==/UserScript==
 
@@ -12,6 +12,61 @@
     // === CHROME DEV CONSOLE LOGGING ===
     function devLog(message) {
         console.log('[YOUTUBE.JS]', message);
+    }
+
+    // ===== Memory/observer/timer lifecycle tracking (added) =====
+    const __ytTimers = { intervals: new Set(), timeouts: new Set() };
+    const __ytObservers = new Set();
+    const __ytEventCleanups = new Set();
+    let __ytCleanupRan = false;
+    let __ytIntervalsRunning = false;
+
+    function addInterval(fn, ms) {
+        const id = setInterval(fn, ms);
+        __ytTimers.intervals.add(id);
+        return id;
+    }
+    function addTimeout(fn, ms) {
+        const id = setTimeout(() => {
+            __ytTimers.timeouts.delete(id);
+            fn();
+        }, ms);
+        __ytTimers.timeouts.add(id);
+        return id;
+    }
+    function onEvent(target, type, handler, options) {
+        target.addEventListener(type, handler, options);
+        __ytEventCleanups.add(() => target.removeEventListener(type, handler, options));
+    }
+    function trackObserver(observer) {
+        __ytObservers.add(observer);
+        return observer;
+    }
+    function stopIntervals() {
+        __ytTimers.intervals.forEach(id => { try { clearInterval(id); } catch {} });
+        __ytTimers.intervals.clear();
+        __ytIntervalsRunning = false;
+    }
+    function startIntervals(schedulerFn) {
+        if (__ytIntervalsRunning) return;
+        schedulerFn();
+        __ytIntervalsRunning = true;
+    }
+    function cleanup() {
+        if (__ytCleanupRan) return;
+        __ytCleanupRan = true;
+        try {
+            stopIntervals();
+            __ytTimers.timeouts.forEach(id => { try { clearTimeout(id); } catch {} });
+            __ytTimers.timeouts.clear();
+            __ytObservers.forEach(obs => { try { obs.disconnect(); } catch {} });
+            __ytObservers.clear();
+            __ytEventCleanups.forEach(fn => { try { fn(); } catch {} });
+            __ytEventCleanups.clear();
+            devLog('Cleanup complete.');
+        } catch (e) {
+            console.log('[YOUTUBE.JS] cleanup error: ' + e.message);
+        }
     }
 
     // List of known YouTube tracker domains or URL patterns
@@ -50,13 +105,13 @@
         /Cora Jade/i, /Jacy Jayne/i, /Gigi Dolin/i, /Thea Hail/i, /Tatum WWE/i, /Paxley/i, /Fallon Henley/i, /Nattie/i, /escort/i, /Sol Ruca/i, /Kelani Jordan/i, /CJ Lana/i, /Lana Perry/i,
         /Electra Lopez/i, /Wendy Choo/i, /Yulisa Leon/i, /Gina Adam/i, /Valentina Feroz/i, /Amari Miller/i, /Arianna Grace/i, /Courtney Ryan/i, /Venice/i, /Venoice/i, /Venise/i, /Venoise/i, /Sharia/i,
         /\bLin\b/i, /Watchorn/i, /@LinWatchorn/i, /wondershare/i, /wonder share/i, /filmora/i, /dreambooth/i, /dream booth/i, /dream boot/i, /dreamboot/i, /diffusion/i, /Elina WWE/i, /virtual workstation/i, 
-	/Fantop/i, /Fan top/i, /Fan-top/i, /Topfan/i, /Top fan/i, /Top-fan/i, /VMWare/i, /VM Ware/i, /\bVM\b/i, /Virtual Machine/i, /\bVMs\b/i, /Virtualbox/i, /Virtual box/i, /Virtual laatikko/i, 
-	/Virtuaali laatikko/i, /Virtuaalilaatikko/i, /Virtuaalibox/i, /OracleVM/i, /virtualmachine/i, /virtual machine/i, /virtuaalikone/i, /virtuaali kone/i, /virtuaali tietokone/i, /virtuaalitietokone/i, 
-	/hyper-v/i, /hyper v/i, /virtuaalimasiina/i, /virtuaali masiina/i,  /virtuaalimasiini/i, /virtuaali masiini/i, /virtuaali workstation/i,  /virtual workstation/i, /virtualworkstation/i, 
-	/virtuaaliworkstation/i, /hypervisor/i, /hyper visor/i, /hyperv/i, /vbox/i, /virbox/i, /virtbox/i, /vir box/i, /virt box/i, /virtual box/i, /vrbox/i, /vibox/i, /virbox virtual/i, /virtbox virtual/i, 
-	/vibox virtual/i, /vbox virtual/i, /v-machine/i,  /vmachine/i, /v machine/i, /vimachine/i, /vi-machine/i, /vi machine/i, /virmachine/i, /vir-machine/i, /vir machine/i, /virt machine/i, /virtmachine/i, 
-	/virt-machine/i, /virtumachine/i, /virtu-machine/i, /virtu machine/i, /virtuamachine/i, /virtua-machine/i, /virtua machine/i, /\bMachaine\b/i, /\bMachiine\b/i, /\bMacheine\b/i, /\bMachiene\b/i, 
-	/vi mach/i, /vir mach/i, /virt mach/i, /virtu mach/i, /virtua mach/i, /virtual mach/i, /vi mac/i, /vir mac/i, /virt mac/i, /virtu mac/i, /virtua mac/i, /virtual machi/i, /Dua Lipa/i, /Dualipa/i,
+        /Fantop/i, /Fan top/i, /Fan-top/i, /Topfan/i, /Top fan/i, /Top-fan/i, /VMWare/i, /VM Ware/i, /\bVM\b/i, /Virtual Machine/i, /\bVMs\b/i, /Virtualbox/i, /Virtual box/i, /Virtual laatikko/i, 
+        /Virtuaali laatikko/i, /Virtuaalilaatikko/i, /Virtuaalibox/i, /OracleVM/i, /virtualmachine/i, /virtual machine/i, /virtuaalikone/i, /virtuaali kone/i, /virtuaali tietokone/i, /virtuaalitietokone/i, 
+        /hyper-v/i, /hyper v/i, /virtuaalimasiina/i, /virtuaali masiina/i,  /virtuaalimasiini/i, /virtuaali masiini/i, /virtuaali workstation/i,  /virtual workstation/i, /virtualworkstation/i, 
+        /virtuaaliworkstation/i, /hypervisor/i, /hyper visor/i, /hyperv/i, /vbox/i, /virbox/i, /virtbox/i, /vir box/i, /virt box/i, /virtual box/i, /vrbox/i, /vibox/i, /virbox virtual/i, /virtbox virtual/i, 
+        /vibox virtual/i, /vbox virtual/i, /v-machine/i,  /vmachine/i, /v machine/i, /vimachine/i, /vi-machine/i, /vi machine/i, /virmachine/i, /vir-machine/i, /vir machine/i, /virt machine/i, /virtmachine/i, 
+        /virt-machine/i, /virtumachine/i, /virtu-machine/i, /virtu machine/i, /virtuamachine/i, /virtua-machine/i, /virtua machine/i, /\bMachaine\b/i, /\bMachiine\b/i, /\bMacheine\b/i, /\bMachiene\b/i, 
+        /vi mach/i, /vir mach/i, /virt mach/i, /virtu mach/i, /virtua mach/i, /virtual mach/i, /vi mac/i, /vir mac/i, /virt mac/i, /virtu mac/i, /virtua mac/i, /virtual machi/i, /Dua Lipa/i, /Dualipa/i,
     ];
 
     // List of keywords or phrases to allow (overrides blockKeywords in search queries)
@@ -92,6 +147,7 @@
 
     // Array of selectors to hide elements
     const selectors = [
+        // Desktop feed/search/video cards
         "ytd-rich-item-renderer",
         "yt-formatted-string#video-title",
         "yt-formatted-string.metadata-snippet-text",
@@ -110,7 +166,22 @@
         "#contents > yt-lockup-view-model > div > div > yt-lockup-metadata-view-model > div.yt-lockup-metadata-view-model-wiz__text-container",
         "#contents > yt-lockup-view-model > div > div > yt-lockup-metadata-view-model > div.yt-lockup-metadata-view-model-wiz__text-container > h3",
         "#contents > yt-lockup-view-model > div > div > yt-lockup-metadata-view-model > div.yt-lockup-metadata-view-model-wiz__text-container > h3 > a",
-        "#contents > yt-lockup-view-model > div > div > yt-lockup-metadata-view-model > div.yt-lockup-metadata-view-model-wiz__text-container > h3 > a > span"
+        "#contents > yt-lockup-view-model > div > div > yt-lockup-metadata-view-model > div.yt-lockup-metadata-view-model-wiz__text-container > h3 > a > span",
+
+        // Desktop watch-page suggestions
+        "ytd-compact-video-renderer",
+        "ytd-compact-autoplay-renderer",
+        "ytd-compact-radio-renderer",
+        "#related ytd-video-renderer",
+
+        // Mobile (ytm-*) feed/search/watch variants
+        "ytm-rich-item-renderer",
+        "ytm-video-renderer",
+        "ytm-video-with-context-renderer",
+        "ytm-compact-video-renderer",
+        "ytm-compact-radio-renderer",
+        "ytm-compact-autoplay-renderer",
+        "#related ytm-video-renderer"
     ];
 
     // Specific selectors for adblock warning popups
@@ -195,7 +266,7 @@
             const urlParams = new URLSearchParams(window.location.search);
             const query = urlParams.get('search_query') || '';
 
-            if (blockKeywords.some(keyword => keyword.test(query)) && !allowedWords.some(word => word.test(query))) {
+            if (query && blockKeywords.some(keyword => keyword.test(query)) && !allowedWords.some(word => word.test(query))) {
                 console.log(`Blocked search query: ${query}`);
                 window.location.href = redirectUrl;
             } else {
@@ -220,9 +291,23 @@
                     el.style.visibility = "hidden";
                     hiddenCount++;
                     
-                    const parent = el.closest("ytd-rich-item-renderer, ytd-grid-video-renderer, ytd-video-renderer");
+                    const parent = el.closest([
+                        "ytd-rich-item-renderer",
+                        "ytd-grid-video-renderer",
+                        "ytd-video-renderer",
+                        "ytd-compact-video-renderer",
+                        "ytd-compact-autoplay-renderer",
+                        "ytd-compact-radio-renderer",
+                        "ytm-rich-item-renderer",
+                        "ytm-video-renderer",
+                        "ytm-video-with-context-renderer",
+                        "ytm-compact-video-renderer",
+                        "ytm-compact-radio-renderer",
+                        "ytm-compact-autoplay-renderer"
+                    ].join(', '));
                     if (parent) {
                         parent.style.display = "none";
+                        parent.style.visibility = "hidden";
                     }
                 }
             });
@@ -232,6 +317,37 @@
             }
         } catch (err) {
             console.log('Error hiding elements by selectors: ' + err.message);
+        }
+    }
+
+    // Ensure watch-page suggestions (right sidebar/autoplay/compact) are filtered consistently (desktop + mobile)
+    function filterWatchSuggestions() {
+        try {
+            const suggestionSelectors = [
+                // Desktop
+                "ytd-compact-video-renderer",
+                "ytd-compact-autoplay-renderer",
+                "ytd-compact-radio-renderer",
+                "#related ytd-video-renderer",
+                // Mobile
+                "ytm-compact-video-renderer",
+                "ytm-compact-radio-renderer",
+                "ytm-compact-autoplay-renderer",
+                "#related ytm-video-renderer"
+            ];
+            let hiddenCount = 0;
+            document.querySelectorAll(suggestionSelectors.join(',')).forEach(item => {
+                if (item.style.display === 'none') return;
+                const text = item.textContent?.toLowerCase() || "";
+                if (blockKeywords.some(keyword => keyword.test(text))) {
+                    item.style.display = "none";
+                    item.style.visibility = "hidden";
+                    hiddenCount++;
+                }
+            });
+            if (hiddenCount > 0) devLog(`Hidden ${hiddenCount} suggested items on watch page`);
+        } catch (err) {
+            console.log('Error filtering watch suggestions: ' + err.message);
         }
     }
 
@@ -270,32 +386,41 @@
         }
     }
 
-    // Observe URL changes to check for search queries
+    // Observe URL changes to check for search queries (kept)
+    let __ytUrlObsInstalled = false;
     function observeUrlChanges() {
         try {
+            if (__ytUrlObsInstalled) return;
+            __ytUrlObsInstalled = true;
+
             let currentUrl = window.location.href;
-            const observer = new MutationObserver(() => {
+            const observer = trackObserver(new MutationObserver(() => {
                 if (currentUrl !== window.location.href) {
                     currentUrl = window.location.href;
                     checkSearchQuery();
                 }
-            });
+            }));
 
             if (document.body) {
                 observer.observe(document.body, { childList: true, subtree: true });
                 devLog('URL observer started');
             } else {
-                setTimeout(observeUrlChanges, 100);
+                addTimeout(observeUrlChanges, 100);
             }
         } catch (err) {
             console.log('Error setting up URL observer: ' + err.message);
         }
     }
 
-    // Enhanced mutation observer for new popup content
+    // Enhanced mutation observer for new popup content and suggestions
+    let __ytPopupObsInstalled = false;
     function observePopupChanges() {
         try {
-            const observer = new MutationObserver((mutations) => {
+            if (__ytPopupObsInstalled) return;
+            __ytPopupObsInstalled = true;
+
+            const observer = trackObserver(new MutationObserver((mutations) => {
+                let sawNewSuggestions = false;
                 mutations.forEach((mutation) => {
                     if (mutation.addedNodes.length > 0) {
                         mutation.addedNodes.forEach((node) => {
@@ -327,47 +452,161 @@
                                         child.style.visibility = "hidden";
                                     }
                                 });
+
+                                // Watch-page suggestions can load dynamically (desktop + mobile)
+                                if (!sawNewSuggestions && node.querySelectorAll) {
+                                    if (
+                                        node.matches('ytd-compact-video-renderer, ytd-compact-autoplay-renderer, ytd-compact-radio-renderer, #related ytd-video-renderer, ytm-compact-video-renderer, ytm-compact-radio-renderer, ytm-compact-autoplay-renderer, #related ytm-video-renderer') ||
+                                        node.querySelector('ytd-compact-video-renderer, ytd-compact-autoplay-renderer, ytd-compact-radio-renderer, #related ytd-video-renderer, ytm-compact-video-renderer, ytm-compact-radio-renderer, ytm-compact-autoplay-renderer, #related ytm-video-renderer')
+                                    ) {
+                                        sawNewSuggestions = true;
+                                    }
+                                }
                             }
                         });
                     }
                 });
-            });
+                if (sawNewSuggestions) {
+                    filterWatchSuggestions();
+                }
+            }));
 
             if (document.body) {
                 observer.observe(document.body, {
                     childList: true,
                     subtree: true
                 });
-                devLog('Popup observer started');
+                devLog('Popup/suggestion observer started');
             }
         } catch (err) {
             console.log('Error setting up popup observer: ' + err.message);
         }
     }
 
+    // Robust SPA navigation hooks to restore redirect on banned searches
+    let __ytHistoryHooksInstalled = false;
+    function installUrlChangeHooks() {
+        if (__ytHistoryHooksInstalled) return;
+        __ytHistoryHooksInstalled = true;
+
+        try {
+            const wrap = (type) => {
+                const orig = history[type];
+                return function() {
+                    const rv = orig.apply(this, arguments);
+                    try { window.dispatchEvent(new Event('locationchange')); } catch {}
+                    return rv;
+                };
+            };
+            history.pushState = wrap('pushState');
+            history.replaceState = wrap('replaceState');
+            onEvent(window, 'popstate', () => window.dispatchEvent(new Event('locationchange')), false);
+
+            // React when URL changes, regardless of how navigation happened
+            onEvent(window, 'locationchange', () => {
+                checkSearchQuery();
+                hideElementsBySelectors();
+                filterWatchSuggestions();
+            }, false);
+
+            // YouTube-specific navigation lifecycle events (best-effort)
+            onEvent(window, 'yt-navigate-finish', () => {
+                checkSearchQuery();
+                hideElementsBySelectors();
+                filterWatchSuggestions();
+            }, false);
+            onEvent(window, 'yt-navigate-start', () => {
+                // clear pending intervals if leaving page to avoid bursts
+                stopIntervals();
+            }, false);
+        } catch (e) {
+            console.log('[YOUTUBE.JS] history hook error: ' + e.message);
+        }
+    }
+
+    // Intercept search submissions to block before navigating (desktop + mobile)
+    function interceptSearchSubmissions() {
+        try {
+            // Capture submits globally (YouTube re-renders search box often)
+            onEvent(document, 'submit', (e) => {
+                const form = e.target;
+                if (!form) return;
+
+                // Desktop search box and general results forms
+                const isSearchForm =
+                    form.id === 'search-form' ||
+                    form.closest('ytd-searchbox') ||
+                    form.getAttribute('action') === '/results' ||
+                    form.matches('form[action="/results"]') ||
+                    form.closest('form[action="/results"]');
+
+                if (!isSearchForm) return;
+
+                // Gather possible inputs across desktop + mobile variants
+                const candidates = [
+                    form.querySelector('input[name="search_query"]'),
+                    form.querySelector('#search'),
+                    form.querySelector('input#search'),
+                    form.querySelector('input[type="search"]'),
+                    form.querySelector('input[aria-label="Search YouTube"]'),
+                    document.querySelector('ytd-searchbox input#search'),
+                    document.querySelector('ytm-searchbox input[type="search"]'),
+                    document.querySelector('ytm-searchbox input[name="search_query"]')
+                ].filter(Boolean);
+
+                const q = (candidates.find(i => (i.value || '').trim().length)?.value || '').trim();
+
+                if (q && blockKeywords.some(rx => rx.test(q)) && !allowedWords.some(rx => rx.test(q))) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log(`Blocked search submission: ${q}`);
+                    window.location.href = redirectUrl;
+                }
+            }, true);
+        } catch (e) {
+            console.log('Error intercepting search submissions: ' + e.message);
+        }
+    }
+
     devLog('YouTube Enhancer initializing');
 
-    // Initial check for search query
+    // Initial checks
     checkSearchQuery();
+    installUrlChangeHooks();
+    interceptSearchSubmissions();
 
-    // Start observing URL changes
+    // Start observing URL changes (kept) and popup/suggestion changes
     observeUrlChanges();
-
-    // Start observing popup changes
     observePopupChanges();
 
-    // Periodically hide elements matching selectors
-    setInterval(hideElementsBySelectors, 250);
-
-    // Check for adblock popups more frequently
-    setInterval(removeAdblockPopups, 500);
-
-    // Handle popup buttons
-    setInterval(handlePopupButtons, 1000);
+    // Periodic tasks with lifecycle tracking (unchanged cadence)
+    function scheduleMainIntervals() {
+        addInterval(() => { if (!document.hidden) hideElementsBySelectors(); }, 250);
+        addInterval(() => { if (!document.hidden) filterWatchSuggestions(); }, 350);
+        addInterval(() => { if (!document.hidden) removeAdblockPopups(); }, 500);
+        addInterval(() => { if (!document.hidden) handlePopupButtons(); }, 1000);
+    }
+    startIntervals(scheduleMainIntervals);
 
     // Initial popup removal after page load
-    setTimeout(removeAdblockPopups, 1000);
-    setTimeout(handlePopupButtons, 2000);
+    addTimeout(removeAdblockPopups, 1000);
+    addTimeout(handlePopupButtons, 2000);
+
+    // Pause/resume intervals on visibility change
+    onEvent(document, 'visibilitychange', () => {
+        if (document.hidden) {
+            stopIntervals();
+        } else {
+            startIntervals(scheduleMainIntervals);
+            // quick sweep on resume for fresh DOM
+            hideElementsBySelectors();
+            filterWatchSuggestions();
+        }
+    }, false);
+
+    // Teardown on pagehide/beforeunload to avoid leaks
+    onEvent(window, 'pagehide', cleanup, false);
+    onEvent(window, 'beforeunload', cleanup, false);
 
     devLog('YouTube Enhancer with targeted adblock popup removal loaded');
 })();

@@ -6,6 +6,89 @@
         console.log('[FACEBOOK.JS]', message);
     }
 
+    // ===== Memory/observer/timer lifecycle tracking (added) =====
+    const __fbTimers = {
+        intervals: new Set(),
+        timeouts: new Set(),
+    };
+    const __fbObservers = new Set();
+    const __fbEventCleanups = new Set();
+    let __fbCleanupRan = false;
+
+    function addInterval(fn, ms) {
+        const id = setInterval(fn, ms);
+        __fbTimers.intervals.add(id);
+        return id;
+    }
+    function addTimeout(fn, ms) {
+        const id = setTimeout(() => {
+            __fbTimers.timeouts.delete(id);
+            fn();
+        }, ms);
+        __fbTimers.timeouts.add(id);
+        return id;
+    }
+    function trackObserver(observer) {
+        __fbObservers.add(observer);
+        return observer;
+    }
+    function onWindowEvent(target, type, handler, options) {
+        target.addEventListener(type, handler, options);
+        __fbEventCleanups.add(() => target.removeEventListener(type, handler, options));
+    }
+
+    function cleanup() {
+        if (__fbCleanupRan) return;
+        __fbCleanupRan = true;
+        try {
+            __fbTimers.intervals.forEach(id => { try { clearInterval(id); } catch {} });
+            __fbTimers.intervals.clear();
+
+            __fbTimers.timeouts.forEach(id => { try { clearTimeout(id); } catch {} });
+            __fbTimers.timeouts.clear();
+
+            __fbObservers.forEach(obs => { try { obs.disconnect(); } catch {} });
+            __fbObservers.clear();
+
+            __fbEventCleanups.forEach(fn => { try { fn(); } catch {} });
+            __fbEventCleanups.clear();
+
+            devLog('Cleanup complete.');
+        } catch (e) {
+            console.log('[FACEBOOK.JS] cleanup error: ' + e.message);
+        }
+    }
+
+    // Pause background intervals when hidden (saves CPU/memory)
+    let __fbIntervalsRunning = false;
+    function stopIntervals() {
+        __fbTimers.intervals.forEach(id => { try { clearInterval(id); } catch {} });
+        __fbTimers.intervals.clear();
+        __fbIntervalsRunning = false;
+    }
+    function startIntervals(schedulerFn) {
+        if (__fbIntervalsRunning) return;
+        schedulerFn();
+        __fbIntervalsRunning = true;
+    }
+
+    // Throttle helper (added)
+    function createThrottle(fn, wait) {
+        let last = 0;
+        let trailingTimeout = null;
+        return function throttled(...args) {
+            const now = performance.now();
+            const remaining = wait - (now - last);
+            const call = () => { last = performance.now(); fn.apply(this, args); };
+            if (remaining <= 0) {
+                if (trailingTimeout) { clearTimeout(trailingTimeout); __fbTimers.timeouts.delete(trailingTimeout); trailingTimeout = null; }
+                call();
+            } else if (!trailingTimeout) {
+                trailingTimeout = addTimeout(call, remaining);
+            }
+        };
+    }
+
     // Variable to cache redirects
     let lastRedirect = null;
 
@@ -105,18 +188,13 @@
                 pointer-events: none !important; /* Prevent interaction */
             }
             `;
-            
+            // Safe append (no document.write)
             if (document.head) {
                 document.head.appendChild(style);
                 devLog('CSS injected to head');
             } else if (document.documentElement) {
-                const tempStyle = document.createElement('style');
-                tempStyle.textContent = style.textContent;
-                document.documentElement.insertBefore(tempStyle, document.documentElement.firstChild);
+                document.documentElement.appendChild(style);
                 devLog('CSS injected to documentElement');
-            } else {
-                document.write(`<style>${style.textContent}</style>`);
-                devLog('CSS injected via document.write');
             }
         } catch (err) {
             console.log('Error while injecting CSS: ' + err.message);
@@ -124,7 +202,7 @@
                 const styleTag = document.createElement('style');
                 styleTag.textContent = `a[aria-label="Kaverit"], div[aria-label="Kaverit"], a[href="/friends/"] { display: none !important; }`;
                 (document.head || document.documentElement).appendChild(styleTag);
-                devLog('Fallback CSS injected');
+                devLog('Fallback CSS injected (safe append)');
             } catch (e) {
                 console.log('Fallback CSS injection failed: ' + e.message);
             }
@@ -241,6 +319,7 @@
         '973601849337783',
         '970049886359646',
 	'100001581857271',
+	'1256224499884112',
         '940194702678498',
         '9761862833844930',
         '936445033053465',
@@ -387,6 +466,7 @@
 	/Mimmi%20Wikman/,
 	/Ira%20Nyman/,
 	/Sanni%20Vuori/,
+	/pfbid02s8apN5SvHj2L634nJJmzRZbABC9wZzdChf2kqG6m3h1PrDG5Z5CrVYfWpSim9L5Fl/,
 	/pfbid02Eho4BczZu7Vbg2iJDF6jr89KwHBy1iGr3GzAwPREbrNr6gjPDXpSy7JwJqvN4fZdl/,
 	/pfbid02AuWMkj4XYtGbaneoq8JWomieFk1UuVTPDTSvL3avK74mXykwe87GSA5G4dsaYJ3rl/,
 	/permalink.php?story_fbid=pfbid02AuWMkj4XYtGbaneoq8JWomieFk1UuVTPDTSvL3avK74mXykwe87GSA5G4dsaYJ3rl/,
@@ -931,9 +1011,11 @@
     };
 
     // More efficient observer implementation
+    let __fbPhrasesObserverInstalled = false;
     const observeForRestrictedPhrases = () => {
         try {
-            if (!document.body) return;
+            if (!document.body || __fbPhrasesObserverInstalled) return;
+            __fbPhrasesObserverInstalled = true;
 
             devLog('Setting up restricted phrases observer');
             
@@ -941,7 +1023,7 @@
             let throttleTimeout = null;
             const throttledDeletePhrases = () => {
                 if (!throttleTimeout) {
-                    throttleTimeout = setTimeout(() => {
+                    throttleTimeout = addTimeout(() => {
                         deleteRestrictedPhrases();
                         throttleTimeout = null;
                     }, 100); // 100ms throttle
@@ -949,7 +1031,7 @@
             };
 
             // Observe only essential changes
-            const observer = new MutationObserver((mutations) => {
+            const observer = trackObserver(new MutationObserver((mutations) => {
                 let shouldProcess = false;
                 
                 // Check if any mutation is relevant
@@ -959,7 +1041,7 @@
                     // Check for feed content
                     if (mutation.target.closest && 
                         (mutation.target.closest('[role="feed"]') || 
-                         mutation.target.getAttribute('role') === 'feed')) {
+                         mutation.target.getAttribute?.('role') === 'feed')) {
                         shouldProcess = true;
                         break;
                     }
@@ -987,14 +1069,13 @@
                 if (shouldProcess) {
                     throttledDeletePhrases();
                 }
-            });
+            }));
 
-            // More targeted observation
             observer.observe(document.body, { 
                 childList: true, 
                 subtree: true,
-                attributes: false,  // Don't watch attributes for better performance
-                characterData: false // Don't watch text changes for better performance
+                attributes: false,
+                characterData: false
             });
 
             // Run once immediately
@@ -1006,13 +1087,13 @@
 
     // More efficient initialization
     if (document.readyState === 'loading') {
-        window.addEventListener('DOMContentLoaded', observeForRestrictedPhrases);
+        onWindowEvent(window, 'DOMContentLoaded', observeForRestrictedPhrases, false);
     } else {
         // Use requestIdleCallback for non-blocking initialization if available
         if (window.requestIdleCallback) {
             window.requestIdleCallback(observeForRestrictedPhrases);
         } else {
-            setTimeout(observeForRestrictedPhrases, 0);
+            addTimeout(observeForRestrictedPhrases, 0);
         }
     }
 
@@ -1074,7 +1155,7 @@
             const selectors = [
                 'div[aria-label="Näytä suosituksia"].x1i10hfl.xjbqb8w.x1ejq31n.xd10rxx.x1sy0etr.x17r0tee.x972fbf.xcfux6l.x1qhh985.xm0m39n.x1ypdohk.xe8uvvx.xdj266r.x11i5rnm.xat24cr.x1mh8g0r.xexx8yu.x4uap5',
                 'div.xsgj6o6.xw3qccf.x1xmf6yo.x1w6jkce.xusnbm3 div[aria-label="Näytä suosituksia"]',
-                'div[aria-label="Näytä suosituksia"] .x1ja2u2z.x78zum5.x2lah0s.x1n2onr6.xl56j7k.x6s0dn4.xozqiw3.x1q0g3np.xi112ho.x17zwfj4.x585lrc.x1403ito.x972fbf.xcfux6l.x1qhh985.xm0m39n.x9f619.x1qhmfi',
+                'div[aria-label="Näytä suosituksia"] .x1ja2u2z.x78zum5.x2lah0s.x1n2onr6.xl56j7k.x6s0dn4.xozqiw3.x1q0g3np.xi112ho.x17zwfj4.x585lrc.x1403ito.x',
                 'div[aria-label="Näytä suosituksia"] .x1ey2m1c.xds687c.x17qophe.xg01cxk.x47corl.x10l6tqk.x13vifvy.x1ebt8du.x19991ni.x1dhq9h.x1o1ewxj.x3x9cwd.x1e5q0jg.x13rtm0m',
                 'div.xsgj6o6.xw3qccf.x1xmf6yo.x1w6jkce.xusnbm3 div[aria-label="Näytä suosituksia"] .x1ja2u2z.x78zum5.x2lah0s.x1n2onr6.xl56j7k.x6s0dn4.xozqiw3.x1q0g3np.xi112ho.x17zwfj4.x585lrc.x1403ito.x',
                 'div.xsgj6o6.xw3qccf.x1xmf6yo.x1w6jkce.xusnbm3 div[aria-label="Näytä suosituksia"] .x1ey2m1c.xds687c.x17qophe.xg01cxk.x47corl.x10l6tqk.x13vifvy.x1ebt8du.x19991ni.x1dhq9h.x1o1ewxj.x3x9cwd',
@@ -1149,16 +1230,16 @@
                 'footer > .xi81zsa.xo1l8bm.x1sibtaa.x1nxh6w3.x676frb.x4zkp8e.x1943h6x.x1fgarty.x1cpjm7i.x1gmr53x.xhkezso.x1s928wv.x1lliihq.x1xmvt09.x1vvkbs.x13faqbe.xeuugli.x193iq5w',
                 '.x1xzczws.x7ep2pv.x1d1medc.xnp8db0.x1i64zmx.x1e56ztr.x1emribx.x1xmf6yo.xjl7jj.xs83m0k.xeuugli.x1ja2u2z.x1n2onr6.x9f619',
                 '.x1yrsyyn.x10b6aqq.x16hj40l.xsyo7zv.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .xifccgj.x4cne27.xdt5ytf.x78zum5 > .x1k70j0n.xzueoph > .xeuug',
-                '.x1yrsyyn.x10b6aqq.x16hj40l.xsyo7zv.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .xifccgj.x4cne27.xdt5ytf.x78zum5 > .x1k70j0n.xzueoph > .xeuug',
-                '.x1yrsyyn.x10b6aqq.x16hj40l.xsyo7zv.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .xifccgj.x4cne27.xdt5ytf.x78zum5 > .x1k70j0n.xzueoph',
-                '.x1yrsyyn.x10b6aqq.x16hj40l.xsyo7zv.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .xifccgj.x4cne27.xdt5ytf.x78zum5',
+                '.x1yrsyyn.x10b6aqq.x16hj40l.xsyo7zv.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .x1k70j0n.xzueoph > .xeuug',
+                '.x1yrsyyn.x10b6aqq.x16hj40l.xsyo7zv.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .x1k70j0n.xzueoph',
+                '.x1yrsyyn.x10b6aqq.x16hj40l.xsyo7zv.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5 > .x1k70j0n.xzueoph',
                 '.x1yrsyyn.x10b6aqq.x16hj40l.xsyo7zv.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619',
                 '.xifccgj.x4cne27.xbmpl8g.xykv574.x1y1aw1k.xwib8y2.x1ye3gou.xn6708d.x1q0g3np.xozqiw3.x6s0dn4.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619',
                 '.x1y1aw1k.x150jy0e.x1e558r4.x193iq5w.x2lah0s.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619',
                 '.xquyuld.x10wlt62.x6ikm8r.xh8yej3.x9f619.xt3gfkd.xu5ydu1.xdney7k.x1qpq9i9.x1jx94hy.x1ja2u2z.x1n2onr6 > .x193iq5w.x2lah0s.xdt5ytf.x78zum5.x9f619.x1ja2u2z.x1n2onr6 > .x2lwn1j.x1iyjqo2.x',
                 '.xquyuld.x10wlt62.x6ikm8r.xh8yej3.x9f619.xt3gfkd.xu5ydu1.xdney7k.x1qpq9i9.x1jx94hy.x1ja2u2z.x1n2onr6 > .x193iq5w.x2lah0s.xdt5ytf.x78zum5.x9f619.x1ja2u2z.x1n2onr6',
                 '.x1a2a7pz.x1ja2u2z.xh8yej3.x1n2onr6.x10wlt62.x6ikm8r.x1itg65n',
-                '.xu06nn8.x1jl3cmp.x2r5gy4.xnpuxes.x1hc1fzr.x879a55.x1q0g3np.xozqiw3.x1qjc9v5.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619 > .xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x7',
+                '.xu06nn8.x1jl3cmp.x2r5gy4.xnpuxes.x1hc1fzr.x879a55.x1q0g3np.xozqiw3.x1qjc9v5.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619 > .xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619',
                 '.x1x99re3.x1jdnuiz.x1r1pt67.x1qhmfi1.x9f619.xm0m39n.x1qhh985.xcfux6l.x972fbf.x1403ito.x585lrc.x17zwfj4.xi112ho.x1q0g3np.xozqiw3.x6s0dn4.xl56j7k.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z',
                 '.xu06nn8.x1jl3cmp.x2r5gy4.xnpuxes.x1hc1fzr.x879a55.x1q0g3np.xozqiw3.x1qjc9v5.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619',
                 '.xu06nn8.x1jl3cmp.x2r5gy4.xnpuxes.x1hc1fzr.xh8yej3.xdsb8wn.x10l6tqk.x5yr21d.x1q0g3np.xozqiw3.x1qjc9v5.x1qughib.x2lah0s.x78zum5.x1ja2u2z.x9f619',
@@ -1243,7 +1324,7 @@
             devLog('Applying selectors for specific profiles');
             const selectorsToDelete = [
                 '.x1a2a7pz.x1ja2u2z.xh8yej3.x1n2onr6.x10wlt62.x6ikm8r.x1itg65n',
-                '.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > div > .x1jfb8zj.x1qrby5j.x1n2onr6.x7ja8zs.x1t2pt76.x1lytzrv.xedcshv.xarpa2k.x3igimt.x12ejxvf.x1qhmfi1.x1pdmqnj.x9f619.x178xt8z.xm81vs4.xso031l.xy80clv.xev17xk.x1xmf6yo',
+                '.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > div > .x1jfb8zj.x1qrby5j.x1n2onr6.x7ja8zs.x1t2pt76.x1lytzrv.xedcshv.xarpa2k.x3igimt.x12ejxvf.x1qhmfi1.x1pdmqnj.x9f619.x178xt8z.xm81vs4.xso031l.xy80clv.x1xmf6yo',
                 '.xu06nn8.x1jl3cmp.x2r5gy4.xnpuxes.x1hc1fzr.x879a55.x1q0g3np.xozqiw3.x1qjc9v5.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619 > .xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619',
                 '.xu06nn8.x1jl3cmp.x2r5gy4.xnpuxes.x1hc1fzr.x879a55.x1q0g3np.xozqiw3.x1qjc9v5.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619 > .xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .x1y5dvz6.x16i7wwg.xqdwrps.x1pi30zi.x1swvt13.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619',
                 '.x78zum5 > .xh8yej3.x1n2onr6.xl56j7k.xdt5ytf.x3nfvp2.x9f619.x1a2a7pz.x1lku1pv.x87ps6o.x13rtm0m.x1e5q0jg.x3x9cwd.x1o1ewxj.xggy1nq.x1hl2dhg.x16tdsg8.xkhd6sd.x18d9i69.x4uap5.xexx8yu.x1mh8g0r.xat24cr.x11i5rnm.xdj266r.html-div',
@@ -1283,7 +1364,7 @@
                 'div.xamitd3:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > span:nth-child(1) > span:nth-child(1) > span:nth-child(1)',
                 'div.xamitd3:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2)',
                 '.x6d00yu',
-                'mount_0_0_9k > div > div:nth-child(1) > div > div.x9f619.x1n2onr6.x1ja2u2z > div > div > div.x78zum5.xdt5ytf.x1t2pt76.x1n2onr6.x1ja2u2z.x10cihs4 > div.x78zum5.xdt5ytf.x1t2pt76 > div > div > div.x6s0dn4.x78zum5.xdt5ytf.x193iq5w > div.x9f619.x193iq5w.x1talbiv.x1sltb1f.x3fxtfs.xf7dkkf.xv54qhq.xw7yly9 > div > div.x9f619.x1n2onr6.x1ja2u2z.xeuugli.xs83m0k.xjl7jj.x1xmf6yo.x1xegmmw.x1e56ztr.x13fj5qh.xnp8db0.x1d1medc.x7ep2pv.x1xzczws > div.x7wzq59 > div > div:nth-child(2) > div > div',
+                'mount_0_0_9k > div > div > div > div.x9f619.x1n2onr6.x1ja2u2z > div > div > div.x78zum5.xdt5ytf.x1t2pt76.x1n2onr6.x1ja2u2z.x10cihs4 > div.x78zum5.xdt5ytf.x1t2pt76 > div > div > div.x6s0dn4.x78zum5.xdt5ytf.x193iq5w > div.x9f619.x193iq5w.x1talbiv.x1sltb1f.x3fxtfs.xf7dkkf.xv54qhq.xw7yly9 > div > div.x9f619.x1n2onr6.x1ja2u2z.xeuugli.xs83m0k.xjl7jj.x1xmf6yo.x1xegmmw.x1e56ztr.x13fj5qh.xnp8db0.x1d1medc.x7ep2pv.x1xzczws > div.x7wzq59 > div > div:nth-child(2) > div > div',
                 'div[aria-label="Suodattimet"]',
                 'div[aria-label="Filters"]',
                 'div[aria-label="Suodattimet"][role="button"]',
@@ -1375,19 +1456,23 @@ const deleteSelectorsForPersonalProfile = () => {
 };
 
     // Intercept navigation to blocked URLs
+    let __fbNavInterceptInstalled = false;
     const interceptNavigation = () => {
         try {
+            if (__fbNavInterceptInstalled) return;
+            __fbNavInterceptInstalled = true;
+
             devLog('Setting up navigation interception');
-            document.addEventListener('click', (event) => {
-                const target = event.target.closest('a');
+
+            const clickHandler = (event) => {
+                const target = event.target.closest && event.target.closest('a');
                 if (target && blockedUrls.some(blockedUrl => blockedUrl.test(target.href))) {
                     event.preventDefault();
                     event.stopPropagation();
                     console.log('Blocked navigation to: ' + target.href);
                 }
-            }, true);
-
-            document.addEventListener('submit', (event) => {
+            };
+            const submitHandler = (event) => {
                 const form = event.target;
                 const action = form.action || '';
                 if (blockedUrls.some(blockedUrl => blockedUrl.test(action))) {
@@ -1395,21 +1480,31 @@ const deleteSelectorsForPersonalProfile = () => {
                     event.stopPropagation();
                     console.log('Blocked form submission to: ' + action);
                 }
-            }, true);
+            };
+
+            onWindowEvent(document, 'click', clickHandler, true);
+            onWindowEvent(document, 'submit', submitHandler, true);
         } catch (e) {
             console.log('Error setting up navigation interception: ' + e.message);
         }
     };
 
     // ENHANCED: DOM observer with instant search result processing
+    let __fbDomObserverInstalled = false;
     const observeDOMChanges = () => {
         try {
+            if (__fbDomObserverInstalled) return;
+            __fbDomObserverInstalled = true;
+
             devLog('Setting up DOM observer with instant search processing');
-            const observer = new MutationObserver((mutations) => {
+
+            const throttledRunAllFilters = createThrottle(() => runAllFilters(), 75);
+
+            const observer = trackObserver(new MutationObserver((mutations) => {
                 // Check for search-related changes first for instant processing
                 let hasSearchChanges = false;
                 mutations.forEach(mutation => {
-                    mutation.addedNodes.forEach(node => {
+                    mutation.addedNodes && mutation.addedNodes.forEach(node => {
                         if (node.nodeType === 1 && node.matches && (
                             node.matches('li[role="row"]') ||
                             node.matches('a[aria-describedby]') ||
@@ -1426,18 +1521,9 @@ const deleteSelectorsForPersonalProfile = () => {
                     processSearchResults();
                 }
 
-                // Then run other filtering functions
-                hideCriticalElements();
-                deleteBlockedElements();
-                deleteRestrictedWords();
-                deleteRestrictedPhrases();
-                deletePeopleYouMayKnow();
-                // FIXED: These now check URLs internally before running
-                deleteSelectorsForSpecificUrl();
-                deleteSelectorsForSpecificProfile();
-                deleteSelectorsForPersonalProfile();
-                deleteElement();
-            });
+                // Then run other filtering functions (throttled)
+                throttledRunAllFilters();
+            }));
             
             observer.observe(document.documentElement, { 
                 childList: true, 
@@ -1473,11 +1559,11 @@ const deleteSelectorsForPersonalProfile = () => {
     // Ensure DOM is ready before initializing
     const ensureDOMReady = () => {
         if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', () => {
+            onWindowEvent(document, 'DOMContentLoaded', () => {
                 observeDOMChanges();
                 observeForRestrictedPhrases();
                 interceptNavigation();
-            });
+            }, false);
         } else {
             observeDOMChanges();
             observeForRestrictedPhrases();
@@ -1506,12 +1592,33 @@ const deleteSelectorsForPersonalProfile = () => {
     // Start initialization
     init();
 
-    // Attach event listeners for changes
-    window.addEventListener('DOMContentLoaded', runAllFilters);
-    window.addEventListener('load', runAllFilters);
-    window.addEventListener('popstate', runAllFilters);
+    // Attach event listeners for changes (tracked for cleanup)
+    onWindowEvent(window, 'DOMContentLoaded', runAllFilters, false);
+    onWindowEvent(window, 'load', runAllFilters, false);
+    onWindowEvent(window, 'popstate', runAllFilters, false);
 
-    // Ultra-frequent interval checks - critical for reels and instant search hiding
-    setInterval(runAllFilters, 20);
+    // Main interval scheduler (kept at 20ms; paused when tab hidden)
+    function scheduleMainInterval() {
+        addInterval(() => {
+            if (!document.hidden) {
+                runAllFilters();
+            }
+        }, 20);
+    }
+
+    // Start intervals now (foreground), pause/resume on visibility changes
+    startIntervals(scheduleMainInterval);
+    onWindowEvent(document, 'visibilitychange', () => {
+        if (document.hidden) {
+            stopIntervals();
+        } else {
+            startIntervals(scheduleMainInterval);
+            runAllFilters();
+        }
+    }, false);
+
+    // Teardown on pagehide/beforeunload to avoid leaks
+    onWindowEvent(window, 'pagehide', cleanup, false);
+    onWindowEvent(window, 'beforeunload', cleanup, false);
 
 })();

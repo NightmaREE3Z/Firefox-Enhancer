@@ -1,3 +1,278 @@
+// --- EARLY PRE-HIDE + MAIN-WORLD SHADOW-SAFE HOOK (keep this at the very top; run at document_start) ---
+(() => {
+  'use strict';
+
+  if (window.__nrAnswersEarlyInstalled) return;
+  window.__nrAnswersEarlyInstalled = true;
+
+  // Inject a tiny script into the page's MAIN world so we can hook attachShadow
+  function injectIntoPage(fn) {
+    try {
+      const el = document.createElement('script');
+      el.type = 'text/javascript';
+      el.textContent = `;(${fn})();`;
+      (document.documentElement || document.head).appendChild(el);
+      el.remove();
+    } catch {}
+  }
+
+  // Early pre-hide CSS for light DOM (shadow roots require JS removal)
+  (function injectPrehideCss() {
+    try {
+      const id = 'nr-answers-prehide-css';
+      if (document.getElementById(id)) return;
+      const style = document.createElement('style');
+      style.id = id;
+      style.textContent = `
+        /* Hide Answers quickly in light DOM (cannot penetrate shadow DOM) */
+        nav a[href="/answers"],
+        nav a[href="/answers/"],
+        nav a[href^="/answers"],
+        nav li:has(> a[href^="/answers"]),
+        faceplate-tracker[source="nav"] a[href="/answers"],
+        faceplate-tracker[source="nav"] a[href^="/answers"],
+        faceplate-tracker[source="nav"] li:has(> a[href^="/answers"]),
+        nav a:has(> svg[icon-name="answers-outline"]),
+        faceplate-tracker[source="nav"] a:has(> svg[icon-name="answers-outline"]),
+        a[aria-label="Answers"],
+        a[aria-label*="Answers" i],
+        /* Keep exact matches too */
+        a[href="/answers"],
+        a[href="/answers/"],
+        a[href^="/answers"],
+        /* Old version: BETA badge span that visually reveals the entry */
+        span.text-global-admin.font-semibold.text-12 {
+          display: none !important;
+          visibility: hidden !important;
+          opacity: 0 !important;
+          height: 0 !important;
+          width: 0 !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          border: none !important;
+          overflow: hidden !important;
+          position: absolute !important;
+          left: -9999px !important;
+          top: -9999px !important;
+          pointer-events: none !important;
+        }
+      `;
+      (document.head || document.documentElement).prepend(style);
+    } catch {}
+  })();
+
+  // MAIN world hook: remove "Answers" from light DOM and any shadow roots (open/closed) created after this point
+  injectIntoPage(function pageWorldHook() {
+    'use strict';
+
+    if (window.__nrAnswersPageHooked) return;
+    window.__nrAnswersPageHooked = true;
+
+    function killNodeContainer(node) {
+      if (!node) return;
+      try {
+        const li = node.closest && node.closest('li[role="presentation"]');
+        const target = li || (node.closest && node.closest('a, div, faceplate-tracker, nav')) || node;
+        target && target.remove && target.remove();
+      } catch {}
+    }
+
+    function removeAnswersIn(root) {
+      try {
+        if (!root || !root.querySelectorAll) return;
+
+        // Href-based
+        root.querySelectorAll('a[href="/answers"], a[href="/answers/"], a[href^="/answers"]').forEach(killNodeContainer);
+
+        // Aria-based
+        root.querySelectorAll('a[aria-label="Answers"], a[aria-label*="Answers" i]').forEach(killNodeContainer);
+
+        // Icon-based
+        root.querySelectorAll('svg[icon-name="answers-outline"]').forEach(svg => killNodeContainer(svg.closest('a') || svg));
+
+        // BETA badge span (old version indicator)
+        root.querySelectorAll('span.text-global-admin.font-semibold.text-12').forEach(span => {
+          const txt = (span.textContent || '').trim();
+          // Remove the entire nav row if this span is part of the Answers entry
+          const parent = span.closest && span.closest('a, li, div, faceplate-tracker, nav');
+          if (parent && /answers/i.test(parent.textContent || '') || /^beta$/i.test(txt)) {
+            killNodeContainer(parent || span);
+          }
+        });
+
+        // Text-based (scoped to nav-like containers)
+        root.querySelectorAll('nav, aside, [id*="nav"], [class*="nav"], faceplate-tracker[source="nav"], faceplate-tracker[noun="gen_guides_sidebar"]').forEach(scope => {
+          const items = scope.querySelectorAll('a, li[role="presentation"], button, span');
+          for (let i = 0; i < items.length; i++) {
+            const t = (items[i].textContent || '').trim();
+            if (t && /(^|\s)answers(\s|$)/i.test(t)) {
+              killNodeContainer(items[i]);
+            }
+          }
+        });
+      } catch {}
+    }
+
+    // Expose a lightweight remover for the Firefox fallback to call from content script
+    try {
+      if (!window.__nrRemoveAnswersIn_forFF) {
+        window.__nrRemoveAnswersIn_forFF = function(root) {
+          try { removeAnswersIn(root); } catch {}
+        };
+      }
+    } catch {}
+
+    // Process existing open shadow roots (covers Declarative Shadow DOM with mode="open")
+    (function scanExistingOpenShadows() {
+      try {
+        const all = document.querySelectorAll('*');
+        for (let i = 0; i < all.length; i++) {
+          const el = all[i];
+          if (el && el.shadowRoot) {
+            removeAnswersIn(el.shadowRoot);
+            try {
+              const mo = new MutationObserver(() => removeAnswersIn(el.shadowRoot));
+              mo.observe(el.shadowRoot, { childList: true, subtree: true });
+            } catch {}
+          }
+        }
+      } catch {}
+    })();
+
+    // Observe nav-like containers in page world
+    (function observeNav() {
+      try {
+        const observeOne = (nav) => {
+          if (!nav || nav.__nrAnswersObserved) return;
+          nav.__nrAnswersObserved = true;
+          const mo = new MutationObserver(() => removeAnswersIn(nav));
+          mo.observe(nav, { childList: true, subtree: true });
+        };
+
+        document.querySelectorAll('nav, aside, faceplate-tracker[source="nav"], [id*="nav"], [class*="nav"]').forEach(observeOne);
+
+        const docMo = new MutationObserver(muts => {
+          for (let i = 0; i < muts.length; i++) {
+            const m = muts[i];
+            for (let j = 0; j < m.addedNodes.length; j++) {
+              const n = m.addedNodes[j];
+              if (!n || n.nodeType !== 1) continue;
+              if (n.matches?.('nav, aside, faceplate-tracker[source="nav"], [id*="nav"], [class*="nav"]')) {
+                removeAnswersIn(n);
+                observeOne(n);
+              } else if (n.querySelector) {
+                const lateNav = n.querySelector('nav, aside, faceplate-tracker[source="nav"], [id*="nav"], [class*="nav"]');
+                if (lateNav) {
+                  removeAnswersIn(lateNav);
+                  observeOne(lateNav);
+                }
+              }
+            }
+          }
+        });
+        docMo.observe(document.documentElement, { childList: true, subtree: true });
+      } catch {}
+    })();
+
+    // Hook attachShadow so we can watch every shadow root (open or closed) created after this point
+    (function hookAttachShadow() {
+      try {
+        const proto = Element.prototype;
+        if (proto.__nrAttachShadowHooked) return;
+        const orig = proto.attachShadow;
+        if (!orig) return;
+        proto.__nrAttachShadowHooked = true;
+
+        proto.attachShadow = function(init) {
+          const root = orig.call(this, init);
+          try {
+            window.__nrRemoveAnswersIn_forFF && window.__nrRemoveAnswersIn_forFF(root);
+            const mo = new MutationObserver(() => window.__nrRemoveAnswersIn_forFF && window.__nrRemoveAnswersIn_forFF(root));
+            mo.observe(root, { childList: true, subtree: true });
+          } catch {}
+          return root;
+        };
+      } catch {}
+    })();
+
+    // Short burst to catch very early async renders
+    (function shortBurst() {
+      let count = 0;
+      const id = setInterval(() => {
+        try { window.__nrRemoveAnswersIn_forFF && window.__nrRemoveAnswersIn_forFF(document); } catch {}
+        if (++count >= 40) clearInterval(id); // ~4s @ 100ms
+      }, 100);
+    })();
+
+    // Initial sweep (page world)
+    window.__nrRemoveAnswersIn_forFF && window.__nrRemoveAnswersIn_forFF(document);
+  });
+
+  // Firefox-only attachShadow fallback (if CSP blocks injection); auto-detected
+  (function installFirefoxAttachShadowFallback() {
+    try {
+      const isFirefox = !!window.wrappedJSObject && typeof exportFunction === 'function' && typeof cloneInto === 'function';
+      if (!isFirefox) { window.__nrFFAttachShadowInstalled = false; return; }
+
+      const w = window.wrappedJSObject;
+
+      // Ensure a page-world remover exists (if the injection above was blocked)
+      if (!w.__nrRemoveAnswersIn_forFF) {
+        try {
+          const remover = function(root) {
+            try {
+              if (!root || !root.querySelectorAll) return;
+              // Minimal subset used during very early fallback
+              const qsa = root.querySelectorAll.bind(root);
+              qsa && qsa('a[href="/answers"], a[href="/answers/"], a[href^="/answers"], a[aria-label="Answers"], a[aria-label*="Answers" i], svg[icon-name="answers-outline"]').forEach?.((el) => {
+                try {
+                  let target = el.closest && (el.closest('li[role="presentation"]') || el.closest('a, div, faceplate-tracker, nav'));
+                  (target || el).remove?.();
+                } catch {}
+              });
+            } catch {}
+          };
+          w.__nrRemoveAnswersIn_forFF = exportFunction(remover, w);
+        } catch {}
+      }
+
+      // If the page hook already installed, nothing else to do
+      if (w.Element?.prototype?.__nrAttachShadowHooked) { window.__nrFFAttachShadowInstalled = true; return; }
+
+      const orig = w.Element?.prototype?.attachShadow;
+      if (!orig) { window.__nrFFAttachShadowInstalled = false; return; }
+
+      const wrapper = exportFunction(function(init) {
+        const root = orig.call(this, init);
+        try {
+          w.__nrRemoveAnswersIn_forFF && w.__nrRemoveAnswersIn_forFF(root);
+          const mo = new w.MutationObserver(exportFunction(function() {
+            try { w.__nrRemoveAnswersIn_forFF && w.__nrRemoveAnswersIn_forFF(root); } catch(e) {}
+          }, w));
+          mo.observe(root, cloneInto({ childList: true, subtree: true }, w));
+        } catch(e) {}
+        return root;
+      }, w);
+
+      try {
+        Object.defineProperty(w.Element.prototype, 'attachShadow', {
+          value: wrapper,
+          writable: true,
+          configurable: true
+        });
+        w.Element.prototype.__nrAttachShadowHooked = true;
+        window.__nrFFAttachShadowInstalled = true;
+      } catch (e) {
+        window.__nrFFAttachShadowInstalled = false;
+      }
+    } catch {
+      window.__nrFFAttachShadowInstalled = false;
+    }
+  })();
+
+})();
+
+// --- SCRIPT STARTS HERE ---
 (function () {
     'use strict';
 
@@ -5,6 +280,13 @@
     function devLog(message) {
         console.log('[REDDIT.JS]', message);
     }
+
+    // --- RUNTIME TOGGLES (safe defaults) ---
+    const DEBUG_MODE = false;
+    const WATCHDOG_ENABLED = false;       // set true to enable timed re-evaluation of undecided hosts
+    const WATCHDOG_HARD_MODE = false;     // if true, can temporarily mark as approved on timeout (kept false by default)
+    const WATCHDOG_TIMEOUT_MS = 1000;     // 0.8s–1.5s typical
+    const FEED_GUARDRAIL_ENABLED = true;  // re-check once if visible approved count hits zero
 
     // --- IMMEDIATE PRE-HIDING CSS (Applied before any content loads) ---
     function addPreHidingCSS() {
@@ -48,22 +330,22 @@
             community-highlight-carousel {
                 display: none !important;
             }
-            
-            /* Hide Answers BETA button - Simplified selectors */
+
+            /* Answers BETA: Robust early pre-hide (works even if your later JS doesn't run yet) */
+            nav a[href="/answers"],
+            nav a[href="/answers/"],
+            nav a[href^="/answers"],
+            nav li:has(> a[href^="/answers"]),
+            faceplate-tracker[source="nav"] a[href="/answers"],
+            faceplate-tracker[source="nav"] a[href^="/answers"],
+            faceplate-tracker[source="nav"] li:has(> a[href^="/answers"]),
+            a[aria-label="Answers"],
+            a[aria-label*="Answers" i],
+            nav a:has(> svg[icon-name="answers-outline"]),
+            faceplate-tracker[source="nav"] a:has(> svg[icon-name="answers-outline"]),
+            a[href="/answers"],
             a[href="/answers/"],
-            a[href^="/answers"],
-            faceplate-tracker[noun="gen_guides_sidebar"],
-            span:contains("BETA"),
-            span:contains("Answers BETA"),
-            a[href="/answers/"],
-            .flex.justify-between.relative.px-md.gap-\\[0\\.5rem\\].text-secondary.hover\\:text-secondary-hover.active\\:bg-interactive-pressed.hover\\:bg-neutral-background-hover.hover\\:no-underline.cursor-pointer.py-2xs.-outline-offset-1.s\\:rounded-2.bg-transparent.no-underline,
-            .flex.justify-between.relative.px-md.gap-\\[0\\.5rem\\],
-            span.text-global-admin.font-semibold.text-12:contains("BETA"),
-            span.text-global-admin.font-semibold.text-12:contains("Answers BETA"),
-            svg[icon-name="answers-outline"],
-            .text-14 > div.flex.gap-xs.items-baseline,
-            span:contains("Answers"),
-            *[href="/answers/"] {
+            a[href^="/answers"] {
                 display: none !important;
                 visibility: hidden !important;
                 opacity: 0 !important;
@@ -77,81 +359,12 @@
                 left: -9999px !important;
                 top: -9999px !important;
                 pointer-events: none !important;
-            }
-            
-            /* Hide by class for Answers button */
-            .reddit-answers-hidden {
-                display: none !important;
-                visibility: hidden !important;
-                opacity: 0 !important;
-                height: 0 !important;
-                width: 0 !important;
-                margin: 0 !important;
-                padding: 0 !important;
-                border: none !important;
-                overflow: hidden !important;
-                position: absolute !important;
-                left: -9999px !important;
-                top: -9999px !important;
-                pointer-events: none !important;
-            }
-            
-            /* Banned content - permanent hiding */
-            .reddit-banned {
-                display: none !important;
-                visibility: hidden !important;
-                height: 0 !important;
-                overflow: hidden !important;
-                margin: 0 !important;
-                padding: 0 !important;
-                border: none !important;
-                opacity: 0 !important;
-                pointer-events: none !important;
-            }
-            
-            /* Specific prehiding classes for banned content */
-            article.prehide, shreddit-post.prehide, [subreddit-prefixed-name].prehide {
-                display: none !important;
-                visibility: hidden !important;
-                opacity: 0 !important;
-                height: 0 !important;
-                overflow: hidden !important;
-                margin: 0 !important;
-                padding: 0 !important;
-                border: none !important;
-                pointer-events: none !important;
-            }
-            
-            /* Search dropdown hiding */
-            .reddit-search-item-prehide, .reddit-search-shadow-prehide {
-                display: none !important;
-                visibility: hidden !important;
-                opacity: 0 !important;
-            }
-            
-            /* Hide potentially NSFW thumbnails until approved */
-            article:not(.reddit-approved) img, 
-            shreddit-post:not(.reddit-approved) img,
-            [subreddit-prefixed-name]:not(.reddit-approved) img {
-                visibility: hidden !important;
-                opacity: 0 !important;
-            }
-            
-            article.reddit-approved img, 
-            shreddit-post.reddit-approved img,
-            [subreddit-prefixed-name].reddit-approved img {
-                visibility: visible !important;
-                opacity: 1 !important;
             }
         `;
-        
-        // Inject style at the earliest possible moment
         try {
-            // Create and inject before DOM is ready for fastest application
             const head = document.head || document.documentElement;
             head.insertBefore(style, head.firstChild);
         } catch (e) {
-            // Fallback: wait for document ready and try again
             document.addEventListener('DOMContentLoaded', function() {
                 (document.head || document.documentElement).appendChild(style);
             });
@@ -232,14 +445,14 @@
         "Becky Lynch", "Bayley", "Bailey", "Giulia", "Michin", "Mia Yim", "AJ Lee", "Paige", "Bella", "Bianca", "Belair", "Alicia", "Atout", "stephanie", "ra*e", "nofap", "No nut",
         "Stephanie", "Thekla", "Liv Morgan", "Piper Niven", "Jordynne Grace", "Jordynne", "NXT Womens", "NXT Women", "NXT Woman", "Aubrey", "Edwards", "Renee", "rap*", "Sasha Banks", 
         "Maryse", "Tessa", "Brooke", "Jackson", "Jakara", "Lash Legend", "Velvet Sky", "Izzi Dame", "Alba Fyre", "Isla Dawn", "Tamina", "Sydney", "Gina Adams", "Kelly2", "Russo", 
-        "Raquel Rodriguez", "Scarlett", "Bordeaux", "Kayden", "Carter", "Katana Chance", "Valkyria", "Tamina Snuka", "Renee Young", "Sydney Sweeney", "Priscilla", 
+        "Raquel Rodriguez", "Scarlett", "Bordeaux", "Kayden", "Carter", "Katana Chance", "Valkyria", "Tamina Snuka", "Renee Young", "Sydney Sweeney", "Priscilla", "Cathalina",
         "Roxanne Perez", "Indi Hartwell", "Hartwell", "Blair", "Davenport", "wonder share", "Lola Vice", "Maxxine Dupri", "Karmen", "Karmen Petrovic", "Brittany", "Renee Paquette",
         "Ava Raine", "Cora Jade", "Jacy Jayne", "Gigi Dolin", "Thea Hail", "Tatum", "Paxley", "Fallon Henley", "Sky wrestle", "Women's", "Women", "venoisi",  "rawdog", "rawdogging", 
-        "Kelani Jordan", "Electra", "Wendy Choo", "Yulisa", "Valentina", "Valentine", "Amari Miller", "Woman", "Lady", "Girls", "Girl's", "venoise", "AlexaBliss", 
+        "Kelani Jordan", "Electra", "Wendy Choo", "Yulisa", "Valentina", "Valentine", "Amari Miller", "Woman", "Lady", "Girls", "Girl's", "venoise", "AlexaBliss", "Cathy", "Kathy",
         "Sol Ruca", "lexi", "AlexaPearl", "Arianna", "Natalya", "Nattie", "Young Bucks", "Matt Jackson", "Nick Jackson", "AEW", "Woman's", "Lady's", "Girl's", "HorizonMW", "Horizon MW",
         "Horizon Modern Warfare", "HorizonModern", "HorizonWarfare", "Horizon ModernWarfare", "Diffusion", "StableDiffusion", "UnStableDiffusion", "Dreambooth", "Dream booth", "comfyui",
         "sperm", "boyfriend", "girlfriend", "AI generated", "AI-generated", "generated", "artificial intelligence", "machine learning", "neural network", "deep learning",
-        "Midjourney", "stable diffusion", "artificial", "synthetic", "computer generated", "algorithm", "chatbot", "automated", "text to image", "Answers BETA", "Birppis",
+        "Kazuki", "Midjourney", "stable diffusion", "artificial", "synthetic", "computer generated", "algorithm", "chatbot", "automated", "text to image", "Answers BETA", "Birppis",
     ];
 
     const redgifsKeyword = "www.redgifs.com";
@@ -277,17 +490,17 @@
         /Fantop/i, /Fan top/i, /Fan-top/i, /Topfan/i, /Top fan/i, /Top-fan/i, /Top-fans/i, /fanstopia/i, /Jenni/i,  /fans top/i, /topiafan/i, /topia fan/i, /topia-fan/i, /topifan/i, /topi fan/i, 
         /topi-fan/i, /topaifan/i, /topai fan/i, /topai-fan/i, /fans-topia/i, /fans-topai/i, /Henni/i, /Lawren/i, /Lawrenc/i, /Lawrence/i, /Jenny/i, /Jenna/i, /softorbit/i, /softorbits/i, /soft-orbit/i, 
         /soft-orbits/i, /VMWare/i, /VM Ware/i, /\bVM\b/i, /Virtual Machine/i, /\bVMs\b/i, /Virtualbox/i, /Virtual box/i, /Virtual laatikko/i, /Virtuaali laatikko/i, /Virtuaalilaatikko/i, /hyper-v/i,
-        /VMWare/i, /VM Ware/i, /\bVM\b/i, /Virtual Machine/i, /\bVMs\b/i, /Virtualbox/i, /Virtual box/i, /Virtual laatikko/i, /Virtuaali laatikko/i, /Virtuaalilaatikko/i, /Virtuaalibox/i, /OracleVM/i, 
-        /virtualmachine/i, /virtual machine/i, /virtuaalikone/i, /virtuaali kone/i, /virtuaali tietokone/i, /virtuaalitietokone/i, /hyper-v/i, /hyper v/i, /virtuaalimasiina/i, /virtuaali masiina/i, 
+        /VMWare/i, /VM Ware/i, /\bVM\b/i, /Virtual Machine/i, /\bVMs\b/i, /Virtualbox/i, /Virtual box/i, /Virtual laatikko/i, /Virtuaali laatikko/i, /Virtuaalilaatikko/i, /hyper-v/i, /hyper v/i, /\bLilly\b/i, 
         /virtuaalimasiini/i, /virtuaali masiini/i, /virtuaali workstation/i, /virtual workstation/i, /virtualworkstation/i, /virtual workstation/i, /virtuaaliworkstation/i, /hypervisor/i, /hyper visor/i, 
-        /hyperv/i, /vbox/i, /virbox/i, /virtbox/i, /vir box/i, /virt box/i, /virtual box/i, /vrbox/i, /vibox/i, /virbox virtual/i, /virtbox virtual/i, /vibox virtual/i, /vbox virtual/i, /v-machine/i, 
+        /hyperv/i, /vbox/i, /virbox/i, /virtbox/i, /vir box/i, /virt box/i, /virtual box/i, /vrbox/i, /vibox/i, /virbox virtual/i, /virtbox virtual/i, /vibox virtual/i, /vbox virtual/i, /v-machine/i, /\bLilli\b/i,
         /vmachine/i, /v machine/i, /vimachine/i, /vi-machine/i, /vi machine/i, /virmachine/i, /vir-machine/i, /vir machine/i, /virt machine/i, /virtmachine/i, /virt-machine/i, /virtumachine/i, /vir mach/i,
-        /virtu-machine/i, /virtu machine/i, /virtuamachine/i, /virtua-machine/i, /virtua machine/i, /\bMachaine\b/i, /\bMachiine\b/i, /\bMacheine\b/i, /\bMachiene\b/i, /vi mach/i, /virtual machi/i,
-        /virt mach/i, /virtu mach/i, /virtua mach/i, /virtual mach/i, /vi mac/i, /vir mac/i, /virt mac/i, /virtu mac/i, /virtua mac/i, /birppis/i, /irpp4/i, /b1rppis/i, /birpp1s/i, /b1rpp1s/i, /comfyui/i,
-        /comfy ui/i, /comfy ai/i, /comfyai/i, /comfy-ui/i, /comfy-ai/i, /comfy-ai/i, /Becky/i, /Becki/i, /Rebecca/i, /Amber Heard/i, /girlfriend/i, /boyfriend/i, /mid journey/i, /unstable diffusion/i,
+        /virtu-machine/i, /virtu machine/i, /virtuamachine/i, /virtua-machine/i, /virtua machine/i, /\bMachaine\b/i, /\bMachiine\b/i, /\bMacheine\b/i, /\bMachiene\b/i, /vi mach/i, /virtual machi/i, /\bLily\b/i,
+	/virtuaali masiina/i, /virtuaalimasiina/i,  /virt mach/i, /virtu mach/i, /virtua mach/i, /virtual mach/i, /vi mac/i, /vir mac/i, /virt mac/i, /virtu mac/i, /virtua mac/i, /virtuaali masiina/i, /\bLili\b/i,
+	/Cathy/i, /Kathy/i, /Katherine/i, /Kazuki/i, /Kathy/i, /Yoshiko/i, /Yoshihiko/i, /Hirata/i, /birppis/i, /irpp4/i, /b1rppis/i, /birpp1s/i, /b1rpp1s/i, /comfyui/i, /Lily Adam/i, /Lilly Adam/i, /Dualipa/i,
+        /comfy ui/i, /comfy ai/i, /comfyai/i, /comfy-ui/i, /comfy-ai/i, /comfy-ai/i, /Becky/i, /Becki/i, /Rebecca/i, /Amber Heard/i, /girlfriend/i, /boyfriend/i, /mid journey/i, /unstable diffusion/i, /Dua Lipa/i, 
         /AI[ -]?generated/i, /generated[ -]?by[ -]?AI/i, /artificial[ -]?intelligence/i, /machine[ -]?learning/i, /neural[ -]?network/i, /deep[ -]?learning/i, /midjourney/i, /dall[ -]?e/i, /stable[ -]?diffusion/i,
         /computer[ -]?generated/i, /text[ -]?to[ -]?image/i, /image[ -]?generation/i, /AI[ -]?art/i, /synthetic[ -]?media/i, /algorithmically/i, /bot[ -]?generated/i, /automated[ -]?content/i, /stablediffused/i, 
-	/Dualipa/i, /Dua Lipa/i, /\bLily\b/i, /\bLili\b/i, /\bLilli\b/i, /\bLilly\b/i, /Lily Adam/i, /Lilly Adam/i,
+	/Hirada/i, /Hirata/i, 
     ];
 
     const unifiedSelectors = [
@@ -307,14 +520,22 @@
         ".\\32 xs.gap.items-center.flex",
         ".mt-\\[-4px\\].mb-2xs.min-h-\\[32px\\].text-12.justify-between.flex > .relative.min-w-0.items-center.gap-2xs.text-12.flex-wrap.flex",
         ".row-end-2.row-start-1.col-end-3.col-start-1 > .mt-\\[-4px\\].mb-2xs.min-h-\\[32px\\].text-12.justify-between.flex > .relative.min-w-0.items-center.gap-2xs.text-12.flex-wrap.flex",
-        'span.text-global-admin.font-semibold.text-12'
+        'span.text-global-admin.font-semibold.text-12',
+
+    // Added robust nav-scoped selectors for "Answers" (kept as additions only)
+    	'faceplate-tracker[source="nav"] a[href="/answers/"]',
+    	'li[role="presentation"] a[href="/answers/"]',
+    	'svg[icon-name="answers-outline"]',
+	'span.text-global-admin.font-semibold.text-12',
+	".text-14 > div.flex.gap-xs.items-baseline",
     ];
 
     const selectorsToDelete = [
         "community-highlight-carousel",
         "community-highlight-carousel h3",
         "community-highlight-carousel shreddit-gallery-carousel",
-        "span.text-global-admin.font-semibold.text-12"
+        "span.text-global-admin.font-semibold.text-12",
+	".text-14 > div.flex.gap-xs.items-baseline",
     ];
 
     // Simplified and more effective Answers button selectors
@@ -322,7 +543,11 @@
         'a[href="/answers/"]',
         'a[href^="/answers"]',
         'faceplate-tracker[noun="gen_guides_sidebar"]',
-        'span.text-global-admin.font-semibold.text-12'
+        'span.text-global-admin.font-semibold.text-12',
+	'.text-14 > div.flex.gap-xs.items-baseline',
+	'faceplate-tracker[source="nav"] a[href="/answers/"]',
+    	'li[role="presentation"] a[href="/answers/"]',
+    	'svg[icon-name="answers-outline"]'
     ];
 
     // --- OPTIMIZED MEMORY MANAGEMENT WITH ZERO LEAKS ---
@@ -341,16 +566,21 @@
             super();
             this.maxSize = maxSize;
             this.ttlMs = ttlMs;
-            this.timers = new Map();
+            this.timers = new Map();       // key -> timeoutId (number)
+            this.expirations = new Map();  // key -> timestamp (ms)
         }
         
         set(key, value) {
             // Clear existing timer if key exists
             if (this.timers.has(key)) {
-                clearTimeout(this.timers.get(key));
+                const oldId = this.timers.get(key);
+                clearTimeout(oldId);
+                timeoutIds.delete(oldId);
+                this.timers.delete(key);
+                this.expirations.delete(key);
             }
             
-            // Enforce size limit
+            // Enforce size limit (simple FIFO)
             if (this.size >= this.maxSize && !this.has(key)) {
                 const firstKey = this.keys().next().value;
                 this.delete(firstKey);
@@ -358,35 +588,46 @@
             
             // Set with TTL
             super.set(key, value);
-            const timer = setTimeout(() => {
+            const expiry = Date.now() + this.ttlMs;
+            this.expirations.set(key, expiry);
+
+            const timerId = setTimeout(() => {
                 this.delete(key);
             }, this.ttlMs);
-            this.timers.set(key, timer);
+            
+            timeoutIds.add(timerId);
+            this.timers.set(key, timerId);
             
             return this;
         }
         
         delete(key) {
             if (this.timers.has(key)) {
-                clearTimeout(this.timers.get(key));
+                const id = this.timers.get(key);
+                clearTimeout(id);
+                timeoutIds.delete(id);
                 this.timers.delete(key);
             }
+            this.expirations.delete(key);
             return super.delete(key);
         }
         
         clear() {
-            for (const timer of this.timers.values()) {
-                clearTimeout(timer);
+            // Properly clear all timers and remove from global tracking
+            for (const id of this.timers.values()) {
+                clearTimeout(id);
+                timeoutIds.delete(id);
             }
             this.timers.clear();
+            this.expirations.clear();
             return super.clear();
         }
         
         cleanup() {
-            // Force cleanup of expired entries
+            // Force cleanup of expired entries using stored expirations
             const now = Date.now();
-            for (const [key, timer] of this.timers.entries()) {
-                if (timer._idleStart && now - timer._idleStart > this.ttlMs) {
+            for (const [key, expiry] of this.expirations.entries()) {
+                if (now >= expiry) {
                     this.delete(key);
                 }
             }
@@ -407,10 +648,13 @@
 
     // Enhanced tracking for complete cleanup
     const intervalIds = new Set();
-    const timeoutIds = new Set();
+    const timeoutIds = new Set();   // setTimeout/cancelIdleCallback IDs
+    const rafIds = new Set();       // requestAnimationFrame IDs
+    const idleCallbackIds = new Set(); // requestIdleCallback IDs
     const observerInstances = new Set();
     const eventListenerCleanupFunctions = new Set();
-    const throttledFunctions = new WeakMap();
+    const throttledFunctions = new Map(); // Changed from WeakMap to Map for proper cleanup
+    const watchdogTimers = new WeakMap();
 
     let lastFilterTime = 0;
     let pendingOperations = false;
@@ -421,7 +665,7 @@
 
     // Enhanced memory monitoring
     function getMemoryUsage() {
-        if (performance.memory) {
+        if (performance && performance.memory) {
             const memInfo = performance.memory;
             const usedGB = memInfo.usedJSHeapSize / (1024 * 1024 * 1024);
             const limitGB = memInfo.jsHeapSizeLimit / (1024 * 1024 * 1024);
@@ -450,7 +694,6 @@
             const isCritical = memInfo ? memInfo.percentage > CRITICAL_MEMORY_THRESHOLD * 100 : false;
             
             if (force || isOverCap || isCritical) {
-                // Aggressive cleanup
                 const beforeContent = contentBannedCache.size;
                 const beforeSubreddit = bannedSubredditCache.size;
                 const beforeApproval = approvalPersistence.size;
@@ -458,33 +701,32 @@
                 contentBannedCache.clear();
                 bannedSubredditCache.clear();
                 
-                // Keep only most recent approvals
                 if (isCritical || isOverCap) {
                     approvalPersistence.clear();
                 }
                 
-                // Clean up throttled function references
-                throttledFunctions.clear?.();
+                for (const [func, cleanup] of throttledFunctions.entries()) {
+                    if (cleanup && typeof cleanup.cleanup === 'function') {
+                        cleanup.cleanup();
+                    }
+                }
+                throttledFunctions.clear();
                 
-                // Force cleanup of observers that might be leaking
-                let cleanedObservers = 0;
                 for (const observer of observerInstances) {
                     try {
                         if (observer && typeof observer.disconnect === 'function') {
                             observer.disconnect();
-                            cleanedObservers++;
                         }
-                    } catch (e) {
-                        // Ignore cleanup errors
-                    }
+                    } catch {}
                 }
+                observerInstances.clear();
                 
-                if (memInfo) {
-                    devLog(`🧹 AGGRESSIVE CLEANUP - Memory: ${memInfo.usedGB}GB/${MEMORY_CAP_GB}GB | Cleared: Content(${beforeContent}), Subreddit(${beforeSubreddit}), Approval(${beforeApproval}), Observers(${cleanedObservers})`);
+                const after = getMemoryUsage();
+                if (after) {
+                    devLog(`🧹 AGGRESSIVE CLEANUP - Memory now: ${after.usedGB}GB`);
                 }
                 
             } else if (isWarning) {
-                // Gentle cleanup with TTL expiration
                 bannedSubredditCache.cleanup();
                 contentBannedCache.cleanup();
                 approvalPersistence.cleanup();
@@ -496,7 +738,6 @@
 
             memoryCleanupCount++;
             
-            // Force GC more strategically
             if (window.gc && (force || isOverCap || memoryCleanupCount % 5 === 0)) {
                 try {
                     window.gc();
@@ -504,9 +745,7 @@
                     if (afterMemInfo && memInfo) {
                         devLog(`🗑️ GC - Memory: ${afterMemInfo.usedGB}GB (was ${memInfo.usedGB}GB)`);
                     }
-                } catch (e) {
-                    // Ignore GC errors
-                }
+                } catch {}
             }
         } finally {
             isCleaningUp = false;
@@ -544,57 +783,39 @@
         devLog('🧹 Performing complete cleanup...');
         
         try {
-            // Clear all intervals
-            intervalIds.forEach(id => {
-                try {
-                    clearInterval(id);
-                } catch (e) {}
-            });
+            intervalIds.forEach(id => { try { clearInterval(id); } catch {} });
             intervalIds.clear();
 
-            // Clear all timeouts
-            timeoutIds.forEach(id => {
-                try {
-                    clearTimeout(id);
-                } catch (e) {}
-            });
+            timeoutIds.forEach(id => { try { clearTimeout(id); } catch {} });
             timeoutIds.clear();
 
-            // Disconnect all observers
-            observerInstances.forEach(observer => {
-                try {
-                    if (observer && typeof observer.disconnect === 'function') {
-                        observer.disconnect();
-                    }
-                } catch (e) {}
-            });
+            rafIds.forEach(id => { try { cancelAnimationFrame(id); } catch {} });
+            rafIds.clear();
+
+            if (window.cancelIdleCallback) {
+                idleCallbackIds.forEach(id => { try { window.cancelIdleCallback(id); } catch {} });
+                idleCallbackIds.clear();
+            }
+
+            observerInstances.forEach(observer => { try { observer.disconnect?.(); } catch {} });
             observerInstances.clear();
 
-            // Execute all event listener cleanup functions
-            eventListenerCleanupFunctions.forEach(cleanup => {
-                try {
-                    cleanup();
-                } catch (e) {}
-            });
+            eventListenerCleanupFunctions.forEach(cleanup => { try { cleanup(); } catch {} });
             eventListenerCleanupFunctions.clear();
 
-            // Force cache cleanup
             cleanupCaches(true);
             
-            // Clear throttled function references
-            throttledFunctions.clear?.();
+            for (const [func, cleanup] of throttledFunctions.entries()) {
+                if (cleanup && typeof cleanup.cleanup === 'function') {
+                    cleanup.cleanup();
+                }
+            }
+            throttledFunctions.clear();
             
             const memInfo = getMemoryUsage();
-            if (memInfo) {
-                devLog(`🧹 Complete cleanup finished - Memory: ${memInfo.usedGB}GB`);
-            }
+            if (memInfo) devLog(`🧹 Complete cleanup finished - Memory: ${memInfo.usedGB}GB`);
             
-            // Final GC attempt
-            if (window.gc) {
-                try {
-                    window.gc();
-                } catch (e) {}
-            }
+            if (window.gc) { try { window.gc(); } catch {} }
         } catch (e) {
             devLog(`❌ Error during cleanup: ${e.message}`);
         }
@@ -632,44 +853,90 @@
 
     // --- SIMPLIFIED ANSWERS BUTTON HIDING FUNCTIONS ---
     function hideAnswersButton() {
-        // Method 1: Direct removal by href (most effective)
+        // Method 0: Most reliable - search in likely nav/aside containers for "Answers" link or icon, case-insensitive
         try {
-            document.querySelectorAll('a[href="/answers/"], a[href^="/answers"]').forEach(el => el.remove());
+            const navScopes = document.querySelectorAll('nav, aside, [id*="nav"], [class*="nav"], faceplate-tracker[source="nav"], faceplate-tracker[noun="gen_guides_sidebar"]');
+            const tryHideAnchorContainer = (el) => {
+                if (!el) return;
+                const li = el.closest('li[role="presentation"]');
+                const container = li || el.closest('a, div, faceplate-tracker') || el;
+                container.classList.add('reddit-answers-hidden');
+                container.remove();
+            };
+            navScopes.forEach(scope => {
+                // By href
+                scope.querySelectorAll('a[href="/answers/"], a[href="/answers"], a[href^="/answers"]').forEach(tryHideAnchorContainer);
+                // By aria-label
+                scope.querySelectorAll('a[aria-label="Answers"], a[aria-label*="Answers" i]').forEach(tryHideAnchorContainer);
+                // By icon -> climb
+                scope.querySelectorAll('svg[icon-name="answers-outline"]').forEach(svg => {
+                    const a = svg.closest('a');
+                    tryHideAnchorContainer(a || svg);
+                });
+                // By visible text (cheap check limited to links and list items)
+                const candidates = scope.querySelectorAll('a, li[role="presentation"], button');
+                candidates.forEach(node => {
+                    const t = (node.textContent || '').trim();
+                    if (!t) return;
+                    // Require "Answers" presence; "BETA" optional (A/B sometimes missing)
+                    if (/answers/i.test(t)) {
+                        tryHideAnchorContainer(node);
+                    }
+                });
+            });
         } catch (e) {}
 
-        // Method 2: Remove by faceplate-tracker
+        // Method 1: Direct removal by href (most effective generic)
         try {
-            document.querySelectorAll('faceplate-tracker[noun="gen_guides_sidebar"]').forEach(el => el.remove());
+            document.querySelectorAll('a[href="/answers/"], a[href="/answers"], a[href^="/answers"]').forEach(el => {
+                const li = el.closest('li[role="presentation"]');
+                (li || el).classList.add('reddit-answers-hidden');
+                (li || el).remove();
+            });
+        } catch (e) {}
+
+        // Method 2: Remove by faceplate-tracker scope
+        try {
+            document.querySelectorAll('faceplate-tracker[noun="gen_guides_sidebar"], faceplate-tracker[source="nav"]').forEach(scope => {
+                const anchor = scope.querySelector('a[href="/answers"], a[href="/answers/"], a[href^="/answers"], a[aria-label="Answers"], a[aria-label*="Answers" i]');
+                const icon = scope.querySelector('svg[icon-name="answers-outline"]');
+                const target = anchor || (icon && icon.closest('a')) || icon;
+                if (target) {
+                    const li = target.closest('li[role="presentation"]');
+                    (li || target).classList.add('reddit-answers-hidden');
+                    (li || target).remove();
+                }
+            });
         } catch (e) {}
 
         // Method 3: Remove BETA spans and their parents
         try {
             document.querySelectorAll('span.text-global-admin.font-semibold.text-12').forEach(span => {
-                if (span.textContent && span.textContent.trim() === 'BETA') {
-                    const parent = span.closest('a, li, div, faceplate-tracker');
-                    if (parent) {
+                const txt = (span.textContent || '').trim();
+                if (txt.toUpperCase() === 'BETA') {
+                    const parent = span.closest('a, li, div, faceplate-tracker, nav');
+                    if (parent && /answers/i.test(parent.textContent || '')) {
+                        parent.classList.add('reddit-answers-hidden');
                         parent.remove();
-                    } else {
-                        span.remove();
                     }
                 }
             });
         } catch (e) {}
 
-        // Method 4: Text-based removal for "Answers" + "BETA"
+        // Method 4: Text-based removal for "Answers" (+ optional "BETA") — scoped to nav-like containers to avoid false positives
         try {
-            document.querySelectorAll('*').forEach(element => {
-                if (element.children.length === 0 && element.textContent) {
-                    const text = element.textContent.trim();
-                    if ((text.includes('Answers') && text.includes('BETA')) || text === 'Answers BETA') {
-                        const container = element.closest('a, li, div[class*="nav"], faceplate-tracker');
-                        if (container) {
-                            container.remove();
-                        } else {
-                            element.remove();
-                        }
+            const scopes = document.querySelectorAll('nav, aside, [id*="nav"], [class*="nav"]');
+            scopes.forEach(scope => {
+                scope.querySelectorAll('a, li[role="presentation"], button').forEach(element => {
+                    if (element.children && element.children.length > 0) return;
+                    const text = (element.textContent || '').trim();
+                    if (!text) return;
+                    if (/answers/i.test(text)) {
+                        const container = element.closest('a, li, div, faceplate-tracker') || element;
+                        container.classList.add('reddit-answers-hidden');
+                        container.remove();
                     }
-                }
+                });
             });
         } catch (e) {}
 
@@ -712,12 +979,15 @@
         };
         
         // Store reference for cleanup
-        throttledFunctions.set(throttled, { fn, cleanup: () => {
-            if (timeoutId) {
-                clearTimeout(timeoutId);
-                timeoutIds.delete(timeoutId);
+        throttledFunctions.set(throttled, { 
+            fn, 
+            cleanup: () => {
+                if (timeoutId) {
+                    clearTimeout(timeoutId);
+                    timeoutIds.delete(timeoutId);
+                }
             }
-        }});
+        });
         
         return throttled;
     }
@@ -751,12 +1021,15 @@
         };
         
         // Store reference for cleanup
-        throttledFunctions.set(debounced, { fn, cleanup: () => {
-            if (timeoutId) {
-                clearTimeout(timeoutId);
-                timeoutIds.delete(timeoutId);
+        throttledFunctions.set(debounced, { 
+            fn, 
+            cleanup: () => {
+                if (timeoutId) {
+                    clearTimeout(timeoutId);
+                    timeoutIds.delete(timeoutId);
+                }
             }
-        }});
+        });
         
         return debounced;
     }
@@ -767,9 +1040,13 @@
         
         const processFrame = (callback) => {
             if (window.requestIdleCallback) {
-                return window.requestIdleCallback(callback, { timeout: 1000 });
+                const id = window.requestIdleCallback(callback, { timeout: 1000 });
+                idleCallbackIds.add(id);
+                return { type: 'idle', id };
             } else {
-                return requestAnimationFrame(callback);
+                const id = requestAnimationFrame(callback);
+                rafIds.add(id);
+                return { type: 'raf', id };
             }
         };
         
@@ -784,12 +1061,24 @@
         });
     }
 
+    // Helper: if approving a host, also mark inner article when present
+    function markInnerArticleApprovedIfAny(host) {
+        try {
+            if (host && host.tagName === 'SHREDDIT-POST' && host.shadowRoot) {
+                const art = host.shadowRoot.querySelector('article');
+                if (art) art.classList.add('reddit-approved');
+            }
+        } catch {}
+    }
+
     // ENHANCED: Function to scan FULL post content - now with better extraction and memory management
     function extractCompletePostContent(element) {
         try {
+            const root = element && element.shadowRoot ? element.shadowRoot : element;
+
             // Early return for safe subreddits to save processing
             if (isElementInSafeSubreddit(element)) {
-                const basicContent = element.textContent || element.innerText || '';
+                const basicContent = (root?.textContent || element.textContent || element.innerText || '');
                 return basicContent.substring(0, 2000); // Limit to prevent memory bloat
             }
             
@@ -799,7 +1088,7 @@
             let totalLength = 0;
             
             // Method 1: Get main element text content (truncated)
-            const mainText = element.textContent || element.innerText || '';
+            const mainText = (root?.textContent || element.textContent || element.innerText || '');
             if (mainText.trim() && totalLength < maxContentLength) {
                 const chunk = mainText.substring(0, Math.min(1000, maxContentLength - totalLength));
                 textParts.push(chunk);
@@ -807,7 +1096,7 @@
             }
             
             // Method 2: Get specific content from key selectors only if we haven't hit limit
-            if (totalLength < maxContentLength) {
+            if (totalLength < maxContentLength && root && root.querySelectorAll) {
                 const contentSelectors = [
                     'h1, h2, h3, h4, h5, h6',
                     '[slot="title"]',
@@ -818,7 +1107,7 @@
                 ];
                 
                 for (let i = 0; i < contentSelectors.length && totalLength < maxContentLength; i++) {
-                    const elements = element.querySelectorAll(contentSelectors[i]);
+                    const elements = root.querySelectorAll(contentSelectors[i]);
                     for (let j = 0; j < Math.min(elements.length, 5) && totalLength < maxContentLength; j++) {
                         const elem = elements[j];
                         let text = elem.textContent || elem.innerText || '';
@@ -834,7 +1123,6 @@
             
             const combinedContent = textParts.join(' ').trim();
             
-            // Debug logging for AI content (limited to prevent log spam)
             if (combinedContent.toLowerCase().includes('ai') && Math.random() < 0.1) {
                 devLog(`🔍 FOUND AI CONTENT: "${combinedContent.substring(0, 100)}..." (${combinedContent.length} chars total)`);
             }
@@ -902,17 +1190,19 @@
     // Better post identifier that works across feed and post pages
     function getPostIdentifier(element) {
         try {
+            const root = element && element.shadowRoot ? element.shadowRoot : element;
+
             // Check data-ks-id first (most reliable)
-            const dataKsElement = element.querySelector('[data-ks-id*="t3_"]');
+            const dataKsElement = root?.querySelector && root.querySelector('[data-ks-id*="t3_"]');
             if (dataKsElement) {
                 const dataKsId = dataKsElement.getAttribute('data-ks-id');
-                const match = dataKsId.match(/t3_([a-zA-Z0-9]+)/);
+                const match = dataKsId && dataKsId.match(/t3_([a-zA-Z0-9]+)/);
                 if (match) {
                     return `post_${match[1]}`;
                 }
             }
             
-            const postLinks = element.querySelectorAll && element.querySelectorAll('a[href*="/comments/"]');
+            const postLinks = root?.querySelectorAll && root.querySelectorAll('a[href*="/comments/"]');
             if (postLinks && postLinks.length > 0) {
                 for (let i = 0; i < Math.min(postLinks.length, 3); i++) { // Limit iterations
                     const href = postLinks[i].getAttribute('href');
@@ -940,7 +1230,7 @@
             if (postId) return `post_${postId}`;
             
             const subreddit = getSubredditForAnyRedditPost(element);
-            const titleElement = element.querySelector && element.querySelector('h1, h2, h3, [data-testid="post-content"] h1, [slot="title"]');
+            const titleElement = root?.querySelector && root.querySelector('h1, h2, h3, [data-testid="post-content"] h1, [slot="title"]');
             const title = titleElement ? titleElement.textContent : '';
             
             if (subreddit && title) {
@@ -1069,13 +1359,14 @@
         const dataSubreddit = el.getAttribute && el.getAttribute('data-subreddit');
         if (dataSubreddit) return dataSubreddit.startsWith('r/') ? dataSubreddit : 'r/' + dataSubreddit;
         
-        const subredditLink = el.querySelector && el.querySelector('a[data-testid="subreddit-name"]');
+        const subredditLink = (el.shadowRoot || el).querySelector && (el.shadowRoot || el).querySelector('a[data-testid="subreddit-name"]');
         if (subredditLink && subredditLink.textContent) return subredditLink.textContent.trim();
         
-        const rLink = el.querySelector && el.querySelector('a[href^="/r/"]');
+        const root = el.shadowRoot || el;
+        const rLink = root.querySelector && root.querySelector('a[href^="/r/"]');
         if (rLink && rLink.textContent) return rLink.textContent.trim();
         
-        const links = el.querySelectorAll && el.querySelectorAll('a[href*="/r/"]');
+        const links = root.querySelectorAll && root.querySelectorAll('a[href*="/r/"]');
         if (links) {
             for (let i = 0; i < Math.min(links.length, 5); i++) { // Limit iterations
                 const href = links[i].getAttribute('href');
@@ -1169,7 +1460,9 @@
         }
         
         // Also check individual elements for thorough scanning
-        const titleElement = element.querySelector && element.querySelector('h1, h2, h3, a[data-click-id="body"], .title, [slot="title"]');
+        const root = element && element.shadowRoot ? element.shadowRoot : element;
+
+        const titleElement = root?.querySelector && root.querySelector('h1, h2, h3, a[data-click-id="body"], .title, [slot="title"]');
         if (titleElement && checkContentForKeywords(titleElement)) {
             if (isPostPage()) {
                 devLog(`🚫 Blocked by title content`);
@@ -1178,7 +1471,7 @@
         }
         
         // Check post body content
-        const contentElement = element.querySelector && element.querySelector('.post-content, .md-container, p, [slot="text-body"], [data-testid="post-content"]');
+        const contentElement = root?.querySelector && root.querySelector('.post-content, .md-container, p, [slot="text-body"], [data-testid="post-content"]');
         if (contentElement && checkContentForKeywords(contentElement)) {
             if (isPostPage()) {
                 devLog(`🚫 Blocked by post content`);
@@ -1187,7 +1480,7 @@
         }
         
         // Check for NSFW indicators
-        const nsfwIndicators = element.querySelectorAll && element.querySelectorAll('.nsfw, [data-nsfw="true"], svg[icon-name="nsfw-outline"], .text-category-nsfw');
+        const nsfwIndicators = root?.querySelectorAll && root.querySelectorAll('.nsfw, [data-nsfw="true"], svg[icon-name="nsfw-outline"], .text-category-nsfw');
         if (nsfwIndicators && nsfwIndicators.length > 0) {
             if (isPostPage()) {
                 devLog(`🚫 Blocked by NSFW indicator`);
@@ -1225,6 +1518,7 @@
                     removeElementAndRelated(element);
                 } else {
                     markElementAsApproved(element);
+                    markInnerArticleApprovedIfAny(element);
                 }
             }
         }
@@ -1263,7 +1557,7 @@
         const sub = post.getAttribute && post.getAttribute('data-subreddit');
         if (sub) return sub.startsWith('r/') ? sub : 'r/' + sub;
         
-        const aTags = post.querySelectorAll && post.querySelectorAll('a[href*="/r/"]');
+        const aTags = (post.shadowRoot || post).querySelectorAll && (post.shadowRoot || post).querySelectorAll('a[href*="/r/"]');
         if (aTags) {
             for (let i = 0; i < Math.min(aTags.length, 3); i++) { // Limit iterations
                 const match = aTags[i].getAttribute('href').match(/\/r\/([A-Za-z0-9_]+)/);
@@ -1302,6 +1596,7 @@
                 removeElementAndRelated(post);
             } else {
                 markElementAsApproved(post);
+                markInnerArticleApprovedIfAny(post);
             }
         }
     }
@@ -1320,6 +1615,7 @@
                 removeElementAndRelated(post);
             } else {
                 markElementAsApproved(post);
+                markInnerArticleApprovedIfAny(post);
             }
         }
     }
@@ -1405,9 +1701,14 @@
         }
     }
 
+    // Fixed: Recursion depth limit and proper memory management
     function hideBannedSubredditsFromAllSearchDropdowns() {
-        function processShadowRoots(node) {
-            if (!node) return;
+        // Memory leak fix: Track processed elements to avoid infinite recursion
+        const processedNodes = new WeakSet();
+        
+        function processShadowRoots(node, depth = 0) {
+            if (!node || processedNodes.has(node) || depth > 5) return; // Limit recursion depth
+            processedNodes.add(node);
             
             if (node.shadowRoot && !shadowRootsProcessed.has(node.shadowRoot)) {
                 shadowRootsProcessed.add(node.shadowRoot);
@@ -1422,15 +1723,16 @@
                     characterData: false
                 });
                 
+                // Limit depth of shadow DOM traversal
                 const shadowChildren = node.shadowRoot.querySelectorAll('*');
-                for (let i = 0; i < Math.min(shadowChildren.length, 50); i++) { // Limit iterations
-                    processShadowRoots(shadowChildren[i]);
+                for (let i = 0; i < Math.min(shadowChildren.length, 20); i++) {
+                    processShadowRoots(shadowChildren[i], depth + 1);
                 }
             }
             
-            if (node.children) {
-                for (let i = 0; i < Math.min(node.children.length, 50); i++) { // Limit iterations
-                    processShadowRoots(node.children[i]);
+            if (node.children && depth < 3) { // Limit depth for performance
+                for (let i = 0; i < Math.min(node.children.length, 20); i++) {
+                    processShadowRoots(node.children[i], depth + 1);
                 }
             }
         }
@@ -1442,21 +1744,30 @@
         }
         
         const searchDropdowns = document.querySelectorAll('faceplate-search-dropdown, shreddit-search-dropdown');
-        for (let i = 0; i < searchDropdowns.length; i++) {
+        for (let i = 0; i < Math.min(searchDropdowns.length, 5); i++) { // Limit processing
             processShadowRoots(searchDropdowns[i]);
         }
     }
 
     const throttledShadowRootHandler = createThrottle((mutations) => {
-        for (const mutation of mutations) {
-            for (const node of mutation.addedNodes) {
-                if (node.nodeType === 1) {
-                    processShadowSearchItems(mutation.target);
-                    
-                    if (node.shadowRoot && !shadowRootsProcessed.has(node.shadowRoot)) {
-                        shadowRootsProcessed.add(node.shadowRoot);
-                        processShadowSearchItems(node.shadowRoot);
-                    }
+        // Memory leak fix: Limit mutation processing
+        const processedMutationNodes = new WeakSet();
+        const maxMutations = Math.min(mutations.length, 10);
+        
+        for (let i = 0; i < maxMutations; i++) {
+            const mutation = mutations[i];
+            const addedNodesLimit = Math.min(mutation.addedNodes.length, 5);
+            
+            for (let j = 0; j < addedNodesLimit; j++) {
+                const node = mutation.addedNodes[j];
+                if (node.nodeType !== 1 || processedMutationNodes.has(node)) continue;
+                processedMutationNodes.add(node);
+                
+                processShadowSearchItems(mutation.target);
+                
+                if (node.shadowRoot && !shadowRootsProcessed.has(node.shadowRoot)) {
+                    shadowRootsProcessed.add(node.shadowRoot);
+                    processShadowSearchItems(node.shadowRoot);
                 }
             }
         }
@@ -1655,18 +1966,66 @@
         }
     }
 
+    // Watchdog: schedule re-evaluation for a host that hasn't been decided
+    function scheduleWatchdogForHost(host) {
+        if (!WATCHDOG_ENABLED || !host || watchdogTimers.has(host)) return;
+        const id = setTimeout(() => {
+            timeoutIds.delete(id);
+            watchdogTimers.delete(host);
+            try {
+                const approved = host.classList.contains('reddit-approved');
+                const removed = !document.contains(host);
+                if (!approved && !removed) {
+                    if (DEBUG_MODE) devLog('🕒 Watchdog re-evaluating undecided host');
+                    const shouldBan = evaluateElementForBanning(host);
+                    if (shouldBan) {
+                        host.classList.add('prehide', 'reddit-banned');
+                        removeElementAndRelated(host);
+                    } else {
+                        if (WATCHDOG_HARD_MODE) {
+                            host.classList.add('reddit-approved');
+                            markInnerArticleApprovedIfAny(host);
+                        } else {
+                            markElementAsApproved(host);
+                            markInnerArticleApprovedIfAny(host);
+                        }
+                    }
+                }
+            } catch {}
+        }, WATCHDOG_TIMEOUT_MS);
+        timeoutIds.add(id);
+        watchdogTimers.set(host, id);
+    }
+
+    // Guardrail: if approved hosts drop to 0 and no spinner, re-run once
+    function guardrailRecheck() {
+        if (!FEED_GUARDRAIL_ENABLED) return;
+        try {
+            const approvedCount = document.querySelectorAll('shreddit-post.reddit-approved, article.reddit-approved').length;
+            const loading = document.querySelector('[data-testid="feed-spinner"], faceplate-loading, [slot="skeleton"]');
+            if (approvedCount === 0 && !loading) {
+                if (DEBUG_MODE) devLog('🛟 Guardrail: 0 approved posts detected, re-running checks');
+                runAllChecks();
+            }
+        } catch {}
+    }
+
+    // Fixed: Limited recursion depth and node processing in shadow DOM
     function processShadowDOM() {
         const elements = document.querySelectorAll('shreddit-post, shreddit-feed');
+        const maxElements = Math.min(elements.length, 20); // Limit to prevent excessive processing
         
-        for (let i = 0; i < elements.length; i++) {
+        for (let i = 0; i < maxElements; i++) {
             const element = elements[i];
             if (!element.shadowRoot || shadowRootsProcessed.has(element.shadowRoot)) continue;
             
             shadowRootsProcessed.add(element.shadowRoot);
             
-            // Process ONLY posts in shadow DOM, NOT comments
+            // Process ONLY posts in shadow DOM, NOT comments - with limits
             const posts = element.shadowRoot.querySelectorAll('article, shreddit-post');
-            for (let j = 0; j < posts.length; j++) {
+            const maxPosts = Math.min(posts.length, 10); // Limit post processing
+            
+            for (let j = 0; j < maxPosts; j++) {
                 const post = posts[j];
                 if (processedElements.has(post)) continue;
                 processedElements.add(post);
@@ -1677,9 +2036,15 @@
                     post.remove();
                 } else {
                     markElementAsApproved(post);
+                    markInnerArticleApprovedIfAny(post);
+                }
+
+                if (post.tagName === 'SHREDDIT-POST') {
+                    scheduleWatchdogForHost(post);
                 }
             }
             
+            // Memory leak fix: Create a new observer with proper tracking
             const shadowObserver = new MutationObserver(throttledShadowRootHandler);
             observerInstances.add(shadowObserver);
             shadowObserver.observe(element.shadowRoot, {
@@ -1689,6 +2054,18 @@
                 characterData: false
             });
         }
+    }
+
+    // --- NEW: Observe nav containers specifically to nuke "Answers" ASAP with minimal work ---
+    function observeNavForAnswers() {
+        const navs = document.querySelectorAll('nav, aside, faceplate-tracker[source="nav"]');
+        navs.forEach((nav) => {
+            if (nav.__answersObserved) return;
+            nav.__answersObserved = true;
+            const obs = new MutationObserver(createThrottle(() => hideAnswersButton(), 50));
+            observerInstances.add(obs);
+            obs.observe(nav, { childList: true, subtree: true });
+        });
     }
 
     // --- MAIN FILTER FUNCTION ---
@@ -1702,6 +2079,7 @@
         }
         
         hideAnswersButton();
+        observeNavForAnswers();
         
         hideBannedSubredditsFromSearch();
         hideBannedSubredditsFromAllSearchDropdowns();
@@ -1726,12 +2104,22 @@
         removeHrElements();
         removeSelectorsToDelete();
         checkAndHideNSFWClassElements();
+
+        guardrailRecheck();
     }
 
     // --- INITIALIZATION AND EVENT HANDLING ---
     function init() {
         interceptSearchInputChanges();
         interceptSearchFormSubmit();
+
+        // Startup status log
+        const isFirefox = !!window.wrappedJSObject && typeof exportFunction === 'function';
+        if (isFirefox) {
+            devLog(`Platform: Firefox; attachShadow fallback: ${window.__nrFFAttachShadowInstalled ? 'ACTIVE' : 'INACTIVE'}`);
+        } else {
+            devLog('Platform: Chrome/Chromium; page-world injection active');
+        }
         
         runAllChecks();
         
@@ -1748,13 +2136,17 @@
             });
         }
         
+        // Memory leak fix: Track interval IDs for cleanup
         const minimalInterval = setInterval(hideBannedSubredditsFromSearch, 1000);
         intervalIds.add(minimalInterval);
         
         const answersButtonInterval = setInterval(hideAnswersButton, 150);
         intervalIds.add(answersButtonInterval);
         
+        // Memory leak fix: Better idle callback handling
         if (window.requestIdleCallback) {
+            let idleCallbackId;
+            
             const idleCallback = () => {
                 if (isShuttingDown) return;
                 
@@ -1766,10 +2158,20 @@
                     hideAnswersButton();
                 }
                 
-                window.requestIdleCallback(idleCallback, { timeout: 3000 });
+                idleCallbackId = window.requestIdleCallback(idleCallback, { timeout: 3000 });
+                idleCallbackIds.add(idleCallbackId);
             };
             
-            window.requestIdleCallback(idleCallback, { timeout: 3000 });
+            idleCallbackId = window.requestIdleCallback(idleCallback, { timeout: 3000 });
+            idleCallbackIds.add(idleCallbackId);
+            
+            // Add cleanup function
+            eventListenerCleanupFunctions.add(() => {
+                if (idleCallbackId && window.cancelIdleCallback) {
+                    window.cancelIdleCallback(idleCallbackId);
+                    idleCallbackIds.delete(idleCallbackId);
+                }
+            });
         } else {
             const backgroundInterval = setInterval(() => {
                 if (isShuttingDown) return;
@@ -1801,15 +2203,22 @@
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);
+        // Memory leak fix: Add cleanup for this event listener
+        eventListenerCleanupFunctions.add(() => {
+            document.removeEventListener('DOMContentLoaded', init);
+        });
     } else {
         init();
     }
 
+    // Fixed: Better mutation processing with limits
     const processNewElements = createThrottle((mutations) => {
         let needsSearchUpdate = false;
+        // Memory leak fix: Limit mutations to process
+        const limitedMutations = mutations.slice(0, 20);
         
-        for (let i = 0; i < mutations.length; i++) {
-            const mutation = mutations[i];
+        for (let i = 0; i < limitedMutations.length; i++) {
+            const mutation = limitedMutations[i];
             
             if (mutation.target.id === 'search-dropdown-results-container' ||
                 mutation.target.tagName === 'FACEPLATE-SEARCH-DROPDOWN' ||
@@ -1817,17 +2226,20 @@
                 needsSearchUpdate = true;
             }
             
-            for (let j = 0; j < mutation.addedNodes.length; j++) {
+            // Memory leak fix: Limit nodes to process
+            const addedNodesLimit = Math.min(mutation.addedNodes.length, 10);
+            for (let j = 0; j < addedNodesLimit; j++) {
                 const node = mutation.addedNodes[j];
                 if (node.nodeType !== 1) continue;
                 
-                if (node.tagName === 'A' && node.getAttribute('href') === '/answers/') {
+                if (node.tagName === 'A' && (node.getAttribute('href') === '/answers/' || node.getAttribute('href') === '/answers')) {
                     hideAnswersButton();
                 }
                 
                 if (node.tagName === 'FACEPLATE-TRACKER' || 
-                    node.querySelector && (node.querySelector('faceplate-tracker[noun="gen_guides_sidebar"]') ||
-                                         node.querySelector('a[href="/answers/"]'))) {
+                    (node.querySelector && (node.querySelector('faceplate-tracker[noun="gen_guides_sidebar"]') ||
+                                         node.querySelector('a[href^="/answers"]') ||
+                                         node.querySelector('svg[icon-name="answers-outline"]')))) {
                     hideAnswersButton();
                 }
                 
@@ -1842,24 +2254,32 @@
                             removeElementAndRelated(node);
                         } else {
                             markElementAsApproved(node);
+                            markInnerArticleApprovedIfAny(node);
+                        }
+
+                        if (node.tagName === 'SHREDDIT-POST') {
+                            scheduleWatchdogForHost(node);
                         }
                     }
                 } else if (node.hasAttribute && (
                     node.hasAttribute('role') || 
                     node.hasAttribute('data-testid') || 
-                    node.classList.contains('recent-search-item')
+                    (node.classList && node.classList.contains('recent-search-item'))
                 )) {
                     needsSearchUpdate = true;
                 }
                 
+                // Memory leak fix: Avoid deep shadow DOM processing
                 if (node.shadowRoot && !shadowRootsProcessed.has(node.shadowRoot)) {
                     shadowRootsProcessed.add(node.shadowRoot);
                     
                     processShadowSearchItems(node.shadowRoot);
                     
-                    // Process ONLY posts in shadow DOM, NOT comments - optimized
+                    // Process ONLY posts in shadow DOM, NOT comments - with limits
                     const shadowPosts = node.shadowRoot.querySelectorAll('article, shreddit-post');
-                    for (let k = 0; k < shadowPosts.length; k++) {
+                    const maxShadowPosts = Math.min(shadowPosts.length, 5);
+                    
+                    for (let k = 0; k < maxShadowPosts; k++) {
                         const shadowPost = shadowPosts[k];
                         if (!processedElements.has(shadowPost)) {
                             processedElements.add(shadowPost);
@@ -1870,10 +2290,16 @@
                                 shadowPost.remove();
                             } else {
                                 markElementAsApproved(shadowPost);
+                                markInnerArticleApprovedIfAny(shadowPost);
+                            }
+
+                            if (shadowPost.tagName === 'SHREDDIT-POST') {
+                                scheduleWatchdogForHost(shadowPost);
                             }
                         }
                     }
                     
+                    // Memory leak fix: Add observer to tracking set
                     const shadowObserver = new MutationObserver(throttledShadowRootHandler);
                     observerInstances.add(shadowObserver);
                     shadowObserver.observe(node.shadowRoot, {
@@ -1886,13 +2312,13 @@
                 
                 if (node.querySelectorAll) {
                     const hrElements = node.querySelectorAll('hr.border-b-neutral-border-weak.border-solid.border-b-sm.border-0');
-                    for (let k = 0; k < hrElements.length; k++) {
+                    for (let k = 0; k < Math.min(hrElements.length, 10); k++) {
                         hrElements[k].remove();
                     }
                     
                     for (let k = 0; k < selectorsToDelete.length; k++) {
                         const elements = node.querySelectorAll(selectorsToDelete[k]);
-                        for (let l = 0; l < elements.length; l++) {
+                        for (let l = 0; l < Math.min(elements.length, 10); l++) {
                             removeElementAndRelated(elements[l]);
                         }
                     }
@@ -1908,6 +2334,7 @@
         }
         
         hideAnswersButton();
+        guardrailRecheck();
     }, 20);
 
     const observer = new MutationObserver(processNewElements);
