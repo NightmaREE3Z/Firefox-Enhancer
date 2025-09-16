@@ -10,6 +10,7 @@
     const __fbTimers = {
         intervals: new Set(),
         timeouts: new Set(),
+        idleCallbacks: new Set(), // track rIC ids to avoid leaks in SPAs
     };
     const __fbObservers = new Set();
     const __fbEventCleanups = new Set();
@@ -27,6 +28,19 @@
         }, ms);
         __fbTimers.timeouts.add(id);
         return id;
+    }
+    function addIdleCallback(fn) {
+        // Track requestIdleCallback so we can cancel on cleanup (prevents leaks on SPA navigations)
+        if (typeof window.requestIdleCallback === 'function') {
+            const id = window.requestIdleCallback(() => {
+                try { fn(); } finally { __fbTimers.idleCallbacks.delete(id); }
+            });
+            __fbTimers.idleCallbacks.add(id);
+            return id;
+        } else {
+            // Fallback is tracked via __fbTimers.timeouts
+            return addTimeout(fn, 0);
+        }
     }
     function trackObserver(observer) {
         __fbObservers.add(observer);
@@ -47,11 +61,22 @@
             __fbTimers.timeouts.forEach(id => { try { clearTimeout(id); } catch {} });
             __fbTimers.timeouts.clear();
 
+            if (typeof window.cancelIdleCallback === 'function') {
+                __fbTimers.idleCallbacks.forEach(id => { try { window.cancelIdleCallback(id); } catch {} });
+            }
+            __fbTimers.idleCallbacks.clear();
+
             __fbObservers.forEach(obs => { try { obs.disconnect(); } catch {} });
             __fbObservers.clear();
 
             __fbEventCleanups.forEach(fn => { try { fn(); } catch {} });
             __fbEventCleanups.clear();
+
+            // Remove injected style to free memory in long-lived SPA sessions
+            try {
+                const s = document.getElementById('fb-inline-style');
+                if (s) s.remove();
+            } catch {}
 
             devLog('Cleanup complete.');
         } catch (e) {
@@ -96,7 +121,11 @@
     const injectInlineCSS = () => {
         try {
             devLog('Injecting inline CSS with instant search hiding');
-            const style = document.createElement('style');
+            let style = document.getElementById('fb-inline-style');
+            if (!style) {
+                style = document.createElement('style');
+                style.id = 'fb-inline-style';
+            }
             style.textContent = `
             /* INSTANT SEARCH HIDING - Hide search results by default until approved */
             li[role="row"]:not(.fb-search-approved),
@@ -189,17 +218,22 @@
             }
             `;
             // Safe append (no document.write)
-            if (document.head) {
-                document.head.appendChild(style);
-                devLog('CSS injected to head');
-            } else if (document.documentElement) {
-                document.documentElement.appendChild(style);
-                devLog('CSS injected to documentElement');
+            if (!style.isConnected) {
+                if (document.head) {
+                    document.head.appendChild(style);
+                    devLog('CSS injected to head');
+                } else if (document.documentElement) {
+                    document.documentElement.appendChild(style);
+                    devLog('CSS injected to documentElement');
+                }
+            } else {
+                devLog('CSS updated (reuse existing style node)');
             }
         } catch (err) {
             console.log('Error while injecting CSS: ' + err.message);
             try {
                 const styleTag = document.createElement('style');
+                styleTag.id = 'fb-inline-style-fallback';
                 styleTag.textContent = `a[aria-label="Kaverit"], div[aria-label="Kaverit"], a[href="/friends/"] { display: none !important; }`;
                 (document.head || document.documentElement).appendChild(styleTag);
                 devLog('Fallback CSS injected (safe append)');
@@ -407,7 +441,7 @@
         /permalink\.php\?story_fbid=pfbid02QrdmwZKfKxAiZm3k41FgqM6FEyRx1eLAB1UiJPc7z9CT3RxL9a4X12qKKyykkfw5l/,
         /permalink\.php\?story_fbid=pfbid02f5iZ2iLyAA4o4PLoreUSQ7EJi19fSmYYUbCqxFEKMZv89VmiKfBtS1hqAErjzdQZl/,
         /permalink\.php\?story_fbid=836447305302755/,
-        /permalink\.php\?story_fbid=pfbid022bSh3R6FDVHjTomfKqRremW2dg8fiWb5xaRzpqAJXdQHPkwBvsfJgicom5Vi3hKml/,
+        /permalink\.php\?story_fbid=pfbid022bSh3R6FDVHjTomfKqRremW2dg8fiWb5xaRzpqAJXdQHPkwBvsfJgicom5Vi3RremW2dg8fiWb5xaRzpqAJXdQHPkwBvsfJgicom5Vi3Hml/,
         /permalink\.php\?story_fbid=pfbid0abuaonjJ1417W5MUrmpGgo4pJt5kJGL9hYcGYz8J392z3PjjVjhrZhgcK2fz6pZcl/,
         /permalink\.php\?story_fbid=pfbid02rX4RcxF9v5YB1xAq36u9bndbyiW535dgjuTnbCxJjjRHzPCKDzQyvPAtdN23T4Kzl/,
         /permalink\.php\?story_fbid=1236875833901235/,
@@ -1089,12 +1123,8 @@
     if (document.readyState === 'loading') {
         onWindowEvent(window, 'DOMContentLoaded', observeForRestrictedPhrases, false);
     } else {
-        // Use requestIdleCallback for non-blocking initialization if available
-        if (window.requestIdleCallback) {
-            window.requestIdleCallback(observeForRestrictedPhrases);
-        } else {
-            addTimeout(observeForRestrictedPhrases, 0);
-        }
+        // Use requestIdleCallback for non-blocking initialization if available (tracked to avoid leaks)
+        addIdleCallback(observeForRestrictedPhrases);
     }
 
     // Function to delete "People You May Know" sections

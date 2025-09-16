@@ -93,7 +93,6 @@
         // BETA badge span (old version indicator)
         root.querySelectorAll('span.text-global-admin.font-semibold.text-12').forEach(span => {
           const txt = (span.textContent || '').trim();
-          // Remove the entire nav row if this span is part of the Answers entry
           const parent = span.closest && span.closest('a, li, div, faceplate-tracker, nav');
           if (parent && /answers/i.test(parent.textContent || '') || /^beta$/i.test(txt)) {
             killNodeContainer(parent || span);
@@ -466,7 +465,7 @@
         /morph/i, /inpaint/i, /art intel/i, /safari/i, /Opera Browser/i, /Mozilla/i, /Firefox/i, /Firefux/i, /\bbra\b/i, /soulgen/i, /ismartta/i, /editor/i, /image enhanced/i, /image enhancing/i,
         /tush/i, /lex bl/i, /image ai/i, /edit ai/i, /deviant/i, /Lex Cabr/i, /Lex Carb/i, /Lex Kauf/i, /Lex Man/i, /Blis/i, /nudecrawler/i, /photo AI/i, /pict AI/i, /pics app/i, /enhanced image/i,
         /AI edit/i, /faceswap/i, /DeepSeek/i, /deepnude ai/i, /deepnude-ai/i, /object/i, /unc1oth/i, /Opera GX/i, /Perez/i, /Mickie/i, /Micky/i, /Brows/i, /vagena/i, /ed17/i, /Lana Perry/i, /Del Rey/i,
-        /vegi/i, /vege/i, /vulv/i, /clit/i, /cl1t/i, /cloth/i, /uncloth/i, /decloth/i, /rem cloth/i, /del cloth/i, /izzi dame/i, /eras cloth/i, /Bella/i, /Tiffy/i, /vagi/i, /vagene/i, /Del Ray/i, /CJ Lana/i,
+        /vegi/i, /vege/i, /vulv/i, /clit/i, /cl1t/i, /cloth/i, /uncloth/i, /decloth/i, /rem cloth/i, /del cloth/i, /eras cloth/i, /Bella/i, /Tiffy/i, /vagi/i, /vagene/i, /Del Ray/i, /CJ Lana/i,
         /Tiffa/i, /Strat/i, /puz/i, /Sweee/i, /Kristen Stewart/i, /Steward/i, /Perze/i, /Brave/i, /Roxan/i, /Browser/i, /Selain/i, /TOR-Selain/i, /Brit Bake/i, /vega/i, /\bSlut\b/i, /3dit/i, /ed1t/i,
         /Liv org/i, /pant/i, /off pant/i, /rem pant/i, /del pant/i, /eras pant/i, /her pant/i, /she pant/i, /pussy/i, /adult content/i, /content adult/i, /porn/i, /\bTor\b/i, /editing/i, /3d1t/i, /\bAi\b/i,
         /Sydney Sweeney/i, /Sweeney/i, /fap/i, /Sydnee/i, /Stee/i, /Waaa/i, /Stewart/i, /MS Edge/i, /TOR-browser/i, /Opera/i, /\bAi\b/i, /\bADM\b/i, /\bAis\b/i, /\b-Ai\b/i, /\bedit\b/i, /Feikki/i,
@@ -495,12 +494,12 @@
         /hyperv/i, /vbox/i, /virbox/i, /virtbox/i, /vir box/i, /virt box/i, /virtual box/i, /vrbox/i, /vibox/i, /virbox virtual/i, /virtbox virtual/i, /vibox virtual/i, /vbox virtual/i, /v-machine/i, /\bLilli\b/i,
         /vmachine/i, /v machine/i, /vimachine/i, /vi-machine/i, /vi machine/i, /virmachine/i, /vir-machine/i, /vir machine/i, /virt machine/i, /virtmachine/i, /virt-machine/i, /virtumachine/i, /vir mach/i,
         /virtu-machine/i, /virtu machine/i, /virtuamachine/i, /virtua-machine/i, /virtua machine/i, /\bMachaine\b/i, /\bMachiine\b/i, /\bMacheine\b/i, /\bMachiene\b/i, /vi mach/i, /virtual machi/i, /\bLily\b/i,
-	/virtuaali masiina/i, /virtuaalimasiina/i,  /virt mach/i, /virtu mach/i, /virtua mach/i, /virtual mach/i, /vi mac/i, /vir mac/i, /virt mac/i, /virtu mac/i, /virtua mac/i, /virtuaali masiina/i, /\bLili\b/i,
-	/Cathy/i, /Kathy/i, /Katherine/i, /Kazuki/i, /Kathy/i, /Yoshiko/i, /Yoshihiko/i, /Hirata/i, /birppis/i, /irpp4/i, /b1rppis/i, /birpp1s/i, /b1rpp1s/i, /comfyui/i, /Lily Adam/i, /Lilly Adam/i, /Dualipa/i,
+        /virtuaali masiina/i, /virtuaalimasiina/i,  /virt mach/i, /virtu mach/i, /virtua mach/i, /virtual mach/i, /vi mac/i, /vir mac/i, /virt mac/i, /virtu mac/i, /virtua mac/i, /virtuaali masiina/i, /\bLili\b/i,
+        /Cathy/i, /Kathy/i, /Katherine/i, /Kazuki/i, /Kathy/i, /Yoshiko/i, /Yoshihiko/i, /Hirata/i, /birppis/i, /irpp4/i, /b1rppis/i, /birpp1s/i, /b1rpp1s/i, /comfyui/i, /Lily Adam/i, /Lilly Adam/i, /Dualipa/i,
         /comfy ui/i, /comfy ai/i, /comfyai/i, /comfy-ui/i, /comfy-ai/i, /comfy-ai/i, /Becky/i, /Becki/i, /Rebecca/i, /Amber Heard/i, /girlfriend/i, /boyfriend/i, /mid journey/i, /unstable diffusion/i, /Dua Lipa/i, 
         /AI[ -]?generated/i, /generated[ -]?by[ -]?AI/i, /artificial[ -]?intelligence/i, /machine[ -]?learning/i, /neural[ -]?network/i, /deep[ -]?learning/i, /midjourney/i, /dall[ -]?e/i, /stable[ -]?diffusion/i,
         /computer[ -]?generated/i, /text[ -]?to[ -]?image/i, /image[ -]?generation/i, /AI[ -]?art/i, /synthetic[ -]?media/i, /algorithmically/i, /bot[ -]?generated/i, /automated[ -]?content/i, /stablediffused/i, 
-	/Hirada/i, /Hirata/i, 
+        /Hirada/i, /Hirata/i, 
     ];
 
     const unifiedSelectors = [
@@ -652,6 +651,10 @@
     const rafIds = new Set();       // requestAnimationFrame IDs
     const idleCallbackIds = new Set(); // requestIdleCallback IDs
     const observerInstances = new Set();
+
+    // NEW: track per-ShadowRoot observers without preventing GC
+    const shadowRootObservers = new WeakMap(); // ShadowRoot -> MutationObserver
+
     const eventListenerCleanupFunctions = new Set();
     const throttledFunctions = new Map(); // Changed from WeakMap to Map for proper cleanup
     const watchdogTimers = new WeakMap();
@@ -768,7 +771,7 @@
             
         } else if (memInfo.usedGB > MEMORY_WARNING_GB) {
             if (now - lastMemoryWarning > 10000) {
-                devLog(`⚠️ Memory warning: ${memInfo.usedGB}GB / ${MEMORY_CAP_GB}GB cap (${memInfo.percentage}% of heap)`);
+                devLog(`⚠️ Memory warning: ${memInfo.usedGB}GB / ${MEMORY_CAP_GB}GB cap (${memInfo.percentage}%)`);
                 lastMemoryWarning = now;
             }
             cleanupCaches();
@@ -1714,14 +1717,8 @@
                 shadowRootsProcessed.add(node.shadowRoot);
                 processShadowSearchItems(node.shadowRoot);
                 
-                const shadowObserver = new MutationObserver(throttledShadowRootHandler);
-                observerInstances.add(shadowObserver);
-                shadowObserver.observe(node.shadowRoot, { 
-                    childList: true, 
-                    subtree: true,
-                    attributes: false,
-                    characterData: false
-                });
+                // NEW: attach or reuse a single observer per ShadowRoot
+                observeShadowRootOnce(node.shadowRoot);
                 
                 // Limit depth of shadow DOM traversal
                 const shadowChildren = node.shadowRoot.querySelectorAll('*');
@@ -1812,6 +1809,58 @@
             });
         }
     }
+
+    // --- UTILITY: observe a ShadowRoot exactly once, reuse observer, and auto-clean on detach ---
+    function observeShadowRootOnce(root) {
+        if (!root) return;
+        if (shadowRootObservers.has(root)) return;
+        try {
+            const mo = new MutationObserver(throttledShadowRootHandler);
+            mo.observe(root, { childList: true, subtree: true, attributes: false, characterData: false });
+            shadowRootObservers.set(root, mo);
+        } catch {}
+    }
+
+    // --- UTILITY: disconnect any shadow observers found in a removed subtree (auto cleanup) ---
+    function disconnectShadowObserversInSubtree(node, depth = 0) {
+        if (!node || node.nodeType !== 1 || depth > 6) return; // safety limit
+        try {
+            // If this element hosts a shadow root we've observed, disconnect it
+            if (node.shadowRoot && shadowRootObservers.has(node.shadowRoot)) {
+                const mo = shadowRootObservers.get(node.shadowRoot);
+                try { mo && mo.disconnect && mo.disconnect(); } catch {}
+                shadowRootObservers.delete(node.shadowRoot);
+            }
+            // Recurse into children (limited)
+            const children = node.children;
+            if (children && children.length) {
+                const max = Math.min(children.length, 200);
+                for (let i = 0; i < max; i++) {
+                    disconnectShadowObserversInSubtree(children[i], depth + 1);
+                }
+            }
+        } catch {}
+    }
+
+    // Observe DOM removals to auto-disconnect shadow observers (prevents accumulation)
+    const domDetachObserver = new MutationObserver((muts) => {
+        for (let i = 0; i < muts.length; i++) {
+            const m = muts[i];
+            if (m.removedNodes && m.removedNodes.length) {
+                const maxRemoved = Math.min(m.removedNodes.length, 50);
+                for (let j = 0; j < maxRemoved; j++) {
+                    const n = m.removedNodes[j];
+                    if (n && n.nodeType === 1) {
+                        disconnectShadowObserversInSubtree(n, 0);
+                    }
+                }
+            }
+        }
+    });
+    try {
+        domDetachObserver.observe(document.documentElement, { childList: true, subtree: true });
+        observerInstances.add(domDetachObserver);
+    } catch {}
 
     // --- UTILITY FUNCTIONS ---
     function interceptSearchInputChanges() {
@@ -2044,15 +2093,8 @@
                 }
             }
             
-            // Memory leak fix: Create a new observer with proper tracking
-            const shadowObserver = new MutationObserver(throttledShadowRootHandler);
-            observerInstances.add(shadowObserver);
-            shadowObserver.observe(element.shadowRoot, {
-                childList: true,
-                subtree: true,
-                attributes: false,
-                characterData: false
-            });
+            // Memory leak fix: Create (or reuse) shadow-root observer with proper tracking
+            observeShadowRootOnce(element.shadowRoot);
         }
     }
 
@@ -2269,7 +2311,7 @@
                     needsSearchUpdate = true;
                 }
                 
-                // Memory leak fix: Avoid deep shadow DOM processing
+                // Memory leak fix: Avoid deep shadow DOM processing, but attach observer safely
                 if (node.shadowRoot && !shadowRootsProcessed.has(node.shadowRoot)) {
                     shadowRootsProcessed.add(node.shadowRoot);
                     
@@ -2299,15 +2341,8 @@
                         }
                     }
                     
-                    // Memory leak fix: Add observer to tracking set
-                    const shadowObserver = new MutationObserver(throttledShadowRootHandler);
-                    observerInstances.add(shadowObserver);
-                    shadowObserver.observe(node.shadowRoot, {
-                        childList: true,
-                        subtree: true,
-                        attributes: false,
-                        characterData: false
-                    });
+                    // NEW: observe the shadow root once
+                    observeShadowRootOnce(node.shadowRoot);
                 }
                 
                 if (node.querySelectorAll) {
