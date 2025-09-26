@@ -10,6 +10,13 @@
     devLog('Location: ' + window.location.href);
     devLog('Document ready state: ' + document.readyState);
 
+    // === UA detection for platform-specific handling ===
+    const ua = (typeof navigator !== 'undefined' && navigator.userAgent) ? navigator.userAgent : '';
+    const isFirefox = /Firefox/i.test(ua);
+    const isAndroid = /Android/i.test(ua);
+    const isFirefoxAndroid = isFirefox && isAndroid;
+    devLog('Platform: ' + (isFirefoxAndroid ? 'Firefox Android' : (isFirefox ? 'Firefox Desktop' : 'Chrome/Desktop or other')));
+
     // === INSTANT WHITE OVERLAY: Show immediately at document_start ===
     // Make sure your manifest uses: "run_at": "document_start"
     let overlay = document.createElement('div');
@@ -123,7 +130,7 @@
         "ok fans", "Just for fans", "i fans", "Loyal fans", "Fan sly", "fans only", "Jaida WWE", "fan only", "Fan loyal", "Fans loyal", "biscuit booty", "editor app", "Trans", "Kristen", "MS Edge", "Transvestite", "linger",
         "Baker", "Biscuit Butt", "Birppis", "Birpppis", "deviant art", "upscale", "upscaling", "Bella", "sex", "facetune", "face tune", "tuning face", "face tuning", "facetuning", "tuningface", "biscuit ass", "Chyna", "Gina Adams",
         "bikini", "Kristen Stewart", "biscuit backside","Sydney Sweeney", "Britt Baker", "Deepseek", "shag", "shagged", "fake", "cloth", "Blis", "LGBTQ", "pant", "fat fetish", "Object", "adultcontent", "F4NS", "Carmella", "Adams WWE",
-        "nsfw", "18+", "18 plus", "porn", "penetration", "filmora", "xxx", "nudifier", "nudifying", "nudity", "Jaida Parker", "F4N5", "undressing", "undressifying", "generative", "undressify", "Goddess", "Perry WWE", "Toni Storm", 
+        "nsfw", "18+", "18 plus", "18 plus", "porn", "penetration", "filmora", "xxx", "nudifier", "nudifying", "nudity", "Jaida Parker", "F4N5", "undressing", "undressifying", "generative", "undressify", "Goddess", "Perry WWE", "Toni Storm", 
         "FAN5", "Harley", "Cameron", "Merlio", "Hayter", "Ripley", "Rhea Ripley", "Microsoft Edge", "askfm", "ask fm", "CJ WWE", "queer", "Pride", "prostitute", "escort", "fetish", "v1ds", "m4ny", "v1d5", "erotic", "LGBT", "Gina WWE",
         "blowjob", "Sportskeeda", "whoring", "AI Tool", "aitool", "vagina", "genital", "booty", "nudyi", "Nudying", "Nudeying", "derriere", "busty", "slut", "whore", "whoring", "camgirl", "cumslut", "fury foot", "fury feet", "Jaida",
         "DeepSeek", "DeepSeek AI", "fansly", "patreon", "manyvids", "chaturbate", "myfreecams", "Samsung Internet", "Policy template", "Templates", "Policies", "onlifans", "camsoda", "stripchat", "bongacams", "livejasmin",
@@ -147,8 +154,7 @@
         "m*therf*cker", "m*therfucker", "*ss", "as****", "f*ckface", "f*cktard", "fukk", "fukc", "fu*c", "azz", "a*z", "az*", "***", "###", "@@", "#*", "*#", "@*", "*@", "#@", "@#",
         "sheer", "face replace", "face merge", "face blend", "faceblend", "AI face", "neural", "AI morph", "face animation", "deep swap", "swap model", "photorealistic swap", "synthetic face", "hyperreal", "hyper real", "reface", "facereplace",
         "facefusion", "face reconstruction", "wondershare", "AI face recreation", "virtual morph", "face synthesis", "neural face swap", "deep neural face", "AI-powered face swap", "face augmentation", "digital face synthesis",
-        "virtual face swap", "hyperreal AI face", "photo-real AI face", "face deepfake", "synthetic portrait generation", "AI image transformation", "face fusion technology", "deepface swap", "photo manipulation face",
-        "deepfak portrait", "machine learning", "generation", "generative", "AI model face swap", "face generation AI", "face replacement AI", "video face morphing", "3D face morph", "AI facial animation", "deepfake avatar",
+        "virtual face swap", "hyperreal AI face", "photo-real AI face", "face deepfake", "synthetic portrait generation", "AI image transformation", "face fusion technology", "deepfak portrait", "machine learning", "generation", "generative", "AI model face swap", "face generation AI", "face replacement AI", "video face morphing", "3D face morph", "AI facial animation", "deepfake avatar",
         "synthetic avatar creation", "facial", "AI model swap", "deep model swap", "image to face morph", "AI character face", "face remapping AI", "synthetic media", "AI-created character face", "face replacement tool",
         "photo trans", "pict trans", "image trans", "virtual avatar face", "AI video face replacement", "digital face replacement", "hyperreal synthetic face", "AI face transformer", "face generation model", "realistic face",
         "face technology", "face tech", "3D morph face", "face AI animation", "real-time face swap", "AI-driven photo manipulation", "deepfake model creation", "digital persona", "All Elite", "Elite Wrestling", "video generat", "Windsor",
@@ -516,7 +522,6 @@
     const protectedSelectors = [
         '#APjFqb', '#tsf > div:nth-child(1) > div.A8SBwf > div.RNNXgb > div.SDkEP > div.a4bIc',
         '#tsf > div:nth-child(1) > div.A8SBwf > div.RNNXgb > div.SDkEP > div.fM33ce.dRYYxd',
-        '#tsf > div:nth-child(1) > div.A8SBwf > div.RNNXgb > div.SDkEP',
         '#tsf > div:nth-child(1) > div.A8SBwf > div.RNNXgb > button',
         '#tsf > div:nth-child(1) > div.A8SBwf > div.RNNXgb > div.M8H8pb',
         '#tsf > div:nth-child(1) > div.A8SBwf > div.RNNXgb',
@@ -528,6 +533,8 @@
     // --- State ---
     let isRedirecting = false;
     let domObserver = null;
+    let ffAndroidScanInterval = null;
+    let ffAndroidScanAttempts = 0;
 
     // --- Compiled pattern (combined regex) ---
     const blockKeywordsPattern = regexKeywordsToHide.length
@@ -611,11 +618,51 @@
         return arrayHit.some(Boolean);
     }
 
+    // Helper: non-destructive hide (do not remove nodes)
+    function hideElementSafely(el) {
+        try {
+            if (!el || !el.style) return;
+            el.setAttribute('data-googlejs-hidden', '1');
+            el.setAttribute('aria-hidden', 'true');
+            el.style.setProperty('display', 'none', 'important');
+            el.style.setProperty('visibility', 'hidden', 'important');
+            el.style.setProperty('opacity', '0', 'important');
+            el.style.setProperty('pointer-events', 'none', 'important');
+        } catch (e) {}
+    }
+
+    // Suggestion selectors builder (includes mobile-friendly superset for Firefox Android)
+    function getSuggestionSelectors() {
+        const base = [
+            '#fprsl', '#fprs', '#oFNiHe', '.QRYxYe', '.NNMgCf', '.spell_orig', '.gL9Hy', '#bres', 'div.y6Uyqe',
+            'span.gL9Hy', 'a.spell', 'p.spell_orig', '.KDCVqf', '.card-section.p64x9c'
+        ];
+        if (isFirefoxAndroid) {
+            // Add a wider net for Google Mobile DOM variants commonly seen on Android
+            const mobileExtras = [
+                '#taw', '#topstuff', '#search',
+                'div[aria-live]', 'div[role="alert"]', 'div[aria-atomic]',
+                'div[jsname]', 'div[data-hveid]', 'div[data-ved]',
+                'span[role="text"]', 'div[data-async-context]',
+                'div[aria-label*="results"]',
+                'div[data-md*="spelling"]',
+                '.gXqMYb', '.sspCHc', '.sUGDF', '.wwUB2c', '.s6JM6d', '.mqCNLe', // observed mobile classes (subject to A/B)
+                'div.E69Xwd', 'div.EZRelc', 'div.HZ1VQ' // generic card containers on mobile
+            ];
+            return base.concat(mobileExtras);
+        }
+        return base;
+    }
+
     // --- Chrome "no-glimpse" redirect (keep overlay until redirect) ---
     function doRedirect() {
         if (isRedirecting) return;
         isRedirecting = true;
         try { if (domObserver) domObserver.disconnect(); } catch (e) {}
+        if (ffAndroidScanInterval) {
+            try { clearInterval(ffAndroidScanInterval); } catch (e) {}
+            ffAndroidScanInterval = null;
+        }
         try { window.stop && window.stop(); } catch (e) {}
         // DO NOT remove the overlay here; we intentionally keep it visible until we land on google.com
         try {
@@ -852,7 +899,8 @@
                     if (!isProtectedElement(element)) {
                         const txt = element.textContent || '';
                         if (!containsAllowedWords(txt)) {
-                            element.remove();
+                            // HIDE instead of remove (so scanning still "sees" the content)
+                            hideElementSafely(element);
                         }
                     }
                 });
@@ -876,7 +924,8 @@
                 if (isProtectedElement(element)) return;
                 const textContent = element.textContent || '';
                 if (phrasesToHide.some(phrase => phrase.test(textContent)) && !containsAllowedWords(textContent)) {
-                    element.remove();
+                    // HIDE instead of remove (so scanning still "sees" the content)
+                    hideElementSafely(element);
                 }
             });
         } catch (e) {}
@@ -884,10 +933,7 @@
 
     // Suggestions/“Did you mean?” detection without redirect (for safe overlay release)
     function hasForbiddenSuggestionText() {
-        const suggestionSelectors = [
-            '#fprsl', '#fprs', '#oFNiHe', '.QRYxYe', '.NNMgCf', '.spell_orig', '.gL9Hy', '#bres', 'div.y6Uyqe',
-            'span.gL9Hy', 'a.spell', 'p.spell_orig', '.KDCVqf', '.card-section.p64x9c'
-        ];
+        const suggestionSelectors = getSuggestionSelectors();
         for (let s = 0; s < suggestionSelectors.length; ++s) {
             const elements = document.querySelectorAll(suggestionSelectors[s]);
             for (let i = 0; i < elements.length; ++i) {
@@ -899,12 +945,40 @@
         return false;
     }
 
+    // Extra robust scanner for Firefox Android: scan a broader set (including aria-live regions)
+    function ffAndroidSuggestionScanAndRedirect() {
+        if (!isFirefoxAndroid || isRedirecting) return false;
+
+        const selectors = getSuggestionSelectors().concat([
+            'div[aria-live]', 'div[role="alert"]', 'div[aria-atomic]',
+            'div[aria-live] *', 'div[role="alert"] *',
+            'h1, h2, h3, h4, p, span, a, i'
+        ]);
+        let redirected = false;
+
+        for (let s = 0; s < selectors.length && !redirected; ++s) {
+            const nodes = document.querySelectorAll(selectors[s]);
+            for (let i = 0; i < nodes.length && !redirected; ++i) {
+                const txt = nodes[i].textContent || '';
+                if (!txt) continue;
+                if (containsAllowedWords(txt)) continue;
+
+                // Quick positive path: any forbidden keyword inside a likely "did you mean/showing" container
+                const hasForbidden = containsForbiddenKeywords(txt);
+                if (hasForbidden) {
+                    console.log('🚨 FFAndroid broad-scan redirect by:', hasForbidden, 'selector:', selectors[s]);
+                    overlay && (overlay.style.display = 'block');
+                    doRedirect();
+                    redirected = true;
+                }
+            }
+        }
+        return redirected;
+    }
+
     function monitorSelectorsAndRedirect() {
         // Under overlay: if forbidden appears in suggestions, redirect immediately
-        const selectors = [
-            '#fprsl', '#fprs', '#oFNiHe', '.QRYxYe', '.NNMgCf', '.spell_orig', '.gL9Hy', '#bres', 'div.y6Uyqe',
-            'span.gL9Hy', 'a.spell', 'p.spell_orig', '.KDCVqf', '.card-section.p64x9c'
-        ];
+        const selectors = getSuggestionSelectors();
         let redirected = false;
         for (let s = 0; s < selectors.length; ++s) {
             const elements = document.querySelectorAll(selectors[s]);
@@ -918,6 +992,12 @@
                     if (!redirected) { redirected = true; doRedirect(); }
                 }
             }
+        }
+
+        // Firefox Android fallback: if the specific selectors miss it (A/B DOM changes),
+        // run a broader scan over aria-live and general text containers.
+        if (!redirected && isFirefoxAndroid) {
+            ffAndroidSuggestionScanAndRedirect();
         }
     }
 
@@ -1043,7 +1123,8 @@
         devLog('Setting up mutation observer');
         interceptSearchInputChanges();
 
-        const container = document.getElementById('search') || document.body || document.documentElement;
+        // Observe entire document for FF Android (text changes are often characterData changes in aria-live containers)
+        const container = (isFirefoxAndroid ? document.documentElement : (document.getElementById('search') || document.body || document.documentElement));
         domObserver = new MutationObserver((mutations) => {
             if (isRedirecting) return;
             // Small debounce to batch DOM bursts
@@ -1052,7 +1133,38 @@
                 mainFilteringThrottled();
             }, 18);
         });
-        domObserver.observe(container, { childList: true, subtree: true });
+
+        const observerOptions = isFirefoxAndroid
+            ? { childList: true, subtree: true, characterData: true, attributes: true }
+            : { childList: true, subtree: true };
+
+        try { domObserver.observe(container, observerOptions); } catch (e) {}
+        devLog('Observer attached to: ' + (container === document.documentElement ? 'documentElement' : container.id || container.nodeName));
+
+        // Periodic fallback scanner for Firefox Android (covers missed MutationObserver cases or async aria-live updates)
+        if (isFirefoxAndroid) {
+            try {
+                ffAndroidScanAttempts = 0;
+                ffAndroidScanInterval = setInterval(() => {
+                    if (isRedirecting) {
+                        clearInterval(ffAndroidScanInterval);
+                        ffAndroidScanInterval = null;
+                        return;
+                    }
+                    ffAndroidScanAttempts++;
+                    // Scan more frequently at first, then stop after some time window
+                    ffAndroidSuggestionScanAndRedirect();
+                    // Also try to release overlay if it's safe
+                    maybeReleaseOverlay();
+                    if (ffAndroidScanAttempts > 120) { // ~60 seconds at 500ms
+                        clearInterval(ffAndroidScanInterval);
+                        ffAndroidScanInterval = null;
+                    }
+                }, 500);
+                devLog('FF Android periodic scanner started');
+            } catch (e) {}
+        }
+
         mainFiltering();
     }
 
