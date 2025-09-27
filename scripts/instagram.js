@@ -395,6 +395,12 @@
         'html',
         'body',
         '#mount_0_0_Ie',
+        'div[role="dialog"] [role="button"][aria-label="Lähetä"]',
+        '[role="button"][aria-label="Lähetä"]',
+        'div[role="dialog"] [role="button"][aria-label="Send"]',
+        '[role="button"][aria-label="Send"]',
+        'div[role="dialog"] div[role="button"][tabindex="0"]:not([aria-disabled="true"])',
+        'div[role="dialog"] div[role="button"].x1i10hfl.xjqpnuy.xc5r6h4.xqeqjp1.x1phubyo.x10w94by.x1qhh985.x14e42zd.xdl72j9.x2lah0s.x3ct3a4.xdj266r.x14z9mp.xat24cr.x1lziwak.x2lwn1j.xeuugli.xexx8yu.x18d9i69.x1hl2dhg.xggy1nq.x1ja2u2z.x1t137rt.x1q0g3np.x1lku1pv.x1a2a7pz.x6s0dn4.xjyslct.x1obq294.x5a5i1n.xde0f50.x15x8krk.x1ejq31n.x18oe1m7.x1sy0etr.xstzfhl.x9f619.x9bdzbf.x1ypdohk.x1f6kntn.xwhw2v2.x10w6t97.xl56j7k.x17ydfre.xf7dkkf.xv54qhq.x1n2onr6.x2b8uid.xlyipyv.x87ps6o.x5c86q.x18br7mf.x1i0vuye.xh8yej3.x18cabeq.x158me93.xk4oym4.x1uugd1q.x3nfvp2',
 
         /* NEW protected selectors for IG share dialog "Lähetä" (Send) button */
         'div[role="button"][tabindex="0"].x1i10hfl.xjqpnuy.xc5r6h4.xqeqjp1.x1phubyo.x972fbf.x10w94by.x1qhh985.x14e42zd.xdl72j9.x2lah0s.x3ct3a4.xdj266r.x14z9mp.xat24cr.x1lziwak.x2lwn1j.xeuugli.xexx8yu.x18d9i69.x1hl2dhg.xggy1nq.x1ja2u2z.x1t137rt.x1q0g3np.x1lku1pv.x1a2a7pz.x6s0dn4.xjyslct.x1obq294.x5a5i1n.xde0f50.x15x8krk.x1ejq31n.x18oe1m7.x1sy0etr.xstzfhl.x9f619.x9bdzbf.x1ypdohk.x1f6kntn.xwhw2v2.x10w6t97.xl56j7k.x17ydfre.xf7dkkf.xv54qhq.x1n2onr6.x2b8uid.xlyipyv.x87ps6o.x5c86q.x18br7mf.x1i0vuye.xh8yej3.x18cabeq.x158me93.xk4oym4.x1uugd1q.x3nfvp2',
@@ -444,11 +450,9 @@
         'span.x1lliihq.x1plvlek.xryxfnj.x1n2onr6.x1ji0vk5.x18bv5gf.x193iq5w.xeuugli.x1fj9vlw.x13faqbe.x1vvkbs.x1s928wv.xhkezso.x1gmr53x.x1cpjm7i.x1fgarty.x1943h6x.x1i0vuye.xvs91rp.x1s688f.x1roi4f4.x1t',
         'a.x1i10hfl.xjbqb8w.x1ejq31n.x18oe1m7.x1sy0etr.xstzfhl.x972fbf.x10w94by.x1qhh985.x14e42zd.x9f619.x1ypdohk.xt0psk2.xe8uvvx.xdj266r.x14z9mp.xat24cr.x1lziwak.xexx8yu.xyri2b.x18d9i69.x1c1uobl.x16t',
         'div.x9f619.xjbqb8w.x78zum5.xdj266r.x1yztbdb.xyri2b.x1c1uobl.x1uhb9sk.x1plvlek.xryxfnj.x1c4vz4f.x2lah0s.xdt5ytf.xqjyukv.x1qjc9v5.x1oa3qoh.x1nhvcw1',
-        'div.x9f619.xjbqb8w.x78zum5.x15mokao.x1ga7v0g.x16uus16.xbiv7yw.xyqm7xq.x1ys307a.x1uhb9sk.x1plvlek.xryxfnj.x1c4vz4f.x2lah0s.xdt5ytf.xqjyukv.x1qjc9v5.x1oa3qoh.x1nhvcw1',
-        'div.x9f619.xjbqb8w.x78zum5.x15mokao.x1ga7v0g.x16uus16.xbiv7yw.xdj266r.x1yztbdb.xyri2b.x1c1uobl.x1uhb9sk.x1plvlek.xryxfnj.x1c4vz4f.x2lah0s.xdt5ytf.xqjyukv.x1qjc9v5.x1oa3qoh.x1nhvcw1',
-        'div.x9f619.xjbqb8w.x78zum5.x15mokao.x1ga7v0g.x16uus16.xbiv7yw.xdj266r.x1yztbdb.xyri2b.x1c1uobl.x1uhb9sk.x1plvlek.xryxfnj.x1c4vz4f.x2lah0s.xdt5ytf.xqjyukv.x1qjc9v5.x1oa3qoh.x1nhvcw1',
         'div.x9f619.xjbqb8w.x78zum5.x15mokao.x1ga7v0g.x16uus16.xbiv7yw.x1uhb9sk.x1plvlek.xryxfnj.x1c4vz4f.x2lah0s.xdt5ytf.xqjyukv.x1qjc9v5.x1oa3qoh.x1nhvcw1[style*="height: 250px"]',
         'a.x1i10hfl.xjbqb8w.x1ejq31n.x18oe1m7.x1sy0etr.xstzfhl.x972fbf.x10w94by.x1qhh985.x14e42zd.x9f619.x1ypdohk.xt0psk2.xe8uvvx.xdj266r.x14z9mp.xat24cr.x1lziwak.xexx8yu.xyri2b.x18d9i69.x1c1uobl.x16tdsg8.x1',
+        'div.x9f619.xjbqb8w.x78zum5.x15mokao.x1ga7v0g.x16uus16.xbiv7yw.xdj266r.x1yztbdb.xyri2b.x1c1uobl.x1uhb9sk.x1plvlek.xryxfnj.x1c4vz4f.x2lah0s.xdt5ytf.xqjyukv.x1qjc9v5.x1oa3qoh.x1nhvcw1',
         'a.x1i10hfl[href*="blocked"]',
         'a.x1i10hfl[href*="estetty"]',
         'a.x1i10hfl[href*="Rajoitetut tilit"]',
@@ -466,6 +470,11 @@
         '[aria-label*="Myös Metalta"]',
         '[title*="Myös Metalta"]',
         'svg[aria-label*="Myös Metalta"]',
+        '[role="navigation"] a[href^="/explore"]',
+        'nav[aria-label*="Primary"] a[href^="/explore"]',
+        'a[href="/explore/"]',
+        'a[href="/explore/?next=%2F"]',
+        'a[role="link"][href^="/explore"]'
     ];
 
     const selectorsToMonitor = [
@@ -1022,6 +1031,11 @@ ${p}, ${p} * {
 [role="listbox"] li:not([${IG_SEARCH_APPROVE_ATTR}="1"]),
 [role="listbox"] a[role="link"]:not([${IG_SEARCH_APPROVE_ATTR}="1"]),
 [role="listbox"] a._a6hd:not([${IG_SEARCH_APPROVE_ATTR}="1"]),
+[role="navigation"] a[href^="/explore"],
+nav[aria-label*="Primary"] a[href^="/explore"],
+a[href="/explore/"],
+a[href="/explore/?next=%2F"],
+a[role="link"][href^="/explore"],
 [role="listbox"] a.x1i10hfl:not([${IG_SEARCH_APPROVE_ATTR}="1"]) {
     display: none !important;
     visibility: hidden !important;

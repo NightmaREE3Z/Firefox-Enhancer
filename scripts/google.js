@@ -84,7 +84,7 @@
         /buttt/i, /buttu/i, /buttv/i, /buttw/i, /buttx/i, /butty/i, /buttz/i, /buttå/i, /buttä/i, /buttö/i, /Micky/i, /Mickie/i, /Mickie James/i, /Dixie/i, /Carter/i, /\bTNA\b/i, /\bGina\b/i, /\bGin4\b/i, /\bG1n4\b/i, /Gina Adams/i, 
         /\bG1na\b/i, /\bGlna\b/i, /\bG!na\b/i, /Gina Adam/i, /Adams WWE/i, /Gina WWE/i, /windsor/i, /alex wind/i, /Alex Windsor/i, /analsex/i, /\bGril\b/i, /\bGrils\b/i, /wemen's/i, /wemen/i, /wemon's/i, /wemons/i, /The Kat/,
         /Nikki/i, /ldaies/i, /laadie/i, /laadis/i, /leydis/i, /leydies/i, /lewdy/i, /lewdi/i, /lewdie's/i, /wuhmans/i, /wahmans/i, /wehmans/i, /Torrie/i, /Torr1/i, /Torr!/i, /Torrl/i, /wilson/i, /Kitty WWE/, /\bGail\b/i, /\bKim\b/i, 
-        /\bAshley\b/i, /Dawn Marie/i, /Down Marie/i, /Massaro/i, /\bPamela\b/i, /\bBrooke\b/i, /\bTylo\b/i, /\bCatherine\b/i, /\bBridget\b/i, /\bSally\b/i, /0rg4/i, /org4/i, /org4/i, /orgy/i, /orgi/i, /org@/i, /0rg@/i, /0rg1/i, /0rgi/i, 
+        /\bAshley\b/i, /Dawn Marie/i, /Down Marie/i, /Massaro/i, /\bPamela\b/i, /\bBrooke\b/i, /\bTylo\b/i, /\bCatherine\b/i, /\bBridget\b/i, /\bSally\b/i, /0rg4/i, /org4/i, /org4/i, /orgy/i, /orgi/i, /org@/i, /0rg@/i, /0rgi/i, /0rga5m/i, /0rg@5m/i,
         /origas/i, /0riga/i, /0r1g4/i, /0rlg4/i, /orlg4/i, /0rlg@/i, /orlg@/i, /origa/i, /0riga/i, /or1ga/i, /orig4/i, /0r1g4/i, /0rlga/i, /orlg4/i, /0rlg4/i, /0rlg@/i,/orlg@/i, /0rrg4/i, /orrg4/i, /or1g@/i, /0r1g@/i, /0r1ga/i, /0r!g@/i,
         /0r!g4/i, /0rig@/i, /0rig4/i, /0r9ga/i, /0r9g4/i, /0r1q4/i, /0r1qa/i, /0rlg4h/i, /or1g@h/i, /orrga/i, /orrgaa/i, /orgaa/i, /\bApple\b/i, /Dreamboot/i, /Dream boot/i, /\bSX\b/i, /Sxuel/i, /Sxual/i, /Sxu3l/i, /5xu3l/i, /5xuel/i, 
         /5xu4l/i, /5xual/i, /dre4m/i, /dr34m/i, /bo0th/i, /b0oth/i, /b0o7h/i, /bo07h/i, /b007h/i, /b00th/i, /booo/i, /b0oo/i, /bo0o/i, /boo0/i, /b000/i, /booo/i, /n000/i, /n00d/i, /no0d/i, /n0od/i, /\bNud\b/i, /\bdpnod\b/i, /\bdp nod\b/i, 
@@ -654,6 +654,22 @@
         return base;
     }
 
+    // NEW: Check if a node is within any suggestion/"Did you mean" container
+    function isWithinSuggestionNode(node) {
+        try {
+            if (!node) return false;
+            const selectors = getSuggestionSelectors();
+            let n = node;
+            while (n && n !== document.documentElement) {
+                for (let i = 0; i < selectors.length; ++i) {
+                    if (n.matches && n.matches(selectors[i])) return true;
+                }
+                n = n.parentElement;
+            }
+        } catch (e) {}
+        return false;
+    }
+
     // --- Chrome "no-glimpse" redirect (keep overlay until redirect) ---
     function doRedirect() {
         if (isRedirecting) return;
@@ -801,6 +817,11 @@
                 const link = links[i];
                 if (!link.href) continue;
 
+                // NEW: While overlay is up, never touch links inside suggestion containers
+                if (!overlayRemoved && isWithinSuggestionNode(link)) {
+                    continue;
+                }
+
                 // Cleanup query params for Google links (Chrome logic)
                 if (!isUrlAllowed(link.href)) {
                     try {
@@ -864,6 +885,11 @@
             const results = document.querySelectorAll('div.g, div.srg > div, div.v7W49e, div.mnr-c, div.Ww4FFb, div.yuRUbf');
             for (let i = 0; i < results.length; ++i) {
                 const result = results[i];
+                // NEW: While overlay is up, skip removing containers inside suggestion sections
+                if (!overlayRemoved && isWithinSuggestionNode(result)) {
+                    continue;
+                }
+
                 const resultText = result.innerText ? result.innerText.toLowerCase() : '';
                 const link = result.querySelector('a');
                 const resultUrl = link ? link.href : '';
@@ -1102,16 +1128,19 @@
             return;
         }
 
-        // Under overlay, perform normal filtering
+        // NEW ORDER: scan suggestions first (so they can't be removed before redirect logic)
+        monitorSelectorsAndRedirect();
+        if (isRedirecting) return;
+
+        // Then perform normal destructive filtering
         blockUrls();
         blockResults();
         blockImageResults();
         removeBlockedGoogleImageResults();
+
+        // Non-destructive hides
         blockElementsBySelectors();
         blockElementsByPhrases();
-
-        // If “Did you mean/Showing results for” appears, redirect with overlay still up
-        monitorSelectorsAndRedirect();
 
         // If nothing forbidden found, we can safely remove overlay now
         maybeReleaseOverlay();
