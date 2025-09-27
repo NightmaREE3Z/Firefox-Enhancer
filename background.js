@@ -154,6 +154,7 @@ const urlsToBlock = [
     "*://threads.com/*",
     "*://threads.net/*",
     "*://instagram.com/*",
+    "*://m.instagram.com/*",
     "*://osboxes.org/*",
     "*://oracle.com/*",
     "*://oracle.org/*",
