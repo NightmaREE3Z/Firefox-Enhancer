@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         ArchiveRedirect
-// @version      2.1
+// @version      2.2
 // @description  Redirects specific archive pages (and xcancel.com search) to the appropriate front page when banned terms are detected.
 // @match        *://web.archive.org/*
 // @match        *://archive.org/*
@@ -21,9 +21,20 @@
         try { return window.top; } catch { return window; }
     })();
 
+    // Proactively clear legacy once-per-session flag if it exists (prevents permanent suppression)
+    try { sessionStorage.removeItem('ARD_REDIRECTED_ONCE'); } catch {}
+
     // Safe helpers for page and context info (avoid cross-origin reads)
     const selfURL = String(window.location.href || '');
+
+    // Decode-helpers: scan raw and decoded URL variants for full coverage (handles %20 etc.)
+    const tryDecode = (s) => {
+        try { return decodeURIComponent(s); } catch {}
+        try { return decodeURI(s); } catch {}
+        return s;
+    };
     const pageURLLower = selfURL.toLowerCase();
+    const pageURLDecodedLower = tryDecode(selfURL).toLowerCase();
     const selfHostLower = String(window.location.hostname || '').toLowerCase();
 
     const contextHostLower = (() => {
@@ -164,7 +175,7 @@
         /Tiffa/i, /Strat/i, /puz/i, /vulv/i, /clit/i, /cl1t/i, /cloth/i, /uncloth/i, /decloth/i, /rem cloth/i, /del cloth/i, /izzi dame/i, /eras cloth/i, /Bella/i, /Tiffy/i, /vagi/i, /vagene/i, /Del Ray/i, /CJ Lana/i, /generator/i,
         /Liv org/i, /pant/i, /off pant/i, /rem pant/i, /Kristen Stewart/i, /Steward/i, /Perze/i, /Brave/i, /Roxan/i, /Browser/i, /Selain/i, /TOR-Selain/i, /Brit Bake/i, /vega/i, /\bSlut\b/i, /3dit/i, /ed1t/i, /playboy/i, /poses/i,
         /Sydney Sweeney/i, /Sweeney/i, /fap/i, /Sydnee/i, /del pant/i, /eras pant/i, /her pant/i, /she pant/i, /pussy/i, /adult content/i, /content adult/i, /porn/i, /\bTor\b/i, /editing/i, /3d1t/i, /\bAMX\b/i, /posing/i, /Sweee/i,
-        /\bAnal-\b/i, /\bAlexa\b/i, /\bAleksa\b/i, /AI Tool/i, /aitool/i, /Stee/i, /Waaa/i, /Stewart/i, /MS Edge/i, /TOR-browser/i, /Opera/i, /\bAi\b/i, /\bADM\b/i, /\bAis\b/i, /\b-Ai\b/i, /\bedit\b/i, /Feikki/i, /syväväärennös/i,
+        /\bAnal-\b/i, /\bAlexa\b/i, /\bAleksa\b/i, /AI Tool/i, /aitool/i, /Stee/i, /Waaa/i, /Stewart/i, /MS Edge/i, /TOR-browser/i, /Opera/i, /\bAi\b/i, /\bIa\b/i, /\bADM\b/i, /\bAis\b/i, /\b-Ai\b/i, /\bedit\b/i, /Feikki/i, /syväväärennös/i,
         /\bIzzi\b/i, /\bDame\b/i, /\bNox\b/i, /\bLiv\b/i, /Chelsey/i, /Zel Veg/i, /Ch3l/i, /\bShe\b/i, /\bADMX\b/i, /\bSol\b/i, /\bEmma\b/i, /\bRiho\b/i, /\bJaida\b/i, /\bCum\b/i, /\bAi-\b/i, /syvä väärennös/i, /alaston/i, /\bHer\b/i,
         /P4IG3/i, /Paig3/i, /P4ige/i, /pa1g/i, /pa!g/i, /palg3/i, /palge/i, /Br1tt/i, /Br!tt/i, /Brltt/i, /\bTay\b/i, /\balexa wwe\b/i, /\bazz\b/i, /\bjaida\b/i, /Steph/i, /St3ph/i, /editation/i, /3d!7/i, /3d!t/i, /ed!t/i, /Chel5/i,
         /Diipfeikki/i, /Diipfeik/i, /deep feik/i, /deepfeik/i, /Diip feik/i, /Diip feikki/i, /syva vaarennos/i, /syvä vaarennos/i, /CJ Perry/i, /Lana WWE/i, /Lana Del Rey/i, /\bLana\b/i, /CJ WWE/i, /image app/i, /edi7/i, /3d17/i, /ed!7/i,
@@ -215,17 +226,19 @@
         /virt mach/i, /virtu mach/i, /virtua mach/i, /virtual mach/i, /vi mac/i, /vir mac/i, /virt mac/i, /virtu mac/i, /virtua mac/i, /virtual machi/i, /waterfox/i, /water fox/i, /waterf0x/i, /water f0x/i, 	/\bMimmi\b/i, /\bMimmuska\b/i, 
         /\bM1mmi\b/i, /\bM1mmuska\b/i, /\bMimm1\b/i, /\bM1mmusk4\b/i, /\bMimmusk4\b/i, /lahiopekoni/i, /lähiopekoni/i, /lähiöpekoni/i, /lahiöpekoni/i, /LTheory/i, /LuTheory/i, /LusTheory/i, /L-Theory/i, /m4tic/i, /LustTheory/i, /Lust Theory/i, 
         /Lu-Theory/i, /Lus-Theory/i, /Lust-Theory/i, /ComfyUI/i, /Comfy-UI/i, /ComfyAI/i, /Comfy-AI/i, /Midjourney/i, /StaphMc/i, /Staph McMahon/i, /MeekMahan/i, /MekMahan/i, /MekMahaan/i, /Mek Mahaan/i, /4ut0/i, /Meek Mahaan/i, /Meek Mahan/i, 
-        /Meek Mahon/i, /Mek Mahon/i, /MeekMahon/i, /MekMahon/i, /CoAi/i, /ComAi/i, /ComfAi/i, /ComfoAi/i, /ComforAi/i, /ComfortAi/i, /ComfortaAi/i, /ComfortabAi/i, /ComfortablAi/i, /ComfortableAi/i, /Runcomfy/i, /Run comfy/i, /Run-comfy/i, /Aut1111/i, /Automatic11/i, /Automatic 11/i, /Aut0/i, /4uto/i, /Co-Ai/i, /Com-Ai/i, /Comf-Ai/i, /Comfo-Ai/i, /Comfor-Ai/i, /Comfort-Ai/i, /Comforta-Ai/i, /Comfortab-Ai/i, /Comfortabl-Ai/i, /Comfortable-Ai/i, /Runcomfy/i, /Run comfy/i, /Run-comfy/i, /Aut1111/i, /Automatic11/i, /Automatic 11/i, /Aut0/i, /4uto/i, /4ut0/i, /Becky/i, /Becki/i, 
+        /Meek Mahon/i, /Mek Mahon/i, /MeekMahon/i, /MekMahon/i, /CoAi/i, /ComAi/i, /ComfAi/i, /ComfoAi/i, /ComforAi/i, /ComfortAi/i, /ComfortaAi/i, /ComfortabAi/i, /ComfortablAi/i, /ComfortableAi/i, /Runcomfy/i, /Run comfy/i, /Run-comfy/i, /Aut1111/i, 
+	/Automatic11/i, /Automatic 11/i, /Aut0/i, /4uto/i, /Co-Ai/i, /Com-Ai/i, /Comf-Ai/i, /Comfo-Ai/i, /Comfor-Ai/i, /Comfort-Ai/i, /Comforta-Ai/i, /Comfortab-Ai/i, /Comfortabl-Ai/i, /Comfortable-Ai/i, /Runcomfy/i, /Run comfy/i, /Run-comfy/i, /Aut1111/i, 
+	/Automatic11/i, /Automatic 11/i, /Aut0/i, /4uto/i, /4ut0/i, /Becky/i, /Becki/i, /Lily Adam/i, /Lilly Adam/i, /xvideo/i, /\bTatu\b/i, /Toiviainen/i, /Tatujo/i, /AIRemove/i, /RemoveAI/i, /removalAI/i, /removAI/i, /AIremoving/i, /removingAI/i, /AIremoval/i, 
         /Rebecca/i, /Amber/i, /Amber Heard/i, /without cloth/i, /without pant/i, /without tshirt/i, /without t-shirt/i, /without boxer/i, /b0x3r/i, /box3r/i, /b0xer/i, /woman without/i, /women without/i, /girl without/i, /lady without/i, /ladies without/i, 
         /tyttöjä/i, /naisia/i, /tytöt/i, /naiset/i, /nainen/i, /naikkoset/i, /mimmejä/i, /misu/i, /pimu/i, /lortto/i, /lutka/i, /lumppu/i, /narttu/i,  /horo/i, /huora/i, /huoru/i, /Becky/i, /Becki/i, /Rebecca/i, /Amber Heard/i, /girlfriend/i, /boyfriend/i, 
-        /girl friend/i, /boy friend/i, /sperm/i, /bikini/i, /linger/i, /underwear/i, /under wear/i, /without dres/i, /with out dres/i, /bik1/i, /m4t1c/i, /mat1c/i, /m4tic/i, /m47ic/i, /ma7ic/i, /ma71c/i, /m471c/i, /Dualipa/i, /Dua Lipa/i, /chang pos/i, 
+        /girl friend/i, /boy friend/i, /sperm/i, /bikini/i, /linger/i, /underwear/i, /under wear/i, /without dres/i, /with out dres/i, /bik1/i, /m4t1c/i, /mat1c/i, /m4tic/i, /m47ic/i, /ma7ic/i, /ma71c/i, /m471c/i, /Dualipa/i, /Dua Lipa/i, /chang pos/i, /PiFuHD/i, 
         /selfie body/i, /belfie/i, /pos chang/i, /post chang/i, /change post/i, /change pose/i, /post change/i, /pose change/i, /pose change/i, /posture change/i, /pose change/i,  /postu edit/i, /pose edit/i, /edit postu/i, /edit pose/i, /editor postu/i, 
         /editor pose/i, /postu editor/i, /pose editor/i, /postu modi/i, /pose modi/i, /pic online/i, /pict online/i, /phot onli/i, /fhot onli/i, /foto onli/i, /body selfie/i, /body belfie/i, /full body/i, /pic body/i, /pict body/i, /phot body/i, /image body/i, 
         /img body/i, /postu tweak/i, /pose tweak/i, /postu tweak/i, /twerk/i, /pose swap/i, /post swap/i, /body swap/i,  /pose adjust/i, /post adjust/i, /body adjust/i,  /adjust pose/i, /adjust posture/i, /pose trans/i, /post trans/i, /pose morph/i, /post morph/i, 
         /body morph/i, /body reshape/i, /shape body/i, /repose/i, /repose edit/i, /pose redo/i, /repose chang/i, /body editor/i, /body filter/i, /filter body/i, /angle chang/i, /change angle/i, /edit angle/i, /camera angle/i, /head turn/i, /body turn/i, /pose tweak/i, 
         /tweak pose/i, /post tweak/i, /pose reconstruct/i, /reconstruct pose/i, /pose fix/i, /fix pose/i, /body fix/i, /fix body/i, /edit selfie/i,  /selfie editor/i, /selfie morph/i, /pose shift/i, /posture shift/i, /angle shift/i, /pic shift/i, /phot shift/i, 
         /pose tweak/i, /img shift/i, /promeai/i, /prome-ai/i, /openpose/i, /open pose/i, /open-pose/i, /openpose/i, /open pose/i, /open-pose/i, /pose-open/i, /poseopen/i, /pos open/i, /open-pose/i, /pose-/i, /-pose/i, /\bLily\b/i, /\bLili\b/i, /\bLilli\b/i, /\bLilly\b/i, 
-        /Lily Adam/i, /Lilly Adam/i, /xvideo/i, /\bTatu\b/i, /Toiviainen/i, /Tatujo/i, /PiFuHD/i,
+        /removeai/i, /airemove/i, /ai-/i, /-ai/i, 
     ];
 
     // Robust, cross-browser redirect
@@ -236,13 +249,26 @@
         try { window.location.href = targetUrl; } catch {}
     }
 
-    // Prevent redirect loops within a single tab/origin
-    const REDIRECT_FLAG = 'ARD_REDIRECTED_ONCE';
+    // Prevent redirect loops but allow future redirects (short TTL, per-destination)
+    const REDIRECT_FLAG = 'ARD_REDIRECTED_ONCE'; // legacy (kept for backward compatibility; no longer used)
+    const LAST_REDIRECT_KEY = 'ARD_LAST_REDIRECT';
+    const REDIRECT_TTL_MS = 2500;
+
     const alreadyRedirected = () => {
-        try { return sessionStorage.getItem(REDIRECT_FLAG) === '1'; } catch { return false; }
+        try {
+            const s = sessionStorage.getItem(LAST_REDIRECT_KEY);
+            if (!s) return false;
+            const o = JSON.parse(s);
+            if (!o || !o.url || !o.ts) return false;
+            const home = getHomeURLForCurrentSite();
+            return o.url === home && (Date.now() - o.ts) < REDIRECT_TTL_MS;
+        } catch { return false; }
     };
     const markRedirected = () => {
-        try { sessionStorage.setItem(REDIRECT_FLAG, '1'); } catch {}
+        try {
+            const home = getHomeURLForCurrentSite();
+            sessionStorage.setItem(LAST_REDIRECT_KEY, JSON.stringify({ url: home, ts: Date.now() }));
+        } catch {}
     };
 
     // Centralized redirect: determines the correct home page per site (Archive vs xcancel),
@@ -277,10 +303,25 @@
         redirectToHome();
     };
 
+    // Helper: check any text for restricted terms (string and regex)
+    const containsRestricted = (text) => {
+        if (!text) return false;
+        const lower = text.toLowerCase();
+        for (let term of terms) {
+            if (lower.includes(term.toLowerCase())) return true;
+        }
+        for (let regex of regexTerms) {
+            try { if (regex.test(text)) return true; } catch {}
+        }
+        return false;
+    };
+
     // Function to check for terms in the URL and redirect
     const checkTermsAndRedirect = () => {
+        // Check both raw and decoded variants
         for (let term of terms) {
-            if (pageURLLower.includes(term.toLowerCase())) {
+            const t = term.toLowerCase();
+            if (pageURLLower.includes(t) || pageURLDecodedLower.includes(t)) {
                 console.log(`Term found in URL: ${term}. Redirecting to ${getSiteLabel()}.`);
                 redirectToHome();
                 return true;
@@ -291,11 +332,16 @@
 
     // Function to check for regex patterns in the URL and redirect
     const checkRegexAndRedirect = () => {
+        // Test both original URL and decoded URL for maximum coverage
         for (let regex of regexTerms) {
-            if (regex.test(pageURLLower)) {
-                console.log(`Regex pattern found in URL: ${regex}. Redirecting to ${getSiteLabel()}.`);
-                redirectToHome();
-                return true;
+            try {
+                if (regex.test(selfURL) || regex.test(tryDecode(selfURL))) {
+                    console.log(`Regex pattern found in URL: ${regex}. Redirecting to ${getSiteLabel()}.`);
+                    redirectToHome();
+                    return true;
+                }
+            } catch (e) {
+                // ignore malformed regex application
             }
         }
         return false;
@@ -305,13 +351,21 @@
     if (checkTermsAndRedirect()) return;
     if (checkRegexAndRedirect()) return;
 
+    // Re-check on URL changes after initial load (hash/popstate)
+    window.addEventListener('hashchange', () => {
+        if (checkTermsAndRedirect() || checkRegexAndRedirect()) return;
+    }, true);
+    window.addEventListener('popstate', () => {
+        if (checkTermsAndRedirect() || checkRegexAndRedirect()) return;
+    }, true);
+
     // Additional function to check for banned URLs with or without "www."
     const bannedURLs = ["blogspot.com", "blogger.com", "ask.fm", "reddit.com", "reddit.com/r/", "kuvake.net", "irc-galleria.net", "irc-galleria.fi", "irc.fi", "wondershare.com", "wondershare.net", "vmware.com", "virtualbox.org", "azure.microsoft.com"];
 
-    const isBannedURL = (urlLower) => {
+    const isBannedURL = (urlLower, urlDecodedLower) => {
         for (let bannedURL of bannedURLs) {
             const b = bannedURL.toLowerCase();
-            if (urlLower.includes(b) || urlLower.includes(`www.${b}`)) {
+            if (urlLower.includes(b) || urlLower.includes(`www.${b}`) || urlDecodedLower.includes(b) || urlDecodedLower.includes(`www.${b}`)) {
                 return true;
             }
         }
@@ -319,7 +373,7 @@
     };
 
     // Check for banned URLs and prevent loading if necessary
-    if (isBannedURL(pageURLLower)) {
+    if (isBannedURL(pageURLLower, pageURLDecodedLower)) {
         console.log(`Banned URL detected: ${selfURL}. Preventing page load.`);
         redirectToHome();
         return;
@@ -332,6 +386,26 @@
         } else {
             initContentChecking();
         }
+    };
+
+    // Utility: determine editable fields (inputs, textareas, contenteditable)
+    const isContentEditable = (el) => !!el && el.nodeType === 1 && typeof el.isContentEditable === 'boolean' && el.isContentEditable;
+    const isEditableField = (el) => {
+        if (!el || el.nodeType !== 1) return false;
+        if (el instanceof HTMLInputElement) {
+            return !el.disabled && !el.readOnly && el.type !== 'hidden';
+        }
+        if (el instanceof HTMLTextAreaElement) {
+            return !el.disabled && !el.readOnly;
+        }
+        if (isContentEditable(el)) return true;
+        return false;
+    };
+    const getEditableValue = (el) => {
+        if (!el) return '';
+        if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) return el.value || '';
+        if (isContentEditable(el)) return (el.textContent || '').trim();
+        return '';
     };
 
     // Initialize content checking
@@ -390,13 +464,6 @@
             ".search-bar input[type='search'], .search-bar input[name='search']"
         ];
 
-        // Only treat real, editable fields as sources
-        const isEditableField = (el) =>
-            (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) &&
-            !el.disabled &&
-            !el.readOnly &&
-            el.type !== 'hidden';
-
         // Function to check page content for restricted words
         const checkContentForRestrictedWords = () => {
             let redirected = false;
@@ -411,7 +478,7 @@
                         // Only scan user-editable input/textarea values; ignore static nodes/containers
                         if (!isEditableField(element)) return;
 
-                        const content = element.value || "";
+                        const content = getEditableValue(element);
                         const lowerContent = content.toLowerCase();
 
                         if (!lowerContent) return;
@@ -443,6 +510,28 @@
                 }
             }
 
+            // Additionally scan generic contenteditable elements (not covered by specific selectors)
+            if (!redirected) {
+                try {
+                    const editableNodes = document.querySelectorAll('[contenteditable], [contenteditable="true"], [contenteditable="plaintext-only"]');
+                    for (const el of editableNodes) {
+                        if (redirected) break;
+                        if (!isEditableField(el)) continue;
+                        const content = getEditableValue(el);
+                        if (!content) continue;
+
+                        if (containsRestricted(content)) {
+                            console.log(`Get the fuck out of here with that! (contenteditable) Redirecting you to ${getSiteLabel()}.`);
+                            redirectToHome();
+                            redirected = true;
+                            break;
+                        }
+                    }
+                } catch (e) {
+                    // ignore
+                }
+            }
+
             return redirected;
         };
 
@@ -456,23 +545,67 @@
             inputTimer = setTimeout(() => checkContentForRestrictedWords(), 120);
         };
 
+        // Use composedPath to reliably find the real editable field (works with shadow DOM)
+        const getEditableFromEvent = (e) => {
+            const path = (typeof e.composedPath === 'function') ? e.composedPath() : (e.path || []);
+            const chain = (path && path.length) ? path : [e.target];
+            for (const node of chain) {
+                if (isEditableField(node)) return node;
+                if (node && typeof node.closest === 'function') {
+                    const hit = node.closest('input, textarea, [contenteditable], [contenteditable="true"], [contenteditable="plaintext-only"]');
+                    if (hit && isEditableField(hit)) return hit;
+                }
+            }
+            return null;
+        };
+
         const inputHandler = (e) => {
-            const t = e.target;
-            if (!t) return;
-            const field = (t.closest && t.closest('input, textarea')) || (t.matches && t.matches('input, textarea') ? t : null);
+            const field = getEditableFromEvent(e);
             if (field && isEditableField(field)) triggerCheck();
         };
 
+        document.addEventListener('beforeinput', inputHandler, true);
         document.addEventListener('input', inputHandler, true);
         document.addEventListener('keyup', inputHandler, true);
         document.addEventListener('change', inputHandler, true);
         document.addEventListener('paste', inputHandler, true);
         document.addEventListener('compositionend', inputHandler, true);
 
+        // Intercept form submissions early to block navigation and redirect
+        document.addEventListener('submit', (e) => {
+            try {
+                const form = e.target;
+                if (!form || !(form instanceof HTMLFormElement)) return;
+
+                // Inspect all inputs, textareas, and contenteditables within the form
+                const fields = form.querySelectorAll('input, textarea, [contenteditable], [contenteditable="true"], [contenteditable="plaintext-only"]');
+                for (const field of fields) {
+                    if (!isEditableField(field)) continue;
+                    const val = getEditableValue(field);
+                    if (!val) continue;
+                    if (containsRestricted(val)) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        e.stopImmediatePropagation?.();
+                        console.log(`Restricted term detected on form submit. Redirecting you to ${getSiteLabel()}.`);
+                        redirectToHome();
+                        return;
+                    }
+                }
+            } catch {}
+        }, true);
+
+        // Observe DOM changes so late-loaded inputs are covered without relying solely on a timer
+        const mo = new MutationObserver(() => triggerCheck());
+        try {
+            mo.observe(document.documentElement || document.body, { childList: true, subtree: true, characterData: false });
+        } catch {}
+
         // Run periodically in case elements load late (keeps running; stops only after redirect)
         const interval = setInterval(() => {
             if (checkContentForRestrictedWords()) {
                 clearInterval(interval);
+                try { mo.disconnect(); } catch {}
             }
         }, 1000);
 

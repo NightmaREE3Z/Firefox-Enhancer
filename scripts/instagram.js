@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ExtraRedirect-Instagram
-// @version      1.6.40-instagram-search-approve-gate-split
-// @description  Instagram/Threads/Reels specific logic split from Extra.js
+// @version      1.6.41-instagram-mem-optim
+// @description  Instagram/Threads/Reels specific logic split from Extra.js (memory + scheduling optimizations)
 // @match        *://www.instagram.com/*
 // @match        *://www.instagram.com/?next=%2F/*
 // @match        *://www.instagram.com/accounts/onetap/?next=%2F/*
@@ -21,6 +21,26 @@
     let __cleanupRan = false;
     let __intervalsRunning = false;
     let __isRedirectingFast = false; // guard against double redirects
+
+    // pacing/throttle config to reduce GC churn and peak memory, keeping UI snappy
+    const PACE = {
+        mainMinMs: 120,         // minimum spacing between heavy "main" runs
+        genericMinMs: 1500,     // min spacing between genericAggressiveHider runs
+        myosMinMs: 500,         // min spacing between "Myös Metalta" sweeps
+        settingsMinMs: 2500,    // min spacing between settings-page sweeps
+        searchMinMs: 80         // min spacing for search suggestion sweeps
+    };
+
+    // timestamps/state for throttling
+    let lastMainHandlerRun = 0;
+    let lastGenericAggressiveRun = 0;
+    let lastMyosSweep = 0;
+    let lastSettingsSweep = 0;
+    let lastSearchSweep = 0;
+    let settingsSweepPath = '';
+
+    let __searchSweepScheduled = false;
+    const __pendingRowRAF = new WeakSet(); // prevent duplicate RAFs per row
 
     function addInterval(fn, ms) {
         const id = setInterval(fn, ms);
@@ -449,7 +469,6 @@
         'div.x9f619.xjbqb8w.x78zum5.x168nmei.x13lgxp2.x5pf9jr.xo71vjh.xv54qhq.xf7dkkf.xjkvuk6.x1iorvi4.x1n2onr6.x1plvlek.xryxfnj.x1c4vz4f.x2lah0s.x1q0g3np.xqjyukv.x6s0dn4.x1oa3qoh.x1nhvcw1',
         'span.x1lliihq.x1plvlek.xryxfnj.x1n2onr6.x1ji0vk5.x18bv5gf.x193iq5w.xeuugli.x1fj9vlw.x13faqbe.x1vvkbs.x1s928wv.xhkezso.x1gmr53x.x1cpjm7i.x1fgarty.x1943h6x.x1i0vuye.xvs91rp.x1s688f.x1roi4f4.x1t',
         'a.x1i10hfl.xjbqb8w.x1ejq31n.x18oe1m7.x1sy0etr.xstzfhl.x972fbf.x10w94by.x1qhh985.x14e42zd.x9f619.x1ypdohk.xt0psk2.xe8uvvx.xdj266r.x14z9mp.xat24cr.x1lziwak.xexx8yu.xyri2b.x18d9i69.x1c1uobl.x16t',
-        'div.x9f619.xjbqb8w.x78zum5.xdj266r.x1yztbdb.xyri2b.x1c1uobl.x1uhb9sk.x1plvlek.xryxfnj.x1c4vz4f.x2lah0s.xdt5ytf.xqjyukv.x1qjc9v5.x1oa3qoh.x1nhvcw1',
         'div.x9f619.xjbqb8w.x78zum5.x15mokao.x1ga7v0g.x16uus16.xbiv7yw.x1uhb9sk.x1plvlek.xryxfnj.x1c4vz4f.x2lah0s.xdt5ytf.xqjyukv.x1qjc9v5.x1oa3qoh.x1nhvcw1[style*="height: 250px"]',
         'a.x1i10hfl.xjbqb8w.x1ejq31n.x18oe1m7.x1sy0etr.xstzfhl.x972fbf.x10w94by.x1qhh985.x14e42zd.x9f619.x1ypdohk.xt0psk2.xe8uvvx.xdj266r.x14z9mp.xat24cr.x1lziwak.xexx8yu.xyri2b.x18d9i69.x1c1uobl.x16tdsg8.x1',
         'div.x9f619.xjbqb8w.x78zum5.x15mokao.x1ga7v0g.x16uus16.xbiv7yw.xdj266r.x1yztbdb.xyri2b.x1c1uobl.x1uhb9sk.x1plvlek.xryxfnj.x1c4vz4f.x2lah0s.xdt5ytf.xqjyukv.x1qjc9v5.x1oa3qoh.x1nhvcw1',
@@ -650,6 +669,27 @@ ${p}, ${p} * {
         );
     }
 
+    // Throttled/pooled search sweep to avoid duplicate heavy passes per frame
+    function scheduleSearchSweep(immediate = false) {
+        if (!isSearchSurfacePresent()) return;
+        const now = performance.now();
+        if (immediate || (now - lastSearchSweep) >= PACE.searchMinMs) {
+            lastSearchSweep = now;
+            hideInstagramSearchResults();
+            __searchSweepScheduled = false;
+            return;
+        }
+        if (__searchSweepScheduled) return;
+        __searchSweepScheduled = true;
+        addTimeout(() => {
+            __searchSweepScheduled = false;
+            if (!__cleanupRan && isSearchSurfacePresent()) {
+                lastSearchSweep = performance.now();
+                hideInstagramSearchResults();
+            }
+        }, PACE.searchMinMs);
+    }
+
     function getSearchRoots() {
         const rootsSet = new Set();
         document.querySelectorAll('[role="listbox"]').forEach(el => rootsSet.add(el));
@@ -836,16 +876,20 @@ ${p}, ${p} * {
                 }
 
                 if (!decided) {
-                    addRAF(() => {
-                        if (row.getAttribute(IG_SEARCH_APPROVE_ATTR) === '1' || row.hasAttribute(IG_SEARCH_HIDDEN_ATTR)) return;
-                        const laterTexts = collectRowTexts(row);
-                        const laterReason = matchesBannedByText(laterTexts);
-                        if (laterReason) {
-                            blockRow(row, laterReason);
-                        } else {
-                            approveRow(row);
-                        }
-                    });
+                    if (!__pendingRowRAF.has(row)) {
+                        __pendingRowRAF.add(row);
+                        addRAF(() => {
+                            __pendingRowRAF.delete(row);
+                            if (row.getAttribute(IG_SEARCH_APPROVE_ATTR) === '1' || row.hasAttribute(IG_SEARCH_HIDDEN_ATTR)) return;
+                            const laterTexts = collectRowTexts(row);
+                            const laterReason = matchesBannedByText(laterTexts);
+                            if (laterReason) {
+                                blockRow(row, laterReason);
+                            } else {
+                                approveRow(row);
+                            }
+                        });
+                    }
                 }
 
                 if (decided && !row.hasAttribute(IG_SEARCH_HIDDEN_ATTR)) {
@@ -856,6 +900,10 @@ ${p}, ${p} * {
     }
 
     function hideMyosMetaltaElements() {
+        const now = performance.now();
+        if ((now - lastMyosSweep) < PACE.myosMinMs) return;
+        lastMyosSweep = now;
+
         const metaSvgs = document.querySelectorAll('svg[aria-label*="Myös Metalta"]');
         metaSvgs.forEach(svg => {
             let container = svg;
@@ -904,6 +952,13 @@ ${p}, ${p} * {
 
     function hideSettingsPageElements() {
         if (!window.location.pathname.includes('/accounts/') && !window.location.pathname.includes('/settings/')) return;
+
+        // throttle by path and time to avoid repeated full DOM sweeps
+        const now = performance.now();
+        if (settingsSweepPath === location.pathname && (now - lastSettingsSweep) < PACE.settingsMinMs) return;
+        settingsSweepPath = location.pathname;
+        lastSettingsSweep = now;
+
         const hiddenWordsSelectors = [
             'a[href*="hidden_words"]',
             'a[href*="piiloitetut_sanat"]',
@@ -1136,9 +1191,7 @@ a[role="link"][href^="/explore"],
         });
         hideMyosMetaltaElements();
         hideSettingsPageElements();
-        if (isSearchSurfacePresent()) {
-            hideInstagramSearchResults();
-        }
+        scheduleSearchSweep(); // run search gating soon
     };
     hideCriticalElements();
 
@@ -1212,6 +1265,13 @@ a[role="link"][href^="/explore"],
         }
         
         reelsStyleInjected = true;
+    }
+
+    function removeReelsCSS() {
+        try {
+            document.getElementById('reels-navigation-hider')?.remove();
+        } catch {}
+        reelsStyleInjected = false;
     }
 
     // Safe page whiteout (no document.write)
@@ -1312,9 +1372,7 @@ a[role="link"][href^="/explore"],
                 collapseElement(element);
             }
         });
-        if (isSearchSurfacePresent()) {
-            hideInstagramSearchResults();
-        }
+        scheduleSearchSweep();
     }
 
     function collapseElementsByKeywordsOrPaths(keywords, paths, selectors) {
@@ -1381,9 +1439,7 @@ a[role="link"][href^="/explore"],
             });
         });
 
-        if (isSearchSurfacePresent()) {
-            hideInstagramSearchResults();
-        }
+        scheduleSearchSweep();
     }
 
     function collapseReelsElementsByKeywordsOrPaths(keywords, paths, selectors) {
@@ -1438,9 +1494,7 @@ a[role="link"][href^="/explore"],
         checkForRedirectElements();
         hideMyosMetaltaElements();
         hideSettingsPageElements();
-        if (isSearchSurfacePresent()) {
-            hideInstagramSearchResults();
-        }
+        scheduleSearchSweep();
     }
 
     function hideInstagramAccountsFromList() {}
@@ -1468,9 +1522,7 @@ a[role="link"][href^="/explore"],
             }
         });
 
-        if (isSearchSurfacePresent()) {
-            hideInstagramSearchResults();
-        }
+        scheduleSearchSweep();
     }
 
     function genericAggressiveHider() {
@@ -1479,6 +1531,10 @@ a[role="link"][href^="/explore"],
         if (isExcludedPath()) return;
         if (isReelsPage()) return;
         if (!document.body) return;
+
+        const now = performance.now();
+        if ((now - lastGenericAggressiveRun) < PACE.genericMinMs) return;
+        lastGenericAggressiveRun = now;
         
         const allTextNodes = [];
         const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
@@ -1518,12 +1574,35 @@ a[role="link"][href^="/explore"],
         });
     }
 
-    let observerScheduled = false;
+    function runThrottledMain(force = false) {
+        const now = performance.now();
+        if (!force && (now - lastMainHandlerRun) < PACE.mainMinMs) {
+            scheduleSearchSweep();
+            return;
+        }
+        lastMainHandlerRun = now;
+
+        handleRedirectionsAndContentHiding();
+        if (isReelsPage()) {
+            return;
+        }
+        if (location.hostname.includes('instagram.com') && location.pathname.match(/\/(followers|following)/)) {
+            hideInstagramAccountsFromList();
+            return;
+        }
+        if (location.hostname.includes('instagram.com')) {
+            hideInstagramBannedContent();
+            genericAggressiveHider();
+            checkForRedirectElements();
+            hideMyosMetaltaElements();
+            hideSettingsPageElements();
+            scheduleSearchSweep();
+        }
+    }
+
     function observerCallback(mutationsList) {
-        if (observerScheduled) return;
-        observerScheduled = true;
+        // Debounced by timeout below; avoid stacking additional runs
         addTimeout(() => {
-            observerScheduled = false;
             if (isReelsPage()) {
                 return;
             }
@@ -1543,9 +1622,7 @@ a[role="link"][href^="/explore"],
                 checkForRedirectElements();
                 hideMyosMetaltaElements();
                 hideSettingsPageElements();
-                if (isSearchSurfacePresent()) {
-                    hideInstagramSearchResults();
-                }
+                scheduleSearchSweep();
             }
         }, 80);
     }
@@ -1565,24 +1642,7 @@ a[role="link"][href^="/explore"],
     }
 
     function mainHandler() {
-        handleRedirectionsAndContentHiding();
-        if (isReelsPage()) {
-            return;
-        }
-        if (location.hostname.includes('instagram.com') && location.pathname.match(/\/(followers|following)/)) {
-            hideInstagramAccountsFromList();
-            return;
-        }
-        if (location.hostname.includes('instagram.com')) {
-            hideInstagramBannedContent();
-            genericAggressiveHider();
-            checkForRedirectElements();
-            hideMyosMetaltaElements();
-            hideSettingsPageElements();
-            if (isSearchSurfacePresent()) {
-                hideInstagramSearchResults();
-            }
-        }
+        runThrottledMain(false);
     }
 
     mainHandler();
@@ -1590,34 +1650,23 @@ a[role="link"][href^="/explore"],
 
     function scheduleIntervals() {
         addInterval(() => {
+            if (__cleanupRan) return;
             if (!isReelsPage() && !document.hidden) {
-                mainHandler();
-                hideMyosMetaltaElements();
-                hideSettingsPageElements();
-                if (isSearchSurfacePresent()) hideInstagramSearchResults();
+                runThrottledMain(false);
             }
         }, 70);
     }
     startIntervals(scheduleIntervals);
 
-    onEvent(document, 'visibilitychange', () => {
+    function handleVisibilityChange() {
         if (document.hidden) {
             stopIntervals();
         } else {
             startIntervals(scheduleIntervals);
-            mainHandler();
-            if (isSearchSurfacePresent()) hideInstagramSearchResults();
+            runThrottledMain(true);
         }
-    }, false);
-
-    onEvent(document, 'visibilitychange', () => {
-        if (!document.hidden && !isReelsPage()) {
-            mainHandler();
-            hideMyosMetaltaElements();
-            hideSettingsPageElements();
-            if (isSearchSurfacePresent()) hideInstagramSearchResults();
-        }
-    }, false);
+    }
+    onEvent(document, 'visibilitychange', handleVisibilityChange, false);
 
     (function() {
         var _wr = function(type) {
@@ -1643,19 +1692,8 @@ a[role="link"][href^="/explore"],
         if (isReelsPage()) {
             injectReelsCSS();
         } else {
-            mainHandler();
-            hideMyosMetaltaElements();
-            hideSettingsPageElements();
-            if (isSearchSurfacePresent()) hideInstagramSearchResults();
-        }
-    }, false);
-
-    onEvent(document, 'visibilitychange', function() {
-        if (!document.hidden && !isReelsPage()) {
-            mainHandler();
-            hideMyosMetaltaElements();
-            hideSettingsPageElements();
-            if (isSearchSurfacePresent()) hideInstagramSearchResults();
+            removeReelsCSS();
+            runThrottledMain(true);
         }
     }, false);
 
