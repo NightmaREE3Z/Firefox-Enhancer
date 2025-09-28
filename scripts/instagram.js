@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ExtraRedirect-Instagram
-// @version      1.6.41-instagram-mem-optim
-// @description  Instagram/Threads/Reels specific logic split from Extra.js (memory + scheduling optimizations)
+// @version      1.6.44-instagram-noglimpse2
+// @description  Instagram/Threads/Reels specific logic split from Extra.js (pre-unload + first-paint shields + approve-gates + memory-lean scheduling)
 // @match        *://www.instagram.com/*
 // @match        *://www.instagram.com/?next=%2F/*
 // @match        *://www.instagram.com/accounts/onetap/?next=%2F/*
@@ -24,11 +24,11 @@
 
     // pacing/throttle config to reduce GC churn and peak memory, keeping UI snappy
     const PACE = {
-        mainMinMs: 120,         // minimum spacing between heavy "main" runs
+        mainMinMs: 400,         // minimum spacing between heavy "main" runs (was 120)
         genericMinMs: 1500,     // min spacing between genericAggressiveHider runs
         myosMinMs: 500,         // min spacing between "Myös Metalta" sweeps
         settingsMinMs: 2500,    // min spacing between settings-page sweeps
-        searchMinMs: 80         // min spacing for search suggestion sweeps
+        searchMinMs: 250        // min spacing for search suggestion sweeps (was 80)
     };
 
     // timestamps/state for throttling
@@ -41,6 +41,80 @@
 
     let __searchSweepScheduled = false;
     const __pendingRowRAF = new WeakSet(); // prevent duplicate RAFs per row
+
+    // Single debouncer token for MutationObserver bursts
+    let __observerTimeoutId = null;
+
+    // Single attribute for hiding (reduces repeated inline style writes)
+    const HIDE_ATTR = 'data-ig-hide';
+
+    // Reuse approve attribute for search + feed articles
+    const APPROVE_ATTR = 'data-ig-approve';
+
+    // Startup and unload shields to prevent any flash on F5 and first paint
+    const STARTUP_SHIELD_ID = 'ig-startup-shield';
+    let __readyMarked = false;
+
+    // Inline shield (works even before CSS is parsed)
+    function applyInlineShield() {
+        try {
+            const de = document.documentElement;
+            de.style.setProperty('visibility', 'hidden', 'important');
+            de.style.setProperty('opacity', '0', 'important');
+            de.style.setProperty('background', '#fff', 'important');
+        } catch {}
+    }
+    function removeInlineShield() {
+        try {
+            const de = document.documentElement;
+            de.style.removeProperty('visibility');
+            de.style.removeProperty('opacity');
+            de.style.removeProperty('background');
+        } catch {}
+    }
+
+    function installStartupShield() {
+        if (!location.hostname.includes('instagram.com')) return;
+        try {
+            // Apply inline immediately for zero-glimpse on very first paint
+            applyInlineShield();
+
+            // Also add a tiny CSS guard in case site CSS tries to override inline styles
+            let s = document.getElementById(STARTUP_SHIELD_ID);
+            if (!s) {
+                s = document.createElement('style');
+                s.id = STARTUP_SHIELD_ID;
+                s.textContent = `
+                    html, body { background: #fff !important; }
+                    /* Keep entire page hidden until we mark ready */
+                    html[data-ig-startup="1"] body > * {
+                        display: none !important;
+                    }
+                `;
+                if (document.documentElement) {
+                    document.documentElement.insertBefore(s, document.documentElement.firstChild);
+                } else {
+                    document.addEventListener('DOMContentLoaded', () => {
+                        (document.head || document.documentElement).appendChild(s);
+                    }, { once: true });
+                }
+            }
+            document.documentElement.setAttribute('data-ig-startup', '1');
+        } catch {}
+    }
+
+    function markReady() {
+        if (__readyMarked) return;
+        __readyMarked = true;
+        try {
+            document.documentElement.removeAttribute('data-ig-startup');
+            document.getElementById(STARTUP_SHIELD_ID)?.remove();
+            removeInlineShield();
+        } catch {}
+    }
+
+    // Install startup shield ASAP to avoid flashes on hard refresh
+    installStartupShield();
 
     function addInterval(fn, ms) {
         const id = setInterval(fn, ms);
@@ -97,9 +171,11 @@
             try { document.getElementById('extra-redirect-style')?.remove(); } catch {}
             try { document.getElementById('reels-navigation-hider')?.remove(); } catch {}
             try { document.getElementById('ig-blank-style')?.remove(); } catch {}
+            try { document.getElementById(STARTUP_SHIELD_ID)?.remove(); } catch {}
         } catch {}
     }
 
+    // ======== YOUR ARRAYS (unchanged) ========
     const bannedKeywords = [
         "Bliss", "Alexa Bliss", "Tiffany", "Stratton", "Chelsea Green", "Bayley", "Blackheart", "Mercedes", "Alba Fyre", "sensuel", "Maryse", "Meta AI", "Del Rey", "CJ Perry", 
         "Becky Lynch", "Michin", "Mia Yim", "julmakira", "Stephanie", "Liv Morgan", "Piper Niven", "sensuel", "queer", "Pride", "NXT Womens", "model", "Perry", "Henley", "Nattie", 
@@ -591,8 +667,7 @@
 
     // attributes for search gating diagnostics
     const IG_SEARCH_HIDDEN_ATTR = 'data-ig-search-hidden-reason';
-    const IG_SEARCH_APPROVE_ATTR = 'data-ig-approve';
-    const IG_SEARCH_ROW_ATTR = 'data-ig-row';
+    const IG_SEARCH_APPROVE_ATTR = APPROVE_ATTR; // unify
 
     // Helper: remove image/network loads from a container
     function stripImagesWithin(el) {
@@ -711,6 +786,17 @@ ${p}, ${p} * {
         return Array.from(rootsSet);
     }
 
+    // Restrict heavy scans to realistic containers, not whole document
+    function getScanRoots() {
+        const roots = [];
+        const pushIf = el => { if (el) roots.push(el); };
+        pushIf(document.querySelector('[role="feed"]'));
+        pushIf(document.querySelector('main[role="main"]'));
+        pushIf(document.querySelector('section[role="main"]'));
+        document.querySelectorAll('[role="dialog"], [role="listbox"]').forEach(el => roots.push(el));
+        return roots.length ? roots : (document.body ? [document.body] : []);
+    }
+
     function usernameFromHref(rawHref) {
         if (!rawHref) return '';
         try {
@@ -745,7 +831,7 @@ ${p}, ${p} * {
     function getSearchRowElement(anchor) {
         let row = anchor.closest('[role="option"], li, a[role="link"], a._a6hd, a.x1i10hfl, a');
         if (!row) row = anchor;
-        row.setAttribute(IG_SEARCH_ROW_ATTR, '1');
+        row.setAttribute('data-ig-row', '1');
         return row;
     }
 
@@ -782,15 +868,7 @@ ${p}, ${p} * {
     function blockRow(row, reason) {
         row.removeAttribute(IG_SEARCH_APPROVE_ATTR);
         row.setAttribute(IG_SEARCH_HIDDEN_ATTR, reason || 'blocked');
-        row.style.setProperty('display', 'none', 'important');
-        row.style.setProperty('visibility', 'hidden', 'important');
-        row.style.setProperty('opacity', '0', 'important');
-        row.style.setProperty('height', '0', 'important');
-        row.style.setProperty('width', '0', 'important');
-        row.style.setProperty('position', 'absolute', 'important');
-        row.style.setProperty('left', '-9999px', 'important');
-        row.style.setProperty('top', '-9999px', 'important');
-        row.style.setProperty('pointer-events', 'none', 'important');
+        row.setAttribute(HIDE_ATTR, '1');
         hiddenElements.add(row);
     }
 
@@ -804,6 +882,7 @@ ${p}, ${p} * {
         row.style.removeProperty('left');
         row.style.removeProperty('top');
         row.style.removeProperty('pointer-events');
+        row.removeAttribute(HIDE_ATTR);
         row.removeAttribute(IG_SEARCH_HIDDEN_ATTR);
         row.setAttribute(IG_SEARCH_APPROVE_ATTR, '1');
     }
@@ -818,23 +897,17 @@ ${p}, ${p} * {
                 root.querySelectorAll('a[href]').forEach(a => anchorSet.add(a));
             });
         }
-        if (!anchorSet.size) {
-            document.querySelectorAll('a[href]').forEach(a => {
-                try {
-                    const rect = a.getBoundingClientRect();
-                    if (rect && rect.width >= 220 && rect.width <= 480 && rect.left >= 0 && rect.left <= 420 && rect.height >= 44 && rect.height <= 160) {
-                        anchorSet.add(a);
-                    }
-                } catch {}
-            });
-        }
         if (!anchorSet.size) return;
 
-        anchorSet.forEach(a => {
+        // Cap per-sweep to reduce churn; next sweep will catch the rest
+        const anchors = Array.from(anchorSet);
+        const limit = 400;
+        for (let i = 0; i < anchors.length && i < limit; i++) {
+            const a = anchors[i];
             try {
                 const row = getSearchRowElement(a);
-                if (!row) return;
-                if (row.getAttribute(IG_SEARCH_APPROVE_ATTR) === '1' || row.hasAttribute(IG_SEARCH_HIDDEN_ATTR)) return;
+                if (!row) continue;
+                if (row.getAttribute(IG_SEARCH_APPROVE_ATTR) === '1' || row.hasAttribute(IG_SEARCH_HIDDEN_ATTR)) continue;
 
                 const href = a.getAttribute('href') || '';
                 let normalizedPath = '';
@@ -848,8 +921,8 @@ ${p}, ${p} * {
                 let decided = false;
 
                 if (normalizedPath.startsWith('/p/')) {
-                    for (let i = 0; i < instagramBannedPosts.length; i++) {
-                        const pid = instagramBannedPosts[i].toLowerCase();
+                    for (let i2 = 0; i2 < instagramBannedPosts.length; i2++) {
+                        const pid = instagramBannedPosts[i2].toLowerCase();
                         if (normalizedPath.includes(`/${pid}`)) {
                             blockRow(row, `post:${pid}`);
                             decided = true;
@@ -896,7 +969,7 @@ ${p}, ${p} * {
                     approveRow(row);
                 }
             } catch {}
-        });
+        }
     }
 
     function hideMyosMetaltaElements() {
@@ -915,15 +988,7 @@ ${p}, ${p} * {
                     container.classList.contains('x3nfvp2') && 
                     container.classList.contains('xr9ek0c') &&
                     container.textContent.includes('Myös Metalta')) {
-                    container.style.setProperty('display', 'none', 'important');
-                    container.style.setProperty('visibility', 'hidden', 'important');
-                    container.style.setProperty('opacity', '0', 'important');
-                    container.style.setProperty('height', '0', 'important');
-                    container.style.setProperty('width', '0', 'important');
-                    container.style.setProperty('position', 'absolute', 'important');
-                    container.style.setProperty('left', '-9999px', 'important');
-                    container.style.setProperty('top', '-9999px', 'important');
-                    container.style.setProperty('overflow', 'hidden', 'important');
+                    container.setAttribute(HIDE_ATTR, '1');
                     hiddenElements.add(container);
                     break;
                 }
@@ -935,15 +1000,7 @@ ${p}, ${p} * {
                 div.closest('div.x9f619.x3nfvp2.xr9ek0c')) {
                 const container = div.closest('div.x9f619.x3nfvp2.xr9ek0c');
                 if (container && !hiddenElements.has(container)) {
-                    container.style.setProperty('display', 'none', 'important');
-                    container.style.setProperty('visibility', 'hidden', 'important');
-                    container.style.setProperty('opacity', '0', 'important');
-                    container.style.setProperty('height', '0', 'important');
-                    container.style.setProperty('width', '0', 'important');
-                    container.style.setProperty('position', 'absolute', 'important');
-                    container.style.setProperty('left', '-9999px', 'important');
-                    container.style.setProperty('top', '-9999px', 'important');
-                    container.style.setProperty('overflow', 'hidden', 'important');
+                    container.setAttribute(HIDE_ATTR, '1');
                     hiddenElements.add(container);
                 }
             }
@@ -981,15 +1038,7 @@ ${p}, ${p} * {
                          container.classList.contains('x1n2onr6'))) {
                         const childCount = container.querySelectorAll('*').length;
                         if (childCount < 50) {
-                            container.style.setProperty('display', 'none', 'important');
-                            container.style.setProperty('visibility', 'hidden', 'important');
-                            container.style.setProperty('opacity', '0', 'important');
-                            container.style.setProperty('height', '0', 'important');
-                            container.style.setProperty('width', '0', 'important');
-                            container.style.setProperty('position', 'absolute', 'important');
-                            container.style.setProperty('left', '-9999px', 'important');
-                            container.style.setProperty('top', '-9999px', 'important');
-                            container.style.setProperty('overflow', 'hidden', 'important');
+                            container.setAttribute(HIDE_ATTR, '1');
                             hiddenElements.add(container);
                             break;
                         }
@@ -1021,15 +1070,7 @@ ${p}, ${p} * {
                         const siblingCount = container.parentElement ? container.parentElement.children.length : 0;
                         const childCount = container.querySelectorAll('*').length;
                         if (siblingCount > 1 && childCount < 100) {
-                            container.style.setProperty('display', 'none', 'important');
-                            container.style.setProperty('visibility', 'hidden', 'important');
-                            container.style.setProperty('opacity', '0', 'important');
-                            container.style.setProperty('height', '0', 'important');
-                            container.style.setProperty('width', '0', 'important');
-                            container.style.setProperty('position', 'absolute', 'important');
-                            container.style.setProperty('left', '-9999px', 'important');
-                            container.style.setProperty('top', '-9999px', 'important');
-                            container.style.setProperty('overflow', 'hidden', 'important');
+                            container.setAttribute(HIDE_ATTR, '1');
                             hiddenElements.add(container);
                             break;
                         }
@@ -1049,20 +1090,11 @@ ${p}, ${p} * {
                  text === 'Hide stories and live') && 
                 element.getBoundingClientRect().width > 0 &&
                 element.getBoundingClientRect().height > 0) {
-                element.style.setProperty('display', 'none', 'important');
-                element.style.setProperty('visibility', 'hidden', 'important');
-                element.style.setProperty('opacity', '0', 'important');
-                element.style.setProperty('height', '0', 'important');
-                element.style.setProperty('width', '0', 'important');
-                element.style.setProperty('position', 'absolute', 'important');
-                element.style.setProperty('left', '-9999px', 'important');
-                element.style.setProperty('top', '-9999px', 'important');
-                element.style.setProperty('overflow', 'hidden', 'important');
+                element.setAttribute(HIDE_ATTR, '1');
                 hiddenElements.add(element);
                 const parent = element.parentElement;
                 if (parent && parent.querySelectorAll('*').length < 20) {
-                    parent.style.setProperty('display', 'none', 'important');
-                    parent.style.setProperty('visibility', 'hidden', 'important');
+                    parent.setAttribute(HIDE_ATTR, '1');
                     hiddenElements.add(parent);
                 }
             }
@@ -1082,16 +1114,16 @@ ${p}, ${p} * {
 
             const approveGateCSS = `
 /* Approve-gate: hide all suggestion rows by default */
-[role="listbox"] [role="option"]:not([${IG_SEARCH_APPROVE_ATTR}="1"]),
-[role="listbox"] li:not([${IG_SEARCH_APPROVE_ATTR}="1"]),
-[role="listbox"] a[role="link"]:not([${IG_SEARCH_APPROVE_ATTR}="1"]),
-[role="listbox"] a._a6hd:not([${IG_SEARCH_APPROVE_ATTR}="1"]),
+[role="listbox"] [role="option"]:not([${APPROVE_ATTR}="1"]),
+[role="listbox"] li:not([${APPROVE_ATTR}="1"]),
+[role="listbox"] a[role="link"]:not([${APPROVE_ATTR}="1"]),
+[role="listbox"] a._a6hd:not([${APPROVE_ATTR}="1"]),
 [role="navigation"] a[href^="/explore"],
 nav[aria-label*="Primary"] a[href^="/explore"],
 a[href="/explore/"],
 a[href="/explore/?next=%2F"],
 a[role="link"][href^="/explore"],
-[role="listbox"] a.x1i10hfl:not([${IG_SEARCH_APPROVE_ATTR}="1"]) {
+[role="listbox"] a.x1i10hfl:not([${APPROVE_ATTR}="1"]) {
     display: none !important;
     visibility: hidden !important;
     opacity: 0 !important;
@@ -1105,7 +1137,7 @@ a[role="link"][href^="/explore"],
 }
 
 /* Approve-gate: approved rows become visible and clickable */
-[role="listbox"] [${IG_SEARCH_APPROVE_ATTR}="1"] {
+[role="listbox"] [${APPROVE_ATTR}="1"] {
     visibility: visible !important;
     opacity: 1 !important;
     pointer-events: auto !important;
@@ -1114,9 +1146,53 @@ a[role="link"][href^="/explore"],
     width: auto !important;
     overflow: visible !important;
 }
+
+/* Feed approve-gate: hide all articles by default to avoid any flash of unfiltered content */
+article:not([${APPROVE_ATTR}="1"]) {
+    visibility: hidden !important;
+    display: none !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    position: absolute !important;
+    left: -9999px !important;
+    top: -9999px !important;
+    height: 0 !important;
+    width: 0 !important;
+    max-height: 0 !important;
+    max-width: 0 !important;
+    overflow: hidden !important;
+}
+`;
+
+            // Single attribute-based hide rule to avoid repeated inline style writes
+            const attrHideCSS = `
+/* Attribute-based hiding for collapsed elements */
+[${HIDE_ATTR}="1"],
+[role="listbox"] [${HIDE_ATTR}="1"] {
+    visibility: hidden !important;
+    display: none !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    position: absolute !important;
+    left: -9999px !important;
+    top: -9999px !important;
+    height: 0 !important;
+    width: 0 !important;
+    max-height: 0 !important;
+    max-width: 0 !important;
+    overflow: hidden !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    flex: 0 0 0px !important;
+    grid: none !important;
+    transition: none !important;
+}
 `;
 
             style.textContent = `
+            ${attrHideCSS}
+
             /* Immediately hide Instagram elements */
             ${selectorsToHide.join(',\n')} {
                 visibility: hidden !important;
@@ -1155,7 +1231,7 @@ a[role="link"][href^="/explore"],
             /* Instagram search pre-hide for banned accounts/posts (scoped to listbox only) */
             ${searchBanCSS}
 
-            /* Instagram search APPROVE GATE */
+            /* Instagram search + feed APPROVE GATES */
             ${approveGateCSS}
             `;
             
@@ -1179,14 +1255,15 @@ a[role="link"][href^="/explore"],
     injectInlineCSS();
 
     const hideCriticalElements = () => {
+        const roots = getScanRoots();
         selectorsToHide.forEach((selector) => {
-            document.querySelectorAll(selector).forEach((el) => {
-                if (!hiddenElements.has(el)) {
-                    el.style.setProperty('visibility', 'hidden', 'important');
-                    el.style.setProperty('display', 'none', 'important');
-                    el.style.setProperty('opacity', '0', 'important');
-                    hiddenElements.add(el);
-                }
+            roots.forEach(root => {
+                root.querySelectorAll(selector).forEach((el) => {
+                    if (!hiddenElements.has(el)) {
+                        el.setAttribute(HIDE_ATTR, '1');
+                        hiddenElements.add(el);
+                    }
+                });
             });
         });
         hideMyosMetaltaElements();
@@ -1325,22 +1402,7 @@ a[role="link"][href^="/explore"],
     function collapseElement(element) {
         if (!hiddenElements.has(element)) {
             stripImagesWithin(element);
-            element.style.setProperty('display', 'none', 'important');
-            element.style.setProperty('max-height', '0', 'important');
-            element.style.setProperty('height', '0', 'important');
-            element.style.setProperty('min-height', '0', 'important');
-            element.style.setProperty('overflow', 'hidden', 'important');
-            element.style.setProperty('padding', '0', 'important');
-            element.style.setProperty('margin', '0', 'important');
-            element.style.setProperty('border', 'none', 'important');
-            element.style.setProperty('visibility', 'hidden', 'important');
-            element.style.setProperty('flex', '0 0 0px', 'important');
-            element.style.setProperty('grid', 'none', 'important');
-            element.style.setProperty('transition', 'none', 'important');
-            element.style.setProperty('opacity', '0', 'important');
-            element.style.setProperty('position', 'absolute', 'important');
-            element.style.setProperty('left', '-9999px', 'important');
-            element.style.setProperty('top', '-9999px', 'important');
+            element.setAttribute(HIDE_ATTR, '1');
             hiddenElements.add(element);
         }
     }
@@ -1356,21 +1418,33 @@ a[role="link"][href^="/explore"],
         return matchingElements;
     }
 
+    function approveAllNonHiddenArticles() {
+        // Show only articles that are not individually hidden
+        document.querySelectorAll('article').forEach(a => {
+            if (!a.hasAttribute(HIDE_ATTR)) {
+                a.setAttribute(APPROVE_ATTR, '1');
+            }
+        });
+    }
+
     function collapseElementsBySelectors(selectors) {
         if (isReelsPage()) return;
         if (!selectors || !selectors.length) return;
+        const roots = getScanRoots();
         const allSelectors = selectors.join(',');
-        document.querySelectorAll(allSelectors).forEach(element => {
-            if (hiddenElements.has(element)) return;
-            const isProtected = protectedElements.some(protectedSelector => {
-                try { return element.matches(protectedSelector); } catch { return false; }
+        roots.forEach(root => {
+            root.querySelectorAll(allSelectors).forEach(element => {
+                if (hiddenElements.has(element)) return;
+                const isProtected = protectedElements.some(protectedSelector => {
+                    try { return element.matches(protectedSelector); } catch { return false; }
+                });
+                const containsAllowedWords = allowedWordsLower.some(word =>
+                    element.textContent && element.textContent.toLowerCase().includes(word)
+                );
+                if (!isProtected && !containsAllowedWords && !isExcludedPath()) {
+                    collapseElement(element);
+                }
             });
-            const containsAllowedWords = allowedWordsLower.some(word =>
-                element.textContent && element.textContent.toLowerCase().includes(word)
-            );
-            if (!isProtected && !containsAllowedWords && !isExcludedPath()) {
-                collapseElement(element);
-            }
         });
         scheduleSearchSweep();
     }
@@ -1378,52 +1452,55 @@ a[role="link"][href^="/explore"],
     function collapseElementsByKeywordsOrPaths(keywords, paths, selectors) {
         if (isReelsPage()) return;
         if (!selectors || !selectors.length) return;
+        const roots = getScanRoots();
         const allSelectors = selectors.join(',');
-        document.querySelectorAll(allSelectors).forEach(element => {
-            if (hiddenElements.has(element)) return;
-            const isProtected = protectedElements.some(protectedSelector => {
-                try { return element.matches(protectedSelector); } catch { return false; }
-            });
-            if (isProtected) return;
-            if (isExcludedPath()) return;
-            const textContent = element.textContent ? element.textContent.toLowerCase() : "";
-            const containsAllowed = allowedWordsLower.some(word => textContent.includes(word));
-            if (containsAllowed) return;
-            let matched = false;
-            for (let i = 0; i < bannedKeywordsLower.length; ++i) {
-                if (textContent.includes(bannedKeywordsLower[i])) {
-                    matched = true;
-                    break;
-                }
-            }
-            for (let i = 0; i < instagramBannedPathsLower.length; ++i) {
-                if (textContent.includes(instagramBannedPathsLower[i])) {
-                    matched = true;
-                    break;
-                }
-            }
-            if (!matched) {
-                for (let i = 0; i < bannedRegexes.length; ++i) {
-                    if (bannedRegexes[i].test(element.textContent)) {
+        roots.forEach(root => {
+            root.querySelectorAll(allSelectors).forEach(element => {
+                if (hiddenElements.has(element)) return;
+                const isProtected = protectedElements.some(protectedSelector => {
+                    try { return element.matches(protectedSelector); } catch { return false; }
+                });
+                if (isProtected) return;
+                if (isExcludedPath()) return;
+                const textContent = element.textContent ? element.textContent.toLowerCase() : "";
+                const containsAllowed = allowedWordsLower.some(word => textContent.includes(word));
+                if (containsAllowed) return;
+                let matched = false;
+                for (let i = 0; i < bannedKeywordsLower.length; ++i) {
+                    if (textContent.includes(bannedKeywordsLower[i])) {
                         matched = true;
                         break;
                     }
                 }
-            }
-            if (matched) {
-                const parentArticle = element.closest('article');
-                if (parentArticle && !hiddenElements.has(parentArticle)) {
-                    const containsAllowedWords = allowedWordsLower.some(word =>
-                        parentArticle.textContent && parentArticle.textContent.toLowerCase().includes(word)
-                    );
-                    if (!containsAllowedWords) {
-                        Array.from(parentArticle.children).forEach(child => {
-                            child.style.setProperty('display', 'none', 'important');
-                        });
-                        hiddenElements.add(parentArticle);
+                for (let i = 0; i < instagramBannedPathsLower.length; ++i) {
+                    if (textContent.includes(instagramBannedPathsLower[i])) {
+                        matched = true;
+                        break;
                     }
                 }
-            }
+                if (!matched) {
+                    for (let i = 0; i < bannedRegexes.length; ++i) {
+                        if (bannedRegexes[i].test(element.textContent)) {
+                            matched = true;
+                            break;
+                        }
+                    }
+                }
+                if (matched) {
+                    const parentArticle = element.closest('article');
+                    if (parentArticle && !hiddenElements.has(parentArticle)) {
+                        const containsAllowedWords2 = allowedWordsLower.some(word =>
+                            parentArticle.textContent && parentArticle.textContent.toLowerCase().includes(word)
+                        );
+                        if (!containsAllowedWords2) {
+                            Array.from(parentArticle.children).forEach(child => {
+                                child.style.setProperty('display', 'none', 'important');
+                            });
+                            hiddenElements.add(parentArticle);
+                        }
+                    }
+                }
+            });
         });
 
         textBasedTargets.forEach(target => {
@@ -1536,41 +1613,44 @@ a[role="link"][href^="/explore"],
         if ((now - lastGenericAggressiveRun) < PACE.genericMinMs) return;
         lastGenericAggressiveRun = now;
         
-        const allTextNodes = [];
-        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
-        let node;
-        while ((node = walker.nextNode())) {
-            allTextNodes.push(node);
-        }
-        
-        allTextNodes.forEach(node => {
-            let txt = node.nodeValue.toLowerCase();
-            if (allowedWordsLower.some(word => txt.includes(word))) return;
-            if (bannedKeywordsLower.some(keyword => txt.includes(keyword))) {
-                let el = node.parentElement;
-                if (el && el.offsetParent !== null && 
-                    !el.matches('main, section[role="main"], div[role="main"], body, html, nav') &&
-                    !protectedElements.some(selector => {
-                        try { return el.matches(selector); } catch { return false; }
-                    })) {
-                    collapseElement(el);
-                }
+        const roots = getScanRoots();
+        roots.forEach(root => {
+            const nodes = [];
+            const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null, false);
+            let node;
+            while ((node = walker.nextNode())) {
+                nodes.push(node);
             }
-        });
-        
-        allTextNodes.forEach(node => {
-            let txt = node.nodeValue;
-            if (allowedWordsLower.some(word => txt.toLowerCase().includes(word))) return;
-            if (bannedRegexes.some(re => re.test(txt))) {
-                let el = node.parentElement;
-                if (el && el.offsetParent !== null && 
-                    !el.matches('main, section[role="main"], div[role="main"], body, html, nav') &&
-                    !protectedElements.some(selector => {
-                        try { return el.matches(selector); } catch { return false; }
-                    })) {
-                    collapseElement(el);
+            nodes.forEach(n => {
+                const txt = (n.nodeValue || '');
+                const low = txt.toLowerCase();
+                if (!low) return;
+                if (allowedWordsLower.some(word => low.includes(word))) return;
+                if (bannedKeywordsLower.some(keyword => low.includes(keyword))) {
+                    const el = n.parentElement;
+                    if (el && el.offsetParent !== null && 
+                        !el.matches('main, section[role="main"], div[role="main"], body, html, nav') &&
+                        !protectedElements.some(selector => {
+                            try { return el.matches(selector); } catch { return false; }
+                        })) {
+                        collapseElement(el);
+                    }
                 }
-            }
+            });
+            nodes.forEach(n => {
+                const txt = n.nodeValue || '';
+                if (allowedWordsLower.some(word => txt.toLowerCase().includes(word))) return;
+                if (bannedRegexes.some(re => re.test(txt))) {
+                    const el = n.parentElement;
+                    if (el && el.offsetParent !== null && 
+                        !el.matches('main, section[role="main"], div[role="main"], body, html, nav') &&
+                        !protectedElements.some(selector => {
+                            try { return el.matches(selector); } catch { return false; }
+                        })) {
+                        collapseElement(el);
+                    }
+                }
+            });
         });
     }
 
@@ -1584,10 +1664,12 @@ a[role="link"][href^="/explore"],
 
         handleRedirectionsAndContentHiding();
         if (isReelsPage()) {
+            markReady(); // reels page: unblock quickly
             return;
         }
         if (location.hostname.includes('instagram.com') && location.pathname.match(/\/(followers|following)/)) {
             hideInstagramAccountsFromList();
+            markReady();
             return;
         }
         if (location.hostname.includes('instagram.com')) {
@@ -1596,13 +1678,27 @@ a[role="link"][href^="/explore"],
             checkForRedirectElements();
             hideMyosMetaltaElements();
             hideSettingsPageElements();
+
+            // After filtering, approve remaining articles so they can render
+            approveAllNonHiddenArticles();
+
             scheduleSearchSweep();
         }
+
+        // First-run unshield so nothing flashes
+        markReady();
     }
 
     function observerCallback(mutationsList) {
-        // Debounced by timeout below; avoid stacking additional runs
-        addTimeout(() => {
+        // Coalesce all mutation bursts into a single pass
+        if (__observerTimeoutId !== null) {
+            try { clearTimeout(__observerTimeoutId); __timers.timeouts.delete(__observerTimeoutId); } catch {}
+            __observerTimeoutId = null;
+        }
+        __observerTimeoutId = setTimeout(() => {
+            try { __timers.timeouts.delete(__observerTimeoutId); } catch {}
+            __observerTimeoutId = null;
+
             if (isReelsPage()) {
                 return;
             }
@@ -1622,9 +1718,14 @@ a[role="link"][href^="/explore"],
                 checkForRedirectElements();
                 hideMyosMetaltaElements();
                 hideSettingsPageElements();
+
+                // Approve newly-added, non-hidden articles
+                approveAllNonHiddenArticles();
+
                 scheduleSearchSweep();
             }
-        }, 80);
+        }, 120);
+        __timers.timeouts.add(__observerTimeoutId);
     }
 
     function initObserver() {
@@ -1654,9 +1755,17 @@ a[role="link"][href^="/explore"],
             if (!isReelsPage() && !document.hidden) {
                 runThrottledMain(false);
             }
-        }, 70);
+        }, 200); // was 70
     }
     startIntervals(scheduleIntervals);
+
+    // Pre-unload shield: hide immediately when F5 is pressed, before the new document is created
+    function preUnloadShield() {
+        applyInlineShield();
+        try { document.documentElement.setAttribute('data-ig-startup', '1'); } catch {}
+    }
+    // Use capture so it runs as early as possible
+    window.addEventListener('beforeunload', preUnloadShield, true);
 
     function handleVisibilityChange() {
         if (document.hidden) {
@@ -1688,6 +1797,11 @@ a[role="link"][href^="/explore"],
     onEvent(window, 'locationchange', function() {
         reelsStyleInjected = false;
         currentURL = window.location.href;
+
+        // Optional: re-apply shield on SPA route change if you also want zero flash during client-side navs:
+        // __readyMarked = false;
+        // installStartupShield();
+
         injectInlineCSS();
         if (isReelsPage()) {
             injectReelsCSS();
@@ -1699,5 +1813,8 @@ a[role="link"][href^="/explore"],
 
     onEvent(window, 'pagehide', cleanup, false);
     onEvent(window, 'beforeunload', cleanup, false);
+
+    // Safety: if something goes wrong, unshield after 12s so the tab is not permanently blanked
+    addTimeout(() => { try { markReady(); } catch {} }, 12000);
 
 })();
