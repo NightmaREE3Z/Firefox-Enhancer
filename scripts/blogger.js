@@ -161,7 +161,7 @@
             'table.tr-caption-container:nth-child(20) > tbody:nth-child(1) > tr:nth-child(1) > td:nth-child(1) > a:nth-child(1) > img:nth-child(1)',
             'table.tr-caption-container:nth-child(20) > tbody:nth-child(1) > tr:nth-child(2) > td:nth-child(1)',
             '#post-body-9080094212910440436 > div:nth-child(24) > a:nth-child(1) > img:nth-child(1)',
-            '##.Followers.widget',
+            '.Followers.widget',
         ];
 
         selectorsToDelete.forEach(selector => {

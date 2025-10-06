@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         ExtraRedirect-Instagram
-// @version      1.6.44-instagram-noglimpse2
+// @version      1.6.45-instagram-url-gate
 // @description  Instagram/Threads/Reels specific logic split from Extra.js (pre-unload + first-paint shields + approve-gates + memory-lean scheduling)
 // @match        *://www.instagram.com/*
 // @match        *://www.instagram.com/?next=%2F/*
@@ -175,17 +175,17 @@
         } catch {}
     }
 
-    // ======== YOUR ARRAYS (unchanged) ========
+    // ======== Keyword arrays ========
     const bannedKeywords = [
         "Bliss", "Alexa Bliss", "Tiffany", "Stratton", "Chelsea Green", "Bayley", "Blackheart", "Mercedes", "Alba Fyre", "sensuel", "Maryse", "Meta AI", "Del Rey", "CJ Perry", 
         "Becky Lynch", "Michin", "Mia Yim", "julmakira", "Stephanie", "Liv Morgan", "Piper Niven", "sensuel", "queer", "Pride", "NXT Womens", "model", "Perry", "Henley", "Nattie", 
         "Jordynne", "Woman", "Women", "@tiffanywwe", "@yaonlylivvonce", "@alexa_bliss_wwe_", "@alexa_bliss", "@samanthathebomb", "Women's", "Woman's", "Summer Rae", "Mia Yim",
         "Naomi", "Bianca Belair", "Jessika Carr", "Carr WWE", "Jessica Karr", "bikini", "Kristen Stewart", "Sydney Sweeney", "Piper Niven", "Nia Jax", "Meta AI", "AI generated",
         "Young Bucks", "Jackson", "Lash Legend", "Jordynne Grace", "generated", "DeepSeek", "TOR-Browser", "TOR-selain", "Opera GX", "prostitute", "AI-generated", "Arianna Grace", 
-        "deepnude", "undress", "nudify", "nude", "nudifier", "faceswap", "facemorph", "AI app", "Sweeney", "Alexis", "Sydney", "Zelina Vega", "Mandy Rose", "playboy", "Lana", "#AI",
+        "deepnude", "undress", "nudify", "nude", "nudifier", "faceswap", "facemorph", "AI app", "Sweeney", "Alexis", "Sydney", "Zelina Vega", "Mandy Rose", "playboy", "#AI",
         "Nikki", "Brie", "Bella", "Opera Browser", "by AI", "AI edited", "Safari", "OperaGX", "MS Edge", "Microsoft Edge", "clothes", "Lola Vice", "Vice WWE", "Candice LeRae",
         "crotch", "dress", "dreamtime", "Velvet Sky", "LGBTQ", "panties", "panty", "cloth", "AI art", "cleavage", "deviantart", "All Elite Wrestling", "Trish", "Stratus", "Tutki",
-        "Tiffy Time", "Steward", "Roxanne", "cameltoe", "dreamtime AI", "Joanie", "bra", "Stewart", "Isla Dawn", "escort", "inpaint", "photopea", "onlyfans", "fantime", "Amari Miller", 
+        "Tiffy Time", "Steward", "Roxanne", "cameltoe", "dreamtime AI", "Joanie", "Stewart", "Isla Dawn", "escort", "inpaint", "photopea", "onlyfans", "fantime", "Amari Miller", 
         "upscale", "upscaling", "upscaled", "sexy", "Alexa WWE", "AJ Lee", "deepfake", "ring gear", "Lexi", "Trans", "Transvestite", "Aleksa", "Giulia", "Rodriguez", "Elite Wrestling",
         "booty", "Paige", "Chyna", "lingerie", "venice", "AI model", "deep fake", "nudifying", "nudifier", "undressing", "undressed", "undressifying", "undressify", "Kristen",
         "Vladimir Putin", "Toni Storm", "Skye Blue", "Carmella", "Mariah May", "Harley Cameron", "Hayter", "trunks", "pants", "Ripley", "manyvids", "Del Ray", "Sinulle ehdotettua",
@@ -199,7 +199,8 @@
         "B-Fab", "Kayden Carter", "Katana Chance", "Lyra Valkyria", "Indi Hartwell", "Blair", "Davenport", "Maxxine Dupri", "China", "Russia", "Natalya", "Sakazaki", "homo",
         "Karmen Petrovic", "Ava Raine", "Yulisa Leon", "Cora Jade", "Gina Adams", "Jacy Jayne", "Gigi Dolin", "Thea Hail", "Tatum WWE", "Paxley", "Fallon", "Valentina Feroz", 
         "wondershare", "filmora", "Kelani Jordan", "Electra Lopez", "Wendy Choo", "HorizonMW", "Horizon Modern Warfare", "Horizon MW", "Black Ops 7", "Black Ops 6", "lottapupu",
-        "#ass", "#perse", "#pylly", "#tissit", "#tit", "#tits", "#boob", "#boobs", "#boobies", "#boobie", "#booty", "#butt", "#babe", "Primera",
+        "#ass", "#perse", "#pylly", "#tissit", "#tit", "#tits", "#boob", "#boobs", "#boobies", "#boobie", "#booty", "#butt", "#babe", "Primera", "Roxanne", "Roxan", "lotta",
+	"#belfie", "belfie", "Natalia", "Natasha", "#rack", "#finnishgirl", "#girl", "#women", "#woman", "#ladies", "#girls", "#womens", "#womans",
     ];
 
     const bannedRegexes = [
@@ -207,7 +208,9 @@
         /\bHer\b/i, /\bShe\b/i, /\bHer's\b/i, /\bShe's\b/i, /\bHers\b/i, /\bShes\b/i, /\bBy AI\b/i, /\bAlexa\b/i, /\bTiffy\b/i, /Shirai/i, /\bCharlotte\b/i, /\bGina\b/i, /\bGin4\b/i, 
         /\bG1n4\b/i, /Gina Adam/i, /Gina Adams/i, /\bG1na\b/i, /\bGlna\b/i, /\bG!na\b/i, /\bGina\b/i, /\bGigi\b/i, /\bDolin\b/i, /\bSarah\b/i, /pride/i, /transve/i, /\bAI-generated\b/i, 
         /\bHMW\b/i, /\bBO6\b/i, /\bBO7\b/i, /Henni/i, /Lawren/i, /Lawrenc/i, /Lawrence/i, /Jenny/i, /Jenn1/i, /J3nn1/i, /J3nni/i, /J3nn4/i, /Jenn4/i, /Dua Lipa/i, /Dualipa/i, /Jenna/i, 
-    ];
+	/Julianne/i, /Juliane/i, /Juliana/i, /Julianna/i, /Rasikangas/i, /jjulia/i, /juuliska/i, /Roxanne/i, /Roxanna/i, /Noelle/i, /\bErika\b/i, /\bErica\b/i, /\bEerica\b/i, /\bEerika\b/i,
+	/\bIra\b/i, /irppa/i, /irpp4/i, /iragay/i, /juliana/i, /julianna/i, /juulianna/i, /juuliana/i, /juulia/i, /rasikannas/i, /rasikangas/i, /\bBra\b/i, /\bLana\b/i, /\bAI\b/i,
+    ]; 
 
     const allowedWords = [
         "Lähetä", "Viesti", "Lähetä viesti", "Send a message", "Send message", "Send", "message", "Battlefield", "BF", "BF6", "BF1", "BF4", "BF 1942", "BF2", "Battle field", "memes", "masterrace",
@@ -288,7 +291,10 @@
         'redvelvett',
         'anna_jay_aew',
         'tayconti_',
+        'tayconti',
         'taymelo',
+	'erikavikman',
+	'erika.helin',
         'hikaru_shida',
         'riho_ringstar',
         'gailkimitsme',
@@ -298,8 +304,6 @@
         'trinity_fatu',
         'm1mmuska',
         'mimmi',
-        'coupleskink',
-        'relationshipkink',
         'dvondivawwe',
         'suyung',
         'madisonraynewrestling',
@@ -362,6 +366,7 @@
         'killerkellywrestling',
         'alishawrestling',
         'gisele.shaw',
+	'jjuliakristiina_',
         'rachelellering',
         'tanyaraymond',
         'tessablanchard',
@@ -387,6 +392,7 @@
         'theajmendez',
         'saraya',
         'itsmebayley',
+	'julianarasikannas',
         'biancabelairwwe',
         'charlottewwe',
         'wwe_asuka',
@@ -456,7 +462,7 @@
         'button[type="submit"]',
         'div.x1qjc9v5.x1yvgwvq.x1dqoszc.x1ixjvfu.xhk4uv.x1ke7ulo.x3jqge.x1i7howy.x4y8mfe.x13fuv20.xu3j5b3.x1q0q8m5.x26u7qi.x178xt8z.xm81vs4.xso031l.xy80clv.x78zum5.xdt5ytf.xw7yly9.xktsk01.x1yztbdb.x1d',
         'div.x6s0dn4.x78zum5.x1gg8mnh.x1pi30zi.xlu9dua',
-        'div.x9f619.xjbqb8w.x78zum5.x168nmei.x13lgxp2.x5pf9jr.xo71vjh.x1uhb9sk.x1plvlek.xryxfnj.x1c4vz4f.x2lah0s.xdt5ytf.xqjyukv.x1qjc9v5.x1nhvcw1.xpvyfi4.xzueoph',
+        'div.x9f619.xjbqb8w.x78zum5.x168nmei.x13lgxp2.x5pf9jr.xo71vjh.x1uhb9sk.x1plvlek.xryxfnj.x1c4vz4f.x2lah0s.xdt5ytf.xqjyukv.x1qjc9v5.x1oa3qoh.x1nhvcw1',
         'div.x1i10hfl.x972fbf.xcfux6l.x1qhh985.xm0m39n.x9f619.xe8uvvx.xdj266r.x11i5rnm.xat24cr.x1mh8g0r.x16tdsg8.x1hl2dhg.xggy1nq.x1a2a7pz.x6s0dn4.xjbqb8w.x1ejq31n.xd10rxx.x1sy0etr.x17r0tee.x1ypdohk.x',
         'svg[aria-label="Valitse emoji"]',
         'div[aria-describedby="Viesti"][aria-label="Viesti"].xzsf02u.x1a2a7pz.x1n2onr6.x14wi4xw.x1iyjqo2.x1gh3ibb.xisnujt.xeuugli.x1odjw0f.notranslate',
@@ -471,7 +477,7 @@
         'div.x1qjc9v5.x1yvgwvq.x1dqoszc.x1ixjvfu.xhk4uv.x1ke7ulo.x3jqge.x1i7howy.x4y8mfe.x13fuv20.xu3j5b3.x1q0q8m5.x26u7qi.x178xt8z.xm81vs4.xso031l.xy80clv.x78zum5.xdt5ytf.xw7yly9.xktsk01.x1yztbdb',
         'div.x1n2onr6 > div[aria-describedby="Viesti"][aria-label="Viesti"].xzsf02u.x1a2a7pz.x1n2onr6.x14wi4xw.x1iyjqo2.x1gh3ibb.xisnujt.xeuugli.x1odjw0f.notranslate',
         'div[aria-hidden="true"] > div.xi81zsa.x17qophe.x6ikm8r.x10wlt62.x47corl.x10l6tqk.xlyipyv.x13vifvy.x87ps6o.xuxw1ft.xh8yej3',
-        'div.x1i10hfl.xjqpnuy.xa49m3k.xqeqjp1.x2hbi6w.xdl72j9.x2lah0s.xe8uvvx.xdj266r.x1mh8g0r.x2lwn1j.xeuugli.x1hl2dhg.xggy1nq.x1a2a7pz.x6s0dn4.xjyslct.x1ejq31n.xd',
+        'div.x1i10hfl.xjqpnuy.xa49m3k.xqeqjp1.x2hbi6w.xdl72j9.x2lah0s.xe8uvvx.xdj266r.x1mh8g0r.x2lwn1j.xeuugli.x1hl2dhg.xggy1nq.x1ja2u2z.x1t137rt.x1q0g3np.x1lku1pv.x1a2a7pz.x6s0dn4.xjyslct.x1ejq31n.xd',
         'svg[aria-label="Äänileike"]',
         'div.x6s0dn4.x78zum5 > div.x1i10hfl.x972fbf.xcfux6l.x1qhh985.xm0m39n.x9f619.xe8uvvx.xdj266r.x11i5rnm.xat24cr.x1mh8g0r.x16tdsg8.x1hl2dhg.xggy1nq.x1a2a7pz.x6s0dn4.xjbqb8w.xd10rxx.x1sy0etr.x17r0t',
         'div.x6s0dn4.x78zum5.x1r8uery.xdt5ytf.x1iyjqo2.x6ikm8r.x10wlt62',
@@ -495,7 +501,10 @@
         '[role="button"][aria-label="Lähetä"]',
         'div[role="dialog"] [role="button"][aria-label="Send"]',
         '[role="button"][aria-label="Send"]',
-        'div[role="dialog"] div[role="button"][tabindex="0"]:not([aria-disabled="true"])',
+        'div[role="dialog"] div[role="button"][aria-label="Lähetä"]',
+        '[role="button"][aria-label="Lähetä"]',
+        'div[role="dialog"] div[role="button"][aria-label="Send"]',
+        '[role="button"][aria-label="Send"]',
         'div[role="dialog"] div[role="button"].x1i10hfl.xjqpnuy.xc5r6h4.xqeqjp1.x1phubyo.x10w94by.x1qhh985.x14e42zd.xdl72j9.x2lah0s.x3ct3a4.xdj266r.x14z9mp.xat24cr.x1lziwak.x2lwn1j.xeuugli.xexx8yu.x18d9i69.x1hl2dhg.xggy1nq.x1ja2u2z.x1t137rt.x1q0g3np.x1lku1pv.x1a2a7pz.x6s0dn4.xjyslct.x1obq294.x5a5i1n.xde0f50.x15x8krk.x1ejq31n.x18oe1m7.x1sy0etr.xstzfhl.x9f619.x9bdzbf.x1ypdohk.x1f6kntn.xwhw2v2.x10w6t97.xl56j7k.x17ydfre.xf7dkkf.xv54qhq.x1n2onr6.x2b8uid.xlyipyv.x87ps6o.x5c86q.x18br7mf.x1i0vuye.xh8yej3.x18cabeq.x158me93.xk4oym4.x1uugd1q.x3nfvp2',
 
         /* NEW protected selectors for IG share dialog "Lähetä" (Send) button */
@@ -545,7 +554,7 @@
         'div.x9f619.xjbqb8w.x78zum5.x168nmei.x13lgxp2.x5pf9jr.xo71vjh.xv54qhq.xf7dkkf.xjkvuk6.x1iorvi4.x1n2onr6.x1plvlek.xryxfnj.x1c4vz4f.x2lah0s.x1q0g3np.xqjyukv.x6s0dn4.x1oa3qoh.x1nhvcw1',
         'span.x1lliihq.x1plvlek.xryxfnj.x1n2onr6.x1ji0vk5.x18bv5gf.x193iq5w.xeuugli.x1fj9vlw.x13faqbe.x1vvkbs.x1s928wv.xhkezso.x1gmr53x.x1cpjm7i.x1fgarty.x1943h6x.x1i0vuye.xvs91rp.x1s688f.x1roi4f4.x1t',
         'a.x1i10hfl.xjbqb8w.x1ejq31n.x18oe1m7.x1sy0etr.xstzfhl.x972fbf.x10w94by.x1qhh985.x14e42zd.x9f619.x1ypdohk.xt0psk2.xe8uvvx.xdj266r.x14z9mp.xat24cr.x1lziwak.xexx8yu.xyri2b.x18d9i69.x1c1uobl.x16t',
-        'div.x9f619.xjbqb8w.x78zum5.x15mokao.x1ga7v0g.x16uus16.xbiv7yw.x1uhb9sk.x1plvlek.xryxfnj.x1c4vz4f.x2lah0s.xdt5ytf.xqjyukv.x1qjc9v5.x1oa3qoh.x1nhvcw1[style*="height: 250px"]',
+        'div.x9f619.xjbqb8w.x78zum5.x168nmei.x13lgxp2.x5pf9jr.xo71vjh.x15mokao.x1ga7v0g.x16uus16.xbiv7yw.x1uhb9sk.x1plvlek.xryxfnj.x1c4vz4f.x2lah0s.xdt5ytf.xqjyukv.x1qjc9v5.x1oa3qoh.x1nhvcw1[style*="height: 250px"]',
         'a.x1i10hfl.xjbqb8w.x1ejq31n.x18oe1m7.x1sy0etr.xstzfhl.x972fbf.x10w94by.x1qhh985.x14e42zd.x9f619.x1ypdohk.xt0psk2.xe8uvvx.xdj266r.x14z9mp.xat24cr.x1lziwak.xexx8yu.xyri2b.x18d9i69.x1c1uobl.x16tdsg8.x1',
         'div.x9f619.xjbqb8w.x78zum5.x15mokao.x1ga7v0g.x16uus16.xbiv7yw.xdj266r.x1yztbdb.xyri2b.x1c1uobl.x1uhb9sk.x1plvlek.xryxfnj.x1c4vz4f.x2lah0s.xdt5ytf.xqjyukv.x1qjc9v5.x1oa3qoh.x1nhvcw1',
         'a.x1i10hfl[href*="blocked"]',
@@ -569,7 +578,18 @@
         'nav[aria-label*="Primary"] a[href^="/explore"]',
         'a[href="/explore/"]',
         'a[href="/explore/?next=%2F"]',
-        'a[role="link"][href^="/explore"]'
+        'a[role="link"][href^="/explore"]',
+
+  // "Sinulle Ehdotettua" selectors.
+  	'section:has(> div > a._a6hd[href*="?next=%2F"])',
+  	'a._a6hd[href*="?next=%2F"] ~ div[style*="--x-height: 230px"]',
+  	'section:has(> div > a._a6hd[href*="?next=%2F"]) div[style*="--x-height: 230px"]',
+	'section.xc3tme8.xcrlgei.x1tmp44o.xwqlbqq.x7y0ge5.xhayw2b'
+
+  // Fallbacks, just in case
+  	// 'div[style*="--x-height: 230px"]',
+  	// 'div[aria-label="Ohita"]',       
+
     ];
 
     const selectorsToMonitor = [
@@ -600,7 +620,7 @@
         'div.x1azxncr span[aria-describedby*="_R_bmt5bb9klrj5ipd5aq_"]',
         'div.x1azxncr span[aria-describedby*="_R_rmt5bb9klrj5ipd5aq_"]',
         'a.x1i10hfl[href*="threads"]',
-        'div.x9f619.xjbqb8w.x78zum5.x168nmei.x13lgxp2.x5pf9jr.xo71vjh.xdj266r.x1yztbdb.xyri2b.x1c1uobl.x1uhb9sk.x1plvlek.xryxfnj.x1c4vz4f.x2lah0s.xdt5ytf.xqjyukv.x1qjc9v5.x1oa3qoh.x1nhvcw1',
+        'div.x9f619.xjbqb8w.x78zum5.x168nmei.x13lgxp2.x5pf9jr.xo71vjh.x12nagc.x1uhb9sk.x1plvlek.xryxfnj.x1c4vz4f.x2lah0s.xdt5ytf.xqjyukv.x1qjc9v5.x1oa3qoh.x1nhvcw1',
         'canvas.x1upo8f9.xpdipgo.x87ps6o'
     ];
 
@@ -1379,11 +1399,91 @@ article:not([${APPROVE_ATTR}="1"]) {
         try { window.location.href = target; } catch(e){}
     }
 
+    // ===== New: URL-level ban matching helpers (Wider-smart scope) =====
+    function hasBannedMatchInToken(token, useAllowedWords = true) {
+        if (!token || typeof token !== 'string') return false;
+        const raw = token;
+        const low = raw.toLowerCase();
+        if (useAllowedWords && allowedWordsLower.some(w => low.includes(w))) return false;
+        for (const kw of bannedKeywordsLower) {
+            if (kw && low.includes(kw)) return true;
+        }
+        for (const rx of bannedRegexes) {
+            try { if (rx.test(raw)) return true; } catch {}
+        }
+        return false;
+    }
+
+    function extractRelevantURLTokensFromLocation(rawUrl) {
+        const tokens = [];
+        try {
+            const u = new URL(rawUrl, location.origin);
+            const pathname = u.pathname || '';
+            const parts = pathname.split('/').filter(Boolean);
+            if (parts.length) {
+                const first = parts[0];
+                // Username-like first segment
+                if (![
+                    'explore','reels','p','accounts','direct','stories','ai','meta-ai'
+                ].includes(first)) {
+                    tokens.push(parts[0]); // username
+                }
+                // Hashtag route: /explore/tags/<tag>/
+                if (first === 'explore' && parts[1] === 'tags' && parts[2]) {
+                    tokens.push(parts[2]);
+                }
+            }
+            // Common search query keys
+            const keys = ['q','query','keyword','search'];
+            for (const k of keys) {
+                const v = u.searchParams.get(k);
+                if (v) tokens.push(v);
+            }
+        } catch {}
+        return tokens;
+    }
+
+    function shouldRedirectByBannedInURL(rawUrl) {
+        try {
+            if (isExcludedPath()) return false; // honor excluded paths
+            const u = new URL(rawUrl, location.origin);
+            const host = u.hostname || '';
+            if (!host.includes('instagram.com') && !host.includes('threads.net')) return false;
+
+            // Primary: check relevant tokens (username, tag, search terms)
+            const tokens = extractRelevantURLTokensFromLocation(rawUrl);
+            for (const t of tokens) {
+                try {
+                    const tok = decodeURIComponent(t).trim();
+                    if (tok && hasBannedMatchInToken(tok, true)) return true;
+                } catch {
+                    if (t && hasBannedMatchInToken(t, true)) return true;
+                }
+            }
+
+            // Include /p/... and search-like paths: scan full path+query+hash (allowedWords exemptions apply)
+            const pathLike = (u.pathname || '');
+            if (pathLike.startsWith('/p/') || pathLike.startsWith('/explore') || pathLike.includes('/search')) {
+                let full = '';
+                try { full = decodeURIComponent((u.pathname || '') + (u.search || '') + (u.hash || '')); }
+                catch { full = (u.pathname || '') + (u.search || '') + (u.hash || ''); }
+                if (hasBannedMatchInToken(full, true)) return true;
+            }
+
+            return false;
+        } catch {
+            return false;
+        }
+    }
+    // ===== End: URL-level ban matching helpers =====
+
     function shouldInstagramRedirect() {
         const url = window.location.href;
         for (let i = 0; i < instagramBannedPaths.length; ++i) {
             if (url.includes(instagramBannedPaths[i])) return true;
         }
+        // New: include URL-level ban matching (Wider-smart scope)
+        if (shouldRedirectByBannedInURL(url)) return true;
         return false;
     }
 
@@ -1546,7 +1646,15 @@ article:not([${APPROVE_ATTR}="1"]) {
             return;
         }
 
+        // Banned explicit paths first
         if (instagramBannedPaths.some(path => currentURL.includes(path))) {
+            window.stop();
+            fastRedirect('https://www.instagram.com');
+            return;
+        }
+
+        // New: URL-level ban checks (Wider-smart scope), honoring excludedPaths and allowedWords at URL-level
+        if (shouldRedirectByBannedInURL(currentURL)) {
             window.stop();
             fastRedirect('https://www.instagram.com');
             return;
