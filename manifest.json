@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "BraveFox Enhancer",
-  "version": "17.2.8",
+  "version": "17.3.0",
   "description": "Enhances browsing experience by blocking unwanted content and cleaning up URLs.",
   "background": {
     "scripts": [
@@ -334,7 +334,9 @@
         "https://www.tiktok.com/*",
         "https://tiktok.com/*",
         "https://github.com/*",
-        "*://*.guthib.com/*"
+        "*://*.guthib.com/*",
+	"https://www.snapchat.com/*",
+	"https://www.snapchat.com/web*"
       ],
       "js": [
         "scripts/extra.js"

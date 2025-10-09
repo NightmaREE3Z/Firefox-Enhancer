@@ -67,6 +67,77 @@
         } catch {}
     }
 
+    // ===== Protected Snapchat Chat Sidebar Selectors (never hide/delete these) =====
+    const snapchatProtectedSelectors = [
+        '.BL7do',
+        '.XlW_1',
+        '.AbUJt',
+        '.Titq2',
+        '.FBTDE',
+        '.D8ovh',
+        '.lzKDW',
+        '.vbVAI',
+        '.JM4Qm',
+        '.yLNNg',
+        '.toJ1p',
+        '.KcY9t',
+        '.kwuI_',
+        '.eKaL7',
+        '.Bnaur',
+        '.zUzvu',
+        '.LsbRg',
+        '.n6VkK',
+        '.wHvEy',
+        '.xGUM5',
+        '.PrUqm',
+        '.XLCCn',
+        '.cJcor',
+        '.zwwmh',
+        '.yC1EG',
+        '._S446',
+        '.POnGV',
+        '.DkxOl',
+        '.C5Sux',
+        '.dmsdi',
+        '.Vhq_T',
+        '.deg2K',
+        '.ReactVirtualized__Grid',
+        '.ReactVirtualized__List',
+        '.QAr02',
+        '.ReactVirtualized__Grid__innerScrollContainer',
+        '.O4POs',
+        '.LNwMF',
+        '.yOCPc',
+        '.RGJQE',
+        '.sTfiC',
+        '.xllKA',
+        '.Dozhe',
+        '.uALhC',
+        '.BbZFb',
+        '.mYSR9',
+        '.FiLwP',
+        '.PWxCe',
+        '.nmvCS',
+        '.k2F9c',
+        '.Hzb7k',
+        '.aXdlm',
+        '.Gq3RH',
+        '.ovUsZ',
+        '.GQKvA',
+        '.rNemx',
+        '.w15C2',
+        '.HEkDJ',
+        '.resize-triggers',
+        '.expand-trigger',
+        '.contract-trigger',
+        '#comma1',
+        // NEW: Added selectors from the provided HTML for additional protection
+        'div.UZxw_ button.Rknx9',
+        'button.Rknx9',
+        'svg[viewBox="0 0 10 14"]',
+        'path[fill-rule="evenodd"]'
+    ];
+
     // NEW: IRC Galleria selectors to hide immediately
     const ircGalleriaSelectorsToHide = [
         '#thumb_div_129640995',
@@ -111,6 +182,18 @@
         'picture/130016541', 'picture/129804009', 'picture/129684375', 'picture/128593982'
     ];
 
+    // NEW: Snapchat unwanted elements to hide (e.g., Spotlight menu button)
+    const snapchatUnwantedSelectors = [
+        '.OwWqx[title="Katso valokeilatarinoita"]',  // Spotlight menu button to remove from menu
+        // Add other unwanted selectors here if needed
+    ];
+
+    // NEW: Snapchat Camera selector to expand to fill available space (not full screen)
+    const snapchatCameraSelector = '.G3Z4U.Xg7U0';
+
+    // NEW: Snapchat Minimize Button selector (to auto-click for collapsing spotlight)
+    const snapchatMinimizeButtonSelector = 'button.Rknx9';  // Using the protected selector for the button
+
     let currentURL = window.location.href;
     let kuvakeRedirected = false;
     const hiddenElements = new WeakSet();
@@ -139,7 +222,16 @@
         } catch {}
     }
 
-    // Inject CSS for IRC Galleria immediate hiding
+    // Helper: Check if an element is protected (should never be hidden/deleted)
+    function isElementProtected(element) {
+        try {
+            return snapchatProtectedSelectors.some(selector => element.matches && element.matches(selector));
+        } catch {
+            return false;
+        }
+    }
+
+    // Inject CSS for IRC Galleria immediate hiding and Snapchat unwanted elements
     const injectInlineCSS = () => {
         try {
             const styleId = 'extra-redirect-style';
@@ -167,9 +259,30 @@
                     'transition: none !important;' +
                 '}' : '';
 
+            const snapchatUnwantedCSS = window.location.hostname.includes('snapchat.com') ? 
+                snapchatUnwantedSelectors.map(selector => `${selector}`).join(',\n') + ' {' +
+                    'display: none !important;' +
+                    'visibility: hidden !important;' +
+                    'opacity: 0 !important;' +
+                    'height: 0 !important;' +
+                    'width: 0 !important;' +
+                    'max-height: 0 !important;' +
+                    'max-width: 0 !important;' +
+                    'overflow: hidden !important;' +
+                    'position: absolute !important;' +
+                    'left: -9999px !important;' +
+                    'top: -9999px !important;' +
+                    'margin: 0 !important;' +
+                    'padding: 0 !important;' +
+                    'border: none !important;' +
+                    'transition: none !important;' +
+                '}' : '';
+
             style.textContent = `
             /* IRC Galleria pre-hide CSS for immediate thumbnail deletion */
             ${ircGalleriaCSS}
+            /* Snapchat unwanted elements pre-hide CSS (e.g., Spotlight button) */
+            ${snapchatUnwantedCSS}
             `;
             
             if (!style.isConnected) {
@@ -237,6 +350,84 @@
                 }
             });
         });
+    }
+
+    // NEW: Function to hide unwanted Snapchat elements (e.g., Spotlight menu button)
+    function handleSnapchatUnwantedHiding() {
+        if (!window.location.hostname.includes('snapchat.com')) return;
+        snapchatUnwantedSelectors.forEach(selector => {
+            document.querySelectorAll(selector).forEach(element => {
+                if (!hiddenElements.has(element) && !isElementProtected(element)) {
+                    element.style.setProperty('display', 'none', 'important');
+                    element.style.setProperty('visibility', 'hidden', 'important');
+                    element.style.setProperty('opacity', '0', 'important');
+                    element.style.setProperty('height', '0', 'important');
+                    element.style.setProperty('width', '0', 'important');
+                    element.style.setProperty('max-height', '0', 'important');
+                    element.style.setProperty('max-width', '0', 'important');
+                    element.style.setProperty('position', 'absolute', 'important');
+                    element.style.setProperty('left', '-9999px', 'important');
+                    element.style.setProperty('top', '-9999px', 'important');
+                    element.style.setProperty('overflow', 'hidden', 'important');
+                    element.style.setProperty('margin', '0', 'important');
+                    element.style.setProperty('padding', '0', 'important');
+                    element.style.setProperty('border', 'none', 'important');
+                    element.style.setProperty('transition', 'none', 'important');
+                    hiddenElements.add(element);
+                    try {
+                        element.remove();
+                    } catch (e) {
+                        try {
+                            while (element.firstChild) element.removeChild(element.firstChild);
+                        } catch {}
+                    }
+                }
+            });
+        });
+    }
+
+    // NEW: Function to auto-minimize Snapchat Spotlight as fast as possible
+    function handleSnapchatSpotlightAutoMinimize() {
+        if (!window.location.hostname.includes('snapchat.com')) return;
+        // Minimize as soon as possible - check immediately and on DOMContentLoaded
+        const tryMinimize = () => {
+            try {
+                const minimizeButton = document.querySelector(snapchatMinimizeButtonSelector);
+                if (minimizeButton && !hiddenElements.has(minimizeButton)) {
+                    minimizeButton.click();
+                    console.log('Auto-minimized Snapchat spotlight immediately.');
+                } else {
+                    // Retry quickly if not found
+                    addTimeout(tryMinimize, 50);
+                }
+            } catch (e) {
+                console.warn('Failed to auto-minimize Snapchat spotlight:', e);
+            }
+        };
+        tryMinimize();
+        // Also try on DOMContentLoaded for safety
+        onEvent(document, 'DOMContentLoaded', tryMinimize, false);
+    }
+
+    // NEW: Function to expand Snapchat Camera element to fill available space (not full screen)
+    function handleSnapchatCameraExpansion() {
+        if (!window.location.hostname.includes('snapchat.com')) return;
+        const cameraElement = document.querySelector(snapchatCameraSelector);
+        if (cameraElement && !hiddenElements.has(cameraElement)) {
+            // Make the camera element fill its container's available space, without overlaying full screen
+            cameraElement.style.setProperty('width', '100%', 'important');
+            cameraElement.style.setProperty('height', '100%', 'important');
+            cameraElement.style.setProperty('margin', '0', 'important');
+            cameraElement.style.setProperty('padding', '0', 'important');
+            cameraElement.style.setProperty('border', 'none', 'important');
+            cameraElement.style.setProperty('transition', 'none', 'important');
+            // Ensure inner elements adjust (e.g., images)
+            cameraElement.querySelectorAll('img').forEach(img => {
+                img.style.setProperty('width', '100%', 'important');
+                img.style.setProperty('height', '100%', 'important');
+                img.style.setProperty('object-fit', 'cover', 'important');
+            });
+        }
     }
 
     function handleIrcGalleriaRedirect2() {
@@ -369,6 +560,9 @@
         }
 
         handleIRCGalleriaThumbDeletion();
+        handleSnapchatUnwantedHiding();  // NEW: Hide unwanted elements like Spotlight menu button
+        handleSnapchatSpotlightAutoMinimize();  // NEW: Auto-minimize spotlight immediately
+        handleSnapchatCameraExpansion();  // NEW: Added call to expand Snapchat camera within its container
 
         if (currentURL.includes('github.com')) {
             handleGitHubRedirect();
@@ -385,7 +579,7 @@
                 var u = kuvakeRedirectUsers[i];
                 if (
                     decodedPath === '/user/' + u ||
-                    pathname.toLowerCase() === '/user/' + encodeURIComponent(u)
+                    pathname.toLowerCase() === '/user/' + u
                 ) {
                     if (!kuvakeRedirected) {
                         kuvakeRedirected = true;
@@ -466,7 +660,6 @@
             return function() {
                 var rv = orig.apply(this, arguments);
                 window.dispatchEvent(new Event(type));
-                window.dispatchEvent(new Event('locationchange'));
                 return rv;
             };
         };

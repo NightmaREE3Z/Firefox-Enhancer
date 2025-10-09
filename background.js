@@ -175,6 +175,7 @@ const urlsToBlock = [
     "*://comfyui.org/*",
     "*://thinkdiffusion.com/*",
     "*://github.com/copilot*", 
+    "*://snapchat.com*", 
 ];
 
 // Memory tracking
