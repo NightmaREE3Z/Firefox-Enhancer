@@ -1,13 +1,24 @@
 (function () {
     'use strict';
 
+    // ---- RUNTIME + FIREFOX GUARDS ----
+    const IS_FIREFOX = typeof InstallTrigger !== 'undefined' || /\bFirefox\//.test(navigator.userAgent);
+    let HEAVY_OBSERVERS_ACTIVE = false;       // track whether main MOs are attached
+    let INITIAL_BURST_DONE = false;           // taper aggressive timers after startup
+    let PAGE_WORLD_HOOKED = false;            // page-world Answers hook installed flag
+    let START_TS = performance.now();
+
     // === CHROME DEV CONSOLE LOGGING ===
     function devLog(message) {
-        console.log('[REDDIT.JS]', message);
+        try { console.log('[REDDIT.JS]', message); } catch {}
     }
 
-    // === ANSWERS PAGE-WORLD HOOK (Shadow DOM safe; nav-scoped; added) ===
+    // === ANSWERS PAGE-WORLD HOOK (Shadow DOM safe; nav-scoped; optimized for Firefox) ===
     // Inject a tiny script into the page world so it can see Shadow DOM and clean “Answers” reliably without nuking layout.
+    // Changes:
+    // - Avoid scanning document.querySelectorAll('*') for ShadowRoots (very heavy on FF).
+    // - Track created MutationObservers and disconnect them on pagehide.
+    // - Limit initial sweep to known nav/toolbar scopes and common shells.
     (function installAnswersPageHook() {
         try {
             if (window.__nrAnswersEarlyInstalled) return;
@@ -68,6 +79,11 @@
             injectIntoPage(function pageWorldAnswersHook() {
                 if (window.__nrAnswersPageHooked) return;
                 window.__nrAnswersPageHooked = true;
+
+                // Track created observers so we can disconnect them on pagehide
+                const OBS = new Set();
+                function addObs(mo) { try { if (mo) OBS.add(mo); } catch(e){} }
+                function disconnectAll() { try { OBS.forEach(o => { try { o.disconnect(); } catch {} }); OBS.clear(); } catch {} }
 
                 // Only remove small, obvious nav items — never arbitrary div wrappers.
                 function removeAnswersAnchor(a) {
@@ -165,55 +181,86 @@
                     };
                 } catch {}
 
-                // Scan all currently open ShadowRoots
-                (function scanExistingShadows() {
-                    try {
-                        const all = document.querySelectorAll('*');
-                        for (let i = 0; i < all.length; i++) {
-                            const el = all[i];
-                            if (el && el.shadowRoot) {
-                                removeAnswersIn(el.shadowRoot);
-                                try {
-                                    const mo = new MutationObserver(() => removeAnswersIn(el.shadowRoot));
-                                    mo.observe(el.shadowRoot, { childList: true, subtree: true });
-                                } catch {}
-                            }
-                        }
-                    } catch {}
-                })();
+                // Targeted initial sweep: only known nav/header/aside + common shells (avoid queryAll '*')
+(function targetedInitialSweep() {
+  try {
+    removeAnswersIn(document);
+    // Include reddit-sidebar-nav and the left sidebar container so we sweep/observe their ShadowRoots
+    const seeds = document.querySelectorAll(
+      'nav, header, aside, [role="navigation"], ' +
+      'faceplate-tracker[source="nav"], ' +
+      'shreddit-app, faceplate-tracker, shreddit-feed, ' +
+      'reddit-sidebar-nav, #left-sidebar-container, flex-left-nav-container#left-sidebar-container'
+    );
+    const max = Math.min(seeds.length, 160);
+    for (let i = 0; i < max; i++) {
+      const el = seeds[i];
+      if (el && el.shadowRoot) {
+        removeAnswersIn(el.shadowRoot);
+        try {
+          const mo = new MutationObserver(() => removeAnswersIn(el.shadowRoot));
+          mo.observe(el.shadowRoot, { childList: true, subtree: true });
+          addObs(mo);
+        } catch {}
+      }
+    }
+  } catch {}
+})();
 
                 // Observe for nav containers appearing later
-                (function observeNavs() {
-                    try {
-                        const observeOne = (nav) => {
-                            if (!nav || nav.__nrAnswersObserved) return;
-                            nav.__nrAnswersObserved = true;
-                            removeAnswersIn(nav);
-                            const mo = new MutationObserver(() => removeAnswersIn(nav));
-                            mo.observe(nav, { childList: true, subtree: true });
-                        };
+(function observeNavs() {
+  try {
+    const WATCH_SEL =
+      'nav, header, aside, [role="navigation"], faceplate-tracker[source="nav"], ' +
+      'reddit-sidebar-nav, #left-sidebar-container, flex-left-nav-container#left-sidebar-container';
 
-                        document.querySelectorAll('nav, header, aside, [role="navigation"], faceplate-tracker[source="nav"]').forEach(observeOne);
+    const observeOne = (nav) => {
+      if (!nav || nav.__nrAnswersObserved) return;
+      nav.__nrAnswersObserved = true;
+      removeAnswersIn(nav);
 
-                        const docMo = new MutationObserver(muts => {
-                            for (let i = 0; i < muts.length; i++) {
-                                const m = muts[i];
-                                for (let j = 0; j < m.addedNodes.length; j++) {
-                                    const n = m.addedNodes[j];
-                                    if (n && n.nodeType === 1) {
-                                        if (n.matches?.('nav, header, aside, [role="navigation"], faceplate-tracker[source="nav"]')) {
-                                            observeOne(n);
-                                        } else if (n.querySelector) {
-                                            const late = n.querySelector('nav, header, aside, [role="navigation"], faceplate-tracker[source="nav"]');
-                                            if (late) observeOne(late);
-                                        }
-                                    }
-                                }
-                            }
-                        });
-                        docMo.observe(document.documentElement, { childList: true, subtree: true });
-                    } catch {}
-                })();
+      // If this nav has a ShadowRoot, observe within it too
+      if (nav.shadowRoot) {
+        try {
+          removeAnswersIn(nav.shadowRoot);
+          const moShadow = new MutationObserver(() => removeAnswersIn(nav.shadowRoot));
+          moShadow.observe(nav.shadowRoot, { childList: true, subtree: true });
+          addObs(moShadow);
+        } catch {}
+      }
+
+      // Observe the element itself for children/subtree changes
+      try {
+        const mo = new MutationObserver(() => removeAnswersIn(nav));
+        mo.observe(nav, { childList: true, subtree: true });
+        addObs(mo);
+      } catch {}
+    };
+
+    // Observe all current targets (incl. reddit-sidebar-nav)
+    document.querySelectorAll(WATCH_SEL).forEach(observeOne);
+
+    // Doc-level observer for future mounts
+    const docMo = new MutationObserver(muts => {
+      for (let i = 0; i < muts.length; i++) {
+        const m = muts[i];
+        for (let j = 0; j < m.addedNodes.length; j++) {
+          const n = m.addedNodes[j];
+          if (n && n.nodeType === 1) {
+            if (n.matches?.(WATCH_SEL)) {
+              observeOne(n);
+            } else if (n.querySelector) {
+              const late = n.querySelector(WATCH_SEL);
+              if (late) observeOne(late);
+            }
+          }
+        }
+      }
+    });
+    docMo.observe(document.documentElement, { childList: true, subtree: true });
+    addObs(docMo);
+  } catch {}
+})();
 
                 // Hook attachShadow so future ShadowRoots are cleaned automatically
                 (function hookAttachShadow() {
@@ -230,24 +277,31 @@
                                 removeAnswersIn(root);
                                 const mo = new MutationObserver(() => removeAnswersIn(root));
                                 mo.observe(root, { childList: true, subtree: true });
+                                addObs(mo);
                             } catch {}
                             return root;
                         };
                     } catch {}
                 })();
 
-                // Short early burst to catch initial mounts
+                // Short early burst (reduced to 15 iterations) to catch initial mounts
                 (function shortBurst() {
                     let count = 0;
                     const id = setInterval(() => {
                         try { removeAnswersIn(document); } catch {}
-                        if (++count >= 40) clearInterval(id);
+                        if (++count >= 15) clearInterval(id);
                     }, 100);
                 })();
+
+                // Cleanup on navigation
+                window.addEventListener('pagehide', disconnectAll, { once: true });
+                window.addEventListener('beforeunload', disconnectAll, { once: true });
 
                 // Initial sweep
                 try { removeAnswersIn(document); } catch {}
             });
+
+            PAGE_WORLD_HOOKED = true;
         } catch {}
     })();
 
@@ -451,7 +505,7 @@
         "r/Glitch_in_the_Matrix",
         "r/niceguys",
         "r/nicegirls",
-	"r/ChatGPT",
+        "r/ChatGPT",
     ];
 
     const keywordsToHide = [
@@ -523,7 +577,7 @@
         /Fantop/i, /Fan top/i, /Fan-top/i, /Topfan/i, /Top fan/i, /Top-fan/i, /Top-fans/i, /fanstopia/i, /Jenni/i,  /fans top/i, /topiafan/i, /topia fan/i, /topia-fan/i, /topifan/i, /topi fan/i, /La Premare/i,
         /topi-fan/i, /topaifan/i, /topai fan/i, /topai-fan/i, /fans-topia/i, /fans-topai/i, /Henni/i, /Lawren/i, /Lawrenc/i, /Lawrence/i, /Jenny/i, /Jenna/i, /softorbit/i, /softorbits/i, /soft-orbit/i, 
         /soft-orbits/i, /VMWare/i, /VM Ware/i, /\bVM\b/i, /Virtual Machine/i, /\bVMs\b/i, /Virtualbox/i, /Virtual box/i, /Virtual laatikko/i, /Virtuaali laatikko/i, /Virtuaalilaatikko/i, /hyper-v/i,
-        /VMWare/i, /VM Ware/i, /\bVM\b/i, /Virtual Machine/i, /\bVMs\b/i, /Virtualbox/i, /Virtual box/i, /Virtual laatikko/i, /Virtuaali laatikko/i, /Virtuaalilaatikko/i, /hyper-v/i, /hyper v/i, /\bLilly\b/i, 
+        /VMWare/i, /VM Ware/i, /\bVM\b/i, /Virtual Machine/i, /\bVMs\b/i, /Virtualbox/i, /Virtual box/i, /Virtual laatikko/i, /Virtuaali laatikko/i, /hyper-v/i, /hyper v/i, /\bLilly\b/i, 
         /virtuaalimasiini/i, /virtuaali masiini/i, /virtuaali workstation/i, /virtual workstation/i, /virtualworkstation/i, /virtual workstation/i, /virtuaaliworkstation/i, /hypervisor/i, /hyper visor/i, 
         /hyperv/i, /vbox/i, /virbox/i, /virtbox/i, /vir box/i, /virt box/i, /virtual box/i, /vrbox/i, /vibox/i, /virbox virtual/i, /virtbox virtual/i, /vibox virtual/i, /vbox virtual/i, /v-machine/i, /\bLilli\b/i,
         /vmachine/i, /v machine/i, /vimachine/i, /vi-machine/i, /vi machine/i, /virmachine/i, /vir-machine/i, /vir machine/i, /virt machine/i, /virtmachine/i, /virt-machine/i, /virtumachine/i, /vir mach/i,
@@ -534,7 +588,7 @@
         /AI[ -]?generated/i, /generated[ -]?by[ -]?AI/i, /artificial[ -]?intelligence/i, /machine[ -]?learning/i, /neural[ -]?network/i, /deep[ -]?learning/i, /midjourney/i, /dall[ -]?e/i, /stable[ -]?diffusion/i,
         /computer[ -]?generated/i, /text[ -]?to[ -]?image/i, /image[ -]?generation/i, /AI[ -]?art/i, /synthetic[ -]?media/i, /algorithmically/i, /bot[ -]?generated/i, /automated[ -]?content/i, /stablediffused/i, 
         /Hirada/i, /Hirata/i, /Mizubi/i, /Mizupi/i, /Mizuki/i, /Watanabe/i, /Watanaba/i, /Wakana/i, /Kana Urai/i, /Uehara/i, /Uehara/i, /jazmyn/i, /Jazmin/i, /Jasmin/i, /Jasmyn/i, /\bNyx\b/i, /Primera/i,
-	/Julianne/i, /Juliane/i, /Juliana/i, /Julianna/i, /rasikangas/i, /rasikannas/i, 
+        /Julianne/i, /Juliane/i, /Juliana/i, /Julianna/i, /rasikangas/i, /rasikannas/i, 
     ];
 
     const unifiedSelectors = [
@@ -572,13 +626,14 @@
     ];
 
     // --- OPTIMIZED MEMORY MANAGEMENT ---
-    const MEMORY_CAP_GB = 6; // Reduced to 6GB for stability
-    const MEMORY_WARNING_GB = 3; // Reduced warning threshold
-    const MAX_CACHE_SIZE = 50; // Reduced cache size
-    const MAX_APPROVAL_PERSISTENCE = 40; // Reduced approval persistence
-    const CLEANUP_INTERVAL = 10000; // 10 seconds cleanup (more frequent)
-    const MEMORY_CHECK_INTERVAL = 5000; // Check memory every 5 seconds (more frequent)
-    const CRITICAL_MEMORY_THRESHOLD = 0.7; // 70% of heap limit (reduced)
+    // Firefox doesn't expose performance.memory in stable; use stricter caps + hibernation heuristics.
+    const MEMORY_CAP_GB = IS_FIREFOX ? 3.5 : 6;         // tighter cap on FF
+    const MEMORY_WARNING_GB = IS_FIREFOX ? 2.2 : 3;
+    const MAX_CACHE_SIZE = IS_FIREFOX ? 30 : 50;         // smaller caches on FF
+    const MAX_APPROVAL_PERSISTENCE = IS_FIREFOX ? 30 : 40;
+    const CLEANUP_INTERVAL = IS_FIREFOX ? 7000 : 10000;  // prune a bit more often on FF
+    const MEMORY_CHECK_INTERVAL = 4000;                  // frequent checks help hibernation
+    const CRITICAL_MEMORY_THRESHOLD = 0.65;              // 65% of heap limit
 
     // Lightweight caches - minimal memory footprint with WeakSet/WeakMap for automatic cleanup
     const processedElements = new WeakSet();
@@ -595,7 +650,7 @@
     const observerInstances = new Set();
     const mutationObservers = new WeakMap();
 
-    // NEW: ensure single observer per ShadowRoot and auto-disconnect later
+    // ensure single observer per ShadowRoot and auto-disconnect later
     const shadowRootObservers = new WeakMap();
 
     let lastFilterTime = 0;
@@ -604,7 +659,7 @@
     let lastMemoryWarning = 0;
     let isCleaningUp = false;
 
-    // Memory monitoring optimized for stability
+    // Memory monitoring (Chrome returns values; FF returns null)
     function getMemoryUsage() {
         if (performance.memory) {
             const memInfo = performance.memory;
@@ -632,42 +687,36 @@
             const memInfo = getMemoryUsage();
             const isOverCap = memInfo ? memInfo.usedGB > MEMORY_CAP_GB : false;
             const isWarning = memInfo ? memInfo.usedGB > MEMORY_WARNING_GB : false;
-            const isCritical = memInfo ? memInfo.percentage > CRITICAL_MEMORY_THRESHOLD * 100 : false;
+            const isCritical = memInfo ? (memInfo.usedMB / memInfo.limitMB) > CRITICAL_MEMORY_THRESHOLD : false;
             
             if (force || isOverCap || isCritical) {
-                // Aggressive cleanup when over cap
                 const beforeContent = contentBannedCache.size;
                 const beforeSubreddit = bannedSubredditCache.size;
                 const beforeApproval = approvalPersistence.size;
                 
                 contentBannedCache.clear();
                 bannedSubredditCache.clear();
-                
-                // Keep only last 10 approvals when critical
+
+                // Keep only last few approvals when critical
+                const keep = IS_FIREFOX ? 8 : 10;
                 if (isCritical || isOverCap) {
-                    const entries = Array.from(approvalPersistence.entries()).slice(-10);
+                    const entries = Array.from(approvalPersistence.entries()).slice(-keep);
                     approvalPersistence.clear();
                     entries.forEach(([key, value]) => approvalPersistence.set(key, value));
                 }
                 
                 // Clean up any stale observers
                 observerInstances.forEach(observer => {
-                    try {
-                        if (observer && typeof observer.disconnect === 'function') {
-                            observer.disconnect();
-                        }
-                    } catch (e) {
-                        // Ignore cleanup errors
-                    }
+                    try { if (observer && typeof observer.disconnect === 'function') observer.disconnect(); } catch {}
                 });
                 observerInstances.clear();
-                
+                HEAVY_OBSERVERS_ACTIVE = false; // we'll reattach lazily
+
                 if (memInfo) {
                     devLog(`🧹 MEMORY CAP CLEANUP - Memory: ${memInfo.usedGB}GB/${MEMORY_CAP_GB}GB | Cleared: Content(${beforeContent}), Subreddit(${beforeSubreddit}), Approval(${beforeApproval}→${approvalPersistence.size})`);
                 }
                 
             } else if (isWarning || contentBannedCache.size > MAX_CACHE_SIZE || bannedSubredditCache.size > MAX_CACHE_SIZE) {
-                // Gentle cleanup when approaching limits
                 if (contentBannedCache.size > MAX_CACHE_SIZE) {
                     const entries = Array.from(contentBannedCache.entries()).slice(-Math.floor(MAX_CACHE_SIZE * 0.5));
                     contentBannedCache.clear();
@@ -691,43 +740,104 @@
 
             memoryCleanupCount++;
             
-            // Force garbage collection only when necessary
-            if (window.gc && (force || isOverCap || memoryCleanupCount % 3 === 0)) {
+            // Force garbage collection only when necessary (dev/automation builds)
+            if (window.gc && (force || isOverCap || (IS_FIREFOX && memoryCleanupCount % 2 === 0))) {
                 try {
                     window.gc();
                     const afterMemInfo = getMemoryUsage();
                     if (afterMemInfo && memInfo) {
                         devLog(`🗑️ GC - Memory: ${afterMemInfo.usedGB}GB (was ${memInfo.usedGB}GB)`);
                     }
-                } catch (e) {
-                    // Ignore GC errors
-                }
+                } catch {}
             }
         } finally {
             isCleaningUp = false;
         }
     }
 
+    // Hibernation: detach heavy observers during memory pressure or when tab is hidden.
+    function suspendHeavyObservers() {
+        if (!HEAVY_OBSERVERS_ACTIVE) return;
+        try {
+            observerInstances.forEach(mo => { try { mo.disconnect(); } catch {} });
+            observerInstances.clear();
+            HEAVY_OBSERVERS_ACTIVE = false;
+            devLog('🛌 Observers hibernated');
+        } catch {}
+    }
+
+    function attachMainObservers() {
+        try {
+            // Main DOM observer for new content
+            const observer = new MutationObserver(processNewElements);
+            observerInstances.add(observer);
+            observer.observe(document.documentElement, {
+                childList: true,
+                subtree: true,
+                attributes: false,
+                characterData: false
+            });
+
+            // Detach observer to clean shadow-root observers on subtree removals
+            const domDetachObserver = new MutationObserver((muts) => {
+                for (let i = 0; i < muts.length; i++) {
+                    const m = muts[i];
+                    if (m.removedNodes && m.removedNodes.length) {
+                        const maxRemoved = Math.min(m.removedNodes.length, 50);
+                        for (let j = 0; j < maxRemoved; j++) {
+                            const n = m.removedNodes[j];
+                            if (n && n.nodeType === 1) {
+                                disconnectShadowObserversInSubtree(n, 0);
+                            }
+                        }
+                    }
+                }
+            });
+            observerInstances.add(domDetachObserver);
+            domDetachObserver.observe(document.documentElement, { childList: true, subtree: true });
+
+            HEAVY_OBSERVERS_ACTIVE = true;
+        } catch {}
+    }
+
+    function resumeHeavyObservers() {
+        if (HEAVY_OBSERVERS_ACTIVE) return;
+        try {
+            attachMainObservers();
+            // Re-arm search dropdown observers that may have been disconnected
+            observeSearchDropdown(true);
+            HEAVY_OBSERVERS_ACTIVE = true;
+            devLog('🌙 Observers resumed');
+        } catch {}
+    }
+
     // Memory pressure monitoring optimized for stability
     function monitorMemoryPressure() {
         const memInfo = getMemoryUsage();
-        if (!memInfo) return;
-        
+        // On Firefox memInfo is usually null. Use visibility + elapsed time heuristics to keep things light.
         const now = Date.now();
-        
-        if (memInfo.usedGB > MEMORY_CAP_GB) {
-            if (now - lastMemoryWarning > 5000) { // Only warn every 5 seconds
-                devLog(`🚨 MEMORY CAP EXCEEDED: ${memInfo.usedGB}GB > ${MEMORY_CAP_GB}GB - FORCING CLEANUP`);
-                lastMemoryWarning = now;
+
+        if (memInfo) {
+            const pct = (memInfo.usedMB / memInfo.limitMB);
+            if (memInfo.usedGB > MEMORY_CAP_GB || pct > CRITICAL_MEMORY_THRESHOLD) {
+                if (now - lastMemoryWarning > 4000) {
+                    devLog(`🚨 memory pressure: ${memInfo.usedGB}GB (${Math.round(pct*100)}%) — hibernating observers`);
+                    lastMemoryWarning = now;
+                }
+                cleanupCaches(true);
+                suspendHeavyObservers();
+                return;
             }
-            cleanupCaches(true);
-            
-        } else if (memInfo.usedGB > MEMORY_WARNING_GB) {
-            if (now - lastMemoryWarning > 15000) {
-                devLog(`⚠️ Memory warning: ${memInfo.usedGB}GB / ${MEMORY_CAP_GB}GB cap (${memInfo.percentage}% of heap)`);
-                lastMemoryWarning = now;
+        } else if (IS_FIREFOX) {
+            // Heuristic: after the first 20 seconds, if tab is hidden or we've been running long, hibernate briefly
+            if (document.visibilityState === 'hidden') {
+                suspendHeavyObservers();
+                return;
             }
-            cleanupCaches();
+        }
+
+        if (document.visibilityState === 'visible' && !HEAVY_OBSERVERS_ACTIVE) {
+            resumeHeavyObservers();
         }
     }
 
@@ -737,25 +847,16 @@
         
         // Clear all intervals
         intervalIds.forEach(id => {
-            try {
-                clearInterval(id);
-            } catch (e) {
-                // Ignore cleanup errors
-            }
+            try { clearInterval(id); } catch {}
         });
         intervalIds.clear();
 
         // Disconnect all observers
         observerInstances.forEach(observer => {
-            try {
-                if (observer && typeof observer.disconnect === 'function') {
-                    observer.disconnect();
-                }
-            } catch (e) {
-                // Ignore cleanup errors
-            }
+            try { if (observer && typeof observer.disconnect === 'function') observer.disconnect(); } catch {}
         });
         observerInstances.clear();
+        HEAVY_OBSERVERS_ACTIVE = false;
 
         // Force cache cleanup
         cleanupCaches(true);
@@ -766,11 +867,14 @@
         }
     }
 
-    // Enhanced page visibility cleanup
+    // Enhanced page visibility cleanup + hibernation
     document.addEventListener('visibilitychange', () => {
         if (document.hidden) {
             cleanupCaches();
-            monitorMemoryPressure();
+            suspendHeavyObservers();
+        } else {
+            resumeHeavyObservers();
+            runAllChecks();
         }
     });
 
@@ -786,56 +890,52 @@
 
     // --- SIMPLIFIED ANSWERS BUTTON HIDING FUNCTIONS ---
     function hideAnswersButton() {
-        // NEW: Ask the page‑world hook to clean both light DOM and all ShadowRoots (nav-scoped)
+        // Ask the page‑world hook to clean both light DOM and all ShadowRoots (nav-scoped)
         try { window.__nrRemoveAnswersIn_forAnswers && window.__nrRemoveAnswersIn_forAnswers(document); } catch {}
 
         // Method 1: Direct removal by href (most effective)
-        try {
-            document.querySelectorAll('a[href="/answers/"], a[href^="/answers"]').forEach(el => el.remove());
-        } catch (e) {}
+        try { document.querySelectorAll('a[href="/answers/"], a[href^="/answers"]').forEach(el => el.remove()); } catch {}
 
         // Method 2: Remove by faceplate-tracker
-        try {
-            document.querySelectorAll('faceplate-tracker[noun="gen_guides_sidebar"]').forEach(el => el.remove());
-        } catch (e) {}
+        try { document.querySelectorAll('faceplate-tracker[noun="gen_guides_sidebar"]').forEach(el => el.remove()); } catch {}
 
         // Method 3: Remove BETA spans and their parents
         try {
             document.querySelectorAll('span.text-global-admin.font-semibold.text-12').forEach(span => {
                 if (span.textContent && span.textContent.trim() === 'BETA') {
                     const parent = span.closest('a, li, div, faceplate-tracker');
-                    if (parent) {
-                        parent.remove();
-                    } else {
-                        span.remove();
-                    }
+                    if (parent) parent.remove(); else span.remove();
                 }
             });
-        } catch (e) {}
+        } catch {}
 
-        // Method 4: Text-based removal for "Answers" + "BETA"
+        // Method 4: Text-based removal for "Answers" + "BETA" — scoped to nav/header for performance
         try {
-            document.querySelectorAll('*').forEach(element => {
-                if (element.children.length === 0 && element.textContent) {
-                    const text = element.textContent.trim();
+            const scopes = document.querySelectorAll('nav, header, aside, [role="navigation"], faceplate-tracker[source="nav"]');
+            const maxScopes = Math.min(scopes.length, 50);
+            for (let s = 0; s < maxScopes; s++) {
+                const scope = scopes[s];
+                // Only scan leaf nodes inside scope — avoids scanning entire DOM
+                const leaves = scope.querySelectorAll('*:not(:has(*))');
+                const limit = Math.min(leaves.length, 500);
+                for (let i = 0; i < limit; i++) {
+                    const element = leaves[i];
+                    const text = (element.textContent || '').trim();
+                    if (!text) continue;
                     if ((text.includes('Answers') && text.includes('BETA')) || text === 'Answers BETA') {
                         const container = element.closest('a, li, div[class*="nav"], faceplate-tracker');
-                        if (container) {
-                            container.remove();
-                        } else {
-                            element.remove();
-                        }
+                        if (container) container.remove(); else element.remove();
                     }
                 }
-            });
-        } catch (e) {}
+            }
+        } catch {}
 
-        // Method 5: Add CSS class to hide any remaining answers elements
+        // Method 5: CSS hide any stragglers
         try {
             document.querySelectorAll('a[href*="answers"], *[class*="answers"], *[data-testid*="answers"]').forEach(el => {
                 el.classList.add('reddit-answers-hidden');
             });
-        } catch (e) {}
+        } catch {}
     }
 
     // Performance functions with memory monitoring
@@ -895,30 +995,28 @@
         try {
             // Skip expensive operations for safe subreddits
             if (isElementInSafeSubreddit(element)) {
-                devLog('✅ Safe subreddit - using basic content extraction');
+                devLog('✅ Safe subreddit - basic content extraction');
                 const basicContent = element.textContent || element.innerText || '';
                 return basicContent;
             }
             
-            // ENHANCED: Extract ALL available text from the element more thoroughly
+            // Extract ALL available text from the element more thoroughly
             const allTextContent = [];
             
-            // Method 1: Get main element text content
+            // Method 1: main element text content
             const mainText = element.textContent || element.innerText || '';
-            if (mainText.trim()) {
-                allTextContent.push(mainText);
-            }
+            if (mainText.trim()) allTextContent.push(mainText);
             
-            // Method 2: Get specific content from known selectors (more comprehensive)
+            // Method 2: specific content from known selectors
             const contentSelectors = [
-                // Post titles
+                // Titles
                 'h1, h2, h3, h4, h5, h6',
                 '[slot="title"]',
                 '#post-title, [id*="post-title"]',
                 '.title',
                 'a[data-click-id="body"]',
                 
-                // Post content areas
+                // Body
                 '.md',
                 '.md.feed-card-text-preview',
                 '.md.text-14-scalable',
@@ -932,13 +1030,13 @@
                 'div[class*="text"]',
                 'span[class*="text"]',
                 
-                // Reddit-specific content containers
+                // Reddit containers
                 '[data-testid="post-content"]',
                 '[about*="_"]',
                 '[id*="post-rtjson-content"]',
                 '.entry .usertext-body',
                 
-                // Additional selectors for better content extraction
+                // Accessibility
                 'faceplate-screen-reader-content',
                 '.line-clamp-3',
                 '.line-clamp-6',
@@ -946,7 +1044,6 @@
                 '[title]'
             ];
             
-            // Extract text from all matching elements
             for (let i = 0; i < contentSelectors.length; i++) {
                 const elements = element.querySelectorAll(contentSelectors[i]);
                 for (let j = 0; j < elements.length; j++) {
@@ -958,56 +1055,45 @@
                         text = elem.getAttribute('aria-label') || elem.getAttribute('title') || '';
                     }
                     
-                    if (text.trim() && text.length > 2) { // Only include meaningful text
-                        allTextContent.push(text);
-                    }
+                    if (text.trim() && text.length > 2) allTextContent.push(text);
                 }
             }
             
-            // Method 3: Check href attributes for additional text
+            // Method 3: hrefs
             const links = element.querySelectorAll('a[href]');
             for (let i = 0; i < links.length; i++) {
                 const href = links[i].getAttribute('href');
                 if (href && href.includes('/comments/')) {
                     const linkText = links[i].textContent || links[i].innerText || '';
-                    if (linkText.trim()) {
-                        allTextContent.push(linkText);
-                    }
+                    if (linkText.trim()) allTextContent.push(linkText);
                 }
             }
             
-            // Method 4: Extract from data attributes that might contain text
+            // Method 4: data attributes
             const dataAttributes = ['data-permalink', 'data-testid', 'aria-label', 'title', 'alt'];
             for (let i = 0; i < dataAttributes.length; i++) {
                 const attr = dataAttributes[i];
-                const value = element.getAttribute(attr);
-                if (value && typeof value === 'string' && value.length > 2) {
-                    allTextContent.push(value);
-                }
+                const value = element.getAttribute && element.getAttribute(attr);
+                if (value && typeof value === 'string' && value.length > 2) allTextContent.push(value);
             }
             
-            // Method 5: Look for truncated content indicators and try to get more
+            // Method 5: truncated content
             const truncatedElements = element.querySelectorAll('.text-ellipsis, .line-clamp-3, .line-clamp-6');
             for (let i = 0; i < truncatedElements.length; i++) {
                 const elem = truncatedElements[i];
                 const fullText = elem.textContent || elem.innerText || '';
-                if (fullText.trim()) {
-                    allTextContent.push(fullText);
-                }
+                if (fullText.trim()) allTextContent.push(fullText);
             }
             
             const combinedContent = allTextContent.join(' ').trim();
-            
-            // Debug logging for posts that contain "AI"
             if (combinedContent.toLowerCase().includes('ai')) {
-                devLog(`🔍 FOUND AI CONTENT: "${combinedContent.substring(0, 200)}..." (${combinedContent.length} chars total)`);
+                devLog(`🔍 AI string present (first 200): "${combinedContent.substring(0, 200)}..."`);
             }
-            
-            devLog(`📄 Extracted content: ${combinedContent.length} characters from element`);
+            devLog(`📄 Extracted content length: ${combinedContent.length}`);
             return combinedContent;
             
         } catch (error) {
-            devLog(`❌ Error in extractCompletePostContent: ${error.message}`);
+            devLog(`❌ extractCompletePostContent error: ${error.message}`);
             // Fallback to basic text content
             return element.textContent || element.innerText || '';
         }
@@ -1019,8 +1105,8 @@
         
         // Normalize text for better matching
         const lowerText = textContent.toLowerCase()
-            .replace(/[^\w\s]/g, ' ') // Replace special chars with spaces
-            .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+            .replace(/[^\w\s]/g, ' ')
+            .replace(/\s+/g, ' ')
             .trim();
         
         // Check cache first
@@ -1035,35 +1121,30 @@
             entries.forEach(([key, value]) => contentBannedCache.set(key, value));
         }
         
-        // ENHANCED: Check for exact keyword matches (includes the word boundary logic you want to keep)
+        // Exact keyword match + word boundary for very short tokens
         for (let i = 0; i < keywordsToHide.length; i++) {
             const keyword = keywordsToHide[i].toLowerCase();
-            
-            // Check both exact match and word boundary match
             if (lowerText.includes(keyword)) {
-                // For very short keywords (3 chars or less), use word boundary check for precision
-                // For longer keywords, simple inclusion is sufficient
                 if (keyword.length <= 3) {
                     const wordBoundaryRegex = new RegExp('\\b' + keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i');
                     if (wordBoundaryRegex.test(lowerText)) {
                         contentBannedCache.set(lowerText, true);
-                        devLog(`🚫 Blocked by keyword: "${keywordsToHide[i]}" in text: "${textContent.substring(0, 150)}..."`);
+                        devLog(`🚫 Blocked by keyword: "${keywordsToHide[i]}"`);
                         return true;
                     }
                 } else {
-                    // For longer keywords, simple inclusion is fine
                     contentBannedCache.set(lowerText, true);
-                    devLog(`🚫 Blocked by keyword: "${keywordsToHide[i]}" in text: "${textContent.substring(0, 150)}..."`);
+                    devLog(`🚫 Blocked by keyword: "${keywordsToHide[i]}"`);
                     return true;
                 }
             }
         }
         
-        // ENHANCED: Check regex patterns with improved efficiency (limited to first 25 for performance)
+        // Regex patterns (limited to first 25)
         for (let i = 0; i < Math.min(regexKeywordsToHide.length, 25); i++) {
             if (regexKeywordsToHide[i].test(lowerText)) {
                 contentBannedCache.set(lowerText, true);
-                devLog(`🚫 Blocked by regex: ${regexKeywordsToHide[i]} in text: "${textContent.substring(0, 150)}..."`);
+                devLog(`🚫 Blocked by regex: ${regexKeywordsToHide[i]}`);
                 return true;
             }
         }
@@ -1139,7 +1220,7 @@
         const identifier = getPostIdentifier(element);
         if (identifier && approvalPersistence.has(identifier)) {
             if (isPostPage()) {
-                devLog(`✅ Post was previously approved: ${identifier}`);
+                devLog(`✅ Previously approved: ${identifier}`);
             }
             return approvalPersistence.get(identifier);
         }

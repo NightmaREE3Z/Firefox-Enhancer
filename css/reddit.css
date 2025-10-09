@@ -1,0 +1,381 @@
+/* Reddit Bigger UI — stable, class-agnostic enlargement
+   Adjust the variables below to taste. */
+
+:root {
+  /* Overall zoom for Chrome (non-standard but reliable). */
+  --rb-scale: 1.00;
+
+  /* Base font-size. If Reddit uses rems, this scales a lot of text. */
+  --rb-font: 18px;
+
+  /* Layout widths to make the feed less cramped on big displays. */
+  --rb-feed-max: 1080px;
+  --rb-content-max: 1500px;
+
+  /* Post/Thread and Community page widths (match feed scale) */
+  --rb-post-max: 1080px;        /* main post column on post pages (post body area) */
+  --rb-thread-max: 1200px;      /* post + comments area */
+  --rb-community-max: 1200px;   /* community/subreddit headers + primary content */
+
+  /* Left sidebar sizing (expanded by default) */
+  --rb-leftnav-expanded: 320px;   /* widened to fit more community names */
+  --rb-leftnav-collapsed: 72px;   /* reference only; not used to collapse */
+
+  /* Header offset used for sticky left rail */
+  --rb-header-offset: 56px;       /* adjust if your top bar is taller */
+
+  /* Comments sizing + density (slightly smaller than feed posts) */
+  --rb-comment-font: 0.97rem;     /* base comment text size */
+  --rb-comment-line: 1.55;        /* line-height for comment text */
+  --rb-comment-meta: 0.90em;      /* meta rows relative to comment text */
+  --rb-comment-gap: 12px;         /* vertical spacing between top-level comments */
+  --rb-comment-indent: 18px;      /* visual indent for nested replies */
+  --rb-comment-max: var(--rb-thread-max); /* maximum width for the thread area */
+}
+
+/* Optional live size toggles (set data-rb-comments on <html>) */
+html[data-rb-comments="smaller"] {
+  --rb-comment-font: 0.94rem;
+  --rb-comment-line: 1.5;
+  --rb-comment-meta: 0.88em;
+  --rb-comment-gap: 10px;
+}
+html[data-rb-comments="bigger"] {
+  --rb-comment-font: 1.06rem;
+  --rb-comment-line: 1.6;
+  --rb-comment-meta: 0.94em;
+  --rb-comment-gap: 14px;
+}
+html[data-rb-comments="xl"] {
+  --rb-comment-font: 1.14rem;
+  --rb-comment-line: 1.65;
+  --rb-comment-meta: 0.98em;
+  --rb-comment-gap: 16px;
+}
+
+/* 1) Global scale and base font size */
+html {
+  font-size: var(--rb-font) !important;
+}
+
+/* Chrome-only. Makes everything larger even if Reddit used px. */
+html:not([data-rb-no-zoom]) {
+  zoom: var(--rb-scale);
+}
+
+/* 2) New Reddit (Shreddit) — use stable custom elements and roles */
+
+/* Center the main content and widen it a bit (container that holds grid). */
+shreddit-app main,
+div[role="main"] {
+  max-width: var(--rb-content-max) !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+/* Main feed column (listing) — default */
+shreddit-feed,
+faceplate-tracker[slot="layout"] {
+  max-width: var(--rb-feed-max) !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+/* 2.1) Left sidebar: expanded by default (scoped to real containers only)
+   We do NOT size/pin generic wrappers like faceplate-tracker[source="nav"]. */
+
+/* The outer nav container (present in Closed and Expanded snapshots)
+   Make ONLY the container sticky for Chrome/Edge etc.
+   Firefox gets a JS-driven fixed fallback; see rleftnav.js */
+#left-sidebar-container,
+flex-left-nav-container#left-sidebar-container {
+  display: block !important;               /* override any hidden utilities */
+  visibility: visible !important;
+
+  width: var(--rb-leftnav-expanded) !important;
+  min-width: var(--rb-leftnav-expanded) !important;
+  max-width: var(--rb-leftnav-expanded) !important;
+  flex: 0 0 var(--rb-leftnav-expanded) !important;
+
+  pointer-events: auto !important;
+  z-index: 3 !important;
+
+  position: sticky !important;                   /* Chrome path */
+  top: var(--rb-header-offset) !important;
+  height: calc(100vh - var(--rb-header-offset)) !important;
+  overflow-y: auto !important;                   /* container scroll */
+  overflow-x: hidden !important;
+
+  transform: none !important;
+  opacity: 1 !important;
+
+  /* Help stabilize sticky in flex in non-Firefox engines */
+  align-self: flex-start !important;
+  contain: layout paint style;                   /* harmless in Chrome */
+}
+
+/* The actual left-sidebar element that holds the list content */
+[data-testid="left-sidebar"],
+#left-sidebar,
+reddit-sidebar-nav {
+  display: block !important;
+  visibility: visible !important;
+
+  width: var(--rb-leftnav-expanded) !important;
+  min-width: var(--rb-leftnav-expanded) !important;
+  max-width: var(--rb-leftnav-expanded) !important;
+  flex: 0 0 var(--rb-leftnav-expanded) !important;
+
+  pointer-events: auto !important;
+  z-index: 3 !important;
+
+  position: static !important;           /* was sticky — reset for Firefox and consistency */
+  top: auto !important;
+  height: auto !important;
+  overflow-y: visible !important;
+  overflow-x: visible !important;
+
+  transform: none !important;
+  opacity: 1 !important;
+}
+
+/* The actual list container in the rail (Primary nav) */
+reddit-sidebar-nav nav[aria-label="Primary"],
+#left-sidebar nav[aria-label="Primary"],
+[data-testid="left-sidebar"] nav[aria-label="Primary"] {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 100% !important;
+}
+
+/* Un-truncate/wrap label text inside the left rail (to show more names) */
+[data-testid="left-sidebar"] .truncate,
+[data-testid="left-sidebar"] .line-clamp-1,
+[data-testid="left-sidebar"] .text-ellipsis,
+[data-testid="left-sidebar"] .overflow-hidden,
+[data-testid="left-sidebar"] .whitespace-nowrap,
+#left-sidebar .truncate,
+#left-sidebar .line-clamp-1,
+#left-sidebar .text-ellipsis,
+#left-sidebar .overflow-hidden,
+#left-sidebar .whitespace-nowrap,
+reddit-sidebar-nav .truncate,
+reddit-sidebar-nav .line-clamp-1,
+reddit-sidebar-nav .text-ellipsis,
+reddit-sidebar-nav .overflow-hidden,
+reddit-sidebar-nav .whitespace-nowrap {
+  overflow: visible !important;
+  text-overflow: initial !important;
+  white-space: normal !important;   /* allow wrapping to show more text */
+  max-width: none !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+/* Give icon+label rows a reasonable gap so the expanded text breathes */
+[data-testid="left-sidebar"] .items-center.flex,
+#left-sidebar .items-center.flex,
+reddit-sidebar-nav .items-center.flex {
+  gap: 0.55rem !important;
+}
+
+/* Ensure the links and controls inside the left rail are fully clickable */
+[data-testid="left-sidebar"] a,
+[data-testid="left-sidebar"] button,
+#left-sidebar a,
+#left-sidebar button,
+reddit-sidebar-nav a,
+reddit-sidebar-nav button {
+  pointer-events: auto !important;
+}
+
+/* 2.2) Defeat hover-gated drawer: neutralize hamburger + tooltips specifically */
+#flex-nav-expand-button,
+#flex-nav-collapse-button {
+  display: none !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+}
+
+/* Hide tooltip wrappers that can create a hover hotspot */
+rpl-tooltip[content="Expand Navigation"],
+rpl-tooltip[content="Collapse Navigation"] {
+  display: none !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+}
+
+/* Safety: if a screen-reader helper is still present inside the buttons, hide it */
+#flex-nav-expand-button faceplate-screen-reader-content,
+#flex-nav-collapse-button faceplate-screen-reader-content {
+  display: none !important;
+}
+
+/* 2.3) COMMUNITY/SUBREDDIT LISTINGS — widen primary column like main feed
+   Reddit often wraps the listing in a noun/slot tracker plus a feed element; clamp both. */
+div[role="main"] faceplate-tracker[noun="subreddit_listing"],
+div[role="main"] faceplate-tracker[noun="listing"],
+div[role="main"] faceplate-tracker[slot="listing"],
+div[role="main"] faceplate-tracker[slot="layout"],
+div[role="main"] > shreddit-feed,
+div[role="main"] > faceplate-tracker:has(> shreddit-feed),
+div[role="main"] [data-testid="post-list"],
+div[role="main"] [data-testid="subreddit-posts"] {
+  max-width: var(--rb-feed-max) !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+/* 2.4) COMMUNITY/SUBREDDIT HEADERS — widen header blocks */
+shreddit-community-header,
+shreddit-subreddit-header,
+[data-testid="subreddit-header"],
+[data-testid="community-header"] {
+  max-width: var(--rb-community-max) !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+/* Also keep “about/community” sections centered/wide */
+div[role="main"] > section[data-testid="subreddit"],
+div[role="main"] > div[data-testid="community-about"] {
+  max-width: var(--rb-community-max) !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+/* 2.5) POST PAGES — widen main post and the overall thread area */
+/* Main post card (works for classic + shreddit posts) */
+[data-testid="post-container"],
+[data-testid="classic-post-container"],
+shreddit-post {
+  max-width: var(--rb-post-max) !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+/* Thread wrapper (post + comments) — clamp several common wrappers */
+shreddit-comments-page,
+shreddit-comment-tree,
+faceplate-tracker[slot="comments"],
+faceplate-tracker[noun="comments-page"],
+faceplate-tracker[slot="post"],
+faceplate-tracker[noun="post_page"],
+div[role="main"] [data-testid="comments-page"],
+div[role="main"] [data-testid="post-content"] {
+  max-width: var(--rb-thread-max) !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+/* Ensure inner text blocks and rtjson content don’t clamp the width */
+[data-testid="post-content"] [id*="post-rtjson-content"],
+[data-testid="post-content"] .md,
+[data-testid="comments-page"] .md {
+  max-width: 100% !important;
+}
+
+/* 2.6) COMMENTS — size and spacing (slightly smaller than feed posts) */
+shreddit-comment,
+[data-testid="comment"],
+faceplate-tracker[noun="comment"] {
+  font-size: var(--rb-comment-font) !important;
+  line-height: var(--rb-comment-line) !important;
+  max-width: 100% !important;
+  margin-bottom: var(--rb-comment-gap) !important;
+}
+
+shreddit-comment .md,
+[data-testid="comment"] .md,
+shreddit-comment [id*="rtjson"],
+[data-testid="comment"] [id*="rtjson"] {
+  max-width: 100% !important;
+}
+
+shreddit-comment-tree,
+[data-testid="comments-page"] {
+  max-width: var(--rb-comment-max) !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+/* Meta rows (author/time/actions) a tad smaller */
+shreddit-comment header,
+shreddit-comment [data-testid="comment-top-meta"],
+[data-testid="comment"] header,
+[data-testid="comment"] [data-testid="comment-top-meta"] {
+  font-size: var(--rb-comment-meta) !important;
+}
+
+/* Comment buttons */
+shreddit-comment button,
+[data-testid="comment"] button,
+shreddit-comment a[role="button"],
+[data-testid="comment"] a[role="button"] {
+  font-size: var(--rb-comment-meta) !important;
+}
+
+/* Nested replies gentle indent */
+shreddit-comment > shreddit-comment,
+[data-testid="comment"] > [data-testid="comment"] {
+  margin-left: var(--rb-comment-indent) !important;
+}
+
+/* Make media in comments responsive */
+shreddit-comment img,
+[data-testid="comment"] img,
+shreddit-comment video,
+[data-testid="comment"] video,
+shreddit-comment iframe,
+[data-testid="comment"] iframe {
+  max-width: 100% !important;
+  height: auto !important;
+}
+
+/* Post containers and titles (works with data-testid and custom elements). */
+[data-testid="post-container"],
+[data-testid="classic-post-container"],
+shreddit-post {
+  font-size: 1rem; /* inherits the larger base size */
+}
+
+[data-testid="post-title"],
+shreddit-post h2,
+shreddit-post h3 {
+  font-size: 1.3rem !important;
+  line-height: 1.35 !important;
+}
+
+/* Sidebar, header, controls. */
+header, nav, aside, [data-testid="subreddit-sidebar"] {
+  font-size: 1rem;
+}
+
+/* Buttons and form controls – make them readable. */
+button, [role="button"], input, textarea, select {
+  font-size: 1rem !important;
+}
+
+/* 3) Old Reddit (old.reddit.com) — generic selectors */
+body.listing-page, .content, .side, .link {
+  font-size: 1rem;
+}
+
+.content .sitetable .thing .entry .title,
+#siteTable .thing .entry .title {
+  font-size: 1.25rem !important;
+  line-height: 1.35 !important;
+}
+
+/* 4) Small fixes when zooming */
+img, video, iframe {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Optional: add a bit more padding to buttons to counter “compact” density */
+button, [role="button"] {
+  padding: 0.5em 0.9em !important;
+}

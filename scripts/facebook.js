@@ -117,10 +117,11 @@
     // Variable to cache redirects
     let lastRedirect = null;
 
-    // FIXED: Inject CSS immediately for instant hiding - ENHANCED with instant search hiding
+    // ENHANCED: Inject CSS immediately for instant hiding - REMOVED body visibility hidden to prevent white screen
+    // UPDATED: Re-added broad default hiding to prevent flashes, only show approved posts
     const injectInlineCSS = () => {
         try {
-            devLog('Injecting inline CSS with instant search hiding');
+            devLog('Injecting inline CSS with instant search hiding and anti-flashing');
             let style = document.getElementById('fb-inline-style');
             if (!style) {
                 style = document.createElement('style');
@@ -162,7 +163,22 @@
                 top: -9999px !important;
             }
 
-            /* Immediately hide elements related to "friends" */
+            /* Permanently hide banned posts and elements */
+            .fb-post-banned,
+            .fb-element-banned {
+                visibility: hidden !important;
+                display: none !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
+                position: absolute !important;
+                left: -9999px !important;
+                top: -9999px !important;
+                height: 0 !important;
+                width: 0 !important;
+                overflow: hidden !important;
+            }
+
+            /* ANTI-FLASHING: Hide critical elements by default immediately with content-visibility */
             div[aria-label="People You May Know"],
             div[aria-label="Ihmisiä, jotka saatat tuntea"],
             a[href="https://www.facebook.com/friends/suggestions/"],
@@ -186,7 +202,7 @@
             a[href*="/messages/t/36327,2227039302/"],
             a[href*="messages/t/36327"],
             /* Friends-related links */
-            a[href*="meta.ai"], a[href="/Meta AI/"], a[href="/friends/"], a[href*="/friends/"],
+            a[href*="meta.ai"], a[href="/Meta AI/"], a[href="/friends/"],
             a[role="link"][href="/friends/"], a[role="link"][aria-label="Kaverit"], a[role="link"][aria-label="Friends"],
             img[src*="w5I9ktz_3Ib.png"],
             li.x1iyjqo2.xmlsiyf.x1hxoosp.x1l38jg0.x1awlv9s.x1i64zmx.x1gz44f,
@@ -196,11 +212,15 @@
             div.x1i10hfl:nth-child(13) > div:nth-child(2),
             div.x1i10hfl:nth-child(13) > div:nth-child(3),
             .x6s0dn4.x1obq294.x5a5i1n:has(.x1gslohp > span:empty),
+            li.x1c1uobl.x18d9i69.xyri2b.xexx8yu.x1lziwak.xat24cr.x14z9mp.xdj266r.html-li:nth-of-type(2),
             svg[aria-label="Meta AI:n profiilikuva"],
             svg[aria-label*="Meta AI profile"],
             div.x1gefphp.xf7dkkf.x1l90r2v.xv54qhq.xyamay9.x1e56ztr.x78zum5.x9f619.x1olyfxc.x15x8krk.xde0f50.x5a5i1n.x1obq294.x6s0dn4:nth-of-type(6),
             .xjkvuk6.x1iorvi4.x1qughib.x78zum5.x6s0dn4,
             .x1vjfegm.x1iyjqo2,
+            div.x1a02dak:nth-child(3) > div:nth-child(1),
+            div.xnp8db0:nth-child(4) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(2) > div:nth-child(1),
+            div.xnp8db0:nth-child(4) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(1),
             .x1ye3gou.x1120s5i.xn6708d.xz9dl7a.x1qughib.x1q0g3np.x78zum5,
             .xbbxn1n.xwxc41k.xxbr6pl.x1p5oq8j.xl56j7k.xdt5ytf.x78zum5.x6s0dn4.x1mh8g0r.xat24cr.x11i5rnm.xdj266r.html-div,
             .x1exxf4d.x1y71gwh.x1nb4dca.xu1343h.x1lq5wgf.xgqcy7u.x30kzoy.x9jhf4c.x13fuv20.xu3j5b3.x1q0q8m5.x26u7qi.x178xt8z.xm81vs4.xso031l.xy80clv.xev17xk.x1xmf6yo,
@@ -215,6 +235,49 @@
                 display: none !important; /* Fully remove them */
                 opacity: 0 !important; /* Triple-layer hiding */
                 pointer-events: none !important; /* Prevent interaction */
+                content-visibility: hidden !important; /* Prevent rendering until shown */
+                position: absolute !important;
+                left: -9999px !important;
+                top: -9999px !important;
+                height: 0 !important;
+                width: 0 !important;
+                overflow: hidden !important;
+            }
+            /* Additional aggressive hiding for persistent elements */
+            a[aria-label="Kaverit"],
+            div[aria-label="Kaverit"],
+            a[href="/friends/"],
+            a[aria-label="Meta AI"],
+            div[aria-label="Meta AI"] {
+                visibility: hidden !important;
+                display: none !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
+                position: absolute !important;
+                left: -9999px !important;
+                top: -9999px !important;
+                height: 0 !important;
+                width: 0 !important;
+                overflow: hidden !important;
+                content-visibility: hidden !important; /* Anti-flashing */
+            }
+            /* ENHANCED: Hide all posts by default to prevent flashes, only show approved ones */
+            [role="article"]:not(.fb-post-approved),
+            [role="article"].x1lliihq:not(.fb-post-approved),
+            [role="article"] .x1yztbdb:not(.fb-post-approved),
+            [role="article"] .x1hc1fzr:not(.fb-post-approved),
+            div.x1iyjqo2.x1vjfegm:not(.fb-post-approved) {
+                visibility: hidden !important;
+                display: none !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
+                content-visibility: hidden !important;
+                position: absolute !important;
+                left: -9999px !important;
+                top: -9999px !important;
+                height: 0 !important;
+                width: 0 !important;
+                overflow: hidden !important;
             }
             `;
             // Safe append (no document.write)
@@ -246,10 +309,10 @@
     // Run CSS injection immediately
     injectInlineCSS();
 
-    // Directly hide specific elements based on their unique selectors
+    // Directly hide specific elements based on their unique selectors - Enhanced for persistence and anti-flashing
     const hideCriticalElements = () => {
         try {
-            devLog('Hiding critical elements');
+            devLog('Hiding critical elements with permanent banning and anti-flashing');
             const selectors = [
                 'a[aria-label="Kaverit"]',
                 'div[aria-label="Kaverit"]',
@@ -263,7 +326,8 @@
                 'svg[aria-label="Meta AI:n profiilikuva"]',
                 'svg[aria-label*="Meta AI profile"]', 
                 'a[aria-label="Meta AI"]',
-        		'.x6s0dn4.x1obq294.x5a5i1n:has(.x1gslohp > span:empty)',
+        	'.x6s0dn4.x1obq294.x5a5i1n:has(.x1gslohp > span:empty)',
+		'li.x1c1uobl.x18d9i69.xyri2b.xexx8yu.x1lziwak.xat24cr.x14z9mp.xdj266r.html-li:nth-of-type(2)',
                 'div[aria-label="Meta AI"]',
                 'span[aria-label="Meta AI"]',
                 'svg[viewBox="0 0 112 112"][width="112"][height="112"].xfx01vb.x1lliihq.x1tzjh5l.x1k90msu.x2h7rmj.x1qfuztq',
@@ -272,16 +336,29 @@
                 'div.x1exxf4d.xpv9jar.x1nb4dca.x1nmn18.x1obq294.x5a5i1n.xde0f50.x15x8krk.x13fuv20.x18b5jzi.x1q0q8m5.x1t7ytsu.x178xt8z.x1lun4ml.xso031l.xpilrb4.xev17xk.x1xmf6yo',
                 // ENHANCED: Meta AI contact specific selectors
                 'a[href*="/messages/t/36327,2227039302/"]',
-                'a[href*="messages/t/36327"]'
+                'a[href*="messages/t/36327"]',
+		'div.x1a02dak:nth-child(3) > div:nth-child(1)',
+		'.xjl7jj > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > a:nth-child(3) > div:nth-child(1)',
+		'div.xnp8db0:nth-child(4) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(2) > div:nth-child(1)',
+		'div.xnp8db0:nth-child(4) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(1)'
             ];
 
             let hiddenCount = 0;
             selectors.forEach((selector) => {
                 document.querySelectorAll(selector).forEach((el) => {
-                    const parent = el.closest('li, div');
-                    if (parent) {
-                        parent.style.visibility = 'hidden';
-                        parent.style.display = 'none';
+                    if (!el.classList.contains('fb-element-banned')) {
+                        el.classList.add('fb-element-banned');
+                        el.style.setProperty('display', 'none', 'important');
+                        el.style.setProperty('visibility', 'hidden', 'important');
+                        el.style.setProperty('opacity', '0', 'important');
+                        el.style.setProperty('pointer-events', 'none', 'important');
+                        el.style.setProperty('position', 'absolute', 'important');
+                        el.style.setProperty('left', '-9999px', 'important');
+                        el.style.setProperty('top', '-9999px', 'important');
+                        el.style.setProperty('height', '0', 'important');
+                        el.style.setProperty('width', '0', 'important');
+                        el.style.setProperty('overflow', 'hidden', 'important');
+                        el.style.setProperty('content-visibility', 'hidden', 'important'); // Anti-flashing
                         hiddenCount++;
                     }
                 });
@@ -447,7 +524,7 @@
         /permalink\.php\?story_fbid=1236875833901235/,
         /permalink\.php\?story_fbid=pfbid02cVLMUQSCxQzznzkH5X9BPsUDusdBKc9fzuiGsoJHSXDWqYMKBBXHd8xj6EFKmdivl/,
         /permalink\.php\?story_fbid=583915704973068/,
-        /permalink\.php\?story_fbid=pfbid0xWnWWEadSE4BToaorWjEVgAkTLRvckK9y5BoXVYrPF9jsSGUBdHEwvDTRxDX7yJVl/,
+        /permalink\.php\?story_fbid=pfbid0Xq5bxtrXkWA9gWqcBt2aT8sDMeCDG5XN6hWVHE7axKu3jbn9LfiYfADgWHLtBfEUl/,
         /posts\/pfbid02LXtamB1X9aJrRsMDxkcbNLFk2g9eeYBNii6HzaLLZVamDMnaAG4AvZU1VYfVHvn9l/,
         /posts\/pfbid0XXH5hPZ4kU6y6zm4eeyqYkUMZhCdXsKuMzCRbkZptgEGNTk8UVYT9UEEYinKvXLWl/,
         /posts\/pfbid02LKr4mWRvd45TkNcPfaUFuu3NGkgQb1t8fHD6t9cqigiUkQLuyQRASMMYeH88yDBVl/,
@@ -478,13 +555,11 @@
         /permalink.php?story_fbid=907980612566574/,
         /permalink.php?story_fbid=pfbid02ERbU7QHGJLQ8CwgMz2wdNjnQJdZ8fJje85i1LcExk5CLCXkDuTyyRp5uat4aKkAYl/,
         /permalink.php?story_fbid=907631116865858/,
-	/pfbid0oH97BQX6SJFFD1fVrd5QdFruFfpBMWZp452ZHkxK6arLR68RzbrrBuruEye6dwqEl/,
+	/pfbid0oH97BQX6SJFFD1fVrd5QdFruFfpBMWZp452ZHkxK6arLR68RzbrBuruEye6dwqEl/,
 	/pfbid02AeDKp115BTU1qD4QzLZ8V2NWm7NmZUe9V9cghxu5YyasXHDwvJCLgBr9GEtv6qmjl/,
 	/permalink\.php\?story_fbid=pfbid02AeDKp115BTU1qD4QzLZ8V2NWm7NmZUe9V9cghxu5YyasXHDwvJCLgBr9GEtv6qmjl/,
 	/permalink.php?story_fbid=pfbid02aTQ2VVXnfkxpy38cZ5Ey179t4qcxZugQtAmNU5o4eerHn81h6ETiXcY76XEgAx5ul/,
 	/pfbid02aTQ2VVXnfkxpy38cZ5Ey179t4qcxZugQtAmNU5o4eerHn81h6ETiXcY76XEgAx5ul/,
-        /fbid=pfbid036f6zK7fAhXTd4CpkSDtayrMrDW6VSNKcoQoPiR3CMPvVCVuMaNX8jMEoYc6WpkZnl/,
-	/pfbid06xvcvULz9eHgge39HMCS4TYPLs6pM3itRyRqUQGHZAZbZAvR6DbQfAskMFTRm1X8l/,
         /permalink.php?story_fbid=10099498386748038/,
         /permalink.php?story_fbid=895923403772295/,
         /permalink.php?story_fbid=895381147159854/,
@@ -554,6 +629,7 @@
         /github\.com/,
         /irpppas\.blogspot\.com/,
         /irpppas\.blogspot\.fi/,
+        /www\.facebook\.com\/Haukkis\/friends_with_upcoming_birthdays/,
         /www\.facebook\.com\/toni\.harsunen\.1/,
         /www\.facebook\.com\/minna\.kaipio\.5/,
         /www\.tiktok\.com/,
@@ -628,7 +704,7 @@
         'div.xdj266r.x11i5rnm.xat24cr',
         'a[href="/marketplace/?ref=app_tab"]',
         'svg[viewBox="0 0 24 24"]',
-        'span.xdj266r.x11i5rnm.xat24cr.x1mh8g0r'
+        'span.xdj266r.x11i5rnm.xat24cr'
     ];
 
     // Keyword arrays
@@ -764,6 +840,102 @@
         }
     };
 
+    // ENHANCED: Function to scan and ban entire posts initially to prevent "Show more" issues
+    // UPDATED: Add fb-post-approved class to non-banned posts for immediate visibility
+    const scanAndBanEntirePosts = () => {
+        try {
+            devLog('Scanning entire posts for banned content');
+            const postSelectors = [
+                '[role="article"]',
+                '[role="article"].x1lliihq',
+                '[role="article"] .x1yztbdb',
+                '[role="article"] .x1hc1fzr',
+                'div.x1iyjqo2.x1vjfegm'
+            ];
+
+            let bannedCount = 0;
+            postSelectors.forEach(selector => {
+                document.querySelectorAll(selector + ':not(.fb-post-processed)').forEach(post => {
+                    post.classList.add('fb-post-processed');
+                    
+                    // Collect all text content from the post, including expanded areas
+                    const allTextElements = post.querySelectorAll('*');
+                    let fullPostText = '';
+                    allTextElements.forEach(el => {
+                        const text = el.textContent || el.innerText || '';
+                        if (text.trim()) fullPostText += text + ' ';
+                    });
+                    fullPostText = fullPostText.toLowerCase();
+
+                    // Check against all blocking criteria
+                    let isBanned = false;
+                    
+                    // Check restricted words in full post text
+                    if (restrictedWords.some(word => fullPostText.includes(word.toLowerCase()))) {
+                        isBanned = true;
+                        devLog(`🚫 Post banned by restricted word in full content`);
+                    }
+                    
+                    // Check regex blocked words in full post text
+                    if (!isBanned && regexBlockedWords.some(regex => regex.test(fullPostText))) {
+                        isBanned = true;
+                        devLog(`🚫 Post banned by regex in full content`);
+                    }
+                    
+                    // Check for blocked FBIDs in post attributes or links
+                    if (!isBanned) {
+                        const postLinks = post.querySelectorAll('a[href]');
+                        for (let link of postLinks) {
+                            const href = link.href;
+                            if (blockedFbids.some(fbid => href.includes(fbid) || href.includes(`id=${fbid}`))) {
+                                isBanned = true;
+                                devLog(`🚫 Post banned by FBID in links`);
+                                break;
+                            }
+                        }
+                    }
+                    
+                    // Check for blocked URLs in post
+                    if (!isBanned) {
+                        const postLinks = post.querySelectorAll('a[href]');
+                        for (let link of postLinks) {
+                            if (blockedUrls.some(blockedUrl => blockedUrl.test(link.href))) {
+                                isBanned = true;
+                                devLog(`🚫 Post banned by URL in post`);
+                                break;
+                            }
+                        }
+                    }
+                    
+                    if (isBanned) {
+                        // Permanently ban the post
+                        post.classList.add('fb-post-banned');
+                        post.style.setProperty('display', 'none', 'important');
+                        post.style.setProperty('visibility', 'hidden', 'important');
+                        post.style.setProperty('opacity', '0', 'important');
+                        post.style.setProperty('pointer-events', 'none', 'important');
+                        post.style.setProperty('position', 'absolute', 'important');
+                        post.style.setProperty('left', '-9999px', 'important');
+                        post.style.setProperty('top', '-9999px', 'important');
+                        post.style.setProperty('height', '0', 'important');
+                        post.style.setProperty('width', '0', 'important');
+                        post.style.setProperty('overflow', 'hidden', 'important');
+                        bannedCount++;
+                    } else {
+                        // Approve the post to ensure it shows
+                        post.classList.add('fb-post-approved');
+                    }
+                });
+            });
+            
+            if (bannedCount > 0) {
+                devLog(`Banned ${bannedCount} entire posts initially`);
+            }
+        } catch (e) {
+            console.log('Error scanning entire posts: ' + e.message);
+        }
+    };
+
     // IMPORTANT: This function must be separate to ensure reels are removed
     const deleteRestrictedWords = () => {
         try {
@@ -803,8 +975,20 @@
                     
                     if (isRestricted || isRegexBlocked) {
                         const elementToRemove = element.closest('[role="article"]') || element;
-                        elementToRemove.remove();
-                        removedCount++;
+                        if (!elementToRemove.classList.contains('fb-post-banned') && !elementToRemove.classList.contains('fb-element-banned')) {
+                            elementToRemove.classList.add('fb-element-banned');
+                            elementToRemove.style.setProperty('display', 'none', 'important');
+                            elementToRemove.style.setProperty('visibility', 'hidden', 'important');
+                            elementToRemove.style.setProperty('opacity', '0', 'important');
+                            elementToRemove.style.setProperty('pointer-events', 'none', 'important');
+                            elementToRemove.style.setProperty('position', 'absolute', 'important');
+                            elementToRemove.style.setProperty('left', '-9999px', 'important');
+                            elementToRemove.style.setProperty('top', '-9999px', 'important');
+                            elementToRemove.style.setProperty('height', '0', 'important');
+                            elementToRemove.style.setProperty('width', '0', 'important');
+                            elementToRemove.style.setProperty('overflow', 'hidden', 'important');
+                            removedCount++;
+                        }
                     }
                 });
                 
@@ -888,6 +1072,7 @@
                         result.style.setProperty('pointer-events', 'none', 'important');
                         result.style.setProperty('position', 'absolute', 'important');
                         result.style.setProperty('left', '-9999px', 'important');
+                        result.style.setProperty('top', '-9999px', 'important');
                         result.classList.add('fb-search-banned');
                         
                         // Also hide parent containers
@@ -973,13 +1158,16 @@
                 
                 if (shouldRemove) {
                     // Hide immediately before removing for better performance
-                    post.style.display = 'none';
-                    post.style.visibility = 'hidden';
-                    
-                    // Use a more reliable removal approach
-                    const parent = post.parentNode;
-                    if (parent) parent.removeChild(post);
-                    removedPostCount++;
+                    if (!post.classList.contains('fb-post-banned') && !post.classList.contains('fb-element-banned')) {
+                        post.classList.add('fb-element-banned');
+                        post.style.display = 'none';
+                        post.style.visibility = 'hidden';
+                        
+                        // Use a more reliable removal approach
+                        const parent = post.parentNode;
+                        if (parent) parent.removeChild(post);
+                        removedPostCount++;
+                    }
                 }
             });
             
@@ -1026,12 +1214,15 @@
                         container.offsetHeight > 40) {
                         
                         // Hide first, then remove
-                        container.style.display = 'none';
-                        
-                        // Use direct parent removal for better performance
-                        const parent = container.parentNode;
-                        if (parent) parent.removeChild(container);
-                        removedHeaderCount++;
+                        if (!container.classList.contains('fb-post-banned') && !container.classList.contains('fb-element-banned')) {
+                            container.classList.add('fb-element-banned');
+                            container.style.display = 'none';
+                            
+                            // Use direct parent removal for better performance
+                            const parent = container.parentNode;
+                            if (parent) parent.removeChild(container);
+                            removedHeaderCount++;
+                        }
                     }
                 }
             });
@@ -1146,15 +1337,21 @@
                 'div.x1i10hfl:nth-child(13) > div:nth-child(1)',
                 'div.x1i10hfl:nth-child(13) > div:nth-child(2)',
                 'div.x1i10hfl:nth-child(13) > div:nth-child(3)',
+                '.x6s0dn4.x1obq294.x5a5i1n:has(.x1gslohp > span:empty)',
+                'li.x1c1uobl.x18d9i69.xyri2b.xexx8yu.x1lziwak.xat24cr.x14z9mp.xdj266r.html-li:nth-of-type(2)',
+                'svg[aria-label="Meta AI:n profiilikuva"]',
+                'svg[aria-label*="Meta AI profile"]',
+                'div.x1gefphp.xf7dkkf.x1l90r2v.xv54qhq.xyamay9.x1e56ztr.x78zum5.x9f619.x1olyfxc.x15x8krk.xde0f50.x5a5i1n.x1obq294.x6s0dn4:nth-of-type(6)',
                 '.xjkvuk6.x1iorvi4.x1qughib.x78zum5.x6s0dn4',
                 '.x1vjfegm.x1iyjqo2',
+                'div.x1a02dak:nth-child(3) > div:nth-child(1)',
+                'div.xnp8db0:nth-child(4) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(2) > div:nth-child(1)',
+                'div.xnp8db0:nth-child(4) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(1)',
                 '.x1ye3gou.x1120s5i.xn6708d.xz9dl7a.x1qughib.x1q0g3np.x78zum5',
-                '.xquyuld.x10wlt62.x6ikm8r.xh8yej3.x9f619.xt3gfkd.xu5ydu1.xdney7k.x1qpq9i9.x1jx94hy.x1ja2u2z.x1n2onr6 > .x10wlt62.x6ikm8r',
-                '.x1xmf6yo.xev17xk.xy80clv.xso031l.xm81vs4.x178xt8z.x26u7qi.x1q0q8m5.xu3j5b3.x13fuv20.x9jhf4c.x30kzoy.xgqcy7u.x1lq5wgf.xu1343h.x1nb4dca.x1y71gwh.x1exxf4d > .xh8yej3.x1n2onr6.x78zum5.xkhd6sd.x18d9i69',
-                '.x1xmf6yo.xev17xk.xy80clv.xso031l.xm81vs4.x178xt8z.x26u7qi.x1q0q8m5.xu3j5b3.x13fuv20.x9jhf4c.x30kzoy.xgqcy7u.x1lq5wgf.xu1343h.x1nb4dca.x1y71gwh.x1exxf4d > .xh8yej3.x1n2onr6.x78zum5.xkhd6sd.x18d9i69',
-                '.x1xmf6yo.xev17xk.xy80clv.xso031l.xm81vs4.x178xt8z.x26u7qi.x1q0q8m5.xu3j5b3.x13fuv20.x9jhf4c.x30kzoy.xgqcy7u.x1lq5wgf.xu1343h.x1nb4dca.x1y71gwh.x1exxf4d',
-                '.x1xmf6yo.xev17xk.xy80clv.xso031l.xm81vs4.x178xt8z.x26u7qi.x1q0q8m5.xu3j5b3.x13fuv20.x9jhf4c.x30kzoy.xgqcy7u.x1lq5wgf.xu1343h.x1nb4dca.x1y71gwh.x1exxf4d',
                 '.xbbxn1n.xwxc41k.xxbr6pl.x1p5oq8j.xl56j7k.xdt5ytf.x78zum5.x6s0dn4.x1mh8g0r.xat24cr.x11i5rnm.xdj266r.html-div',
+                '.x1exxf4d.x1y71gwh.x1nb4dca.xu1343h.x1lq5wgf.xgqcy7u.x30kzoy.x9jhf4c.x13fuv20.xu3j5b3.x1q0q8m5.x26u7qi.x178xt8z.xm81vs4.xso031l.xy80clv.xev17xk.x1xmf6yo',
+                /* ENHANCED: All PYMK selectors for instant hiding */
+                '.xquyuld.x10wlt62.x6ikm8r.xh8yej3.x9f619.xt3gfkd.xu5ydu1.xdney7k.x1qpq9i9.x1jx94hy.x1ja2u2z.x1n2onr6',
                 '.x1xmf6yo.xev17xk.xy80clv.xso031l.xm81vs4.x178xt8z.x26u7qi.x1q0q8m5.xu3j5b3.x13fuv20.x9jhf4c.x30kzoy.xgqcy7u.x1lq5wgf.xu1343h.x1nb4dca.x1y71gwh.x1exxf4d',
                 'svg[viewBox="0 0 112 112"][width="112"][height="112"].xfx01vb.x1lliihq.x1tzjh5l.x1k90msu.x2h7rmj.x1qfuztq',
                 'div.html-div.xdj266r.x14z9mp.xat24cr.x1lziwak.x6s0dn4.x78zum5.xdt5ytf.xl56j7k.x1p5oq8j.x64bnmy.xwxc41k.x13jy36j',
@@ -1165,8 +1362,18 @@
             let deletedCount = 0;
             document.querySelectorAll(selectors.join(','))
                 .forEach(element => {
-                    if (!safeSelectors.some(selector => element.closest(selector))) {
-                        element.remove();
+                    if (!element.classList.contains('fb-element-banned')) {
+                        element.classList.add('fb-element-banned');
+                        element.style.setProperty('display', 'none', 'important');
+                        element.style.setProperty('visibility', 'hidden', 'important');
+                        element.style.setProperty('opacity', '0', 'important');
+                        element.style.setProperty('pointer-events', 'none', 'important');
+                        element.style.setProperty('position', 'absolute', 'important');
+                        element.style.setProperty('left', '-9999px', 'important');
+                        element.style.setProperty('top', '-9999px', 'important');
+                        element.style.setProperty('height', '0', 'important');
+                        element.style.setProperty('width', '0', 'important');
+                        element.style.setProperty('overflow', 'hidden', 'important');
                         deletedCount++;
                     }
                 });
@@ -1186,7 +1393,7 @@
                 'div[aria-label="Näytä suosituksia"].x1i10hfl.xjbqb8w.x1ejq31n.xd10rxx.x1sy0etr.x17r0tee.x972fbf.xcfux6l.x1qhh985.xm0m39n.x1ypdohk.xe8uvvx.xdj266r.x11i5rnm.xat24cr.x1mh8g0r.xexx8yu.x4uap5',
                 'div.xsgj6o6.xw3qccf.x1xmf6yo.x1w6jkce.xusnbm3 div[aria-label="Näytä suosituksia"]',
                 'div[aria-label="Näytä suosituksia"] .x1ja2u2z.x78zum5.x2lah0s.x1n2onr6.xl56j7k.x6s0dn4.xozqiw3.x1q0g3np.xi112ho.x17zwfj4.x585lrc.x1403ito.x',
-                'div[aria-label="Näytä suosituksia"] .x1ey2m1c.xds687c.x17qophe.xg01cxk.x47corl.x10l6tqk.x13vifvy.x1ebt8du.x19991ni.x1dhq9h.x1o1ewxj.x3x9cwd.x1e5q0jg.x13rtm0m',
+                'div[aria-label="Näytä suosituksia"] .x1ey2m1c.xds687c.x17qophe.xg01cxk.x47corl.x10l6tqk.x13vifvy.x1ebt8du.x19991ni.x1dhq9h.x1o1ewxj.x3x9cwd.x1e5q0jg.x3x9cwd',
                 'div.xsgj6o6.xw3qccf.x1xmf6yo.x1w6jkce.xusnbm3 div[aria-label="Näytä suosituksia"] .x1ja2u2z.x78zum5.x2lah0s.x1n2onr6.xl56j7k.x6s0dn4.xozqiw3.x1q0g3np.xi112ho.x17zwfj4.x585lrc.x1403ito.x',
                 'div.xsgj6o6.xw3qccf.x1xmf6yo.x1w6jkce.xusnbm3 div[aria-label="Näytä suosituksia"] .x1ey2m1c.xds687c.x17qophe.xg01cxk.x47corl.x10l6tqk.x13vifvy.x1ebt8du.x19991ni.x1dhq9h.x1o1ewxj.x3x9cwd',
                 'div.x1exxf4d.x1y71gwh.x1nb4dca.xu1343h.x1lq5wgf.xgqcy7u.x30kzoy.x9jhf4c.x13fuv20.xu3j5b3.x1q0q8m5.x26u7qi.x178xt8z.xm81vs4.xso031l.xy80clv.xev17xk.x1xmf6yo',
@@ -1197,8 +1404,20 @@
             let deletedCount = 0;
             document.querySelectorAll(selectors.join(','))
                 .forEach(element => {
-                    element.remove();
-                    deletedCount++;
+                    if (!element.classList.contains('fb-element-banned')) {
+                        element.classList.add('fb-element-banned');
+                        element.style.setProperty('display', 'none', 'important');
+                        element.style.setProperty('visibility', 'hidden', 'important');
+                        element.style.setProperty('opacity', '0', 'important');
+                        element.style.setProperty('pointer-events', 'none', 'important');
+                        element.style.setProperty('position', 'absolute', 'important');
+                        element.style.setProperty('left', '-9999px', 'important');
+                        element.style.setProperty('top', '-9999px', 'important');
+                        element.style.setProperty('height', '0', 'important');
+                        element.style.setProperty('width', '0', 'important');
+                        element.style.setProperty('overflow', 'hidden', 'important');
+                        deletedCount++;
+                    }
                 });
                 
             if (deletedCount > 0) {
@@ -1255,23 +1474,22 @@
                 '.x1120s5i.x1n2onr6.x10wlt62.x6ikm8r.x1lliihq',
                 '.x1cnzs8.xjkvuk6.x193iq5w.x2lah0s.xdt5ytf.x78zum5.x9f619.x1ja2u2z.x1n2onr6',
                 '.xifccgj.x4cne27.xbmpl8g.xykv574.xyamay9.x1swvt13.x1pi30zi.x1q0g3np.xozqiw3.x1qjc9v5.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619',
-                '.x7wzq59 > div > div > div > .x1yztbdb > .xh8yej3.x1n2onr6.x78zum5.xkhd6sd.x18d9i69.x4uap5.xexx8yu.x1mh8g0r.xat24cr.x11i5rnm.xdj266r.html-div > .xquyuld.x10wlt62.x6ikm8r.xh8yej3.x9f61',
+                '.x7wzq59 > div > div > div > .x1yztbdb > .xh8yej3.x1n2onr6.xl56j7k.xdt5ytf.x3nfvp2.x9f619.x1a2a7pz.x1lku1pv.x87ps6o.x13rtm0m.x1e5q0jg.x3x9cwd.x1o1ewxj.xggy1nq.x1hl2dhg.x16tdsg8.xkhd6sd.x18d9i69.x4uap5.xexx8yu.x1mh8g0r.xat24cr.x11i5rnm.xdj266r.html-div > .xquyuld.x10wlt62.x6ikm8r.xh8yej3.x9f61',
                 '.xi81zsa.xo1l8bm.x1sibtaa.x1nxh6w3.x676frb.x4zkp8e.x1943h6x.x1fgarty.x1cpjm7i.x1gmr53x.xhkezso.x1s928wv.x1lliihq.x1xmvt09.x1vvkbs.x13faqbe.xeuugli.x193iq5w > .xt0psk2',
                 'footer > .xi81zsa.xo1l8bm.x1sibtaa.x1nxh6w3.x676frb.x4zkp8e.x1943h6x.x1fgarty.x1cpjm7i.x1gmr53x.xhkezso.x1s928wv.x1lliihq.x1xmvt09.x1vvkbs.x13faqbe.xeuugli.x193iq5w',
                 '.x1xzczws.x7ep2pv.x1d1medc.xnp8db0.x1i64zmx.x1e56ztr.x1emribx.x1xmf6yo.xjl7jj.xs83m0k.xeuugli.x1ja2u2z.x1n2onr6.x9f619',
                 '.x1yrsyyn.x10b6aqq.x16hj40l.xsyo7zv.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .xifccgj.x4cne27.xdt5ytf.x78zum5 > .x1k70j0n.xzueoph > .xeuug',
                 '.x1yrsyyn.x10b6aqq.x16hj40l.xsyo7zv.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .x1k70j0n.xzueoph > .xeuug',
-                '.x1yrsyyn.x10b6aqq.x16hj40l.xsyo7zv.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .x1k70j0n.xzueoph',
                 '.x1yrsyyn.x10b6aqq.x16hj40l.xsyo7zv.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5 > .x1k70j0n.xzueoph',
                 '.x1yrsyyn.x10b6aqq.x16hj40l.xsyo7zv.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619',
                 '.xifccgj.x4cne27.xbmpl8g.xykv574.x1y1aw1k.xwib8y2.x1ye3gou.xn6708d.x1q0g3np.xozqiw3.x6s0dn4.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619',
                 '.x1y1aw1k.x150jy0e.x1e558r4.x193iq5w.x2lah0s.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619',
+                '.xquyuld.x10wlt62.x6ikm8r.xh8yej3.x9f619.xt3gfkd.xu5ydu1.xdney7k.x1qpq9i9.x1jx94hy.x1ja2u2z.x1n2onr6.x26u7qi.x178xt8z.xm81vs4.xso031l.xy80clv.xev17xk.x1xmf6yo',
                 '.xquyuld.x10wlt62.x6ikm8r.xh8yej3.x9f619.xt3gfkd.xu5ydu1.xdney7k.x1qpq9i9.x1jx94hy.x1ja2u2z.x1n2onr6 > .x193iq5w.x2lah0s.xdt5ytf.x78zum5.x9f619.x1ja2u2z.x1n2onr6 > .x2lwn1j.x1iyjqo2.x',
                 '.xquyuld.x10wlt62.x6ikm8r.xh8yej3.x9f619.xt3gfkd.xu5ydu1.xdney7k.x1qpq9i9.x1jx94hy.x1ja2u2z.x1n2onr6 > .x193iq5w.x2lah0s.xdt5ytf.x78zum5.x9f619.x1ja2u2z.x1n2onr6',
                 '.x1a2a7pz.x1ja2u2z.xh8yej3.x1n2onr6.x10wlt62.x6ikm8r.x1itg65n',
                 '.xu06nn8.x1jl3cmp.x2r5gy4.xnpuxes.x1hc1fzr.x879a55.x1q0g3np.xozqiw3.x1qjc9v5.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619 > .xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619',
-                '.x1x99re3.x1jdnuiz.x1r1pt67.x1qhmfi1.x9f619.xm0m39n.x1qhh985.xcfux6l.x972fbf.x1403ito.x585lrc.x17zwfj4.xi112ho.x1q0g3np.xozqiw3.x6s0dn4.xl56j7k.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z',
-                '.xu06nn8.x1jl3cmp.x2r5gy4.xnpuxes.x1hc1fzr.x879a55.x1q0g3np.xozqiw3.x1qjc9v5.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619',
+                '.x1x99re3.x1jdnuiz.x1r1pt67.x1qhmfi1.x9f619.xm0m39n.x1qhh985.xcfux6l.x972fbf.x10w94by.x1qhh985.x14e42zd.x1ypdohk.xe8uvvx.xdj266r.x14z9mp.xat24cr.x1lziwak.xexx8yu.xyri2b.x18d9i69.x1c1uobl.x16tdsg8.xat24cr.x1mh8g0r.x6s0dn4.x78zum5.xdt5ytf.xjy6m2a.xl56j7k',
                 '.xu06nn8.x1jl3cmp.x2r5gy4.xnpuxes.x1hc1fzr.xh8yej3.xdsb8wn.x10l6tqk.x5yr21d.x1q0g3np.xozqiw3.x1qjc9v5.x1qughib.x2lah0s.x78zum5.x1ja2u2z.x9f619',
                 '.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .x1n2onr6.x10wlt62.x6ikm8r.x1ja2u2z.x9f619',
                 'div[aria-label="Photos"]',
@@ -1280,7 +1498,7 @@
                 '*:contains("Suositeltu")',
                 '*:contains("Recommended")',
                 'footer .xi81zsa',
-                '.xh8yej3 > .xh8yej3.x1n2onr6.xl56j7k.xdt5ytf.x3nfvp2.x9f619.x1a2a7pz.x1lku1pv.x87ps6o.x13rtm0m.x1e5q0jg.x3x9cwd.x1o1ewxj.xggy1nq.x1hl2dhg.x16tdsg8.xkhd6sd.x18d9i69.x4uap5.xexx8yu.x1mh'
+                '.xh8yej3 > .xh8yej3.x1n2onr6.xl56j7k.xdt5ytf.x3nfvp2.x9f619.x1a2a7pz.x1lku1pv.x87ps6o.x13rtm0m.x1e5q0jg.x3x9cwd.x1o1ewxj.xggy1nq.x1hl2dhg.x16tdsg8.xkhd6sd.x18d9i69.x4uap5.xexx8yu.x1mh8g0r'
             ];
 
             let deletedCount = 0;
@@ -1302,19 +1520,43 @@
                                 while (parent && parent !== document.body) {
                                     if (parent.classList.contains('x1yztbdb') ||
                                         parent.classList.contains('html-div')) {
-                                        parent.remove();
-                                        deletedCount++;
+                                        if (!parent.classList.contains('fb-element-banned')) {
+                                            parent.classList.add('fb-element-banned');
+                                            parent.style.setProperty('display', 'none', 'important');
+                                            parent.style.setProperty('visibility', 'hidden', 'important');
+                                            parent.style.setProperty('opacity', '0', 'important');
+                                            parent.style.setProperty('pointer-events', 'none', 'important');
+                                            parent.style.setProperty('position', 'absolute', 'important');
+                                            parent.style.setProperty('left', '-9999px', 'important');
+                                            parent.style.setProperty('top', '-9999px', 'important');
+                                            parent.style.setProperty('height', '0', 'important');
+                                            parent.style.setProperty('width', '0', 'important');
+                                            parent.style.setProperty('overflow', 'hidden', 'important');
+                                            deletedCount++;
+                                        }
                                         break;
                                     }
-                                    parent = parent.parentElement;
+                                    parent = parentElement;
                                 }
                             }
                         }
                     }
                 } else {
                     document.querySelectorAll(selector).forEach(element => {
-                        element.remove();
-                        deletedCount++;
+                        if (!element.classList.contains('fb-element-banned')) {
+                            element.classList.add('fb-element-banned');
+                            element.style.setProperty('display', 'none', 'important');
+                            element.style.setProperty('visibility', 'hidden', 'important');
+                            element.style.setProperty('opacity', '0', 'important');
+                            element.style.setProperty('pointer-events', 'none', 'important');
+                            element.style.setProperty('position', 'absolute', 'important');
+                            element.style.setProperty('left', '-9999px', 'important');
+                            element.style.setProperty('top', '-9999px', 'important');
+                            element.style.setProperty('height', '0', 'important');
+                            element.style.setProperty('width', '0', 'important');
+                            element.style.setProperty('overflow', 'hidden', 'important');
+                            deletedCount++;
+                        }
                     });
                 }
             });
@@ -1369,7 +1611,6 @@
                 'div.x78zum5.x12nagc.x1n2onr6.x1s6qhgt:empty',
                 '.x7wzq59 > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(2)',
                 '.x7wzq59 > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(2) > div:nth-child(1) > div:nth-child(1)',
-                '.x7wzq59 > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1)',
                 'div.x1nhvcw1:nth-child(1)',
                 'div.x1nhvcw1:nth-child(1) > div:nth-child(1)',
                 'div.x1nhvcw1:nth-child(1) > div:nth-child(2)',
@@ -1411,8 +1652,20 @@
             selectorsToDelete.forEach(selector => {
                 document.querySelectorAll(selector)
                     .forEach(element => {
-                        element.remove();
-                        deletedCount++;
+                        if (!element.classList.contains('fb-element-banned')) {
+                            element.classList.add('fb-element-banned');
+                            element.style.setProperty('display', 'none', 'important');
+                            element.style.setProperty('visibility', 'hidden', 'important');
+                            element.style.setProperty('opacity', '0', 'important');
+                            element.style.setProperty('pointer-events', 'none', 'important');
+                            element.style.setProperty('position', 'absolute', 'important');
+                            element.style.setProperty('left', '-9999px', 'important');
+                            element.style.setProperty('top', '-9999px', 'important');
+                            element.style.setProperty('height', '0', 'important');
+                            element.style.setProperty('width', '0', 'important');
+                            element.style.setProperty('overflow', 'hidden', 'important');
+                            deletedCount++;
+                        }
                     });
             });
             
@@ -1424,24 +1677,52 @@
         }
     };
 
-// FIXED: Function to delete elements for a personal profile - now with proper URL restriction
+// Function to delete elements for a personal profile - now with support for multiple URLs
 const deleteSelectorsForPersonalProfile = () => {
     try {
         const currentUrl = window.location.href;
-        
-        if (currentUrl !== 'https://www.facebook.com/Haukkis/friends') {
+
+        // Allowed URLs: add strings (exact match, trailing slash ignored) or RegExp patterns.
+        const allowedUrls = [
+		'https://www.facebook.com/Haukkis/friends',
+		'https://www.facebook.com/Haukkis/friends_all',
+		'https://www.facebook.com/Haukkis/friends_with_upcoming_birthdays'	
+        ];
+
+        // Normalize URL (ignore hash, handle trailing slash) and test against allowlist
+        const normalizeForCompare = (u) => {
+            try {
+                const url = new URL(u);
+                url.hash = '';
+                return url.toString().replace(/\/+$/, '');
+            } catch {
+                return String(u).replace(/#.*$/, '').replace(/\/+$/, '');
+            }
+        };
+
+        const isAllowed = allowedUrls.some((matcher) => {
+            if (typeof matcher === 'string') {
+                return normalizeForCompare(currentUrl) === normalizeForCompare(matcher);
+            } else if (matcher instanceof RegExp) {
+                return matcher.test(currentUrl.replace(/\/+$/, ''));
+            }
+            return false;
+        });
+
+        if (!isAllowed) {
             return;
         }
-        
+
         devLog('Applying selectors for personal profile');
+
         const personalProfileSelectors = [
-            'div.xnjli0.x1q8cg2c.xwib8y2.x1y1aw1k.x6s0dn4.x1ja2u2z.x16tdsg8.x1n2onr6.x1gh759c.xnqzcj9.xfvfia3.x1i6fsjq.x2lah0s.x1q0g3np.x78zum5.x1ypdohk.x9f619.xjyslct.x1a2a7pz.x1lku1pv.x87ps6',
-            'div.xnjli0.x1q8cg2c.xwib8y2.x1y1aw1k.x6s0dn4.x1ja2u2z.x16tdsg8.x1n2onr6.x1gh759c.xnqzcj9.xfvfia3.x1i6fsjq.x2lah0s.x1q0g3np.x78zum5.x1ypdohk.x9f619.xjyslct.x1a2a7pz.x1lku1pv.x87ps6',
+            'div.xnjli0.x1q8cg2c.xwib8y2.x1y1aw1k.x6s0dn4.x1ja2u2z.x16tdsg8.x1n2onr6.x1gh759c.xnqzcj9.xfvfia3.x1i6fsjq.x2lah0s.x1q0g3np.x78zum5.x1ypdohk.x9f619.xjyslct.x1a2a7pz.x1lku1pv.x87ps6o.x13rtm0m.x1e5q0jg.x3x9cwd.x1o1ewxj.xggy1nq.x1hl2dhg.x13vifvy.x16tdsg8.x1xmf6yo',
+            'div.xnjli0.x1q8cg2c.xwib8y2.x1y1aw1k.x6s0dn4.x1ja2u2z.x16tdsg8.x1n2onr6.x1gh759c.xnqzcj9.xfvfia3.x1i6fsjq.x2lah0s.x1q0g3np.x78zum5.x1ypdohk.x9f619.xjyslct.x1a2a7pz.x1lku1pv.x87ps6o.x13rtm0m.x1e5q0jg.x3x9cwd.x1o1ewxj.xggy1nq.x1hl2dhg.x13vifvy.x16tdsg8.x1xmf6yo',
             'span:contains("Poista kavereista")',
             'div[role="menuitem"] span:contains("Poista kavereista")',
             'i[style*="BXcBrMYpzXO.png"][style*="background-position: 0px -84px"]',
         ];
-        
+
         let deletedCount = 0;
         personalProfileSelectors.forEach(selector => {
             if (selector.includes(':contains(')) {
@@ -1454,14 +1735,26 @@ const deleteSelectorsForPersonalProfile = () => {
                         false
                     );
                     let node;
-                    while (node = walker.nextNode()) {
+                    while ((node = walker.nextNode())) {
                         if (node.nodeValue.includes(text)) {
                             let parent = node.parentElement;
                             while (parent && parent !== document.body) {
-                                if (parent.getAttribute('role') === 'menuitem' && 
+                                if (parent.getAttribute('role') === 'menuitem' &&
                                     parent.textContent.includes('Poista kavereista')) {
-                                    parent.remove();
-                                    deletedCount++;
+                                    if (!parent.classList.contains('fb-element-banned')) {
+                                        parent.classList.add('fb-element-banned');
+                                        parent.style.setProperty('display', 'none', 'important');
+                                        parent.style.setProperty('visibility', 'hidden', 'important');
+                                        parent.style.setProperty('opacity', '0', 'important');
+                                        parent.style.setProperty('pointer-events', 'none', 'important');
+                                        parent.style.setProperty('position', 'absolute', 'important');
+                                        parent.style.setProperty('left', '-9999px', 'important');
+                                        parent.style.setProperty('top', '-9999px', 'important');
+                                        parent.style.setProperty('height', '0', 'important');
+                                        parent.style.setProperty('width', '0', 'important');
+                                        parent.style.setProperty('overflow', 'hidden', 'important');
+                                        deletedCount++;
+                                    }
                                     break;
                                 }
                                 parent = parent.parentElement;
@@ -1471,12 +1764,24 @@ const deleteSelectorsForPersonalProfile = () => {
                 }
             } else {
                 document.querySelectorAll(selector).forEach(el => {
-                    el.remove();
-                    deletedCount++;
+                    if (!el.classList.contains('fb-element-banned')) {
+                        el.classList.add('fb-element-banned');
+                        el.style.setProperty('display', 'none', 'important');
+                        el.style.setProperty('visibility', 'hidden', 'important');
+                        el.style.setProperty('opacity', '0', 'important');
+                        el.style.setProperty('pointer-events', 'none', 'important');
+                        el.style.setProperty('position', 'absolute', 'important');
+                        el.style.setProperty('left', '-9999px', 'important');
+                        el.style.setProperty('top', '-9999px', 'important');
+                        el.style.setProperty('height', '0', 'important');
+                        el.style.setProperty('width', '0', 'important');
+                        el.style.setProperty('overflow', 'hidden', 'important');
+                        deletedCount++;
+                    }
                 });
             }
         });
-        
+
         if (deletedCount > 0) {
             devLog(`Deleted ${deletedCount} elements for personal profile`);
         }
@@ -1519,16 +1824,16 @@ const deleteSelectorsForPersonalProfile = () => {
         }
     };
 
-    // ENHANCED: DOM observer with instant search result processing
+    // ENHANCED: DOM observer with instant search result processing and full post scanning
     let __fbDomObserverInstalled = false;
     const observeDOMChanges = () => {
         try {
             if (__fbDomObserverInstalled) return;
             __fbDomObserverInstalled = true;
 
-            devLog('Setting up DOM observer with instant search processing');
+            devLog('Setting up DOM observer with instant search processing and full post scanning');
 
-            const throttledRunAllFilters = createThrottle(() => runAllFilters(), 75);
+            const throttledRunAllFilters = createThrottle(() => runAllFilters(), 10);
 
             const observer = trackObserver(new MutationObserver((mutations) => {
                 // Check for search-related changes first for instant processing
@@ -1558,20 +1863,22 @@ const deleteSelectorsForPersonalProfile = () => {
             observer.observe(document.documentElement, { 
                 childList: true, 
                 subtree: true,
-                attributeFilter: ['src', 'href', 'aria-label', 'data-fbid']
+                attributes: false,
+                characterData: false
             });
         } catch (e) {
             console.log('Error setting up DOM observer: ' + e.message);
         }
     };
 
-    // ENHANCED: Run all filtering functions with search result processing
+    // ENHANCED: Run all filtering functions with full post scanning
     const runAllFilters = () => {
         try {
             handleRedirects();
             cleanUrl();
             hideCriticalElements();
             deleteBlockedElements();
+            scanAndBanEntirePosts(); // Added full post scanning initially
             deleteRestrictedWords();
             processSearchResults(); // Added search result processing
             deleteRestrictedPhrases();
@@ -1586,14 +1893,26 @@ const deleteSelectorsForPersonalProfile = () => {
         }
     };
 
+    // NEW: Immediate initialization function for zero-glimpse hiding
+    const immediateInit = () => {
+        devLog('Running immediate init for zero-glimpse hiding');
+        hideCriticalElements();
+        scanAndBanEntirePosts();
+        deleteRestrictedWords();
+        processSearchResults();
+        deleteRestrictedPhrases();
+        deletePeopleYouMayKnow();
+        // FIXED: These now check URLs internally
+        deleteSelectorsForSpecificUrl();
+        deleteSelectorsForSpecificProfile();
+        deleteSelectorsForPersonalProfile();
+        deleteElement();
+    };
+
     // Ensure DOM is ready before initializing
     const ensureDOMReady = () => {
         if (document.readyState === 'loading') {
-            onWindowEvent(document, 'DOMContentLoaded', () => {
-                observeDOMChanges();
-                observeForRestrictedPhrases();
-                interceptNavigation();
-            }, false);
+            onWindowEvent(window, 'DOMContentLoaded', observeForRestrictedPhrases, false);
         } else {
             observeDOMChanges();
             observeForRestrictedPhrases();
@@ -1603,11 +1922,12 @@ const deleteSelectorsForPersonalProfile = () => {
 
     // Initialize the script
     const init = () => {
-        devLog('Initializing Facebook script with instant search hiding');
+        devLog('Initializing Facebook script with instant search hiding and full post scanning');
         ensureDOMReady();
         handleRedirects();
         cleanUrl();
         deleteBlockedElements();
+        scanAndBanEntirePosts(); // Added full post scanning to initialization
         deleteRestrictedWords();
         processSearchResults(); // Added search result processing to initialization
         deleteRestrictedPhrases();
@@ -1617,10 +1937,21 @@ const deleteSelectorsForPersonalProfile = () => {
         deleteSelectorsForSpecificProfile();
         deleteSelectorsForPersonalProfile();
         deleteElement();
+
+        // ANTI-FLASHING: Add pageshow event to re-hide on navigation (e.g., back/forward cache)
+        onWindowEvent(window, 'pageshow', (event) => {
+            if (event.persisted) {
+                // Page was restored from bfcache, re-run hiding
+                runAllFilters();
+            }
+        }, false);
     };
 
     // Start initialization
     init();
+
+    // ENHANCED: Run immediate init right after CSS injection for zero-glimpse
+    immediateInit();
 
     // Attach event listeners for changes (tracked for cleanup)
     onWindowEvent(window, 'DOMContentLoaded', runAllFilters, false);

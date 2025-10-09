@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "BraveFox Enhancer",
-  "version": "17.2.5",
+  "version": "17.2.6",
   "description": "Enhances browsing experience by blocking unwanted content and cleaning up URLs.",
   "background": {
     "scripts": [
@@ -331,15 +331,9 @@
       "matches": [
         "https://irc-galleria.net/user/*",
         "https://kuvake.net/*",
-
-        // Expand TikTok coverage
         "https://www.tiktok.com/*",
         "https://tiktok.com/*",
-
-        // Fix: correct host (GitHub is github.com, not www.github.com)
         "https://github.com/*",
-
-        // Cover any variant of guthib (http/https, www, subdomains if used by typosquatters)
         "*://*.guthib.com/*"
       ],
       "js": [
@@ -356,14 +350,6 @@
         "scripts/instagram.js"
       ],
       "run_at": "document_start"
-    },
-    {
-      "matches": [
-        "https://github.com/copilot/*"
-      ],
-      "js": [
-        "scripts/copilot.js"
-      ]
     },
     {
       "matches": [
@@ -388,7 +374,11 @@
         "*://*.reddit.com/*"
       ],
       "js": [
-        "scripts/reddit.js"
+        "scripts/reddit.js",
+        "scripts/redditleftnav.js"
+      ],
+      "css": [
+        "css/reddit.css"
       ],
       "run_at": "document_start"
     },
