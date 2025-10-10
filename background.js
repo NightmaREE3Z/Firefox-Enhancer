@@ -175,7 +175,13 @@ const urlsToBlock = [
     "*://comfyui.org/*",
     "*://thinkdiffusion.com/*",
     "*://github.com/copilot*", 
-    "*://snapchat.com*", 
+    "*://snapchat.com/*",  // Corrected from "*://snapchat.com*"
+    "*://snapchat.com/web*", 
+    "*://snapchat.com/*",
+    "*://www.snapchat.com/*", 
+    "*://www.snapchat.com/web/*",
+    "*://web.snapchat.com/*",
+    "*://*.snapchat.com/*", 
 ];
 
 // Memory tracking
