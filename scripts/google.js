@@ -367,6 +367,7 @@
         /\.ai/i,
         /\.app/i,
         /\.io/i,
+        /\.makeup/i,
         /\.off/i,
         /\.best/i,
         /deepnude|deepn/i,
