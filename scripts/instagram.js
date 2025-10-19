@@ -22,6 +22,7 @@
     let __cleanupRan = false;
     let __intervalsRunning = false;
     let __isRedirectingFast = false; // guard against double redirects
+    let __observerTimeoutId = null; // FIX: declare the timeout id used in observerCallback
 
     // pacing/throttle config to reduce GC churn and peak memory, keeping UI snappy
     const PACE = {
@@ -1624,33 +1625,47 @@ ${approveGateCSS}
         markReady();
     }
 
-    function observerCallback() {
-        if (__observerTimeoutId !== null) { try { clearTimeout(__observerTimeoutId); __timers.timeouts.delete(__observerTimeoutId); } catch {} __observerTimeoutId = null; }
-        __observerTimeoutId = setTimeout(() => {
-            try { __timers.timeouts.delete(__observerTimeoutId); } catch {}
-            __observerTimeoutId = null;
-
-            if (isReelsPage()) return;
-            if (location.hostname.endsWith('instagram.com') && location.pathname.match(/\/(followers|following)/)) { hideInstagramAccountsFromList(); return; }
-            if (isExcludedPath()) { collapseElementsOnExcludedPaths(); return; }
-            collapseElementsBySelectors(selectorsToHide);
-            hideRecommendedSections();
-            collapseElementsByKeywordsOrPaths(bannedKeywords, instagramBannedPaths, selectorsToMonitor);
-            if (location.hostname.endsWith('instagram.com')) {
-                hideInstagramBannedContent();
-                genericAggressiveHider();
-                checkForRedirectElements();
-                hideMyosMetaltaElements();
-                hideSettingsPageElements();
-                markSearchRoots();
-                scheduleSearchSweep();
-
-                // RESTORED approve helper
-                approveAllNonHiddenArticles();
-            }
-        }, 120);
-        __timers.timeouts.add(__observerTimeoutId);
+function observerCallback() {
+    // Clear any pending debounce timer
+    if (__observerTimeoutId != null) {
+        try { clearTimeout(__observerTimeoutId); } catch {}
+        try { __timers.timeouts.delete(__observerTimeoutId); } catch {}
+        __observerTimeoutId = null;
     }
+
+    // Capture the id locally to avoid race conditions
+    const id = setTimeout(() => {
+        try { __timers.timeouts.delete(id); } catch {}
+
+        // If no newer timer replaced this one, clear the global ref
+        if (__observerTimeoutId === id) __observerTimeoutId = null;
+
+        // Do nothing if we've already cleaned up
+        if (typeof __cleanupRan !== 'undefined' && __cleanupRan) return;
+
+        if (isReelsPage()) return;
+        if (location.hostname.endsWith('instagram.com') && location.pathname.match(/\/(followers|following)/)) { hideInstagramAccountsFromList(); return; }
+        if (isExcludedPath()) { collapseElementsOnExcludedPaths(); return; }
+        collapseElementsBySelectors(selectorsToHide);
+        hideRecommendedSections();
+        collapseElementsByKeywordsOrPaths(bannedKeywords, instagramBannedPaths, selectorsToMonitor);
+        if (location.hostname.endsWith('instagram.com')) {
+            hideInstagramBannedContent();
+            genericAggressiveHider();
+            checkForRedirectElements();
+            hideMyosMetaltaElements();
+            hideSettingsPageElements();
+            markSearchRoots();
+            scheduleSearchSweep();
+
+            // RESTORED approve helper
+            approveAllNonHiddenArticles();
+        }
+    }, 120);
+
+    __observerTimeoutId = id;
+    __timers.timeouts.add(id);
+}
 
     function initObserver() {
         const observer = trackObserver(new MutationObserver(observerCallback));
