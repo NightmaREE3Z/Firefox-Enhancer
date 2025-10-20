@@ -175,7 +175,7 @@ const urlsToBlock = [
     "*://comfyui.org/*",
     "*://thinkdiffusion.com/*",
     "*://github.com/copilot*", 
-    "*://snapchat.com/*",  // Corrected from "*://snapchat.com*"
+    "*://snapchat.com/*",
     "*://snapchat.com/web*", 
     "*://snapchat.com/*",
     "*://www.snapchat.com/*", 
@@ -221,12 +221,10 @@ const fetchHostsFile = async (url, retries = MAX_RETRIES) => {
             const text = await response.text();
             console.log(`Raw file size: ${text.length} characters`);
             
-            // Memory-optimized parsing with batch processing for 100k+ hosts
             const hosts = [];
             const lines = text.split('\n');
             console.log(`Processing ${lines.length} lines in batches of ${MAX_HOSTS_PER_BATCH}...`);
             
-            // Process in batches to handle 100k+ entries efficiently
             for (let i = 0; i < lines.length; i += MAX_HOSTS_PER_BATCH) {
                 const batch = lines.slice(i, i + MAX_HOSTS_PER_BATCH);
                 const batchHosts = batch
@@ -245,16 +243,12 @@ const fetchHostsFile = async (url, retries = MAX_RETRIES) => {
                 // Progress logging for large files
                 if (i % (MAX_HOSTS_PER_BATCH * 10) === 0 && i > 0) {
                     console.log(`Processed ${i}/${lines.length} lines (${Math.round((i/lines.length)*100)}%)`);
-                    // Small delay to allow garbage collection for very large files
                     await new Promise(resolve => setTimeout(resolve, 1));
                 }
             }
             
             console.log(`Successfully fetched and processed ${hosts.length} hosts from ${url}`);
-            
-            // Clear the text variable to free memory immediately
             lines.length = 0;
-            
             return hosts;
         } catch (error) {
             console.error(`Failed to fetch the hosts file from ${url} on attempt ${attempt}:`, error);
@@ -272,21 +266,14 @@ const fetchHostsFile = async (url, retries = MAX_RETRIES) => {
 // Memory-optimized storage function for large hosts lists
 const storeHostsList = (list) => {
     console.log(`Storing hosts list with ${list.length} entries...`);
-    
-    // Advanced compression for large lists (100k+ entries)
     const uniqueSortedList = Array.from(new Set(list)).sort();
     const compressionRatio = ((list.length - uniqueSortedList.length) / list.length * 100).toFixed(2);
-    
     console.log(`Compression: ${list.length} → ${uniqueSortedList.length} entries (${compressionRatio}% reduction)`);
-    
-    // Store in chunks for very large lists to prevent storage quota issues
     const chunkSize = 10000;
     const chunks = [];
-    
     for (let i = 0; i < uniqueSortedList.length; i += chunkSize) {
         chunks.push(uniqueSortedList.slice(i, i + chunkSize));
     }
-    
     const storageData = {
         hostsList: uniqueSortedList,
         hostsCount: uniqueSortedList.length,
@@ -294,7 +281,6 @@ const storeHostsList = (list) => {
         chunksCount: chunks.length,
         compressionRatio: compressionRatio
     };
-    
     browser.storage.local.set(storageData, () => {
         if (browser.runtime.lastError) {
             console.error("Error storing hosts list:", browser.runtime.lastError);
@@ -308,9 +294,7 @@ const storeHostsList = (list) => {
 const performMemoryCleanup = () => {
     memoryCleanupCount++;
     console.log(`🧹 Performing memory cleanup #${memoryCleanupCount} for large hosts list...`);
-    
-    // Clean up browser storage cache periodically (more aggressive for large lists)
-    if (memoryCleanupCount % 3 === 0) { // Every 1.5 hours
+    if (memoryCleanupCount % 3 === 0) {
         browser.storage.local.get(['hostsList', 'hostsCount'], (result) => {
             if (result.hostsList && result.hostsList.length > STORAGE_COMPRESSION_THRESHOLD) {
                 console.log(`Large hosts list detected (${result.hostsList.length} entries), re-optimizing storage...`);
@@ -335,20 +319,16 @@ const updateBlocklist = async () => {
         console.log("🚀 Starting blocklist update for large hosts file...");
         const startTime = Date.now();
 
-        // URLs of the hosts files
         const urls = [
-        "https://gist.githubusercontent.com/NightmaREE3Z/2ba1f0f59633ae221214595ede2b590a/raw/22035d7e703587787725c495c87d7d92cc937f7b/ForbiddenHosts",
-        "https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/fakenews-porn/hosts"
+            "https://gist.githubusercontent.com/NightmaREE3Z/2ba1f0f59633ae221214595ede2b590a/raw/22035d7e703587787725c495c87d7d92cc937f7b/ForbiddenHosts",
+            "https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/fakenews-porn/hosts"
         ];
 
-        // Fetch all the hosts files with enhanced memory optimization
         const hostsLists = [];
         for (let i = 0; i < urls.length; i++) {
             console.log(`Fetching hosts file ${i + 1}/${urls.length}...`);
             const hosts = await fetchHostsFile(urls[i]);
             hostsLists.push(hosts);
-            
-            // Delay between fetches to prevent memory spikes with large files
             if (i < urls.length - 1) {
                 console.log("Pausing before next fetch to optimize memory...");
                 await new Promise(resolve => setTimeout(resolve, 200));
@@ -357,8 +337,6 @@ const updateBlocklist = async () => {
         
         console.log("Combining all hosts lists...");
         const allHosts = hostsLists.flat();
-        
-        // Clear individual lists to free memory
         hostsLists.length = 0;
 
         if (allHosts.length === 0) {
@@ -367,39 +345,25 @@ const updateBlocklist = async () => {
         }
 
         console.log(`Processing ${allHosts.length} total hosts for deduplication...`);
-        
-        // Memory-optimized deduplication for 100k+ entries
         const uniqueHostsList = Array.from(new Set(allHosts)).sort();
         const processingTime = ((Date.now() - startTime) / 1000).toFixed(2);
-        
         console.log(`✅ Processed ${allHosts.length} → ${uniqueHostsList.length} unique hosts in ${processingTime}s`);
 
-        // Generate blocking URLs
-        console.log("Generating blocking URL patterns...");
         const blockingUrls = uniqueHostsList.map(host => `*://${host}/*`);
-
-        // Remove existing listener if present
         if (browser.webRequest.onBeforeRequest.hasListener(blockRequest)) {
             browser.webRequest.onBeforeRequest.removeListener(blockRequest);
         }
-
-        // Add new listener with combined URLs
-        console.log(`Installing web request blocker for ${blockingUrls.length + urlsToBlock.length} total patterns...`);
+        console.log(`Installing web request blocker for ${blockingUrls.length} + ${urlsToBlock.length} total patterns...`);
         currentBlockedUrls = blockingUrls.concat(urlsToBlock);
-        
         browser.webRequest.onBeforeRequest.addListener(
             blockRequest,
             { urls: currentBlockedUrls },
             ["blocking"]
         );
 
-        // Store the optimized hosts list
         storeHostsList(uniqueHostsList);
-        
         const totalTime = ((Date.now() - startTime) / 1000).toFixed(2);
         console.log(`🎉 Blocklist update completed in ${totalTime}s - ${uniqueHostsList.length} hosts now blocked`);
-        
-        // Trigger memory cleanup after large update
         setTimeout(performMemoryCleanup, 1000);
         
     } catch (error) {
@@ -411,12 +375,8 @@ const updateBlocklist = async () => {
 browser.runtime.onInstalled.addListener(() => {
     console.log("🚀 BraveFox Enhancer Installed!");
     updateBlocklist();
-    
-    // Set up regular update interval
-    setInterval(updateBlocklist, 1 * 60 * 60 * 1000); // Update every hour
-    
-    // Set up memory cleanup interval (more frequent for large hosts)
-    setInterval(performMemoryCleanup, CLEANUP_INTERVAL); // Cleanup every 30 minutes
+    setInterval(updateBlocklist, 1 * 60 * 60 * 1000);
+    setInterval(performMemoryCleanup, CLEANUP_INTERVAL);
 });
 
 // Add listener for when the browser starts
@@ -431,9 +391,7 @@ updateBlocklist();
 // Ensure the clearURLsStart function is defined
 const clearURLsStart = () => {
     console.log("🔗 ClearURLs initialization started.");
-    // Add any initialization code for ClearURLs here
     if (typeof browser.browserAction !== 'undefined') {
-        // Set the browser action badge text
         browser.browserAction.setBadgeText({ text: "ON" });
         browser.browserAction.setBadgeBackgroundColor({ color: '#4CAF50' });
     }
@@ -455,21 +413,10 @@ const removeHistoryForDomains = async (url) => {
     }
 };
 
-// Listen for navigation events to specific domains and remove history entries
-browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-    if (changeInfo.url) {
+// Minimal onUpdated: only perform history cleanup when URL changes
+browser.tabs.onUpdated.addListener((tabId, changeInfo) => {
+    if (changeInfo && changeInfo.url) {
         console.log(`🔍 Checking history entry for: ${changeInfo.url}`);
         removeHistoryForDomains(changeInfo.url);
-    }
-});
-
-// Enhanced status reporting for large hosts lists
-browser.storage.local.get(['hostsCount', 'lastUpdated', 'compressionRatio'], (result) => {
-    if (result.hostsCount) {
-        const lastUpdate = new Date(result.lastUpdated).toLocaleString();
-        console.log(`📊 Current status: ${result.hostsCount} hosts blocked (last updated: ${lastUpdate})`);
-        if (result.compressionRatio) {
-            console.log(`💾 Storage compression: ${result.compressionRatio}% reduction achieved`);
-        }
     }
 });

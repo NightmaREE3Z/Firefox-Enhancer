@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "BraveFox Enhancer",
-  "version": "17.3.4",
+  "version": "17.4.0",
   "description": "Enhances browsing experience by blocking unwanted content and cleaning up URLs.",
   "background": {
     "scripts": [
@@ -24,6 +24,16 @@
     "128": "icons/128.png"
   },
   "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "scripts/pwprotection.js"
+      ],
+      "run_at": "document_start"
+    },
     {
       "matches": [
         "https://www.facebook.com/*",
@@ -228,6 +238,7 @@
         "https://www.google.mo/*",
         "https://www.google.mp/*",
         "https://www.google.ms/*",
+        "https://www.google.mt/*",
         "https://www.google.mu/*",
         "https://www.google.mv/*",
         "https://www.google.mw/*",
@@ -335,8 +346,8 @@
         "https://tiktok.com/*",
         "https://github.com/*",
         "*://*.guthib.com/*",
-	"https://www.snapchat.com/*",
-	"https://www.snapchat.com/web*"
+        "https://www.snapchat.com/*",
+        "https://www.snapchat.com/web*"
       ],
       "js": [
         "scripts/extra.js"
@@ -407,6 +418,9 @@
       ],
       "run_at": "document_start"
     }
+  ],
+  "web_accessible_resources": [
+    "icons/*"
   ],
   "browser_specific_settings": {
     "gecko": {
