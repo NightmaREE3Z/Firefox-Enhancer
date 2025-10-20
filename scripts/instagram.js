@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         ExtraRedirect-Instagram
-// @version      1.6.58-dm-left-rail-protect+safe-approve-gate+ready-early+metaai-testid+myos-stronger
+// @version      1.6.59-walker-root-guard
 // @description  Instagram/Threads/Reels specific logic split from Extra.js (pre-unload + first-paint shields + approve-gates + targeted bans; core-container safe)
 // @match        *://www.instagram.com/*
 // @match        *://instagram.com/*
@@ -22,15 +22,15 @@
     let __cleanupRan = false;
     let __intervalsRunning = false;
     let __isRedirectingFast = false; // guard against double redirects
-    let __observerTimeoutId = null; // FIX: declare the timeout id used in observerCallback
+    let __observerTimeoutId = null; // FIX: declare to avoid ReferenceError
 
     // pacing/throttle config to reduce GC churn and peak memory, keeping UI snappy
     const PACE = {
-        mainMinMs: 600,         // minimum spacing between heavy "main" runs (tuned from 400)
-        genericMinMs: 2000,     // min spacing between genericAggressiveHider runs (tuned from 1500)
+        mainMinMs: 400,         // minimum spacing between heavy "main" runs
+        genericMinMs: 1500,     // min spacing between genericAggressiveHider runs
         myosMinMs: 400,         // min spacing between "Myös Metalta" sweeps
-        settingsMinMs: 3000,    // min spacing between settings-page sweeps (tuned from 2500)
-        searchMinMs: 220        // min spacing for search suggestion sweeps (tuned from 180)
+        settingsMinMs: 2500,    // min spacing between settings-page sweeps
+        searchMinMs: 180        // min spacing for search suggestion sweeps
     };
 
     // timestamps/state for throttling
@@ -50,7 +50,6 @@
     const SEARCH_ROW_ATTR = 'data-ig-row';
     const IG_SEARCH_HIDDEN_ATTR = 'data-ig-search-hidden-reason';
     const IG_SEARCH_APPROVE_ATTR = APPROVE_ATTR; // legacy alias from Old (diagnostics)
-    const FEED_GATE_ATTR = 'data-ig-feed-gate'; // NEW: scope approve-gate only after first approve pass
 
     // Startup and unload shields
     const STARTUP_SHIELD_ID = 'ig-startup-shield';
@@ -145,7 +144,6 @@
             try { document.getElementById('reels-navigation-hider')?.remove(); } catch {}
             try { document.getElementById('ig-blank-style')?.remove(); } catch {}
             try { document.getElementById(STARTUP_SHIELD_ID)?.remove(); } catch {}
-            try { document.documentElement.removeAttribute(FEED_GATE_ATTR); } catch {}
         } catch {}
     }
 
@@ -486,8 +484,6 @@
         'div.x1azxncr span[aria-describedby*="_R_bmt5bb9klrj5ipd5aq_"]',
         'div.x1azxncr span[aria-describedby*="_R_rmt5bb9klrj5ipd5aq_"]',
         'a[href="/ai/"], a[href="/meta-ai/"], a[aria-label*="Meta AI"], *[aria-label="Meta AI"]',
-        // NEW: broader Meta AI selectors
-        '[data-testid*="meta-ai" i]', '[data-testid*="metaai" i]',
         'a.x1i10hfl[href*="threads"]',
         'svg[aria-label="Threads"]',
         'div.x78zum5.xdt5ytf.xdj266r.x14z9mp.xod5an3.x162z183.x1j7kr1c.xvbhtw8',
@@ -516,7 +512,7 @@
         'div.x78zum5.xedcshv',
         'div.x78zum5.xl56j7k.x1n2onr6.xh8yej3',
         'img.xz74otr.x168nmei.x13lgxp2.x5pf9jr.xo71vjh.x1bs05mj.x5yr21d',
-        'div.x9f619.xjbqb8w.x78zum5.x168nmei.x13lgxp2.x5pf9jr.xo71vjh.x12nagc.x1uhb9sk.x1plvlek.xryxfnj.x1c4vz4f.x2lah0s.xdt5ytf.xqjyukv.x1qjc9v5.x1oa3qoh.x13a6bvl.x1diwwjn.x1247r65',
+        'div.x9f619.xjbqb8w.x78zum5.x168nmei.x13lgxp2.x5pf9jr.xo71vjh.x12nagc.x1uhb9sk.x1plvlek.xryxfnj.x1c4vz4f.x2lah0s.xdt5ytf.xqjyukv.x1qjc9v5.x1oa3qoh.x1nhvcw1',
         'div.html-div',
         'article','video','span','div','p','h1','h2','h3','h4','h5','h6','a','button',
         'div[role="button"][tabindex][aria-label="Threads"]',
@@ -1003,27 +999,32 @@ ${p}, ${p} * {
         document.querySelectorAll('svg[aria-label*="Myös Metalta" i]').forEach(svg => {
             let c = svg.closest('a, button, div[role="button"], div[role="link"], [tabindex]') || svg.parentElement;
             let hops = 0;
-            while (c && hops < 10 && !isCoreContainer(c)) {
+            while (c && hops < 6 && !isCoreContainer(c)) {
                 if (c.matches('a, button, div[role="button"], div[role="link"], [tabindex]')) { collapseElement(c, true); break; }
                 c = c.parentElement; hops++;
             }
         });
-        document.querySelectorAll('[aria-label*="Myös Metalta" i], [title*="Myös Metalta" i], [data-testid*="meta-ai" i], [data-testid*="metaai" i]').forEach(el => {
+        document.querySelectorAll('[aria-label*="Myös Metalta" i], [title*="Myös Metalta" i]').forEach(el => {
             if (hiddenElements.has(el)) return;
             let c = el.closest('a, button, div[role="button"], div[role="link"], [tabindex]') || el.parentElement;
             let hops = 0;
-            while (c && hops < 10 && !isCoreContainer(c)) {
+            while (c && hops < 6 && !isCoreContainer(c)) {
                 if (c.matches('a, button, div[role="button"], div[role="link"], [tabindex]')) { collapseElement(c, true); return; }
                 c = c.parentElement; hops++;
             }
             collapseElement(el, true);
         });
-        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
+
+        // SAFE walker root (fixes "parameter 1 is not of type 'Node'" when body is null)
+        const root = document.body || document.documentElement;
+        if (!root || !(root instanceof Node)) return;
+
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null, false);
         let node;
         while ((node = walker.nextNode())) {
             const txt = (node.nodeValue || '').trim();
             if (!txt) continue;
-            if (/myös metalta/i.test(txt) || /more from meta/i.test(txt)) { // NEW: English variant support
+            if (/myös metalta/i.test(txt)) {
                 const el = node.parentElement;
                 if (!el) continue;
                 const clickable = el.closest('a, button, div[role="button"], div[role="link"], [tabindex]') || el;
@@ -1136,9 +1137,8 @@ ${p}, ${p} * {
     width: auto !important;
     overflow: visible !important;
 }
-/* Feed approve-gate: hide all articles by default BUT ONLY when feed gate is enabled */
-/* This prevents initial blank feed/infinite loading until we've applied approvals */
-html[${FEED_GATE_ATTR}="1"] article:not([${APPROVE_ATTR}="1"]) {
+/* Feed approve-gate: hide all articles by default; we mark approved after filtering */
+article:not([${APPROVE_ATTR}="1"]) {
     visibility: hidden !important;
     display: none !important;
     opacity: 0 !important;
@@ -1213,23 +1213,10 @@ ${selectorsToHide.join(',\n')} {
   overflow: hidden !important;
 }
 
-/* Meta AI / Myös Metalta variants via data-testid as well */
-[data-testid*="meta-ai" i], [data-testid*="metaai" i] {
-  display: none !important;
-  visibility: hidden !important;
-  opacity: 0 !important;
-  height: 0 !important;
-  width: 0 !important;
-  position: absolute !important;
-  left: -9999px !important;
-  top: -9999px !important;
-  overflow: hidden !important;
-}
-
 /* Pre-hide banned accounts inside ALL search roots (roles + left-rail chain) AND classic listboxes */
 ${searchBanCSS}
 
-/* RESTORED approve-gates for search + feed (feed gated on html[${FEED_GATE_ATTR}="1"]) */
+/* RESTORED approve-gates for search + feed */
 ${approveGateCSS}
 `;
             if (!style.isConnected) (document.head || document.documentElement).appendChild(style);
@@ -1372,10 +1359,51 @@ ${approveGateCSS}
         } catch {}
     }
 
+    // Additional helper: detect and redirect from private profile pages (restored behavior)
+    function isLikelyProfilePage() {
+        try {
+            const parts = (location.pathname || '').split('/').filter(Boolean);
+            if (!parts.length) return false;
+            const first = parts[0];
+            if (['explore','reels','p','accounts','direct','stories','ai','meta-ai'].includes(first)) return false;
+            return true;
+        } catch { return false; }
+    }
+    function shouldRedirectPrivatePageFast() {
+        if (!location.hostname.endsWith('instagram.com')) return false;
+        if (!isLikelyProfilePage()) return false;
+        if (isExcludedPath()) return false;
+        // Look for common "private account" strings across locales
+        const needles = [
+            'this account is private', // EN
+            'tili on yksityinen', 'tämä tili on yksityinen', 'yksityinen tili', // FI variants
+            'este perfil es privado', // ES
+            'cet compte est privé', 'ce compte est privé', // FR
+            'dieses konto ist privat', // DE
+            'questo account è privato', // IT
+            'este conta é privada', 'esta conta é privada', // PT
+            'このアカウントは非公開です', // JA
+            'этот аккаунт закрыт', // RU
+        ];
+        try {
+            const hay = (document.body?.innerText || document.body?.textContent || '').toLowerCase();
+            if (!hay) return false;
+            return needles.some(s => hay.includes(s));
+        } catch { return false; }
+    }
+    function checkAndRedirectPrivatePage() {
+        try {
+            if (shouldRedirectPrivatePageFast()) {
+                window.stop?.();
+                fastRedirect('https://www.instagram.com');
+                return true;
+            }
+        } catch {}
+        return false;
+    }
+
     // SAFEGUARD: Always remove the startup shield once DOM is ready to avoid "stuck" blank states.
     onEvent(document, 'DOMContentLoaded', () => { try { markReady(); } catch {} }, { once: true });
-    // NEW: earlier ready fallback to prevent long blank states
-    addTimeout(() => { try { markReady(); } catch {} }, 1500);
 
     const hideCriticalElements = () => {
         // Avoid aggressive critical hides on DMs/inbox routes to protect the left users menu.
@@ -1584,6 +1612,9 @@ ${approveGateCSS}
         if (instagramBannedPaths.some(path => currentURL.includes(path))) { window.stop(); fastRedirect('https://www.instagram.com'); return; }
         if (shouldRedirectByBannedInURL(currentURL)) { window.stop(); fastRedirect('https://www.instagram.com'); return; }
 
+        // RESTORED: redirect away from private profile pages
+        if (checkAndRedirectPrivatePage()) return;
+
         if (location.hostname.endsWith('instagram.com') && location.pathname.match(/\/(followers|following)/)) return;
         if (isReelsPage()) { injectReelsCSS(); return; }
         if (isExcludedPath()) { collapseElementsOnExcludedPaths(); return; }
@@ -1640,58 +1671,41 @@ ${approveGateCSS}
             document.querySelectorAll('article').forEach(a => { if (!a.hasAttribute(HIDE_ATTR)) a.setAttribute(APPROVE_ATTR, '1'); });
             approveAllNonHiddenArticles();
 
-            // NEW: enable feed gate after we've approved articles (prevents initial blank feed)
-            try { document.documentElement.setAttribute(FEED_GATE_ATTR, '1'); } catch {}
-
             scheduleSearchSweep(true);
         }
         markReady();
     }
 
-function observerCallback() {
-    // Clear any pending debounce timer
-    if (__observerTimeoutId != null) {
-        try { clearTimeout(__observerTimeoutId); } catch {}
-        try { __timers.timeouts.delete(__observerTimeoutId); } catch {}
-        __observerTimeoutId = null;
+    function observerCallback() {
+        if (__observerTimeoutId !== null) { try { clearTimeout(__observerTimeoutId); __timers.timeouts.delete(__observerTimeoutId); } catch {} __observerTimeoutId = null; }
+        __observerTimeoutId = setTimeout(() => {
+            try { __timers.timeouts.delete(__observerTimeoutId); } catch {}
+            __observerTimeoutId = null;
+
+            // Check private page on dynamic changes too
+            if (checkAndRedirectPrivatePage()) return;
+
+            if (isReelsPage()) return;
+            if (location.hostname.endsWith('instagram.com') && location.pathname.match(/\/(followers|following)/)) { hideInstagramAccountsFromList(); return; }
+            if (isExcludedPath()) { collapseElementsOnExcludedPaths(); return; }
+            collapseElementsBySelectors(selectorsToHide);
+            hideRecommendedSections();
+            collapseElementsByKeywordsOrPaths(bannedKeywords, instagramBannedPaths, selectorsToMonitor);
+            if (location.hostname.endsWith('instagram.com')) {
+                hideInstagramBannedContent();
+                genericAggressiveHider();
+                checkForRedirectElements();
+                hideMyosMetaltaElements();
+                hideSettingsPageElements();
+                markSearchRoots();
+                scheduleSearchSweep();
+
+                // RESTORED approve helper
+                approveAllNonHiddenArticles();
+            }
+        }, 120);
+        __timers.timeouts.add(__observerTimeoutId);
     }
-
-    // Capture the id locally to avoid race conditions
-    const id = setTimeout(() => {
-        try { __timers.timeouts.delete(id); } catch {}
-
-        // If no newer timer replaced this one, clear the global ref
-        if (__observerTimeoutId === id) __observerTimeoutId = null;
-
-        // Do nothing if we've already cleaned up
-        if (typeof __cleanupRan !== 'undefined' && __cleanupRan) return;
-
-        if (isReelsPage()) return;
-        if (location.hostname.endsWith('instagram.com') && location.pathname.match(/\/(followers|following)/)) { hideInstagramAccountsFromList(); return; }
-        if (isExcludedPath()) { collapseElementsOnExcludedPaths(); return; }
-        collapseElementsBySelectors(selectorsToHide);
-        hideRecommendedSections();
-        collapseElementsByKeywordsOrPaths(bannedKeywords, instagramBannedPaths, selectorsToMonitor);
-        if (location.hostname.endsWith('instagram.com')) {
-            hideInstagramBannedContent();
-            genericAggressiveHider();
-            checkForRedirectElements();
-            hideMyosMetaltaElements();
-            hideSettingsPageElements();
-            markSearchRoots();
-            scheduleSearchSweep();
-
-            // RESTORED approve helper
-            approveAllNonHiddenArticles();
-
-            // NEW: ensure feed gate is enabled once approvals exist
-            try { document.documentElement.setAttribute(FEED_GATE_ATTR, '1'); } catch {}
-        }
-    }, 120);
-
-    __observerTimeoutId = id;
-    __timers.timeouts.add(id);
-}
 
     function initObserver() {
         const observer = trackObserver(new MutationObserver(observerCallback));
@@ -1721,7 +1735,7 @@ function observerCallback() {
         addInterval(() => {
             if (__cleanupRan) return;
             if (!isReelsPage() && !document.hidden) runThrottledMain(false);
-        }, 333); // tuned from 220ms to reduce CPU churn
+        }, 220);
     }
     startIntervals(scheduleIntervals);
 
@@ -1754,8 +1768,6 @@ function observerCallback() {
         reelsStyleInjected = false;
         currentURL = window.location.href;
         injectInlineCSS();
-        // NEW: disable feed gate on route change to avoid initial blank feed; it will be re-enabled post-approval
-        try { document.documentElement.removeAttribute(FEED_GATE_ATTR); } catch {}
         if (isReelsPage()) injectReelsCSS();
         else { removeReelsCSS(); runThrottledMain(true); }
     }, false);
