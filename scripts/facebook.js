@@ -734,8 +734,9 @@
         "Summer Rae", "Layla", "Michelle McCool", "Eve Torres", "Kelly Kelly", "Tatu Toiviainen", "Jessika Carr", "Jessica Karr", "Venice", "Jessica Carr", "Jessika WWE", "Jessica WWE", "Matt Jackson", 
         "Karr WWE", "Carr WWE", "Melina wrestler", "Jillian", "Mickie", "Kanellis", "Beth Phoenix", "Victoria", "Jazz WWE", "Molly Holly", "Shirai", "Priscilla", "Kelly", "Red Velvet", "Meta AI",
         "Gail Kim", "Awesome Kong", "Madison Rayne", "Velvet Sky", "Angelina", "Tessmacher", "Havok", "Su Yung", "Taya Valkyrie", "Bianca Belair", "Skye Blue", "Bordeaux", "Brooke", "Mimmi Wikman",
-        "Purrazzo", "Thekla", "Toni Storm", "Britt Baker", "Jamie Hayter", "Anna Jay", "Hikaru", "Sakazaki", "Nyla Rose", "Sakura", "Penelope Ford", "Julia Hart", "Kamifuku", "Elayna", "Minna Kaipio",
-        "Black Ops 6", "Black Ops 7", "Elayna Black", "Blake", "Monroe", "Hulk", "Hogan", "Hulk Hogan", "Sisältö ei ole käytettävissä tällä hetkellä", "Näytä suositukset", "20. heinäkuu klo",
+        "Purrazzo", "Thekla", "Toni Storm", "Britt Baker", "Jamie Hayter", "Anna Jay", "Hikaru", "Sakazaki", "Nyla Rose", "Sakura", "Penelope Ford", "Julia Hart", "Kamifuku", "Elayna", "Blake", "Monroe",
+	"Saya Kamitani", "Kamitani", "Katie", "Nikkita", "Nikkita Lyons", "Lisa Marie", "Lisa Marie Varon", "Lisa Varon", "Marie Varon", "Irving", "Naomi", "Belts Mone", "Amanda Huber", "Elayna Black", 
+	"Sisältö ei ole käytettävissä tällä hetkellä", "Näytä suositukset", "20. heinäkuu klo",
     ];
 
     const regexBlockedWords = [
@@ -748,7 +749,8 @@
         /\bSasha\b/i, /\bAnal\b/i, /\bBliss\b/i, /\bGay\b/i, /\bTrans\b/i, /\bTransvestite\b/i, /\bTransu\b/i, /\bPride\b/i, /\bLesbian\b/i, /\bLesbo\b/i, /\bHomo\b/i, /\bQueer\b/i, /\bSable\b/i, /\bposed\b/i, /\bLayla\b/i, /\bLana\b/i, /\bSol\b/i, /\bJacy\b/i,
         /\bBella\b/i, /\bNikki\b/i, /\bBrie\b/i, /\bTegan\b/i, /\bNox\b/i, /\b Goddess\b/i, /\bLita\b/i, /\bRusso\b/i, /\bLGBT\b/i, /\bLGBTQ\b/i, /\bLGBTQ\b/i, /\bMami\b/i, /\bTrish\b/i, /\bStratus\b/i, /\bYung\b/i, /\bHavok\b/i, /\bJade\b/i, /\bAthena\b/i,
         /\bIzzi\b/i, /\bFuku\b/i, /\bDame\b/i, /\bGiulia\b/i, /\bMichin\b/i, /\bJayne\b/i, /\bLLM\b/i, /\bMLM\b/i, /Shira/i, /Steph's place/i, /Stephanie's place/i, /Steph McMahon/i, /Stepan/i, /Stratu/i, /Stratt/i, /Tiffa/i, /Tiffy/i, /\bGina\b/i, /Dreambooth/i, 
-    	/Dream booth/i, /Dualipa/i, /Dua Lipa/i, /Meta AI/i, /Tatu Toiviainen/i, /IInspiration/i, /IIconics/i,
+    	/Dream booth/i, /Dualipa/i, /Dua Lipa/i, /Meta AI/i, /Tatu Toiviainen/i, /IInspiration/i, /IIconics/i,  /\bJade\b/i, /cargil/i, /cargirl/i, /cargril/i, /gargril/i, /gargirl/i, /garcirl/i, /watanabe/i, /barlow/i, /Nikki/i, /Saya Kamitani/i, /Kamitani/i, /Katie/i, 
+	/Nikkita/i, /Nikkita Lyons/i, /Lisa Marie/i, /Lisa Marie Varon/i, /Lisa Varon/i, /Marie Varon/i, /Takaichi/i, /Sakurai/i, /Arrivederci/i, /Alice/i, /Alicy/i, /Alici/i, /Arisu Endo/i, /Crowley/i, /Ruby Soho/i, /Monica/i, /Castillo/i, /Matsumoto/i, /Shino Suzuki/i,
     ];
 
     const restrictedPhrases = [

@@ -8,6 +8,9 @@
     let PAGE_WORLD_HOOKED = false;            // page-world Answers hook installed flag
     let START_TS = performance.now();
 
+    // Enforce hard, no-bypass blocking of all lists (subreddits, strings, regex)
+    const STRICT_BLOCKING = true;
+
     // === CHROME DEV CONSOLE LOGGING ===
     function devLog(message) {
         try { console.log('[REDDIT.JS]', message); } catch {}
@@ -540,6 +543,7 @@
         "Horizon Modern Warfare", "HorizonModern", "HorizonWarfare", "Horizon ModernWarfare", "Diffusion", "StableDiffusion", "UnStableDiffusion", "Dreambooth", "Dream booth", "comfyui",
         "sperm", "boyfriend", "girlfriend", "AI generated", "AI-generated", "generated", "artificial intelligence", "machine learning", "neural network", "deep learning", "Jazmyn Nyx",
         "Kazuki", "Midjourney", "stable diffusion", "artificial", "synthetic", "computer generated", "algorithm", "automated", "text to image", "Answers BETA", "Birppis", "AI girl", "Juliana",
+	"Saya Kamitani", "Kamitani", "Katie", "Nikkita", "Nikkita Lyons", "Lisa Marie", "Lisa Marie Varon", "Lisa Varon", "Marie Varon", "Irving", "Naomi", "Belts Mone", "Amanda Huber", 
     ];
 
     const redgifsKeyword = "www.redgifs.com";
@@ -576,8 +580,8 @@
         /\bsex\b/i, /\bAdult\b/i, /\bB-Fab\b/i, /Elayna/i, /Eleyna/i, /Eliyna/i, /Elina Black/i, /Elena Black/i, /Elyna Black/i, /Elina/i, /Elyna/i, /Elyina/i, /Aikusviihde/i, /Aikus viihde/i, /La Primare/i,
         /Fantop/i, /Fan top/i, /Fan-top/i, /Topfan/i, /Top fan/i, /Top-fan/i, /Top-fans/i, /fanstopia/i, /Jenni/i,  /fans top/i, /topiafan/i, /topia fan/i, /topia-fan/i, /topifan/i, /topi fan/i, /La Premare/i,
         /topi-fan/i, /topaifan/i, /topai fan/i, /topai-fan/i, /fans-topia/i, /fans-topai/i, /Henni/i, /Lawren/i, /Lawrenc/i, /Lawrence/i, /Jenny/i, /Jenna/i, /softorbit/i, /softorbits/i, /soft-orbit/i, 
-        /soft-orbits/i, /VMWare/i, /VM Ware/i, /\bVM\b/i, /Virtual Machine/i, /\bVMs\b/i, /Virtualbox/i, /Virtual box/i, /Virtual laatikko/i, /Virtuaali laatikko/i, /Virtuaalilaatikko/i, /hyper-v/i,
-        /VMWare/i, /VM Ware/i, /\bVM\b/i, /Virtual Machine/i, /\bVMs\b/i, /Virtualbox/i, /Virtual box/i, /Virtual laatikko/i, /Virtuaali laatikko/i, /hyper-v/i, /hyper v/i, /\bLilly\b/i, 
+        /\bLita\b/i, /soft-orbits/i, /VMWare/i, /VM Ware/i, /\bVM\b/i, /Virtual Machine/i, /\bVMs\b/i, /Virtualbox/i, /Virtual box/i, /Virtual laatikko/i, /Virtuaali laatikko/i, /Virtuaalilaatikko/i, /hyper-v/i,
+        /VMWare/i, /VM Ware/i, /\bVM\b/i, /Virtual Machine/i, /\bVMs\b/i, /Virtualbox/i, /Virtual box/i, /Virtual laatikko/i, /Virtuaali laatikko/i, /Virtuaalilaatikko/i, /hyper-v/i, /hyper v/i, /\bLilly\b/i, 
         /virtuaalimasiini/i, /virtuaali masiini/i, /virtuaali workstation/i, /virtual workstation/i, /virtualworkstation/i, /virtual workstation/i, /virtuaaliworkstation/i, /hypervisor/i, /hyper visor/i, 
         /hyperv/i, /vbox/i, /virbox/i, /virtbox/i, /vir box/i, /virt box/i, /virtual box/i, /vrbox/i, /vibox/i, /virbox virtual/i, /virtbox virtual/i, /vibox virtual/i, /vbox virtual/i, /v-machine/i, /\bLilli\b/i,
         /vmachine/i, /v machine/i, /vimachine/i, /vi-machine/i, /vi machine/i, /virmachine/i, /vir-machine/i, /vir machine/i, /virt machine/i, /virtmachine/i, /virt-machine/i, /virtumachine/i, /vir mach/i,
@@ -588,8 +592,13 @@
         /AI[ -]?generated/i, /generated[ -]?by[ -]?AI/i, /artificial[ -]?intelligence/i, /machine[ -]?learning/i, /neural[ -]?network/i, /deep[ -]?learning/i, /midjourney/i, /dall[ -]?e/i, /stable[ -]?diffusion/i,
         /computer[ -]?generated/i, /text[ -]?to[ -]?image/i, /image[ -]?generation/i, /AI[ -]?art/i, /synthetic[ -]?media/i, /algorithmically/i, /bot[ -]?generated/i, /automated[ -]?content/i, /stablediffused/i, 
         /Hirada/i, /Hirata/i, /Mizubi/i, /Mizupi/i, /Mizuki/i, /Watanabe/i, /Watanaba/i, /Wakana/i, /Kana Urai/i, /Uehara/i, /Uehara/i, /jazmyn/i, /Jazmin/i, /Jasmin/i, /Jasmyn/i, /\bNyx\b/i, /Primera/i,
-        /Julianne/i, /Juliane/i, /Juliana/i, /Julianna/i, /rasikangas/i, /rasikannas/i, /\bJade\b/i, /cargil/i, /cargirl/i, /cargril/i, /gargril/i, /gargirl/i, /garcirl/i, /watanabe/i, /barlow/i,
+        /Julianne/i, /Juliane/i, /Juliana/i, /Julianna/i, /rasikangas/i, /rasikannas/i, /\bJade\b/i, /cargil/i, /cargirl/i, /cargril/i, /gargril/i, /gargirl/i, /garcirl/i, /watanabe/i, /barlow/i, /Nikki/i,
+        /Saya Kamitani/i, /Kamitani/i, /Katie/i, /Nikkita/i, /Nikkita Lyons/i, /Lisa Marie/i, /Lisa Marie Varon/i, /Lisa Varon/i, /Marie Varon/i, /Takaichi/i, /Sakurai/i, /Arrivederci/i, /Alice/i, /Alicy/i, /Alici/i,
+	/Arisu Endo/i, /Crowley/i, /Ruby Soho/i, /Monica/i, /Castillo/i, /Matsumoto/i, /Shino Suzuki/i,
     ];
+
+    // Extra tolerant variant for the name (Maria vs Marie)
+    try { regexKeywordsToHide.push(/Lisa Mar(?:ie|ia) Varon/i); } catch {}
 
     const unifiedSelectors = [
         "faceplate-batch > article.w-full.mb-0 > .nd\\:visible.w-full > .relative.hover\\:bg-neutral-background-hover > .p-md > .w-fit.relative.text-12 > .items-center.flex > .text-neutral-content-strong",
@@ -993,8 +1002,8 @@
     // ENHANCED: Function to scan FULL post content - now with better extraction
     function extractCompletePostContent(element) {
         try {
-            // Skip expensive operations for safe subreddits
-            if (isElementInSafeSubreddit(element)) {
+            // Skip expensive operations for safe subreddits only when not strict
+            if (!STRICT_BLOCKING && isElementInSafeSubreddit(element)) {
                 devLog('✅ Safe subreddit - basic content extraction');
                 const basicContent = element.textContent || element.innerText || '';
                 return basicContent;
@@ -1140,8 +1149,8 @@
             }
         }
         
-        // Regex patterns (limited to first 25)
-        for (let i = 0; i < Math.min(regexKeywordsToHide.length, 25); i++) {
+        // Regex patterns (now unlimited)
+        for (let i = 0; i < regexKeywordsToHide.length; i++) {
             if (regexKeywordsToHide[i].test(lowerText)) {
                 contentBannedCache.set(lowerText, true);
                 devLog(`🚫 Blocked by regex: ${regexKeywordsToHide[i]}`);
@@ -1282,7 +1291,8 @@
             }
         }
         
-        for (let i = 0; i < Math.min(regexKeywordsToHide.length, 25); i++) { // Limit regex checks
+        // Regex checks (now unlimited)
+        for (let i = 0; i < regexKeywordsToHide.length; i++) {
             if (regexKeywordsToHide[i].test(lowerSub)) {
                 bannedSubredditCache.set(lowerSub, true);
                 if (isPostPage()) {
@@ -1408,9 +1418,10 @@
         return false;
     }
 
-    // ENHANCED: Content evaluation function - now with complete content scanning
+    // ENHANCED: Content evaluation function - strict, complete scanning
     function evaluateElementForBanning(element) {
-        if (permanentlyApprovedElements.has(element) || wasElementPreviouslyApproved(element)) {
+        const wasApprovedBefore = (permanentlyApprovedElements.has(element) || wasElementPreviouslyApproved(element));
+        if (!STRICT_BLOCKING && wasApprovedBefore) {
             return false;
         }
         
@@ -1419,13 +1430,10 @@
             devLog(`🔍 Evaluating element: ${identifier}`);
         }
 
-        // Check if element is in a safe subreddit FIRST
-        if (isElementInSafeSubreddit(element)) {
-            devLog(`✅ Element is in safe subreddit - auto-approving`);
-            return false; // Auto-approve safe subreddit posts
-        }
+        // Check safe subreddit, but do not auto-approve in strict mode
+        const isSafe = isElementInSafeSubreddit(element);
 
-        // For non-safe subreddits, do COMPLETE content scanning
+        // Do COMPLETE content scanning
         const fullContent = extractCompletePostContent(element);
 
         // Check if element is from a banned subreddit
@@ -1473,7 +1481,7 @@
         }
         
         if (isPostPage() && identifier) {
-            devLog(`✅ Element passed all checks: ${identifier}`);
+            devLog(`✅ Element passed all checks: ${identifier} ${isSafe ? '(safe subreddit)' : ''} ${wasApprovedBefore ? '(previously approved)' : ''}`);
         }
         
         return false;
@@ -1869,7 +1877,8 @@
             }
         }
         
-        for (let i = 0; i < Math.min(regexKeywordsToHide.length, 25); i++) { // Limit regex checks for performance
+        // Regex checks (now unlimited)
+        for (let i = 0; i < regexKeywordsToHide.length; i++) {
             if (regexKeywordsToHide[i].test(currentUrl)) {
                 if (!isUrlAllowed()) {
                     window.location.replace('https://www.reddit.com');

@@ -173,8 +173,8 @@
         "wondershare", "filmora", "Kelani Jordan", "Electra Lopez", "Wendy Choo", "HorizonMW", "Horizon Modern Warfare", "Horizon MW", "Black Ops 7", "Black Ops 6", "lottapupu",
         "#ass", "#perse", "#pylly", "#tissit", "#tit", "#tits", "#boob", "#boobs", "#boobies", "#boobie", "#booty", "#butt", "#babe", "Primera", "Roxanne", "Roxan", "lotta",
         "#belfie", "belfie", "Natalia", "Natasha", "#rack", "#finnishgirl", "#girl", "#women", "#woman", "#ladies", "#girls", "#womens", "#womans", "miska", "m1ska", "m1sk4", 
-        "misk4", "misk3", "m1sk3", "m1ske", "m1mmuska", "misk33", "misk33waaa", "misk33waa", "misk33wa", "misk3waa", "misk3waaa", "misk3wa",
-        "Myös Metalta",
+        "misk4", "misk3", "m1sk3", "m1ske", "m1mmuska", "misk33", "misk33waaa", "misk33waa", "misk33wa", "misk3waa", "misk3waaa", "misk3wa", "Myös Metalta", "Amanda Huber", 
+	"Saya Kamitani", "Kamitani", "Nikkita", "Nikkita Lyons", "Lisa Marie", "Lisa Marie Varon", "Lisa Varon", "Marie Varon", "Irving", "Naomi", "Belts Mone", 
     ];
 
     const bannedRegexes = [
@@ -184,6 +184,8 @@
         /\bHMW\b/i, /\bBO6\b/i, /\bBO7\b/i, /Henni/i, /Lawren/i, /Lawrenc/i, /Lawrence/i, /Jenny/i, /Jenn1/i, /J3nn1/i, /J3nni/i, /J3nn4/i, /Jenn4/i, /Dua Lipa/i, /Dualipa/i, /Jenna/i, 
         /Julianne/i, /Juliane/i, /Juliana/i, /Julianna/i, /Rasikangas/i, /jjulia/i, /juuliska/i, /Roxanne/i, /Roxanna/i, /Noelle/i, /\bErika\b/i, /\bErica\b/i, /\bEerica\b/i, /\bEerika\b/i,
         /\bIra\b/i, /irppa/i, /irpp4/i, /iragay/i, /juliana/i, /julianna/i, /juulianna/i, /juuliana/i, /juulia/i, /rasikannas/i, /rasikangas/i, /\bBra\b/i, /\bLana\b/i, /\bAI\b/i, /\bNea\b/i, /Neea/i,
+        /Saya Kamitani/i, /Kamitani/i, /Katie/i, /Nikkita/i, /Nikkita Lyons/i, /Lisa Marie/i, /Lisa Marie Varon/i, /Lisa Varon/i, /Marie Varon/i, /Takaichi/i, /Sakurai/i, /Arrivederci/i, /Alice/i, /Alicy/i, 
+	/Alici/i, /Arisu Endo/i, /Crowley/i, /Ruby Soho/i, /Monica/i, /Castillo/i, /Matsumoto/i, /Shino Suzuki/i, /\bNikki\b/i,
     ]; 
 
     const allowedWords = [

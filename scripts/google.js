@@ -115,6 +115,8 @@
         /pose-open/i, /poseopen/i, /pos open/i, /\bLily\b/i, /\bLili\b/i, /\bLilli\b/i, /\bLilly\b/i, /Lily Adam/i, /Lilly Adam/i, /\bTatu\b/i, /Toiviainen/i, /Tatujo/i, /PiFuHD/i, /Hirada/i, /Hirata/i, /Cathy/i, /Kathy/i, /Catherine/i, /AIRemoval/i, 
 	/Prim3r/i, /Pr1m3r/i, /Pr1mer/i, /Primar/i, /Pr1m4r/i, /Pr1mar/i, /Pramer/i, /Pramir/i, /LaPrime/i, /LaPrima/i, /LaPr1ma/i, /L4Pr1ma/i, /LaPr1m4/i, /LaPrim4/i, /LaPrim3/i, /LaPr1m3/i, /LaPr1me/i, /Prim3r/i, /Primer/i, /stefe/i, /stefa/i, 
 	/Premare/i, /La Primare/i, /Julianne/i, /Juliane/i, /Juliana/i, /Julianna/i, /Rasikangas/i, /Rasikannas/i, /Jade Cargil/i, /Jade WWE/i, /cargil/i, /cargirl/i, /cargril/i, /gargril/i, /gargirl/i, /garcirl/i, /watanabe/i, /barlow/i, /Jad3 WWE/i,
+	/Nikki/i, /Saya Kamitani/i, /Kamitani/i, /Katie/i, /Nikkita/i, /Nikkita Lyons/i, /Lisa Marie/i, /Lisa Marie Varon/i, /Lisa Varon/i, /Marie Varon/i, /Takaichi/i, /Sakurai/i, /Arrivederci/i, /Alice/i, /Alicy/i, /Alici/i, /Arisu Endo/i, /Crowley/i, 
+	/Ruby Soho/i, /Monica/i, /Castillo/i, /Matsumoto/i, /Shino Suzuki/i,
     ];
 
     const stringKeywordsToHide = [
@@ -168,7 +170,7 @@
 	"s*x", "s**", "**x", "se*", "*ex", "*uck", "s*ck", "d*ck", "c*ck", "f*ck", "fu*k", "fuc*", "*nal", "a*al", "ana*", "*ss", "a*s", "as*", "su*k", "di*k", "co*k", "suc*", "coc*", "*wat", "t*at", "tw*t", "twa*", "*unt", "c*nt", "cu*t", "cun*", "0rg4", "org4", "*orn", 
 	"p*rn", "po*n", "por*", "*eep", "d*ep", "de*p", "dee*", "*ude", "n*de", "nu*e", "nud*", "*udi", "n*di", "nu*i", "n**e", "n**i", "nu**", "dic*", "*aked", "n*ked", "na*ed", "nak*d", "nake*", "**ked", "n**ed", "na**d", "nak**", "**aked", "n**aked", "n*aked", "d!ck", 
 	"d1ck", "dlck", "na**ked", "nak**ed", "nake**d", "*kin", "s*in", "sk*n", "ski*", "*lesh", "f*esh", "fl*sh", "fle5h", "fle*h", "fles*", "orgasm", "0rgasm", "org@sm", "orga5m", "org@5m", "0rg@sm", "0rga5m", "0rg@5m", "0rg@$m", "org@$m", "0rga$m", "orga$m", "w4nk", "fl35h",
-	"**", "***", "h*le", "*ole", "ho*e", "hol*", "as*", "*as", "a*s", "a**", "*ss",
+	"**", "***", "h*le", "*ole", "ho*e", "hol*", "as*", "*as", "a*s", "a**", "*ss", "Saya Kamitani", "Kamitani", "Katie", "Nikkita", "Nikkita Lyons", "Lisa Marie", "Lisa Marie Varon", "Lisa Varon", "Marie Varon", "Irving", "Naomi", "Belts Mone", "Amanda Huber", 
     ];
 
     const allowedWords = [

@@ -41,14 +41,16 @@
         "deviantart", "deviant art", "Bella", "Nikki", "Brie", "Chyna", "China", "Hulk", "Joanie Laurer", "NJPW", "pride", "McMahon", "Zelina Vega", "Stewart", "Sydney", "facemorph", "Del Rey", "shirakawa",
         "undress-app", "deepnude-app", "nudify-app", "deepseek", "Lola Vice", "WWE", "poshspicy", "Alexa", "Lexi", "TNA", "AEW", "bitch", "LGBT", "Sydney Sweeney", "faceswap", "face morph", "CJ Perry", "Blake",
         "lex bl", "leks bl", "Hogan", "Alexa Bliss", "Tiffy", "app", "new app", "Bliss", "Tiffy Time", "Sol", "Liv Morgan", "Liv Xoxo", "Morgan Xoxo", "Kristen Stewart", "swapface", "morph face", "wondershare",
-        "rule34", "r34", "r_34", "Rule 34", "Rul", "Rul34", "Rul 34", "Stratton", "Ruca", "AI", "LGBTQ", "Gay", "Trans", "Transvestite", "anorexic", "Kristen", "Steward", "swap face", "morphface", "filmora"
+        "rule34", "r34", "r_34", "Rule 34", "Rul", "Rul34", "Rul 34", "Stratton", "Ruca", "AI", "LGBTQ", "Gay", "Trans", "Transvestite", "anorexic", "Kristen", "Steward", "swap face", "morphface", "filmora",
+	"Saya Kamitani", "Kamitani", "Katie", "Nikkita", "Nikkita Lyons", "Lisa Marie", "Lisa Marie Varon", "Lisa Varon", "Marie Varon", "Irving", "Naomi", "Belts Mone", "Amanda Huber", 
     ];
 
     // List of blocked regex keywords
     const blockedRegexWords = [
         /deepn/i, /deepf/i, /deeps/i, /udif/i, /nudif/i, /alexa/i, /ndres/i, /poshspisy/i, /alexa_poshspisy/i, /Liv Morgan/i, /Liv Xoxo/i, /Morgan Xoxo/i, /Sweeney/i, /Sydne/i, /Kristen Stewart/i, /Steward/i, /facemorph/i, /face morph/i, /morphface/i, /morph face/i, 
         /Bella/i, /Nikki/i, /Brie/i, /Chyna/i, /China/i, /Hulk/i, /lex bl/i, /leks bl/i, /Hogan/i, /Alexa Bliss/i, /Tiffy/i, /Bliss/i, /app/i, /Sydney Sweeney/i, /Sweee/i, /Stee/i, /Waaa/i, /Stewart/i, /face swap/i, /swap face/i, /faceswap/i, /swapface/i, /Sweee/i, /Kriis/i, 
-        /LGBT/i, /wondershare/i, /filmora/i, /dreambooth/i, /dream booth/i, /Marg Robb/i, /Margo/i, /Robbie/i, /Elina/i, /Elyna/i, /Elyina/i, /Eliyna/i, /Eliyina/i, /Dualipa/i, /Dua Lipa/i,
+        /LGBT/i, /wondershare/i, /filmora/i, /dreambooth/i, /dream booth/i, /Marg Robb/i, /Margo/i, /Robbie/i, /Elina/i, /Elyna/i, /Elyina/i, /Eliyna/i, /Eliyina/i, /Dualipa/i, /Dua Lipa/i, /Saya Kamitani/i, /Kamitani/i, /Katie/i, /Nikkita/i, /Nikkita Lyons/i, /Lisa Marie/i, 
+	/Lisa Marie Varon/i, /Lisa Varon/i, /Marie Varon/i, /Takaichi/i, /Sakurai/i, /Arrivederci/i, /Alice/i, /Alicy/i, /Alici/i, /Arisu Endo/i, /Crowley/i,  /Ruby Soho/i, /Monica/i, /Castillo/i, /Matsumoto/i, /Shino Suzuki/i, /Lily Adam/i,
     ];
 
     // List of selectors to check for blocked keywords on video pages

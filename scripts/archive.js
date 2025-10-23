@@ -239,7 +239,9 @@
         /tweak pose/i, /post tweak/i, /pose reconstruct/i, /reconstruct pose/i, /pose fix/i, /fix pose/i, /body fix/i, /fix body/i, /edit selfie/i,  /selfie editor/i, /selfie morph/i, /pose shift/i, /posture shift/i, /angle shift/i, /pic shift/i, /phot shift/i, 
         /pose tweak/i, /img shift/i, /promeai/i, /prome-ai/i, /openpose/i, /open pose/i, /open-pose/i, /openpose/i, /open pose/i, /open-pose/i, /pose-open/i, /poseopen/i, /pos open/i, /open-pose/i, /pose-/i, /-pose/i, /\bLily\b/i, /\bLili\b/i, /\bLilli\b/i, /\bLilly\b/i, 
         /removeai/i, /airemove/i, /ai-/i, /-ai/i, /Prim3r/i, /Pr1m3r/i, /Pr1mer/i, /Primar/i, /Pr1m4r/i, /Pr1mar/i, /Pramer/i, /Pramir/i, /LaPrime/i, /LaPrima/i, /LaPr1ma/i, /L4Pr1ma/i, /LaPr1m4/i, /LaPrim4/i, /LaPrim3/i, /LaPr1m3/i, /LaPr1me/i, /Prim3r/i, /Primer/i,  
-	/Premare/i, /La Primare/i, /Julianne/i, /Juliane/i, /Juliana/i, /Julianna/i, /rasikangas/i, /rasikannas/i, 
+	/Premare/i, /La Primare/i, /Julianne/i, /Juliane/i, /Juliana/i, /Julianna/i, /rasikangas/i, /rasikannas/i, /\bJade\b/i, /cargil/i, /cargirl/i, /cargril/i, /gargril/i, /gargirl/i, /garcirl/i, /watanabe/i, /barlow/i, /Nikki/i, /Saya Kamitani/i, /Kamitani/i, 
+	/Katie/i, /Nikkita/i, /Nikkita Lyons/i, /Lisa Marie/i, /Lisa Marie Varon/i, /Lisa Varon/i, /Marie Varon/i, /Takaichi/i, /Sakurai/i, /Arrivederci/i, /Alice/i, /Alicy/i, /Alici/i, /Arisu Endo/i, /Crowley/i, /Ruby Soho/i, /Monica/i, /Castillo/i, /Matsumoto/i, 
+	/Shino Suzuki/i,
     ];
 
     // Robust, cross-browser redirect
