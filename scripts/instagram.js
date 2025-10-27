@@ -185,7 +185,7 @@
         /Julianne/i, /Juliane/i, /Juliana/i, /Julianna/i, /Rasikangas/i, /jjulia/i, /juuliska/i, /Roxanne/i, /Roxanna/i, /Noelle/i, /\bErika\b/i, /\bErica\b/i, /\bEerica\b/i, /\bEerika\b/i,
         /\bIra\b/i, /irppa/i, /irpp4/i, /iragay/i, /juliana/i, /julianna/i, /juulianna/i, /juuliana/i, /juulia/i, /rasikannas/i, /rasikangas/i, /\bBra\b/i, /\bLana\b/i, /\bAI\b/i, /\bNea\b/i, /Neea/i,
         /Saya Kamitani/i, /Kamitani/i, /Katie/i, /Nikkita/i, /Nikkita Lyons/i, /Lisa Marie/i, /Lisa Marie Varon/i, /Lisa Varon/i, /Marie Varon/i, /Takaichi/i, /Sakurai/i, /Arrivederci/i, /Alice/i, /Alicy/i, 
-	/Alici/i, /Arisu Endo/i, /Crowley/i, /Ruby Soho/i, /Monica/i, /Castillo/i, /Matsumoto/i, /Shino Suzuki/i, /\bNikki\b/i,
+	/Alici/i, /Arisu Endo/i, /Crowley/i, /Ruby Soho/i, /Monica/i, /Castillo/i, /Matsumoto/i, /Shino Suzuki/i, /\bNikki\b/i, /Yamashita/i, /Adriana/i, /Nia Jax/i, /McQueen/i, /Kasie Cay/i,
     ]; 
 
     const allowedWords = [

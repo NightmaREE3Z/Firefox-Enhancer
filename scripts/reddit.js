@@ -16,6 +16,102 @@
         try { console.log('[REDDIT.JS]', message); } catch {}
     }
 
+    // === Click-through guarantee + author allowlist globals ===
+    // If a post was previously approved in a feed, guarantee it will not be hidden when opened on its comments page.
+    // Also never hide posts authored by u/NightmaREE3Z anywhere.
+    const WHITELIST_AUTHORS = ['u/NightmaREE3Z', 'NightmaREE3Z', 'u/nightmareee3z', 'nightmareee3z'];
+    const APPROVED_SS_KEY = '__nrApprovedPostsV1';
+    let CURRENT_POST_ID = null;               // "post_<id>" on comments page, else null
+    let ALWAYS_ALLOW_CURRENT_POST = false;    // true if CURRENT_POST_ID was previously approved in a feed
+
+    function getCurrentPostIdFromUrl() {
+        try {
+            const m = window.location.href.match(/\/comments\/([a-zA-Z0-9]+)/);
+            return m ? `post_${m[1]}` : null;
+        } catch { return null; }
+    }
+    function getApprovedPostsArray() {
+        try {
+            const raw = sessionStorage.getItem(APPROVED_SS_KEY);
+            const arr = raw ? JSON.parse(raw) : [];
+            return Array.isArray(arr) ? arr : [];
+        } catch { return []; }
+    }
+    function setApprovedPostsArray(arr) {
+        try { sessionStorage.setItem(APPROVED_SS_KEY, JSON.stringify(arr)); } catch {}
+    }
+    function getApprovedPostIdsFromSession() {
+        return new Set(getApprovedPostsArray());
+    }
+    function rememberApprovedPostId(id) {
+        if (!id) return;
+        const arr = getApprovedPostsArray();
+        if (!arr.includes(id)) arr.push(id);
+        // keep only last 100 approved post ids
+        if (arr.length > 100) arr.splice(0, arr.length - 100);
+        setApprovedPostsArray(arr);
+    }
+    function isWhitelistedAuthorName(name) {
+        if (!name) return false;
+        const n = String(name).trim().replace(/^u\//i, '').toLowerCase();
+        return WHITELIST_AUTHORS.some(a => a.replace(/^u\//i, '').toLowerCase() === n);
+    }
+    function getAuthorFromElement(el) {
+        try {
+            // Attribute-based first (custom elements sometimes expose author)
+            const attrAuthor = (el.getAttribute && (el.getAttribute('author') || el.getAttribute('data-author') || el.getAttribute('data-username'))) || '';
+            if (attrAuthor) return attrAuthor;
+
+            // Known selectors in new Reddit
+            const sel = el.querySelector && el.querySelector(
+                'a[data-testid="post_author_link"], ' +
+                'a[href^="/user/"], a[href^="/u/"], ' +
+                '[slot="author"] a, faceplate-username, ' +
+                '[data-testid="post-author"], ' +
+                'a[data-testid="comment_author_link"]'
+            );
+            if (sel && sel.textContent) return sel.textContent.trim();
+
+            // Try enclosing shreddit-post attributes
+            const postEl = el.closest && el.closest('shreddit-post');
+            if (postEl) {
+                const pAuthor = postEl.getAttribute('author') || postEl.getAttribute('data-author') || '';
+                if (pAuthor) return pAuthor;
+            }
+        } catch {}
+        return '';
+    }
+    function isElementFromWhitelistedAuthor(el) {
+        try {
+            const name = getAuthorFromElement(el);
+            return isWhitelistedAuthorName(name);
+        } catch { return false; }
+    }
+    function isCurrentPageWhitelistedAuthor() {
+        try {
+            // Only meaningful on comments pages
+            if (!/\/comments\//.test(window.location.href)) return false;
+            const el = document.querySelector(
+                'a[data-testid="post_author_link"], ' +
+                '[data-testid="post-author"], ' +
+                'a[href^="/user/"], a[href^="/u/"], ' +
+                'shreddit-post'
+            );
+            if (!el) return false;
+            const name = getAuthorFromElement(el);
+            return isWhitelistedAuthorName(name);
+        } catch { return false; }
+    }
+
+    // initialize current post allow flag ASAP
+    try {
+        CURRENT_POST_ID = getCurrentPostIdFromUrl();
+        if (CURRENT_POST_ID) {
+            const set = getApprovedPostIdsFromSession();
+            ALWAYS_ALLOW_CURRENT_POST = set.has(CURRENT_POST_ID);
+        }
+    } catch {}
+
     // === ANSWERS PAGE-WORLD HOOK (Shadow DOM safe; nav-scoped; optimized for Firefox) ===
     // Inject a tiny script into the page world so it can see Shadow DOM and clean “Answers” reliably without nuking layout.
     // Changes:
@@ -185,85 +281,85 @@
                 } catch {}
 
                 // Targeted initial sweep: only known nav/header/aside + common shells (avoid queryAll '*')
-(function targetedInitialSweep() {
-  try {
-    removeAnswersIn(document);
-    // Include reddit-sidebar-nav and the left sidebar container so we sweep/observe their ShadowRoots
-    const seeds = document.querySelectorAll(
-      'nav, header, aside, [role="navigation"], ' +
-      'faceplate-tracker[source="nav"], ' +
-      'shreddit-app, faceplate-tracker, shreddit-feed, ' +
-      'reddit-sidebar-nav, #left-sidebar-container, flex-left-nav-container#left-sidebar-container'
-    );
-    const max = Math.min(seeds.length, 160);
-    for (let i = 0; i < max; i++) {
-      const el = seeds[i];
-      if (el && el.shadowRoot) {
-        removeAnswersIn(el.shadowRoot);
-        try {
-          const mo = new MutationObserver(() => removeAnswersIn(el.shadowRoot));
-          mo.observe(el.shadowRoot, { childList: true, subtree: true });
-          addObs(mo);
-        } catch {}
-      }
-    }
-  } catch {}
-})();
+                (function targetedInitialSweep() {
+                  try {
+                    removeAnswersIn(document);
+                    // Include reddit-sidebar-nav and the left sidebar container so we sweep/observe their ShadowRoots
+                    const seeds = document.querySelectorAll(
+                      'nav, header, aside, [role="navigation"], ' +
+                      'faceplate-tracker[source="nav"], ' +
+                      'shreddit-app, faceplate-tracker, shreddit-feed, ' +
+                      'reddit-sidebar-nav, #left-sidebar-container, flex-left-nav-container#left-sidebar-container'
+                    );
+                    const max = Math.min(seeds.length, 160);
+                    for (let i = 0; i < max; i++) {
+                      const el = seeds[i];
+                      if (el && el.shadowRoot) {
+                        removeAnswersIn(el.shadowRoot);
+                        try {
+                          const mo = new MutationObserver(() => removeAnswersIn(el.shadowRoot));
+                          mo.observe(el.shadowRoot, { childList: true, subtree: true });
+                          addObs(mo);
+                        } catch {}
+                      }
+                    }
+                  } catch {}
+                })();
 
                 // Observe for nav containers appearing later
-(function observeNavs() {
-  try {
-    const WATCH_SEL =
-      'nav, header, aside, [role="navigation"], faceplate-tracker[source="nav"], ' +
-      'reddit-sidebar-nav, #left-sidebar-container, flex-left-nav-container#left-sidebar-container';
+                (function observeNavs() {
+                  try {
+                    const WATCH_SEL =
+                      'nav, header, aside, [role="navigation"], faceplate-tracker[source="nav"], ' +
+                      'reddit-sidebar-nav, #left-sidebar-container, flex-left-nav-container#left-sidebar-container';
 
-    const observeOne = (nav) => {
-      if (!nav || nav.__nrAnswersObserved) return;
-      nav.__nrAnswersObserved = true;
-      removeAnswersIn(nav);
+                    const observeOne = (nav) => {
+                      if (!nav || nav.__nrAnswersObserved) return;
+                      nav.__nrAnswersObserved = true;
+                      removeAnswersIn(nav);
 
-      // If this nav has a ShadowRoot, observe within it too
-      if (nav.shadowRoot) {
-        try {
-          removeAnswersIn(nav.shadowRoot);
-          const moShadow = new MutationObserver(() => removeAnswersIn(nav.shadowRoot));
-          moShadow.observe(nav.shadowRoot, { childList: true, subtree: true });
-          addObs(moShadow);
-        } catch {}
-      }
+                      // If this nav has a ShadowRoot, observe within it too
+                      if (nav.shadowRoot) {
+                        try {
+                          removeAnswersIn(nav.shadowRoot);
+                          const moShadow = new MutationObserver(() => removeAnswersIn(nav.shadowRoot));
+                          moShadow.observe(nav.shadowRoot, { childList: true, subtree: true });
+                          addObs(moShadow);
+                        } catch {}
+                      }
 
-      // Observe the element itself for children/subtree changes
-      try {
-        const mo = new MutationObserver(() => removeAnswersIn(nav));
-        mo.observe(nav, { childList: true, subtree: true });
-        addObs(mo);
-      } catch {}
-    };
+                      // Observe the element itself for children/subtree changes
+                      try {
+                        const mo = new MutationObserver(() => removeAnswersIn(nav));
+                        mo.observe(nav, { childList: true, subtree: true });
+                        addObs(mo);
+                      } catch {}
+                    };
 
-    // Observe all current targets (incl. reddit-sidebar-nav)
-    document.querySelectorAll(WATCH_SEL).forEach(observeOne);
+                    // Observe all current targets (incl. reddit-sidebar-nav)
+                    document.querySelectorAll(WATCH_SEL).forEach(observeOne);
 
-    // Doc-level observer for future mounts
-    const docMo = new MutationObserver(muts => {
-      for (let i = 0; i < muts.length; i++) {
-        const m = muts[i];
-        for (let j = 0; j < m.addedNodes.length; j++) {
-          const n = m.addedNodes[j];
-          if (n && n.nodeType === 1) {
-            if (n.matches?.(WATCH_SEL)) {
-              observeOne(n);
-            } else if (n.querySelector) {
-              const late = n.querySelector(WATCH_SEL);
-              if (late) observeOne(late);
-            }
-          }
-        }
-      }
-    });
-    docMo.observe(document.documentElement, { childList: true, subtree: true });
-    addObs(docMo);
-  } catch {}
-})();
+                    // Doc-level observer for future mounts
+                    const docMo = new MutationObserver(muts => {
+                      for (let i = 0; i < muts.length; i++) {
+                        const m = muts[i];
+                        for (let j = 0; j < m.addedNodes.length; j++) {
+                          const n = m.addedNodes[j];
+                          if (n && n.nodeType === 1) {
+                            if (n.matches?.(WATCH_SEL)) {
+                              observeOne(n);
+                            } else if (n.querySelector) {
+                              const late = n.querySelector(WATCH_SEL);
+                              if (late) observeOne(late);
+                            }
+                          }
+                        }
+                      }
+                    });
+                    docMo.observe(document.documentElement, { childList: true, subtree: true });
+                    addObs(docMo);
+                  } catch {}
+                })();
 
                 // Hook attachShadow so future ShadowRoots are cleaned automatically
                 (function hookAttachShadow() {
@@ -325,6 +421,18 @@
             article.reddit-approved,
             shreddit-post.reddit-approved,
             [subreddit-prefixed-name].reddit-approved {
+                display: block !important;
+                visibility: visible !important;
+                opacity: 1 !important;
+            }
+
+            /* Click-through guarantee: if current post was previously approved in a feed, don't prehide on its comments page */
+            html.nr-allow-current-post article,
+            html.nr-allow-current-post shreddit-post,
+            html.nr-allow-current-post [subreddit-prefixed-name],
+            body.nr-allow-current-post article,
+            body.nr-allow-current-post shreddit-post,
+            body.nr-allow-current-post [subreddit-prefixed-name] {
                 display: block !important;
                 visibility: visible !important;
                 opacity: 1 !important;
@@ -463,6 +571,22 @@
     // Apply CSS immediately before any other code runs
     addPreHidingCSS();
 
+    // Apply click-through allow marker ASAP for comments pages
+    try {
+        if (ALWAYS_ALLOW_CURRENT_POST) {
+            // add to html immediately (body may not exist yet)
+            document.documentElement.classList.add('nr-allow-current-post');
+            // ensure body also gets the class when ready
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', () => {
+                    try { document.body && document.body.classList.add('nr-allow-current-post'); } catch {}
+                });
+            } else {
+                try { document.body && document.body.classList.add('nr-allow-current-post'); } catch {}
+            }
+        }
+    } catch {}
+
     // --- CSS PRE-HIDING for posts ---
     const style = document.createElement('style');
     style.textContent = `
@@ -509,6 +633,7 @@
         "r/niceguys",
         "r/nicegirls",
         "r/ChatGPT",
+        "r/ChatGPTcomplaints",
     ];
 
     const keywordsToHide = [
@@ -543,7 +668,7 @@
         "Horizon Modern Warfare", "HorizonModern", "HorizonWarfare", "Horizon ModernWarfare", "Diffusion", "StableDiffusion", "UnStableDiffusion", "Dreambooth", "Dream booth", "comfyui",
         "sperm", "boyfriend", "girlfriend", "AI generated", "AI-generated", "generated", "artificial intelligence", "machine learning", "neural network", "deep learning", "Jazmyn Nyx",
         "Kazuki", "Midjourney", "stable diffusion", "artificial", "synthetic", "computer generated", "algorithm", "automated", "text to image", "Answers BETA", "Birppis", "AI girl", "Juliana",
-	"Saya Kamitani", "Kamitani", "Katie", "Nikkita", "Nikkita Lyons", "Lisa Marie", "Lisa Marie Varon", "Lisa Varon", "Marie Varon", "Irving", "Naomi", "Belts Mone", "Amanda Huber", 
+        "Saya Kamitani", "Kamitani", "Katie", "Nikkita", "Nikkita Lyons", "Lisa Marie", "Lisa Marie Varon", "Lisa Varon", "Marie Varon", "Irving", "Naomi", "Belts Mone", "Amanda Huber", 
     ];
 
     const redgifsKeyword = "www.redgifs.com";
@@ -594,7 +719,7 @@
         /Hirada/i, /Hirata/i, /Mizubi/i, /Mizupi/i, /Mizuki/i, /Watanabe/i, /Watanaba/i, /Wakana/i, /Kana Urai/i, /Uehara/i, /Uehara/i, /jazmyn/i, /Jazmin/i, /Jasmin/i, /Jasmyn/i, /\bNyx\b/i, /Primera/i,
         /Julianne/i, /Juliane/i, /Juliana/i, /Julianna/i, /rasikangas/i, /rasikannas/i, /\bJade\b/i, /cargil/i, /cargirl/i, /cargril/i, /gargril/i, /gargirl/i, /garcirl/i, /watanabe/i, /barlow/i, /Nikki/i,
         /Saya Kamitani/i, /Kamitani/i, /Katie/i, /Nikkita/i, /Nikkita Lyons/i, /Lisa Marie/i, /Lisa Marie Varon/i, /Lisa Varon/i, /Marie Varon/i, /Takaichi/i, /Sakurai/i, /Arrivederci/i, /Alice/i, /Alicy/i, /Alici/i,
-	/Arisu Endo/i, /Crowley/i, /Ruby Soho/i, /Monica/i, /Castillo/i, /Matsumoto/i, /Shino Suzuki/i,
+        /Arisu Endo/i, /Crowley/i, /Ruby Soho/i, /Monica/i, /Castillo/i, /Matsumoto/i, /Shino Suzuki/i, /Yamashita/i, /Adriana/i, /Nia Jax/i, /McQueen/i, /Kasie Cay/i,
     ];
 
     // Extra tolerant variant for the name (Maria vs Marie)
@@ -1165,7 +1290,7 @@
     // Better post identifier that works across feed and post pages
     function getPostIdentifier(element) {
         // Check data-ks-id first (most reliable)
-        const dataKsElement = element.querySelector('[data-ks-id*="t3_"]');
+        const dataKsElement = element.querySelector && element.querySelector('[data-ks-id*="t3_"]');
         if (dataKsElement) {
             const dataKsId = dataKsElement.getAttribute('data-ks-id');
             const match = dataKsId.match(/t3_([a-zA-Z0-9]+)/);
@@ -1247,6 +1372,10 @@
             }
             
             approvalPersistence.set(identifier, true);
+
+            // Remember approved posts to guarantee click-through visibility on comments pages
+            try { rememberApprovedPostId(identifier); } catch {}
+
             if (isPostPage()) {
                 devLog(`✅ Marked post as approved: ${identifier}`);
             }
@@ -1333,6 +1462,8 @@
 
     function isUrlAllowed() {
         const currentUrl = window.location.href;
+        // Click-through or whitelisted author should always be allowed
+        if (ALWAYS_ALLOW_CURRENT_POST || isCurrentPageWhitelistedAuthor()) return true;
         return allowedUrls.some(url => currentUrl.startsWith(url)) || isSafeSubredditUrl();
     }
 
@@ -1418,7 +1549,7 @@
         return false;
     }
 
-    // ENHANCED: Content evaluation function - strict, complete scanning
+    // ENHANCED: Content evaluation function - strict, complete scanning with allowlist + click-through guarantee
     function evaluateElementForBanning(element) {
         const wasApprovedBefore = (permanentlyApprovedElements.has(element) || wasElementPreviouslyApproved(element));
         if (!STRICT_BLOCKING && wasApprovedBefore) {
@@ -1428,6 +1559,25 @@
         const identifier = getPostIdentifier(element);
         if (isPostPage() && identifier) {
             devLog(`🔍 Evaluating element: ${identifier}`);
+        }
+
+        // 1) Never hide posts from the whitelisted author
+        if (isElementFromWhitelistedAuthor(element)) {
+            if (identifier) devLog(`🟢 Whitelisted author - allowing: ${identifier}`);
+            markElementAsApproved(element);
+            return false;
+        }
+        // 2) Click-through guarantee: if this is the current post and it was previously approved in a feed, do not hide it on comments page
+        if (identifier && CURRENT_POST_ID && ALWAYS_ALLOW_CURRENT_POST && identifier === CURRENT_POST_ID) {
+            devLog(`🟢 Click-through guarantee - allowing current post: ${identifier}`);
+            markElementAsApproved(element);
+            return false;
+        }
+        // 2b) If page-level detection shows whitelisted author for the current post id, allow
+        if (identifier && CURRENT_POST_ID && identifier === CURRENT_POST_ID && isCurrentPageWhitelistedAuthor()) {
+            devLog(`🟢 Whitelisted author (page-level) - allowing current post: ${identifier}`);
+            markElementAsApproved(element);
+            return false;
         }
 
         // Check safe subreddit, but do not auto-approve in strict mode
@@ -1865,6 +2015,8 @@
 
     function checkUrlForKeywordsToHide() {
         if (isSafeSubredditUrl()) return;
+        // Allow the current post if it was previously approved or is authored by the whitelisted user
+        if (ALWAYS_ALLOW_CURRENT_POST || isCurrentPageWhitelistedAuthor()) return;
         
         const currentUrl = window.location.href.toLowerCase();
         
@@ -1931,6 +2083,7 @@
     }
 
     function checkAndHideNSFWClassElements() {
+        if (ALWAYS_ALLOW_CURRENT_POST) return;
         const nsfwClasses = ['NSFW', 'nsfw-tag', 'nsfw-content'];
         for (let i = 0; i < nsfwClasses.length; i++) {
             const elements = document.querySelectorAll(`.${nsfwClasses[i]}`);
@@ -2093,6 +2246,7 @@
         init();
     }
 
+    // === FIXED AND COMPLETED: processNewElements (single definition, no duplicates) ===
     const processNewElements = throttle((mutations) => {
         let needsSearchUpdate = false;
 
@@ -2119,8 +2273,8 @@
                 }
                 
                 if (node.tagName === 'FACEPLATE-TRACKER' || 
-                    node.querySelector && (node.querySelector('faceplate-tracker[noun="gen_guides_sidebar"]') ||
-                                         node.querySelector('a[href="/answers/"]'))) {
+                    (node.querySelector && (node.querySelector('faceplate-tracker[noun="gen_guides_sidebar"]') ||
+                                            node.querySelector('a[href="/answers/"]')))) {
                     hideAnswersButton();
                 }
                 
@@ -2231,7 +2385,7 @@
     hideBannedSubredditsFromSearch();
     hideBannedSubredditsFromAllSearchDropdowns();
 
-    // URL change detection with optimized memory cleanup
+    // URL change detection with optimized memory cleanup + click-through state refresh
     let currentUrl = window.location.href;
     const urlCheckInterval = setInterval(() => {
         if (window.location.href !== currentUrl) {
@@ -2244,6 +2398,25 @@
             if (memInfo) {
                 devLog(`🔄 URL changed - Memory: ${memInfo.usedGB}GB/${MEMORY_CAP_GB}GB`);
             }
+
+            // Refresh click-through allowance for comments pages
+            try {
+                CURRENT_POST_ID = (function () {
+                    const m = window.location.href.match(/\/comments\/([a-zA-Z0-9]+)/);
+                    return m ? `post_${m[1]}` : null;
+                })();
+                const approvedSet = (function(){
+                    try { return new Set(JSON.parse(sessionStorage.getItem(APPROVED_SS_KEY) || '[]')); } catch { return new Set(); }
+                })();
+                ALWAYS_ALLOW_CURRENT_POST = !!(CURRENT_POST_ID && approvedSet.has(CURRENT_POST_ID));
+                if (ALWAYS_ALLOW_CURRENT_POST) {
+                    document.documentElement.classList.add('nr-allow-current-post');
+                    document.body && document.body.classList.add('nr-allow-current-post');
+                } else {
+                    document.documentElement.classList.remove('nr-allow-current-post');
+                    document.body && document.body.classList.remove('nr-allow-current-post');
+                }
+            } catch {}
         }
     }, 500);
     intervalIds.add(urlCheckInterval);
