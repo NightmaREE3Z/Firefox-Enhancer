@@ -21,6 +21,7 @@
     // Also never hide posts authored by u/NightmaREE3Z anywhere.
     const WHITELIST_AUTHORS = ['u/NightmaREE3Z', 'NightmaREE3Z', 'u/nightmareee3z', 'nightmareee3z'];
     const APPROVED_SS_KEY = '__nrApprovedPostsV1';
+    const APPROVED_LS_KEY = '__nrApprovedPostsV1_ls'; // NEW: localStorage mirror for cross-tab persistence
     let CURRENT_POST_ID = null;               // "post_<id>" on comments page, else null
     let ALWAYS_ALLOW_CURRENT_POST = false;    // true if CURRENT_POST_ID was previously approved in a feed
 
@@ -31,20 +32,36 @@
         } catch { return null; }
     }
     function getApprovedPostsArray() {
+        // CHANGED: unify approvals from sessionStorage + localStorage, dedupe
         try {
-            const raw = sessionStorage.getItem(APPROVED_SS_KEY);
-            const arr = raw ? JSON.parse(raw) : [];
-            return Array.isArray(arr) ? arr : [];
+            const ssRaw = sessionStorage.getItem(APPROVED_SS_KEY);
+            const lsRaw = localStorage.getItem(APPROVED_LS_KEY);
+            const ssArr = ssRaw ? JSON.parse(ssRaw) : [];
+            const lsArr = lsRaw ? JSON.parse(lsRaw) : [];
+            const set = new Set();
+            if (Array.isArray(ssArr)) { for (let i = 0; i < ssArr.length; i++) set.add(ssArr[i]); }
+            if (Array.isArray(lsArr)) { for (let i = 0; i < lsArr.length; i++) set.add(lsArr[i]); }
+            return Array.from(set);
         } catch { return []; }
     }
     function setApprovedPostsArray(arr) {
-        try { sessionStorage.setItem(APPROVED_SS_KEY, JSON.stringify(arr)); } catch {}
+        // CHANGED: persist to both storages for reliability across tabs and reloads
+        try {
+            const safeArr = Array.isArray(arr) ? arr : [];
+            const json = JSON.stringify(safeArr);
+            try { sessionStorage.setItem(APPROVED_SS_KEY, json); } catch {}
+            try { localStorage.setItem(APPROVED_LS_KEY, json); } catch {}
+        } catch {}
     }
     function getApprovedPostIdsFromSession() {
+        // CHANGED: now returns the union Set (still returns Set for compatibility)
         return new Set(getApprovedPostsArray());
     }
     function rememberApprovedPostId(id) {
+        // CHANGED: only persist canonical IDs ("post_<id>"), ignore fallbacks to prevent mismatches
         if (!id) return;
+        const canonical = /^post_[a-zA-Z0-9]+$/.test(String(id));
+        if (!canonical) return;
         const arr = getApprovedPostsArray();
         if (!arr.includes(id)) arr.push(id);
         // keep only last 100 approved post ids
@@ -107,10 +124,123 @@
     try {
         CURRENT_POST_ID = getCurrentPostIdFromUrl();
         if (CURRENT_POST_ID) {
-            const set = getApprovedPostIdsFromSession();
+            const set = getApprovedPostIdsFromSession(); // union set
             ALWAYS_ALLOW_CURRENT_POST = set.has(CURRENT_POST_ID);
         }
     } catch {}
+
+    // === NEW: rock-solid click-through capture (prevents misses on SPA/various click types) ===
+    // Extract canonical post_<id> from a given href
+    function extractCanonicalPostIdFromHref(href) {
+        if (!href || typeof href !== 'string') return null;
+        try {
+            const m = href.match(/\/comments\/([a-zA-Z0-9]+)/);
+            return m ? `post_${m[1]}` : null;
+        } catch { return null; }
+    }
+    // Try to get canonical post id from any element’s own attributes or nearest shreddit-post wrapper
+    function tryGetCanonicalPostId(el) {
+        if (!el) return null;
+        try {
+            // 1) data-ks-id="t3_xxx" on self or descendants
+            const dataKsElement = (el.matches?.('[data-ks-id*="t3_"]') ? el : el.querySelector?.('[data-ks-id*="t3_"]'));
+            if (dataKsElement) {
+                const dataKsId = dataKsElement.getAttribute('data-ks-id') || '';
+                const m = dataKsId.match(/t3_([a-zA-Z0-9]+)/);
+                if (m) return `post_${m[1]}`;
+            }
+            // 2) data-post-id on self or descendants
+            const postIdEl = (el.hasAttribute?.('data-post-id') ? el : el.querySelector?.('[data-post-id]'));
+            if (postIdEl) {
+                const pid = postIdEl.getAttribute('data-post-id');
+                if (pid && /^[a-zA-Z0-9]+$/.test(pid)) return `post_${pid}`;
+            }
+            // 3) id="t3_xxx" on shreddit-post wrapper
+            const postWrapper = el.closest?.('shreddit-post');
+            if (postWrapper) {
+                const idAttr = postWrapper.getAttribute('id') || '';
+                const m = idAttr.match(/t3_([a-zA-Z0-9]+)/);
+                if (m) return `post_${m[1]}`;
+                const pid2 = postWrapper.getAttribute('data-post-id') || postWrapper.getAttribute('post-id') || '';
+                if (pid2 && /^[a-zA-Z0-9]+$/.test(pid2)) return `post_${pid2}`;
+            }
+            // 4) scan any comments link in the element
+            const a = el.querySelector?.('a[href*="/comments/"]');
+            if (a) {
+                const href = a.getAttribute('href') || '';
+                const id = extractCanonicalPostIdFromHref(href);
+                if (id) return id;
+            }
+            return null;
+        } catch { return null; }
+    }
+    // Record an approval by anchor href
+    function rememberApprovalByHref(href) {
+        const id = extractCanonicalPostIdFromHref(href);
+        if (id) {
+            rememberApprovedPostId(id);
+            devLog(`🧷 Captured approval via click: ${id}`);
+        }
+    }
+    // Install capture listeners once
+    (function installClickThroughCapture() {
+        try {
+            if (window.__nrClickCaptureInstalled) return;
+            window.__nrClickCaptureInstalled = true;
+            const capture = (evt) => {
+                try {
+                    let el = evt.target;
+                    // climb up to nearest anchor
+                    const anchor = el?.closest?.('a[href*="/comments/"]');
+                    if (anchor) {
+                        rememberApprovalByHref(anchor.getAttribute('href') || '');
+                        return;
+                    }
+                    // If click on a post card with no visible anchor target, try canonical from wrapper
+                    const card = el?.closest?.('article, shreddit-post');
+                    const cid = tryGetCanonicalPostId(card || el);
+                    if (cid) rememberApprovedPostId(cid);
+                } catch {}
+            };
+            const keyCapture = (evt) => {
+                try {
+                    if (evt.key !== 'Enter' && evt.key !== ' ') return;
+                    const el = document.activeElement;
+                    if (!el) return;
+                    const anchor = el.matches?.('a[href*="/comments/"]') ? el : el.closest?.('a[href*="/comments/"]');
+                    if (anchor) {
+                        rememberApprovalByHref(anchor.getAttribute('href') || '');
+                    } else {
+                        const card = el.closest?.('article, shreddit-post');
+                        const cid = tryGetCanonicalPostId(card || el);
+                        if (cid) rememberApprovedPostId(cid);
+                    }
+                } catch {}
+            };
+            document.addEventListener('click', capture, true);
+            document.addEventListener('auxclick', capture, true);
+            document.addEventListener('mousedown', capture, true);
+            document.addEventListener('contextmenu', capture, true);
+            document.addEventListener('keydown', keyCapture, true);
+            // Storage sync across tabs/windows
+            window.addEventListener('storage', () => {
+                try {
+                    CURRENT_POST_ID = getCurrentPostIdFromUrl();
+                    if (!CURRENT_POST_ID) return;
+                    const set = getApprovedPostIdsFromSession();
+                    const allow = set.has(CURRENT_POST_ID);
+                    ALWAYS_ALLOW_CURRENT_POST = allow;
+                    if (allow) {
+                        document.documentElement.classList.add('nr-allow-current-post');
+                        document.body && document.body.classList.add('nr-allow-current-post');
+                    } else {
+                        document.documentElement.classList.remove('nr-allow-current-post');
+                        document.body && document.body.classList.remove('nr-allow-current-post');
+                    }
+                } catch {}
+            });
+        } catch {}
+    })();
 
     // === ANSWERS PAGE-WORLD HOOK (Shadow DOM safe; nav-scoped; optimized for Firefox) ===
     // Inject a tiny script into the page world so it can see Shadow DOM and clean “Answers” reliably without nuking layout.
@@ -708,7 +838,7 @@
         /\bLita\b/i, /soft-orbits/i, /VMWare/i, /VM Ware/i, /\bVM\b/i, /Virtual Machine/i, /\bVMs\b/i, /Virtualbox/i, /Virtual box/i, /Virtual laatikko/i, /Virtuaali laatikko/i, /Virtuaalilaatikko/i, /hyper-v/i,
         /VMWare/i, /VM Ware/i, /\bVM\b/i, /Virtual Machine/i, /\bVMs\b/i, /Virtualbox/i, /Virtual box/i, /Virtual laatikko/i, /Virtuaali laatikko/i, /Virtuaalilaatikko/i, /hyper-v/i, /hyper v/i, /\bLilly\b/i, 
         /\*/i, /virtuaalimasiini/i, /virtuaali masiini/i, /virtuaali workstation/i, /virtual workstation/i, /virtualworkstation/i, /virtual workstation/i, /virtuaaliworkstation/i, /hypervisor/i, /hyper visor/i, 
-        /hyperv/i, /vbox/i, /virbox/i, /virtbox/i, /vir box/i, /virt box/i, /virtual box/i, /vrbox/i, /vibox/i, /virbox virtual/i, /virtbox virtual/i, /vibox virtual/i, /vbox virtual/i, /v-machine/i, /\bLilli\b/i,
+        /hyperv/i, /vbox/i, /virbox/i, /virtbox/i, /vir box/i, /virt box/i, /virtual box/i, /vrbox/i, /vibox/i, /virbox virtual/i, /virtbox virtual/i, /vibox virtual/i, /vbox virtual/i, /v-machine/i, /\bLili\b/i,
         /vmachine/i, /v machine/i, /vimachine/i, /vi-machine/i, /vi machine/i, /virmachine/i, /vir-machine/i, /vir machine/i, /virt machine/i, /virtmachine/i, /virt-machine/i, /virtumachine/i, /vir mach/i,
         /virtu-machine/i, /virtu machine/i, /virtuamachine/i, /virtua-machine/i, /virtua machine/i, /\bMachaine\b/i, /\bMachiine\b/i, /\bMacheine\b/i, /\bMachiene\b/i, /vi mach/i, /virtual machi/i, /\bLily\b/i,
         /virtuaali masiina/i, /virtuaalimasiina/i,  /virt mach/i, /virtu mach/i, /virtua mach/i, /virtual mach/i, /vi mac/i, /vir mac/i, /virt mac/i, /virtu mac/i, /virtua mac/i, /virtuaali masiina/i, /\bLili\b/i,
@@ -719,7 +849,7 @@
         /Hirada/i, /Hirata/i, /Mizubi/i, /Mizupi/i, /Mizuki/i, /Watanabe/i, /Watanaba/i, /Wakana/i, /Kana Urai/i, /Uehara/i, /Uehara/i, /jazmyn/i, /Jazmin/i, /Jasmin/i, /Jasmyn/i, /\bNyx\b/i, /Primera/i,
         /Julianne/i, /Juliane/i, /Juliana/i, /Julianna/i, /rasikangas/i, /rasikannas/i, /\bJade\b/i, /cargil/i, /cargirl/i, /cargril/i, /gargril/i, /gargirl/i, /garcirl/i, /watanabe/i, /barlow/i, /Nikki/i,
         /Saya Kamitani/i, /Kamitani/i, /Katie/i, /Nikkita/i, /Nikkita Lyons/i, /Lisa Marie/i, /Lisa Marie Varon/i, /Lisa Varon/i, /Marie Varon/i, /Takaichi/i, /Sakurai/i, /Arrivederci/i, /Alice/i, /Alicy/i, /Alici/i,
-        /Arisu Endo/i, /Crowley/i, /Ruby Soho/i, /Monica/i, /Castillo/i, /Matsumoto/i, /Shino Suzuki/i, /Yamashita/i, /Adriana/i, /Nia Jax/i, /McQueen/i, /Kasie Cay/i,
+        /Arisu Endo/i, /Crowley/i, /Ruby Soho/i, /Monica/i, /Castillo/i, /Matsumoto/i, /Shino Suzuki/i, /Yamashita/i, /Adriana/i, /Nia Jax/i, /McQueen/i, /Kasie Cay/i, /Sherilyn/i,
     ];
 
     // Extra tolerant variant for the name (Maria vs Marie)
@@ -1375,11 +1505,14 @@
 
             // Remember approved posts to guarantee click-through visibility on comments pages
             try { rememberApprovedPostId(identifier); } catch {}
-
-            if (isPostPage()) {
-                devLog(`✅ Marked post as approved: ${identifier}`);
-            }
         }
+
+        // NEW: also try to store a canonical post_<id> even if identifier fallback was non-canonical
+        try {
+            const canonical = tryGetCanonicalPostId(element);
+            if (canonical) rememberApprovedPostId(canonical);
+        } catch {}
+
         element.classList.add('reddit-approved');
         permanentlyApprovedElements.add(element);
     }
@@ -1567,11 +1700,20 @@
             markElementAsApproved(element);
             return false;
         }
-        // 2) Click-through guarantee: if this is the current post and it was previously approved in a feed, do not hide it on comments page
-        if (identifier && CURRENT_POST_ID && ALWAYS_ALLOW_CURRENT_POST && identifier === CURRENT_POST_ID) {
+        // 2) Click-through guarantee: if this is the current post, allow it (no storage dependency)
+        if (identifier && CURRENT_POST_ID && identifier === CURRENT_POST_ID) {
             devLog(`🟢 Click-through guarantee - allowing current post: ${identifier}`);
             markElementAsApproved(element);
             return false;
+        }
+        // 2a) Extra resilience: even if identifier failed, try canonical id right here
+        if (CURRENT_POST_ID) {
+            const canonical = tryGetCanonicalPostId(element);
+            if (canonical && canonical === CURRENT_POST_ID) {
+                devLog(`🟢 Click-through guarantee (canonical fallback) - allowing current post: ${canonical}`);
+                markElementAsApproved(element);
+                return false;
+            }
         }
         // 2b) If page-level detection shows whitelisted author for the current post id, allow
         if (identifier && CURRENT_POST_ID && identifier === CURRENT_POST_ID && isCurrentPageWhitelistedAuthor()) {
@@ -2405,8 +2547,12 @@
                     const m = window.location.href.match(/\/comments\/([a-zA-Z0-9]+)/);
                     return m ? `post_${m[1]}` : null;
                 })();
+                // CHANGED: use union (sessionStorage + localStorage) consistently
                 const approvedSet = (function(){
-                    try { return new Set(JSON.parse(sessionStorage.getItem(APPROVED_SS_KEY) || '[]')); } catch { return new Set(); }
+                    try {
+                        const arr = getApprovedPostsArray();
+                        return new Set(Array.isArray(arr) ? arr : []);
+                    } catch { return new Set(); }
                 })();
                 ALWAYS_ALLOW_CURRENT_POST = !!(CURRENT_POST_ID && approvedSet.has(CURRENT_POST_ID));
                 if (ALWAYS_ALLOW_CURRENT_POST) {
