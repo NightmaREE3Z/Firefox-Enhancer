@@ -320,8 +320,9 @@ const updateBlocklist = async () => {
         const startTime = Date.now();
 
         const urls = [
-            "https://gist.githubusercontent.com/NightmaREE3Z/2ba1f0f59633ae221214595ede2b590a/raw/fc2b6cf75371f13f70e056cde64a9071b0a81e22/ForbiddenHostings",
-            "https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/fakenews-porn/hosts"
+        "https://raw.githubusercontent.com/NightmaREE3Z/BraveFox-Enhancer/refs/heads/main/hosts/BraveFoxHosts",
+	"https://raw.githubusercontent.com/NightmaREE3Z/BraveFox-Enhancer/refs/heads/main/hosts/Legacy/legacyFox",
+        "https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/fakenews-porn/hosts"
         ];
 
         const hostsLists = [];
