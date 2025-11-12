@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         ExtraRedirect-Instagram
-// @version      2.0.0.0 Frankensteinered
+// @version      2.0.0.4
 // @description  Instagram/Threads/Reels specific logic split from Extra.js
 // @match        *://www.instagram.com/*
 // @match        *://www.instagram.com/?next=%2F/*
@@ -120,7 +120,7 @@ const bannedRegexes = [
     /\bIra\b/i, /irppa/i, /irpp4/i, /girls/i, /juliana/i, /julianna/i, /juulianna/i, /juuliana/i, /juulia/i, /rasikannas/i, /rasikangas/i, /\bBra\b/i, /\bLana\b/i, /\bAI\b/i, /\bNea\b/i, /Neea/i,
     /Saya Kamitani/i, /Kamitani/i, /Katie/i, /Nikkita/i, /Nikkita Lyons/i, /Lisa Marie/i, /Lisa Marie Varon/i, /Lisa Varon/i, /Marie Varon/i, /Takaichi/i, /Sakurai/i, /Arrivederci/i, /Alice/i, /Alicy/i, 
     /prinsessa/i, /Alici/i, /Arisu Endo/i, /Crowley/i, /Ruby Soho/i, /Monica/i, /Castillo/i, /Matsumoto/i, /Shino Suzuki/i, /\bNikki\b/i, /Yamashita/i, /Adriana/i, /Nia Jax/i, /McQueen/i, /Kasie Cay/i,
-    /Lash Legend/i, /motionai/i, /changemotion/i, /swapmotion/i, /motionsw/i, /motionc/i, /\bmotion\b/i, /poseai/i, /ai-/i, /-ai/i, 
+    /Lash Legend/i, /motionai/i, /changemotion/i, /swapmotion/i, /motionsw/i, /motionc/i, /\bmotion\b/i, /poseai/i, /ai-/i, /-ai/i, /maarit/i, /taija/i, /anni/i, /saija/i, /seija/i, /teija/i, 
 ]; 
 
 const allowedWords = [
@@ -189,6 +189,7 @@ const instagramAccountsToHide = [
     'tenille_dashwood',
     'brittbaker',
     'jaderedeww',
+    'taijamaarit',
     'krisstatlander',
     'jamiehayter',
     'thunderrosa22',
