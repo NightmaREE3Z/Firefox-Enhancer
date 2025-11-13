@@ -126,7 +126,7 @@
         /removebg/i, /remove bg/i, /remov bg/i, /removal bg/i, /ia onl/i, /removebg/i,  /removalbg/i, /rembg/i, /rem background/i, /del background/i, /eras background/i, /erase background/i, /erasing background/i, /butth/i, /buttc/i, 
         /\bIA\b/i,/\bIas\b/i, /\b-Ia\b/i, /\bIa-\b/i, /background eras/i, /background del/i, /background rem/i, /background off/i, /off background/i, /background out/i, /out background/i, /removbg/i, /ladies/i, /lady/i, /butts/i,
         /buttc/i, /butt c/i, /butt h/i, /butt s/i, /\bMLM\b/i, /\bLLM\b/i, /\bTit\b/i, /\bGen\b/i, /\bTits\b/i, /learn model/i, /mach model/i, /titten/i, /combin fac/i, /merg fac/i, /fac merg/i, /fac comb/i, /fac blend/i, /joinface/i, 
-	/poista vaatteet/i, /poista vaat/i, /vaatteidenpoist/i, /vaatepoist/i, /poistavaat/i, /poistovaat/i, /too merg/i, /merg too/i, /two fac/i, /two fac/i, /too fac/i, /too fac/i, /fac join/i, /join fac/i, /bg remov/i, /Trish/i,
+	    /poista vaatteet/i, /poista vaat/i, /vaatteidenpoist/i, /vaatepoist/i, /poistavaat/i, /poistovaat/i, /too merg/i, /merg too/i, /two fac/i, /two fac/i, /too fac/i, /too fac/i, /fac join/i, /join fac/i, /bg remov/i, /Trish/i,
         /join 2 fac/i, /Stormwrestl/i, /Stormrassl/i, /Storm wrestl/i, /Storm rassl/i, /Storm rassl/i, /Toni AEW/i, /Storm AEW/i, /Toni WWE/i, /Toni AEW/i, /Genius of The Sky/i, /\bToni\b/i, /huora/i, /huoru/i, /horo/i, /horats/i,
         /prostitoitu/i, /ilotyttå/i, /ilotyttö/i, /ilötyttö/i, /ilötytto/i, /ilåtyttå/i, /ilåtyttö/i, /iløtyttö/i, /iløtytto/i, /iløtyttø/i, /il0tyttö/i, /il0tytto/i, /il0tytt0/i, /il0tyttå/i, /il0tyttø/i, /1lotyttö/i, /1lotytto/i, 
         /!lotyttö/i, /ilotyttø/i, /ilotytt0/i, /ilotytto/i, /bordel/i, /bordel/i, /bordelli/i, /ilotalo/i, /ilåtalo/i, /ilåtalå/i, /ilotalå/i, /iløtalo/i, /ilötalo/i, /il0talo/i, /iløtalå/i, /ilötalå/i, /ilotalø/i, /erootti/i,
@@ -165,17 +165,17 @@
         /body belfie/i, /full body/i, /pic body/i, /pict body/i, /phot body/i, /image body/i, /img body/i, /postu tweak/i, /pose tweak/i, /twerk/i, /pose swap/i, /post swap/i, /body swap/i,  /pose adjust/i, /post adjust/i, /body adjust/i, /stefa/i, 
         /adjust pose/i, /adjust posture/i, /pose trans/i, /post trans/i, /pose morph/i, /post morph/i, /body morph/i, /body reshape/i, /shape body/i, /repose/i, /repose edit/i, /pose redo/i, /repose chang/i, /body editor/i, /body filter/i, /filter body/i,
         /angle chang/i, /change angle/i, /edit angle/i, /camera angle/i, /head turn/i, /body turn/i, /pose reconstruct/i, /reconstruct pose/i, /pose fix/i, /fix pose/i, /body fix/i, /fix body/i, /edit selfie/i, /AIRemove/i, /RemoveAI/i, /RemovalAI/i, 
-        /selfie editor/i, /selfie morph/i, /pose shift/i, /posture shift/i, /angle shift/i, /pic shift/i, /phot shift/i, /img shift/i, /promeai/i, /prome-ai/i, /openpose/i, /open pose/i, /open-pose/i, /AIRemov/i, /RemovAI/i, /AIRemoving/i, /RemovingAI/i, 
+        /selfie editor/i, /selfie morph/i, /pose shift/i, /posture shift/i, /angle shift/i, /pic shift/i, /phot shift/i, /img shift/i, /ima shift/i, /promeai/i, /prome-ai/i, /openpose/i, /open pose/i, /open-pose/i, /AIRemov/i, /RemovAI/i, /AIRemoving/i, /RemovingAI/i, 
         /pose-open/i, /poseopen/i, /pos open/i, /\bLily\b/i, /\bLili\b/i, /\bLilli\b/i, /\bLilly\b/i, /Lily Adam/i, /Lilly Adam/i, /\bTatu\b/i, /Toiviainen/i, /Tatujo/i, /PiFuHD/i, /Hirada/i, /Hirata/i, /Cathy/i, /Kathy/i, /Catherine/i, /AIRemoval/i, 
         /Prim3r/i, /Pr1m3r/i, /Pr1mer/i, /Primar/i, /Pr1m4r/i, /Pr1mar/i, /Pramer/i, /Pramir/i, /LaPrime/i, /LaPrima/i, /LaPr1ma/i, /L4Pr1ma/i, /LaPr1m4/i, /LaPrim4/i, /LaPrim3/i, /LaPr1m3/i, /LaPr1me/i, /Prim3r/i, /Primer/i, /stefe/i, /stefa/i, 
         /Premare/i, /La Primare/i, /Julianne/i, /Juliane/i, /Juliana/i, /Julianna/i, /Rasikangas/i, /Rasikannas/i, /Jade Cargil/i, /Jade WWE/i, /cargil/i, /cargirl/i, /cargril/i, /gargril/i, /gargirl/i, /garcirl/i, /watanabe/i, /barlow/i, /Jad3 WWE/i,
-        /Nikki/i, /Saya Kamitani/i, /Kamitani/i, /Katie/i, /Nikkita/i, /Nikkita Lyons/i, /Lisa Marie/i, /Lisa Marie Varon/i, /Lisa Varon/i, /Marie Varon/i, /Takaichi/i, /Sakurai/i, /Arrivederci/i, /Alice/i, /Alicy/i, /Alici/i, /Arisu Endo/i, /Crowley/i, 
+        /Nikki/i, /Saya Kamitani/i, /Kamitani/i, /Katie/i, /Nikkita/i, /Nikkita Lyons/i, /Lisa Marie/i, /Lisa Marie Varon/i, /Lisa Varon/i, /Marie Varon/i, /Amanda Huber/i, /cargil/i, /cargirl/i, /cargril/i, /gargril/i, /gargirl/i, /garcirl/i,
         /Ruby Soho/i, /Monica/i, /Castillo/i, /Matsumoto/i, /Shino Suzuki/i, /Yamashita/i, /Adriana/i, /Nia Jax/i, /McQueen/i, /Kasie Cay/i, /\bFuk\b/i, /fukk/i, /fukc/i, /fucc/i, /\bFuc\b/i, /hawt/i, /h4wt/i, /h0wt/i, /d!ck/i, /dlck/i, /d1ck/i, /c0ck/i,
         /5yvä/i, /join2fac/i, /flexclip/i, /pixelmator/i, /perfectcorp/i, /facejoin/i, /d1c/i, /d!c/i, /d!k/i, /d!c/i, /her0/i, /h3r0/i, /h3ro/i, /prompt/i, /pr0mpt/i, /pr0mp7/i, /promp7/i, /#/i, /##/i, /Sherilyn/i, /0rg@5m/i, /headgen/i, /head gen/i,
-	/genhead/i, /genhead/i, /HeyGen/i, /GenHey/i, /Mafiaprinsessa/i, /ai twerk/i, /twerk ai/i, /mangoanimat/i, /photo jiggle/i, /animat pic/i, /animat pho/i, /animat ima/i, /animat img/i, /pic animat/i, /pho animat/i, /animat ima/i, /animat pic/i, 
-	/animat pho/i, /animat ima/i, /animat img/i, /pic animat/i, /pho animat/i, /img animat/i, /ima animat/i, /photo animat/i, /image animat/i, /make pic mov/i, /make pho mov/i, /make img mov/i, /make ima mov/i, /gif pic/i, /gif pho/i, /gif img/i, 
-	/gif ima/i, /photo to gif/i, /image to gif/i, /pic to gif/i, /pic to vid/i, /photo to video/i, /image to video/i, /ph0t/i, /pho7/i, /ph07/i, /1m4g/i, /im4g/i, /1mag/i, /!mag/i, /!m4g/i, /!mg/i, /v1d3/i, /vid3/i, /v1de/i, /vld3/i, /v1d3/i, /g!f/i,
-	/mangoai/i, /mangoapp/i, /mango-app/i, /ai-app/i, /mangoanim/i, /mango anim/i, /mango-anim/i, /lantaai/i, /lantaaa/i, /motionai/i, /changemotion/i, /swapmotion/i, /motionsw/i, /motionc/i, /\bmotion\b/i, /poseai/i, 
+	    /genhead/i, /genhead/i, /HeyGen/i, /GenHey/i, /Mafiaprinsessa/i, /ai twerk/i, /twerk ai/i, /mangoanimat/i, /photo jiggle/i, /animat pic/i, /animat pho/i, /animat ima/i, /animat img/i, /pic animat/i, /pho animat/i, /animat ima/i, /animat pic/i, 
+	    /animat pho/i, /animat ima/i, /animat img/i, /pic animat/i, /pho animat/i, /img animat/i, /ima animat/i, /photo animat/i, /image animat/i, /make pic mov/i, /make pho mov/i, /make img mov/i, /make ima mov/i, /gif pic/i, /gif pho/i, /gif img/i, 
+	    /gif ima/i, /photo to gif/i, /image to gif/i, /pic to gif/i, /pic to vid/i, /photo to video/i, /image to video/i, /ph0t/i, /pho7/i, /ph07/i, /1m4g/i, /im4g/i, /1mag/i, /!mag/i, /!m4g/i, /!mg/i, /v1d3/i, /vid3/i, /v1de/i, /vld3/i, /v1d3/i, /g!f/i,
+	    /mangoai/i, /mangoapp/i, /mango-app/i, /ai-app/i, /mangoanim/i, /mango anim/i, /mango-anim/i, /lantaai/i, /lantaaa/i, /motionai/i, /changemotion/i, /swapmotion/i, /motionsw/i, /motionc/i, /\bmotion\b/i, /poseai/i, 
     ];
 
     // Special Regexes array, kept separate for readability.
@@ -328,12 +328,12 @@
         /gizmodo\.com/i,
         /comfy\.org/i,
         /runcomfy\.com/i,
-	/picsart\.com/i,
-	/capcut\.com/i,
+	    /picsart\.com/i,
+	    /capcut\.com/i,
         /canva\.com/i,
-	/topazlabs\.com/i,
-	/online\.visual-paradigm\.com/i,
-	/skylum\.com/i,
+	    /topazlabs\.com/i,
+	    /online\.visual-paradigm\.com/i,
+	    /skylum\.com/i,
         /stable-diffusion-art\.com/i,
         /comfyui\.org/i,
         /thinkdiffusion\.com/i,
@@ -531,40 +531,30 @@
         /undress-app\./i,
         /appundress\./i,
         /app-undress\./i,
-        /cuttingedger\./i,
-        /cutting-edger\./i,
-        /mimicpc\./i,
-        /mimic-pc\./i,
-        /derobe\./i,
-        /unrobe\./i,
-        /disrobe\./i,
-        /de-robe\./i,
-        /un-robe\./i,
-        /dis-robe\./i,
-	/robeoff\./i,
-	/offrobe\./i,
-	/robe-off\./i,
-	/off-robe\./i,
-	/sendfame\./i,
-	/send-fame\./i,
-	/sendingfame\./i,
-	/sending-fame\./i,
-	/sendsfame\./i,
-	/sends-fame\./i,
-	/sentfame\./i,
-	/sent-fame\./i,
-	/famesend\./i,
-	/fame-send\./i,
-	/famesending\./i,
-	/fame-sending\./i,
-	/famesends\./i,
-	/fame-sends\./i,
-	/famesent\./i,
-	/fame-sent\./i,
-	/headgenai\./i,
-	/headgen-ai\./i,
-	/head-genai\./i,
-	/head-gen-ai\./i,
+	    /robeoff\./i,
+	    /offrobe\./i,
+	    /robe-off\./i,
+	    /off-robe\./i,
+	    /sendfame\./i,
+	    /send-fame\./i,
+	    /sendingfame\./i,
+	    /sending-fame\./i,
+	    /sendsfame\./i,
+	    /sends-fame\./i,
+	    /sentfame\./i,
+	    /sent-fame\./i,
+	    /famesend\./i,
+	    /fame-send\./i,
+	    /famesending\./i,
+	    /fame-sending\./i,
+	    /famesends\./i,
+	    /fame-sends\./i,
+	    /famesent\./i,
+	    /fame-sent\./i,
+	    /headgenai\./i,
+	    /headgen-ai\./i,
+	    /head-genai\./i,
+	    /head-gen-ai\./i,
         /whatisthebigdata\./i,
         /whatsthebigdata\./i,
         /mangoanimate\./i,
@@ -635,7 +625,7 @@
         /waterfox\.\/@/i,
         /awfulannouncing\.com/i,
         /pwpix\.net/i,
-	/reddit\.com\/r\/photoshop/i,
+	    /reddit\.com\/r\/photoshop/i,
         /reddit\.com\/r\/StableDiffusion/i,
         /reddit\.com\/r\/AlexaBliss/i,
         /reddit\.com\/r\/BeckyLynch/i,
@@ -898,18 +888,9 @@
             'span.gL9Hy', 'a.spell', 'p.spell_orig', '.KDCVqf', '.card-section.p64x9c'
         ];
         if (isFirefoxAndroid) {
-            // Add a wider net for Google Mobile DOM variants commonly seen on Android
-            const mobileExtras = [
-                '#taw', '#topstuff', '#search',
-                'div[aria-live]', 'div[role="alert"]', 'div[aria-atomic]',
-                'div[jsname]', 'div[data-hveid]', 'div[data-ved]',
-                'span[role="text"]', 'div[data-async-context]',
-                'div[aria-label*="results"]',
-                'div[data-md*="spelling"]',
-                '.gXqMYb', '.sspCHc', '.sUGDF', '.wwUB2c', '.s6JM6d', '.mqCNLe',
-                'div.E69Xwd', 'div.EZRelc', 'div.HZ1VQ'
-            ];
-            return base.concat(mobileExtras);
+            // Option A.2 (Android-only narrowing): use only the desktop/base suggestion selectors on Firefox Android.
+            // This prevents monitorSelectorsAndRedirect from scanning broad generic containers like #search, div[jsname], etc.
+            return base;
         }
         return base;
     }
@@ -1232,9 +1213,9 @@
         if (!isFirefoxAndroid || isRedirecting) return false;
 
         const selectors = getSuggestionSelectors().concat([
-            'div[aria-live]', 'div[role="alert"]', 'div[aria-atomic]',
-            'div[aria-live] *', 'div[role="alert"] *',
-            'h1, h2, h3, h4, p, span, a, i'
+    		'div[aria-live]',
+    		'div[role="alert"]',
+    		'div[aria-atomic]'
         ]);
         let redirected = false;
 
