@@ -1190,41 +1190,59 @@ ${p}, ${p} * {
             while (container && level < 10) {
                 container = container.parentElement;
                 level++;
-                if (container && container.classList.contains('x9f619') && 
+                if (!container) break;
+
+                // original strict container match
+                if (container.classList.contains('x9f619') && 
                     container.classList.contains('x3nfvp2') && 
                     container.classList.contains('xr9ek0c') &&
                     container.textContent.includes('Myös Metalta')) {
-                    container.style.setProperty('display', 'none', 'important');
-                    container.style.setProperty('visibility', 'hidden', 'important');
-                    container.style.setProperty('opacity', '0', 'important');
-                    container.style.setProperty('height', '0', 'important');
-                    container.style.setProperty('width', '0', 'important');
-                    container.style.setProperty('position', 'absolute', 'important');
-                    container.style.setProperty('left', '-9999px', 'important');
-                    container.style.setProperty('top', '-9999px', 'important');
-                    container.style.setProperty('overflow', 'hidden', 'important');
-                    hiddenElements.add(container);
+
+                    collapseElement(container);
                     break;
+                }
+
+                // extra: allow one level higher small wrapper row
+                if (container.textContent.includes('Myös Metalta')) {
+                    const rect = container.getBoundingClientRect ? container.getBoundingClientRect() : null;
+                    const area = rect ? rect.width * rect.height : 0;
+                    if (area > 80 && area < 60000 &&
+                        !container.matches('main, section[role="main"], div[role="main"], body, html, nav')) {
+                        collapseElement(container);
+                        break;
+                    }
                 }
             }
         });
+
         const allDivs = document.querySelectorAll('div');
         allDivs.forEach(div => {
-            if (div.textContent && div.textContent.trim() === 'Myös Metalta' && 
-                div.closest('div.x9f619.x3nfvp2.xr9ek0c')) {
-                const container = div.closest('div.x9f619.x3nfvp2.xr9ek0c');
-                if (container && !hiddenElements.has(container)) {
-                    container.style.setProperty('display', 'none', 'important');
-                    container.style.setProperty('visibility', 'hidden', 'important');
-                    container.style.setProperty('opacity', '0', 'important');
-                    container.style.setProperty('height', '0', 'important');
-                    container.style.setProperty('width', '0', 'important');
-                    container.style.setProperty('position', 'absolute', 'important');
-                    container.style.setProperty('left', '-9999px', 'important');
-                    container.style.setProperty('top', '-9999px', 'important');
-                    container.style.setProperty('overflow', 'hidden', 'important');
-                    hiddenElements.add(container);
+            if (!div.textContent) return;
+            const txt = div.textContent.trim();
+            if (txt !== 'Myös Metalta') return;
+
+            // original strict wrapper
+            const strict = div.closest('div.x9f619.x3nfvp2.xr9ek0c');
+            if (strict) {
+                if (!hiddenElements.has(strict)) {
+                    collapseElement(strict);
                 }
+                return;
+            }
+
+            // fallback: generic small row containing the text
+            let container = div;
+            let level = 0;
+            while (container && level < 4) {
+                const rect = container.getBoundingClientRect ? container.getBoundingClientRect() : null;
+                const area = rect ? rect.width * rect.height : 0;
+                if (area > 80 && area < 60000 &&
+                    !container.matches('main, section[role="main"], div[role="main"], body, html, nav')) {
+                    collapseElement(container);
+                    break;
+                }
+                container = container.parentElement;
+                level++;
             }
         });
     }
@@ -1339,6 +1357,59 @@ ${p}, ${p} * {
                 }
             }
         });
+    }
+
+    // NEW: hide Sinulle ehdotettua suggestion block (header + list) with slightly looser DOM heuristic
+    function hideSinulleEhdotettuaBlock() {
+        try {
+            const spans = document.querySelectorAll('span');
+            spans.forEach(span => {
+                if (!span.textContent) return;
+                const txt = span.textContent.trim();
+                if (txt !== 'Sinulle ehdotettua') return;
+
+                // prefer the header html-div
+                let container = span.closest('div.html-div') || span.parentElement;
+                if (!container) return;
+
+                // require "Näytä kaikki" link or a /explore/people/ link nearby to avoid false positives
+                const scope = container.closest('div') || container;
+                const hasShowAllLink =
+                    !!scope.querySelector('a[href="/explore/people/"] span') ||
+                    !!scope.querySelector('a[href^="/explore/people"]');
+
+                if (!hasShowAllLink) return;
+
+                // climb up html-div ancestors to find the module root, avoiding main/body/html/nav
+                let lvl = 0;
+                let candidate = container;
+                while (candidate && lvl < 6) {
+                    const rect = candidate.getBoundingClientRect ? candidate.getBoundingClientRect() : null;
+                    const area = rect ? rect.width * rect.height : 0;
+
+                    const plausibleSize = area > 200 && area < 300000;
+                    const isHtmlDiv = candidate.classList.contains('html-div');
+
+                    if (isHtmlDiv &&
+                        plausibleSize &&
+                        !candidate.matches('main, section[role="main"], div[role="main"], body, html, nav')) {
+                        collapseElement(candidate);
+                        return;
+                    }
+
+                    candidate = candidate.parentElement;
+                    lvl++;
+                }
+
+                // fallback: hide the immediate header row if nothing else matched
+                const rect = container.getBoundingClientRect ? container.getBoundingClientRect() : null;
+                const area = rect ? rect.width * rect.height : 0;
+                if (area > 80 && area < 150000 &&
+                    !container.matches('main, section[role="main"], div[role="main"], body, html, nav')) {
+                    collapseElement(container);
+                }
+            });
+        } catch {}
     }
 
     const injectInlineCSS = () => {
@@ -1461,6 +1532,7 @@ ${p}, ${p} * {
         });
         hideMyosMetaltaElements();
         hideSettingsPageElements();
+        hideSinulleEhdotettuaBlock();
         if (isSearchSurfacePresent()) {
             hideInstagramSearchResults();
         }
@@ -1503,6 +1575,7 @@ ${p}, ${p} * {
             div[role="button"][tabindex][aria-label="Threads"],
             svg[aria-label="Threads"],
             a.x1i10hfl[href*="threads"],
+            a[href="/explore/"],
             a[href*="/threads"] {
                 display: none !important;
                 visibility: hidden !important;
@@ -1543,7 +1616,7 @@ ${p}, ${p} * {
                 s = document.createElement('style');
                 s.id = 'ig-blank-style';
                 s.textContent = `
-                    html, body { background: #fff !important; }
+                    html, body { background = '#fff !important; }
                     body > * { display: none !important; visibility: hidden !important; }
                 `;
                 (document.head || document.documentElement).appendChild(s);
@@ -1764,6 +1837,7 @@ ${p}, ${p} * {
         checkForRedirectElements();
         hideMyosMetaltaElements();
         hideSettingsPageElements();
+        hideSinulleEhdotettuaBlock();
         if (isSearchSurfacePresent()) {
             hideInstagramSearchResults();
         }
@@ -1795,6 +1869,8 @@ ${p}, ${p} * {
                 }
             }
         });
+
+        hideSinulleEhdotettuaBlock();
 
         if (isSearchSurfacePresent()) {
             hideInstagramSearchResults();
@@ -1849,6 +1925,7 @@ ${p}, ${p} * {
                 }
             }
         });
+        hideSinulleEhdotettuaBlock();
         updateOverlayState();
         scanPermalinkArticleAndAct();
     }
@@ -1892,6 +1969,7 @@ ${p}, ${p} * {
                 checkForRedirectElements();
                 hideMyosMetaltaElements();
                 hideSettingsPageElements();
+                hideSinulleEhdotettuaBlock();
                 if (isSearchSurfacePresent()) {
                     hideInstagramSearchResults();
                 }
@@ -1933,6 +2011,7 @@ ${p}, ${p} * {
             checkForRedirectElements();
             hideMyosMetaltaElements();
             hideSettingsPageElements();
+            hideSinulleEhdotettuaBlock();
             if (isSearchSurfacePresent()) {
                 hideInstagramSearchResults();
             }
@@ -1952,6 +2031,7 @@ ${p}, ${p} * {
                 mainHandler();
                 hideMyosMetaltaElements();
                 hideSettingsPageElements();
+                hideSinulleEhdotettuaBlock();
                 if (isSearchSurfacePresent()) hideInstagramSearchResults();
             }
         }, 70);
@@ -1975,6 +2055,7 @@ ${p}, ${p} * {
             mainHandler();
             hideMyosMetaltaElements();
             hideSettingsPageElements();
+            hideSinulleEhdotettuaBlock();
             if (isSearchSurfacePresent()) hideInstagramSearchResults();
         }
     }, false);
@@ -2016,6 +2097,7 @@ ${p}, ${p} * {
             mainHandler();
             hideMyosMetaltaElements();
             hideSettingsPageElements();
+            hideSinulleEhdotettuaBlock();
             if (isSearchSurfacePresent()) hideInstagramSearchResults();
         }
         scanPermalinkArticleAndAct();
@@ -2027,6 +2109,7 @@ ${p}, ${p} * {
             mainHandler();
             hideMyosMetaltaElements();
             hideSettingsPageElements();
+            hideSinulleEhdotettuaBlock();
             if (isSearchSurfacePresent()) hideInstagramSearchResults();
         }
         scanPermalinkArticleAndAct();
