@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         ExtraRedirect-Instagram
-// @version      2.0.0.4
+// @version      2.0.1.3
 // @description  Instagram/Threads/Reels specific logic split from Extra.js
 // @match        *://www.instagram.com/*
 // @match        *://www.instagram.com/?next=%2F/*
@@ -120,7 +120,8 @@ const bannedRegexes = [
     /\bIra\b/i, /irppa/i, /irpp4/i, /girls/i, /juliana/i, /julianna/i, /juulianna/i, /juuliana/i, /juulia/i, /rasikannas/i, /rasikangas/i, /\bBra\b/i, /\bLana\b/i, /\bAI\b/i, /\bNea\b/i, /Neea/i,
     /Saya Kamitani/i, /Kamitani/i, /Katie/i, /Nikkita/i, /Nikkita Lyons/i, /Lisa Marie/i, /Lisa Marie Varon/i, /Lisa Varon/i, /Marie Varon/i, /Takaichi/i, /Sakurai/i, /Arrivederci/i, /Alice/i, /Alicy/i, 
     /prinsessa/i, /Alici/i, /Arisu Endo/i, /Crowley/i, /Ruby Soho/i, /Monica/i, /Castillo/i, /Matsumoto/i, /Shino Suzuki/i, /\bNikki\b/i, /Yamashita/i, /Adriana/i, /Nia Jax/i, /McQueen/i, /Kasie Cay/i,
-    /Lash Legend/i, /motionai/i, /changemotion/i, /swapmotion/i, /motionsw/i, /motionc/i, /\bmotion\b/i, /poseai/i, /ai-/i, /-ai/i, /maarit/i, /taija/i, /anni/i, /saija/i, /seija/i, /teija/i, 
+    /Lash Legend/i, /motionai/i, /changemotion/i, /swapmotion/i, /motionsw/i, /motionc/i, /\bmotion\b/i, /poseai/i, /ai-/i, /-ai/i, /maarit/i, /taija/i, /anni/i, /saija/i, /seija/i, /teija/i, /5uck/i,
+    /AIblow/i, /Suckin/i, /Sucks/i, /Sucki/i, /Sucky/i, /AIsuck/i, /AI-suck/i, /drool/i, /RemovingAI/i, /blowjob/i, /bjob/i, /b-job/i, /bj0b/i, /bl0w/i, /blowj0b/i, /dr0ol/i, /dro0l/i, /dr00l/i, 
 ]; 
 
 const allowedWords = [
@@ -382,15 +383,11 @@ const instagramAccountsToHide = [
     '.xfex06f > div:nth-child(3)',
     'div.x1i10hfl:nth-child(8)',
     'mount_0_0_Ie > div > div > div.x9f619.x1n2onr6.x1ja2u2z > div > div > div.x78zum5.xdt5ytf.x1t2pt76.x1n2onr6.x1ja2u2z.x10cihs4 > div:nth-child(2) > div > div.x1gryazu.xh8yej3.x10o80wk.x14k21rp',
-    'div.x78zum5.xdt5ytf.xdj266r.x14z9mp.xod5an3.x162z183.x1j7kr1c.xvbhtw8',
-    'div.html-div.xdj266r.x14z9mp.xat24cr.x1lziwak.xyri2b.x1c1uobl.x9f619.xjbqb8w.x78zum5.x15mokao.x1ga7v0g.x16uus16.xbiv7yw.xwib8y2.x1y1aw1k.x1uhb9sk.x1plvlek.xryxfnj.x1c4vz4f.x2lah0s.xdt5ytf.xqjyukv.x1qjc9v5.x1oa3qoh.x1nhvcw1',
-    'div[style] div.html-div.xdj266r.x14z9mp.xat24cr.x1lziwak.xyri2b.x1c1uobl.x9f619.xjbqb8w.x78zum5.x15mokao.x1ga7v0g.x16uus16.xbiv7yw.xwib8y2.x1y1aw1k.x1uhb9sk.x1plvlek.xryxfnj.x1c4vz4f.x2lah0s.xdt5ytf.xqjyukv.x1qjc9v5.x1oa3qoh.x1nhvcw1',
     'div.x6bk1ks:nth-child(3) > div:nth-child(4) > a:nth-child(1)',
     'div.x6bk1ks:nth-child(3) > div:nth-child(3)',
     '.x1xgvd2v > div:nth-child(2) > div:nth-child(4) > span:nth-child(1)',
     '.x1xgvd2v > div:nth-child(2) > div:nth-child(3) > span:nth-child(1) > a:nth-child(1) > div:nth-child(1)',
     'svg[aria-label="Tutki"]',
-    'main > div > div > div.xg7h5cd.x1n2onr6 div:nth-of-type(2)',
     'div[aria-label="Käyttäjän julmakira tarina"]',
     'div[aria-label="Käyttäjän julmakira tarina, nähty"]',
     'img[alt="Käyttäjän julmakira profiilikuva"]',
@@ -1575,14 +1572,11 @@ ${p}, ${p} * {
             div[role="button"][tabindex][aria-label="Tutki"],
             svg[aria-label="Tutki"],
             div > span.html-span > div.x1n2onr6 > a.x1i10hfl._a6hd[href="/explore/"],
-	    main > div > div > div.xg7h5cd.x1n2onr6 div:nth-of-type(2),
-	    div.x78zum5.xdt5ytf.xdj266r.x14z9mp.xod5an3.x162z183.x1j7kr1c.xvbhtw8,
-	    div.html-div.xdj266r.x14z9mp.xat24cr.x1lziwak.xyri2b.x1c1uobl.x9f619.xjbqb8w.x78zum5.x15mokao.x1ga7v0g.x16uus16.xbiv7yw.xwib8y2.x1y1aw1k.x1uhb9sk.x1plvlek.xryxfnj.x1c4vz4f.x2lah0s.xdt5ytf.xqjyukv.x1qjc9v5.x1oa3qoh.x1nhvcw1,
-	    div[style] div.html-div.xdj266r.x14z9mp.xat24cr.x1lziwak.xyri2b.x1c1uobl.x9f619.xjbqb8w.x78zum5.x15mokao.x1ga7v0g.x16uus16.xbiv7yw.xwib8y2.x1y1aw1k.x1uhb9sk.x1plvlek.xryxfnj.x1c4vz4f.x2lah0s.xdt5ytf.xqjyukv.x1qjc9v5.x1oa3qoh.x1nhvcw1,
             a[href="/explore/"],
             div[role="button"][tabindex][aria-label="Threads"],
             svg[aria-label="Threads"],
             a.x1i10hfl[href*="threads"],
+            a[href="/explore/"],
             a[href*="/threads"] {
                 display: none !important;
                 visibility: hidden !important;
