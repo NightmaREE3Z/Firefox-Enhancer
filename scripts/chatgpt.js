@@ -11,6 +11,7 @@
     function init() {
         injectStyles();
         cleanModelMenu();
+        cleanUIElements();
         observeDOM();
         console.log("[BraveFox Enhancer] Model cleanup active (no renaming).");
     }
@@ -36,7 +37,6 @@
         div.truncate:contains("GPT-5 Thinking") { display: none !important; }
         div.truncate:contains("o3") { display: none !important; }
         div.truncate:contains("o4-mini") { display: none !important; }
-        div.truncate:contains("Auto") { display: none !important; }
 
         /* --- USER BUBBLE --- */
         .user-message-bubble-color {
@@ -98,7 +98,6 @@
         "GPT-5 Thinking",
         "o3",
         "o4-mini",
-        "Auto"
     ];
 
     function cleanModelMenu() {
@@ -112,11 +111,36 @@
     }
 
     /* ============================
+       CLEAN UI ELEMENTS (NEW: Hide upgrade/free/memory/update elements)
+    ============================ */
+
+    const ELEMENTS_TO_HIDE = [
+        { selector: 'button[type="button"].flex.items-center.gap-1.bg-transparent.ps-2\\.5.text-current.focus\\:outline-none.pe-3', textMatch: 'Hanki Plus' },
+        { selector: 'div.truncate[dir="auto"]', textMatch: 'Free' },
+        { selector: 'div.flex.items-center.gap-1.text-sm.font-semibold.opacity-70', textMatch: 'Muisti täynnä' },
+        { selector: 'button[aria-label="Päivitä"]', textMatch: 'Päivitä' },
+    ];
+
+    function cleanUIElements() {
+        ELEMENTS_TO_HIDE.forEach(({ selector, textMatch }) => {
+            const elements = document.querySelectorAll(selector);
+            elements.forEach(element => {
+                if (element.textContent.trim().includes(textMatch)) {
+                    element.style.display = 'none';
+                }
+            });
+        });
+    }
+
+    /* ============================
        OBSERVER
        (re-applies cleanup after renders)
     ============================ */
     function observeDOM() {
-        const obs = new MutationObserver(() => cleanModelMenu());
+        const obs = new MutationObserver(() => {
+            cleanModelMenu();
+            cleanUIElements();
+        });
         obs.observe(document.body, {
             childList: true,
             subtree: true
