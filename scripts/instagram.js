@@ -106,9 +106,16 @@ const bannedKeywords = [
     "wondershare", "filmora", "Kelani Jordan", "Electra Lopez", "Wendy Choo", "HorizonMW", "Horizon Modern Warfare", "Horizon MW", "Black Ops 7", "Black Ops 6", "lottapupu",
     "#ass", "#perse", "#pylly", "#tissit", "#tit", "#tits", "#boob", "#boobs", "#boobies", "#boobie", "#booty", "#butt", "#babe", "Primera", "Roxanne", "Roxan", "lotta",
     "#belfie", "belfie", "Natalia", "Natasha", "#rack", "#finnishgirl", "#girl", "#women", "#woman", "#ladies", "#girls", "#womens", "#womans", "miska", "m1ska", "m1sk4", 
-    "misk4", "misk3", "m1sk3", "m1ske", "m1mmuska", "misk33", "misk33waaa", "misk33waa", "misk33wa", "misk3waa", "misk3waaa", "misk3wa", "Myös Metalta", "Amanda Huber", 
+    "misk4", "misk3", "m1sk3", "m1ske", "m1mmuska", "misk33", "misk33waaa", "misk33waa", "misk33wa", "misk3waa", "misk3waaa", "miskaawq9",  "misk3wa", "Matilda", "Malla",
     "Saya Kamitani", "Kamitani", "Nikkita", "Kristen", "Nikkita Lyons", "Lisa Marie", "Lisa Marie Varon", "Lisa Varon", "Lisa Marie Varon", "Irving", "Naomi", "ZELINA!", 
-    "Sinulle ehdotettua", "Sinulle ehdotettu",
+    "Amanda Huber",  "Lumikki", "Anna", "Vendela", "Julle", "Jensku", "Eveliina", "Rosa", "Rose", "Ella", "Elli", "Jensku", "Emmi", "Viola", "Mari", "Doll", "Sofi", "Sara",
+    "Sandra", "Peppi", "Aurora", "Minni", "Anni", "Noora", "Nooru", "Katariina", "Janita", "Kiia", "Kira", "Susu", "Sirja", "Venla", "Irene", "Jane", "Anette", "Tytti", 
+    "Elisa", "Aleksiina", "Alexiina", "Kaarina", "Johanna", "Jossu", "Minna", "Janika", "Janica", "Janissa", "Janisa", "Essi", "Heidi", "Eevi", "Eeva", "Miisa", "Moona",
+    "Viivi", "Annika", "Menni", "Marissa", "Oona", "Jutta", "Mira", "Tiia", "Amalia", "Nelli", "Anniina", "Marjut", "Siiri", "Kamila", "Kamilla", "Kamilia", "Camila",
+    "Camilla", "Camilia", "Krisse", "Kristiina", "Iina", "Ida", "Iida", "Merja", "Mirkku", "Irkku", "Miia", "Alisa", "Aliisa", "Alina", "Aliina", "Krista", "Iris", "Iiris",
+    "Jessi", "Jessica", "Laura", "Lauren", "Joana", "Hepe", "Janina", "Aino", "Nea", "Neea", "Jemina", "Elina", "Minka", "Tiina", "Tiinu", "Pauliina", "Wilma", "Vilma",
+    "Milli", "Pinu", "Niina", "Jasmin", "Saana", "Vera", "Veera", "Reetta", 
+    "Sinulle ehdotettua", "Sinulle ehdotettu", "Myös Metalta", 
 ];
 
 const bannedRegexes = [
@@ -121,7 +128,15 @@ const bannedRegexes = [
     /Saya Kamitani/i, /Kamitani/i, /Katie/i, /Nikkita/i, /Nikkita Lyons/i, /Lisa Marie/i, /Lisa Marie Varon/i, /Lisa Varon/i, /Marie Varon/i, /Takaichi/i, /Sakurai/i, /Arrivederci/i, /Alice/i, /Alicy/i, 
     /prinsessa/i, /Alici/i, /Arisu Endo/i, /Crowley/i, /Ruby Soho/i, /Monica/i, /Castillo/i, /Matsumoto/i, /Shino Suzuki/i, /\bNikki\b/i, /Yamashita/i, /Adriana/i, /Nia Jax/i, /McQueen/i, /Kasie Cay/i,
     /Lash Legend/i, /motionai/i, /changemotion/i, /swapmotion/i, /motionsw/i, /motionc/i, /\bmotion\b/i, /poseai/i, /ai-/i, /-ai/i, /maarit/i, /taija/i, /anni/i, /saija/i, /seija/i, /teija/i, /5uck/i,
-    /AIblow/i, /Suckin/i, /Sucks/i, /Sucki/i, /Sucky/i, /AIsuck/i, /AI-suck/i, /drool/i, /RemovingAI/i, /blowjob/i, /bjob/i, /b-job/i, /bj0b/i, /bl0w/i, /blowj0b/i, /dr0ol/i, /dro0l/i, /dr00l/i, 
+    /Miska/i, /AIblow/i, /Suckin/i, /Sucks/i, /Sucki/i, /Sucky/i, /AIsuck/i, /AI-suck/i, /drool/i, /RemovingAI/i, /blowjob/i, /bjob/i, /b-job/i, /bj0b/i, /bl0w/i, /blowj0b/i, /dr0ol/i, /dro0l/i, /dr00l/i, 
+    /Lumikki/i, /Lumiikki/i, /Rosa/i, /Roosa/i, /Rose/i, /Ella/i, /Elli/i, /Anna/i, /Eveliina/i, /Julle/i, /Jensku/i, /Emmi/i, /Viola/i, /Mari/i, /Doll/i, /Sofi/i, /Sandra/i, /Peppi/i, /Aurora/i, /Minni/i,
+    /Milla/i, /Mirka/i, /Eerika/i, /Henriikka/i, /Henni/i, /Henna/i, /Henna/i, /Hanna/i, /Hannele/i, /Anni/i, /Heidi/i, /Riikka/i, /Helmi/i, /Rebecca/i, /Jonna/i, /Janna/i, /Janika/i, /Sara/i, /Saara/i,
+    /Noora/i, /Nooru/i, /Kata/i, /Katri/i, /Katherin/i, /Janita/i, /Kiia/i, /Kira/i, /Susu/i, /Susa/i, /Sirja/i, /Venla/i, /Jenn/i, /Irene/i, /Jane/i, /Mila/i, /Susu/i, /Minea/i, /Anette/i, /Tytti/i,
+    /Ellu/i, /Elisa/i, /Elise/i, /Kaisa/i, /Kaisu/i, /Aleksiina/i, /Alexiina/i, /Maria/i, /Marie/i, /Katja/i, /Kati/i, /Kaarina/i, /Johanna/i, /Jossu/i, /Minna/i, /Janika/i, /Janica/i, /Janissa/i, 
+    /Janisa/i, /Essi/i, /Heidi/i, /Eevi/i, /Eeva/i, /Miisa/i, /Moona/i, /Viivi/i, /Annika/i, /Menni/i, /Marissa/i, /Oona/i, /Jutta/i, /Mira/i, /Tiia/i, /Amalia/i, /Nelli/i, /Anniina/i, /Marjut/i, 
+    /Siiri/i, /Kamila/i, /Kamilla/i, /Kamilia/i, /Camila/i, /Camilla/i, /Camilia/i, /Krisse/i, /Kristiina/i, /Iina/i, /Ida/i, /Iida/i, /Merja/i, /Mirkku/i, /Irkku/i, /Miia/i, /Alisa/i, /Aliisa/i, 
+    /Alina/i, /Aliina/i, /Krista/i, /Iris/i, /Iiris/i, /Laura/i, /Lauren/i, /Joana/i, /Hepe/i, /Iiris/i, /Janina/i, /Ansku/i, /Aino/i, /Nea/i, /Neea/i, /Jemina/i, /Elina/i, /Minka/i, /Tiina/i,
+    /Tiinu/i, /Pauliina/i, /Vilma/i, /Wilma/i, /Milli/i, /Pinja/i, /Pinu/i, /Niina/i, /Jasmin/i, /Saana/i, /Vera/i, /Veera/i, /Matilda/i, /Reetta/i, /Malla/i,
 ]; 
 
 const allowedWords = [
@@ -275,6 +290,7 @@ const instagramAccountsToHide = [
     'yukisakazaki',
     'mizuki_wrestler',
     'gina.adams',
+    'miskaawq9',
     'misk33',
     'misk33waaa',
     'misk33waa',
