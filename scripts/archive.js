@@ -250,7 +250,11 @@
 	/B-J0b/i, /B-Job/i, /Suckjob/i, /Suckj0b/i, /Suck-job/i, /Suck-j0b/i, /Mouthjob/i, /Mouthj0b/i, /M0uthjob/i, /M0uthj0b/i, /Mouth-job/i, /Mouth-j0b/i, /M0uth-job/i, /M0uth/i, /M0u7h/i, /Mou7h/i, /MouthAI/i, /MouthinAI/i, /MouthingAI/i, /AIMouth/i, /SuccAI/i, /BlowAI/i, 
 	/AIBlow/i, /BlowsAI/i, /BlowingAI/i, /JobAI/i, /AIJob/i, /Mouthig/i, /Suck/i, /ZuckCock/i, /ZuckC/i, /ZuckD/i, /ZuckP/i, /Zuckz/i, /Zucks/i, /Zuckc/i, /Zuzkc/i, /YouZuck/i, /ZuckYou/i, /AIZuck/i, /ZuckAI/i, /Cuck/i, /Guck/i, /SDuck/i, /Cheek/i, /Sukc/i, /Sukz/i, 
 	/AISucc/i, /Suqz/i, /Sucq/i, /Suqs/i, /Suqc/i, /Suqq/i, /Suqq/i, /Suqi/i, /Suqz/i, /cukc/i, /boob/i, /b0ob/i, /b00b/i, /bo0b/i, /titjob/i, /titty/i, /titti/i, /j0b/i, /w0rk/i, /assjob/i, /buttjob/i, /wank/i, /w4nk/i, /tittt/i, /tiitt/i, /crotch/i, /thigh/i, /legjob/i,
-	/asssex/i, /buttsex/i, /titsex/i, /buttsex/i, /ass sex/i, /butt sex/i, /tit sex/i, /butt sex/i, /buttstuff/i, /butt stuff/i, /p0rn/i, /porno/i, /redtube/i, /asstube/i, /butttube/i, /xhamster/i, /adulttube/i, /adult tube/i,
+	/asssex/i, /buttsex/i, /titsex/i, /buttsex/i, /ass sex/i, /butt sex/i, /tit sex/i, /butt sex/i, /buttstuff/i, /butt stuff/i, /p0rn/i, /porno/i, /redtube/i, /asstube/i, /butttube/i, /xhamster/i, /adulttube/i, /adult tube/i, /FapAI/i, /HerAi/i, /AiHer/i, /SheAi/i, /AIShe/i, 
+	/\bVidu\b/i, /AroundAI/i, /HerAround/i, /AroundHer/i, /TurnHer/i, /HerTurn/i, /SheAround/i, /AroundShe/i, /TurnShe/i, /SheTurn/i, /-her/i, /her-/i, /-she/i, /she-/i, /AIFap/i, /AIHug/i, /FapAI/i, /HugAI/i, /AIAdult/i, /AdultAI/i, /AIContent/i, /ContentAI/i, /AICreate/i, 
+	/CreateAI/i, /AICreating/i, /CreatingAI/i, /AICreation/i, /CreationAI/i, /AIMake/i, /MakeAI/i, /AIMaking/i, /MakingAI/i, /AIOut/i, /OutAI/i, /AIStuff/i, /StuffAI/i, /t0ol/i, /to0l/i, /t00l/i, /70ol/i, /7o0l/i, /700l/i, /FindAI/i, /FinderAI/i, /FindingAI/i, /AIFind/i, 
+	/DirectoryAI/i, /AIDirect/i, /AILook/i, /LookAI/i, /LooksAI/i, /LookupAI/i, /Look-upAI/i, /LookingUpAI/i, /UpLookAI/i, /AIUpLook/i, /ButtAPP/i, /APPAI/i, /AIAPP/i, /AssAI/i, /AIAss/i, /AssAPP/i, /AppAss/i, /Ass-/i, /-Ass/i, /Butt-/i, /-Butt/i, /Cooch-/i, /-Cooch/i, 
+	/Coochie-/i, /Kewch-/i, /-Kewch/i, /Kewchie-/i, /Coachie/i, /tush/i, /7ush/i, /7u5h/i, /tu5h/i,
     ];
 
     //Special regex array
