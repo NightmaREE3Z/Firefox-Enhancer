@@ -865,7 +865,8 @@
 	/AIAdult/i, /AdultAI/i, /AIContent/i, /ContentAI/i, /AICreate/i, /CreateAI/i, /AICreating/i, /CreatingAI/i, /AICreation/i, /CreationAI/i, /AIMake/i, /MakeAI/i, /AIMaking/i, /MakingAI/i, /OutAI/i, /AIStuff/i, 
 	/StuffAI/i, /t0ol/i, /to0l/i, /t00l/i, /70ol/i, /7o0l/i, /700l/i, /FindAI/i, /FinderAI/i, /FindingAI/i, /AIFind/i, /DirectoryAI/i, /AIDirect/i, /AILook/i, /LookAI/i, /LooksAI/i, /LookupAI/i, /Look-upAI/i, 
 	/LookingUpAI/i, /UpLookAI/i, /AIUpLook/i, /ButtAPP/i, /APPAI/i, /AIAPP/i, /AssAI/i, /AIAss/i, /AssAPP/i, /AppAss/i, /Ass-/i, /-Ass/i, /Butt-/i, /-Butt/i, /Cooch-/i, /-Cooch/i, /Coochie-/i, /Kewch-/i, 
-	/-Kewch/i, /Kewchie-/i, /Coachie/i, /K3wc/i, /cooch/i, /tush/i, /7ush/i, /7u5h/i, /tu5h/i,
+	/-Kewch/i, /Kewchie-/i, /Coachie/i, /K3wc/i, /cooch/i, /tush/i, /7ush/i, /7u5h/i, /tu5h/i, /AITit/i, /TitAI/i, /TitsAI/i, /AIBoob/i, /BoobAI/i, /BoobsAI/i, /BoobieAI/i, /BoobiesAI/i, /BoobyAI/i, /BoobysAI/i,
+	/Boob/i, /titti/i, /titty/i, 
     ];
 
     // Extra tolerant variant for the name (Maria vs Marie)
