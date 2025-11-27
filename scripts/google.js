@@ -43,7 +43,11 @@
 
     // Collect and expose last redirect info in memory as well
     function logRedirect(triggerContext, triggerTerm) {
-        console.warn('[GOOGLE.JS] *** logRedirect CALLED ***', triggerContext, triggerTerm);
+        try {
+            // Use console.log instead of console.warn so it doesn't surface as an "extension error",
+            // but still appears in DevTools console when DEBUG is enabled.
+            console.log('[GOOGLE.JS] *** logRedirect CALLED ***', triggerContext, triggerTerm);
+        } catch (e) {}
         lastRedirectInfo = {
             context: triggerContext || '',
             term: String(triggerTerm || ''),
@@ -190,7 +194,7 @@
         /DrewAI/i, /DrawsAI/i, /DrawingAI/i, /DrawingsAI/i, /PaintAI/i, /PaintsAI/i, /PaintingAI/i, /PaintingsAI/i, /AIPain/i, /OpenHerLegs/i, /OpenLegs/i, /OpeningLegs/i, /OpeningHerLegs/i, /OpensLegs/i, /OpensHerLegs/i, /SpreadLeg/i, /SpreadHerLeg/i,
         /cunnt/i, /cunnn/i, /SpreadingLeg/i, /SpreadingHerLeg/i, /SpreadsLeg/i, /SpreadsHerLeg/i, /HerThig/i, /HerLeg/i, /HerThic/i, /SheThig/i, /SheLeg/i, /SheThic/i, /HerLeg/i, /HerThic/i, /LegShe/i, /LegsShe/i, /Thicc/i, /ThickShe/i, /fondl/i, /bdsm/i,
         /4ppli/i, /4ppl1/i, /appl1/i, /pr0gram/i, /progr4m/i, /pr0gr4m/i, /pr0/i, /gr4m/i, /römpsä/i, /römpsä/i, /rompsä/i, /römpsa/i, /rompsa/i, /tussu/i, /tusspa/i, /tuspand/i, /pilde/i, /pilpe/i, /persaus/i, /persvako/i, /persevako/i, /persreikä/i, 
-        /persereikä/i, /kyrpa/i, /kyrpä/i, /kikkeli/i, /pippeli/i, /tekoäly/i, /teko äly/i, /generativ/i,
+        /penis/i, /kulli/i, /kyrpa/i, /kyrpä/i, /kikkeli/i, /pippeli/i,  /persereikä/i, /tekoäly/i, /teko äly/i, /generativ/i, /reveals/i, /reveali/i, /revealing/i, /reveale/i, 
     ];
 
     // Special Regexes array, kept separate for readability.
@@ -1042,22 +1046,22 @@
             /poistami/i, /poistamis/i, /poistamine/i, /poistamen/i, /sovellus/i, /applikaatio/i, /kuva/i, /kuvia/i, /kuvien/i, /käsittely/i, /käsitellä/i, /banned/i, /pers/i, 
             /bans/i, /perse/i, /persaus/i, /persvako/i, /persevako/i, /persreikä/i, /persereikä/i, /trans/i, /transf/i, /transfo/i, /transfor/i, /transform/i, /transformi/i, 
             /animated/i, /transforming/i, /transforms/i, /transformings/i, /transformed/i, /convert/i, /converted/i, /convers/i, /conversi/i, /conversio/i, /conversion/i,
-            /slut/i, /sluts/i, /slutt/i, /slutti/i, /sluttin/i, /slutting/i,
+            /slut/i, /sluts/i, /slutt/i, /slutti/i, /sluttin/i, /slutting/i, /reveal/i, /skin/i, /body/i, /belly/i, /backside/i, /frontside/i, /belf/i, /belfie/i, /bottom/i, 
+            /front/i, /frontal/i, /perc/i, /perv/i, /pervert/i, /perverted/i,
             /-/i, /=/i, /\+/i, /_/i,
         ];
 
         // -- List of finnish surname suffixes (such as NEN) --
         const finnishWordsList = [
-            /nen/i, /lampi/i, /lehti/i, /mäki/i, /maki/i, /lahti/i, /järvi/i, /jarvi/i, /koski/i, /kallio/i, /niemi/i, /aho/i,
-            /salo/i, /kari/i, /oja/i, /pelto/i, /luoto/i, /saari/i, /ranta/i, /virta/i, /keto/i, /vaara/i, /lä/i, /la/i, /maa/i, 
-            /kosken/i, /pää/i, /paa/i, /mäen/i, /mae/i, /sivu/i, /vieri/i, /kaarto/i, /kaarre/i, /aito/i, /aira/i, /man/i, /hauki/i, 
-            /rauma/i, /liite/i, /laine/i, /salmi/i, /harju/i, /kangas/i, /vuori/i, /korpi/i, /suo/i, /tal[oö]/i, /nius/i, /kuiva/i,
-            /timo/i, /olli/i, /nyman/i, /nylund/i, /nygard/i, /aine/i, /nygård/i, /raunio/i,
+            /nen/i, /lampi/i, /lehti/i, /mäki/i, /maki/i, /lahti/i, /järvi/i, /jarvi/i, /koski/i, /kallio/i, /niemi/i, /aho/i, /aho/i, /salo/i, /kari/i, /oja/i, /pelto/i, /luoto/i, 
+            /saari/i, /ranta/i, /virta/i, /keto/i, /vaara/i, /lä/i, /la/i, /maa/i,  /kosken/i, /pää/i, /paa/i, /mäen/i, /mae/i, /sivu/i, /vieri/i, /kaarto/i, /kaarre/i, /aito/i, /aira/i, 
+            /man/i, /hauki/i, /rauma/i, /liite/i, /laine/i, /salmi/i, /harju/i, /kangas/i, /vuori/i, /korpi/i, /suo/i, /tal[oö]/i, /nius/i, /kuiva/i, /timo/i, /olli/i, /nyman/i, /nylund/i, 
+            /nygard/i, /aine/i, /nygård/i, /raunio/i, /mies/i, /nainen/i, /aitto/i, /jylhä/i, /anoai/i,
 
         // -- General Finnish words that contain term "AI" -- //
             /aika/i, /aino/i, /aikuinen/i, /saippua/i, /aisti/i, /aivo/i, /tilaisuus/i, /aikuiskoulutus/i, /paikka/i, /saippua/i, 
             /hais/i, /mais/i, /kais/i, /tais/i, /raiska/i, /raippa/i, /pais/i, /alainen/i, /koululainen/i, /Kuinka/i, /Miten/i, 
-            /Miksi/i, /Milloin/i, /Milloin/i, /Miksei/i, 
+            /Miksi/i, /Milloin/i, /Milloin/i, /Miksei/i, /aita/i, /aidan/i, /maailma/i, /avoin/i,
             /maanantai/i, /tiistai/i, /torstai/i, /perjantai/i, /lauantai/i, /sunnuntai/i, 
         ];
 
@@ -1082,63 +1086,73 @@
         for (let tok of tokens) {
             if (!tok || tok.length < 1) continue;
 
-            // NEW: if token is exactly uppercase "AI" (or variations like "AI,"/"AI."), block immediately
+            // If token is exactly "AI" in any basic punctuation variant, block
             if (/^AI[\.,!?]?$/.test(tok)) {
                 return 'AI';
             }
 
             if (tok.length < 2) continue;
 
-            const lowerTok = tok.toLowerCase();
-
-            // Quick sexual/AI keyword check (kept as-is)
-            for (let r of AIRegexes) {
-                try { if (r.test(tok)) return 'AI'; } catch(e){}
-            }
-
-            // Count 'ai' occurrences (kept as-is)
-            const aiMatches = lowerTok.match(/ai/gi) || [];
-            if (aiMatches.length >= 2) return 'AI';
-
             const originalIsFinnish = isFinnishLike(tok);
 
-            // Check uppercase AI strictly at start/end:
-            const hasUpperAIAtStart = tok.startsWith('AI');
-            const hasUpperAIAtEnd   = tok.endsWith('AI');
+            // --- Case-insensitive detection of AI at start or end (with optional - or _) ---
+            const hasAIAtStart = /^ai[-_]?/i.test(tok);
+            const hasAIAtEnd   = /[-_]?ai$/i.test(tok);
+	
+            // If the whole token looks Finnish, ignore AI-edge heuristics for it
+            if (originalIsFinnish) {
+            continue;
+            }
 
-            // If there is no explicit uppercase AI at edges, treat this as a natural word case.
-            if (!hasUpperAIAtStart && !hasUpperAIAtEnd) {
-                // For purely Finnish-like words (maanantai, Aitokiuas etc.), we do not treat 'ai' as suffix/prefix here.
+            // If token has AI at front/back, run AIRegexes on the root part
+            if (hasAIAtStart || hasAIAtEnd) {
+                let root = tok;
+
+                if (hasAIAtStart) {
+                    root = root.replace(/^ai[-_]?/i, '');
+                }
+                if (hasAIAtEnd) {
+                    root = root.replace(/[-_]?ai$/i, '');
+                }
+
+                if (!root) {
+                    // Effectively just "AI"
+                    return 'AI';
+                }
+
+                for (let r of AIRegexes) {
+                    try {
+                        if (r.test(root)) {
+                            return 'AI';
+                        }
+                    } catch (e) {}
+                }
+            }
+
+            // Finnish-specific edge AI behaviour, using same case-insensitive AI-at-edges check
+            if (!hasAIAtStart && !hasAIAtEnd) {
                 continue;
             }
 
-            // Remove uppercase AI at edges to see the "root" part
-            let root = tok;
-            if (hasUpperAIAtStart) root = root.substring(2);
-            if (hasUpperAIAtEnd)   root = root.substring(0, root.length - 2);
-            const lowerRoot = root.toLowerCase();
+            let root2 = tok;
+            if (hasAIAtStart) root2 = root2.replace(/^ai[-_]?/i, '');
+            if (hasAIAtEnd)   root2 = root2.replace(/[-_]?ai$/i, '');
+            if (!root2) return 'AI';
 
-            if (!root) {
-                // Token is just "AI" or "AI" plus punctuation -> treat as AI word
+            const rootIsFinnish = isFinnishLike(root2);
+
+            // AI + Finnish-root, or Finnish-root + AI ⇒ blocked
+            if (rootIsFinnish && (hasAIAtStart || hasAIAtEnd)) {
                 return 'AI';
             }
 
-            const rootIsFinnish = isFinnishLike(root);
-
-            // Case 1: AI + Finnish-root, or Finnish-root + AI -> treat as "word + AI" => blocked.
-            if (rootIsFinnish && (hasUpperAIAtStart || hasUpperAIAtEnd)) {
-                // Examples: "AIAitokiuas", "AitokiuasAI" => block
-                return 'AI';
-            }
-
-            // Case 2: If full token itself is a Finnish-like word and only has 'ai' at *one* edge in a natural way,
-            // we allow it. (E.g. "MaanantAI" if you ever capitalize in a weird way.)
+            // If full token is Finnish-like but root isn't, allow
             if (originalIsFinnish && !rootIsFinnish) {
                 continue;
             }
 
-            // Case 3: Non-Finnish root + uppercase AI at edge => treat as AI stick-on (LegAI, AIStuff, etc.) => blocked.
-            if (!rootIsFinnish && (hasUpperAIAtStart || hasUpperAIAtEnd)) {
+            // Non-Finnish root + AI at edge ⇒ treat as AI stick-on ⇒ blocked
+            if (!rootIsFinnish && (hasAIAtStart || hasAIAtEnd)) {
                 return 'AI';
             }
         }
