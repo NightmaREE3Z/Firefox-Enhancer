@@ -38,11 +38,12 @@
     if (previousRedirect) {
         devLog('Previous redirect detected. Reason:', previousRedirect);
         // Keep it for reference until the next redirect; comment out next line to keep it forever in the tab.
-        clearPersistedRedirect();
+        // clearPersistedRedirect();  // NOTE: keep comment if you want history across loads
     }
 
     // Collect and expose last redirect info in memory as well
     function logRedirect(triggerContext, triggerTerm) {
+        console.warn('[GOOGLE.JS] *** logRedirect CALLED ***', triggerContext, triggerTerm);
         lastRedirectInfo = {
             context: triggerContext || '',
             term: String(triggerTerm || ''),
@@ -104,12 +105,12 @@
         /Tiffa/i, /Strat/i, /puz/i, /vulv/i, /clit/i, /cl1t/i, /cloth/i, /uncloth/i, /decloth/i, /rem cloth/i, /del cloth/i, /izzi dame/i, /eras cloth/i, /Bella/i, /Tiffy/i, /vagi/i, /vagene/i, /Del Ray/i, /CJ Lana/i, /generator/i,
         /Liv org/i, /pant/i, /off pant/i, /rem pant/i, /Kristen Stewart/i, /Steward/i, /Perze/i, /Brave/i, /Roxan/i, /Browser/i, /Selain/i, /TOR-Selain/i, /Brit Bake/i, /\bVega\b/i, /\bSlut\b/i, /3dit/i, /ed1t/i, /playboy/i, /poses/i,
         /Sydney Sweeney/i, /Sweeney/i, /fap/i, /Sydnee/i, /del pant/i, /eras pant/i, /her pant/i, /she pant/i, /pussy/i, /adult content/i, /content adult/i, /porn/i, /\bTor\b/i, /editing/i, /3d1t/i, /\bAMX\b/i, /posing/i, /Sweee/i,
-        /\bAnal-\b/i, /\bAlexa\b/i, /\bAleksa\b/i, /AI Tool/i, /aitool/i, /Stee/i, /Waaa/i, /Stewart/i, /MS Edge/i, /TOR-browser/i, /Opera/i, /\bAi\b/i, /\bADM\b/i, /\bAis\b/i, /\b-Ai\b/i, /\bedit\b/i, /Feikki/i, /syväväärennös/i,
-        /\bIzzi\b/i, /\bDame\b/i, /\bNox\b/i, /\bLiv\b/i, /Chelsey/i, /Zel Veg/i, /Ch3l/i, /\bShe\b/i, /\bADMX\b/i, /\bSol\b/i, /\bEmma\b/i, /\bRiho\b/i, /\bJaida\b/i, /\bCum\b/i, /\bAi-\b/i, /syvä väärennös/i, /alaston/i, /\bHer\b/i,
-        /P4IG3/i, /Paig3/i, /P4ige/i, /pa1g/i, /pa!g/i, /palg3/i, /palge/i, /Br1tt/i, /Br!tt/i, /Tw4t/i, /Brltt/i, /\bTay\b/i, /\balexa wwe\b/i, /\bazz\b/i, /\bjaida\b/i, /Steph/i, /St3ph/i, /editation/i, /3d!7/i, /3d!t/i, /ed!t/i, /Chel5/i,
+        /\bAnal-\b/i, /\bAlexa\b/i, /\bAleksa\b/i, /AI Tool/i, /aitool/i,  /\bAi-\b/i, /\b-Ai\b/i, /Stee/i, /Waaa/i, /Stewart/i, /MS Edge/i, /TOR-browser/i, /Opera/i, /\bAi\b/i, /\bADM\b/i, /\bAis\b/i, /\bedit\b/i, /Feikki/i, /syväväärennös/i,
+        /\bIzzi\b/i, /\bDame\b/i, /\bNox\b/i, /\bLiv\b/i, /Chelsey/i, /Zel Veg/i, /Ch3l/i, /\bShe\b/i, /\bADMX\b/i, /\bSol\b/i, /\bEmma\b/i, /\bRiho\b/i, /\bJaida\b/i, /\bCum\b/i, /syvä väärennös/i, /alaston/i, /\bHer\b/i, /\bAnal\b/i, 
+        /P4IG3/i, /Paig3/i, /P4ige/i, /pa1g/i, /pa!g/i, /palg3/i, /palge/i, /Br1tt/i, /Br!tt/i, /Tw4t/i, /Brltt/i, /\bTay\b/i, /\balexa wwe\b/i, /\bazz\b/i, /\bjaida\b/i, /Steph/i, /St3ph/i, /editation/i, /3d!7/i, /3d!t/i, /ed!t/i, 
         /Diipfeikki/i, /Diipfeik/i, /deep feik/i, /deepfeik/i, /Diip feik/i, /Diip feikki/i, /syva vaarennos/i, /syvä vaarennos/i, /CJ Perry/i, /Lana WWE/i, /Lana Del Rey/i, /\bLana\b/i, /CJ WWE/i, /image app/i, /edi7/i, /3d17/i, /ed!7/i,
         /pillu/i, /perse/i, /\bFuku\b/i, /pylly/i, /peppu/i, /pimppi/i, /pinppi/i, /Peba/i, /Beba/i, /Bepa/i, /Babe/i, /baby/i, /\bAnaali\b/i, /\bSeksi\b/i, /picture app/i, /edit app/i, /pic app/i, /photo app/i, /syvavaarennos/i, /Perry WWE/i,
-        /application/i, /sukupuoliyhteys/i, /penetraatio/i, /penetration/i, /vaatepoisto/i, /vaatteidenpoisto/i, /poista vaatteet/i, /(?:poista|poisto|poistaminen|poistamis)[ -]?(?:vaatteet|vaatteiden)/i, /\bAnus\b/i, /sexuaali/i, /\bAnal\b/i, 
+        /application/i, /sukupuoliyhteys/i, /penetraatio/i, /penetration/i, /vaatepoisto/i, /vaatteidenpoisto/i, /poista vaatteet/i, /(?:poista|poisto|poistaminen|poistamis)[ -]?(?:vaatteet|vaatteiden)/i, /\bAnus\b/i, /sexuaali/i, /Chel5/i, 
         /arxiv/i, /vaateiden poisto/i, /kuvankäsittely/i, /paneminen/i, /seksikuva/i, /uncensor app/i, /xray/i, /see[- ]?through/i, /clothes remover/i, /nsfw/i, /not safe for work/i, /alaston/i, /sexual/i, /seksuaali/i, /play boy/i, /yhdyntä/i,
         /scanner/i, /AI unblur/i, /deblur/i, /nsfwgen/i, /nsfw gen/i, /image enhancer/i, /skin view/i, /erotic/i, /eroottinen/i, /AI fantasy/i, /Fantasy AI/i, /\bMina\b/i, /fantasy edit/i, /AI recreation/i, /seksuaalisuus/i, /synthetic model/i,
         /Margot/i, /Robbie/i, /Ana de Armas/i, /soulgen/i, /Emily/i, /Emilia/i, /Ratajkowski/i, /Generated/i, /Zendaya/i, /Doja Cat/i, /Madelyn/i, /Salma Hayek/i, /Megan Fox/i, /Addison/i, /Emma Watson/i, /Taylor/i, /artificial model/i,
@@ -118,7 +119,7 @@
         /Stratusfaction/i, /yhdynnässä/i, /seksikuva/i, /seksivideo/i, /seksi kuvia/i, /seksikuvia/i, /yhdyntäkuvia/i, /yhdyntä kuvia/i, /panovideo/i, /pano video/i, /panokuva/i, /pano kuva/i, /pano kuvia/i, /panokuvia/i, /banned app/i,
         /masturb/i, /itsetyydy/i, /itse tyydytys/i, /itsetyydytysvid/i, /itsetyydytyskuv/i, /runkkualbumi/i, /runkku/i, /runkkaus/i, /runkata/i, /runkka/i, /näpitys/i, /näpittäminen/i, /sormetus/i, /sormitus/i, /sormitta/i, /sormetta/i,
         /sormettamiskuv/i, /sormittamiskuv/i, /sormettamiskuv/i, /fistaaminen/i, /näpityskuv/i, /näpittämiskuv/i, /sormettamisvid/i, /näpitysvid/i, /kotijynkky/i, /jynkkykuv/i, /jynkkyvid/i, /aikuisviihde/i, /fisting/i, /fistaus/i,
-        /sheer/i, /aikuis viihde/i, /aikuissisältö/i, /aikuis sisältö/i, /aikuiskontsa/i, /filmora/i, /aikuiskontentti/i, /aikuis kontentti/i, /aikuiscontentti/i, /aikuis contentti/i, /pleasi/i, /pleasu/i, /herself/i, /her self/i, 
+        /sheer/i, /aikuis viihde/i, /aikuissisältö/i, /aikuis sisältö/i, /aikuiskontsa/i, /filmora/i, /aikuiskontentti/i, /aikuis kontentti/i, /aikuiskontentti/i, /aikuis contentti/i, /pleasi/i, /pleasu/i, /herself/i, /her self/i, 
         /\bRembg\b/i, /\bRem bg\b/i, /\bDel bg\b/i, /\bDelbg\b/i, /delet bg/i, /fuck/i, /eras bg/i, /delet bg/i, /erase bg/i, /erasing bg/i, /bg delet/i, /bg erasing/i, /bg erase/i, /Blend face/, /Blendface/, /morphi/, /Blender face/, 
         /\bMorf\b/i, /morfi/, /skin viewer/i, /skinviewer/i, /cloth/i, /clothing/i, /clothes/i, /female/i, /al4ston/i, /p!llu/i, /p!mppi/i, /p!mpp!/i, /pimpp!/i, /nakukuva/i, /nakuna/i, /kuvaton/i, /AI model$/i, /trained model$/i,
         /Reface/i, /DeepAI/i, /GFPGAN/i, /RestoreFormer/i, /FaceMagic/i, /desnudador/i, /des nudador/i, /GAN-based/i, /diffusion/i, /latent/i, /prompt ex/i, /txt2img/i, /img2img/i, /image to image/i, /image 2 image/i, /model/i, 
@@ -126,7 +127,7 @@
         /removebg/i, /remove bg/i, /remov bg/i, /removal bg/i, /ia onl/i, /removebg/i,  /removalbg/i, /rembg/i, /rem background/i, /del background/i, /eras background/i, /erase background/i, /erasing background/i, /butth/i, /buttc/i, 
         /\bIA\b/i,/\bIas\b/i, /\b-Ia\b/i, /\bIa-\b/i, /background eras/i, /background del/i, /background rem/i, /background off/i, /off background/i, /background out/i, /out background/i, /removbg/i, /ladies/i, /lady/i, /butts/i,
         /buttc/i, /butt c/i, /butt h/i, /butt s/i, /\bMLM\b/i, /\bLLM\b/i, /\bTit\b/i, /\bGen\b/i, /\bTits\b/i, /learn model/i, /mach model/i, /titten/i, /combin fac/i, /merg fac/i, /fac merg/i, /fac comb/i, /fac blend/i, /joinface/i, 
-	/poista vaatteet/i, /poista vaat/i, /vaatteidenpoist/i, /vaatepoist/i, /poistavaat/i, /poistovaat/i, /too merg/i, /merg too/i, /two fac/i, /two fac/i, /too fac/i, /too fac/i, /fac join/i, /join fac/i, /bg remov/i, /Trish/i,
+        /poista vaatteet/i, /poista vaat/i, /vaatteidenpoist/i, /vaatepoist/i, /poistavaat/i, /poistovaat/i, /too merg/i, /merg too/i, /two fac/i, /two fac/i, /too fac/i, /too fac/i, /fac join/i, /join fac/i, /bg remov/i, /Trish/i,
         /join 2 fac/i, /Stormwrestl/i, /Stormrassl/i, /Storm wrestl/i, /Storm rassl/i, /Storm rassl/i, /Toni AEW/i, /Storm AEW/i, /Toni WWE/i, /Toni AEW/i, /Genius of The Sky/i, /\bToni\b/i, /huora/i, /huoru/i, /horo/i, /horats/i,
         /prostitoitu/i, /ilotyttå/i, /ilotyttö/i, /ilötyttö/i, /ilötytto/i, /ilåtyttå/i, /ilåtyttö/i, /iløtyttö/i, /iløtytto/i, /iløtyttø/i, /il0tyttö/i, /il0tytto/i, /il0tytt0/i, /il0tyttå/i, /il0tyttø/i, /1lotyttö/i, /1lotytto/i, 
         /!lotyttö/i, /ilotyttø/i, /ilotytt0/i, /ilotytto/i, /bordel/i, /bordel/i, /bordelli/i, /ilotalo/i, /ilåtalo/i, /ilåtalå/i, /ilotalå/i, /iløtalo/i, /ilötalo/i, /il0talo/i, /iløtalå/i, /ilötalå/i, /ilotalø/i, /erootti/i,
@@ -172,22 +173,24 @@
         /Nikki/i, /Saya Kamitani/i, /Kamitani/i, /Katie/i, /Nikkita/i, /Nikkita Lyons/i, /Lisa Marie/i, /Lisa Marie Varon/i, /Lisa Varon/i, /Marie Varon/i, /Amanda Huber/i, /cargil/i, /cargirl/i, /cargril/i, /gargril/i, /gargirl/i, /garcirl/i, /b-job/i, 
         /Ruby Soho/i, /Monica/i, /Castillo/i, /Matsumoto/i, /Shino Suzuki/i, /Yamashita/i, /Adriana/i, /Nia Jax/i, /McQueen/i, /Kasie Cay/i, /\bFuk\b/i, /fukk/i, /fukc/i, /fucc/i, /\bFuc\b/i, /hawt/i, /h4wt/i, /h0wt/i, /d!ck/i, /dlck/i, /d1ck/i, /c0ck/i,
         /5yvä/i, /join2fac/i, /flexclip/i, /pixelmator/i, /perfectcorp/i, /facejoin/i, /d1c/i, /d!c/i, /d!k/i, /d!c/i, /her0/i, /h3r0/i, /h3ro/i, /prompt/i, /pr0mpt/i, /pr0mp7/i, /promp7/i, /#/i, /##/i, /Sherilyn/i, /0rg@5m/i, /headgen/i, /head gen/i,
-	/genhead/i, /genhead/i, /HeyGen/i, /GenHey/i, /Mafiaprinsessa/i, /ai twerk/i, /twerk ai/i, /mangoanimat/i, /photo jiggle/i, /animat pic/i, /animat pho/i, /animat ima/i, /animat img/i, /pic animat/i, /pho animat/i, /animat ima/i, /animat pic/i, 
-	/animat pho/i, /animat ima/i, /animat img/i, /pic animat/i, /pho animat/i, /img animat/i, /ima animat/i, /photo animat/i, /image animat/i, /make pic mov/i, /make pho mov/i, /make img mov/i, /make ima mov/i, /gif pic/i, /gif pho/i, /gif img/i, 
-	/gif ima/i, /photo to gif/i, /image to gif/i, /pic to gif/i, /pic to vid/i, /photo to video/i, /image to video/i, /ph0t/i, /pho7/i, /ph07/i, /1m4g/i, /im4g/i, /1mag/i, /!mag/i, /!m4g/i, /!mg/i, /v1d3/i, /vid3/i, /v1de/i, /vld3/i, /v1d3/i, /g!f/i,
-	/RemovingAI/i, /blowjob/i, /bjob/i, /mangoai/i, /mangoapp/i, /mango-app/i, /ai-app/i, /mangoanim/i, /mango anim/i, /mango-anim/i, /lantaai/i, /lantaaa/i, /motionai/i, /changemotion/i, /swapmotion/i, /motionsw/i, /motionc/i, /\bmotion\b/i, /poseai/i,
-	/AIblow/i, /5uck/i, /Suckin/i, /Sucks/i, /Sucki/i, /Sucky/i, /AIsuck/i, /AI-suck/i, /drool/i, /RemovingAI/i, /blowjob/i, /bjob/i, /b-job/i, /bj0b/i, /bl0w/i, /blowj0b/i, /dr0ol/i, /dro0l/i, /dr00l/i, /BJAI/i, /AIBJ/i, /BJ0b/i, /BJob/i, /B-J0b/i, 
-	/B-Job/i, /Suckjob/i, /Suckj0b/i, /Suck-job/i, /Suck-j0b/i, /Mouthjob/i, /Mouthj0b/i, /M0uthjob/i, /M0uthj0b/i, /Mouth-job/i, /Mouth-j0b/i, /M0uth-job/i, /M0uth/i, /M0u7h/i, /Mou7h/i, /MouthAI/i, /MouthinAI/i, /MouthingAI/i, /AIMouth/i, /BlowAI/i, 
-	/AIBlow/i, /BlowsAI/i, /BlowingAI/i, /JobAI/i, /AIJob/i, /Mouthig/i, /Suck/i, /ZuckCock/i, /ZuckC/i, /ZuckD/i, /ZuckP/i, /Zuckz/i, /Zucks/i, /Zuckc/i, /Zuzkc/i, /YouZuck/i, /ZuckYou/i, /AIZuck/i, /ZuckAI/i, /Cuck/i, /Guck/i, /SDuck/i, /Cheek/i,
-	/Sukc/i, /Sukz/i, /AISucc/i, /SuccAI/i, /Suqz/i, /Suqs/i, /Suqc/i, /Suqq/i, /Suqq/i, /Suqi/i, /Suqz/i, /Sucq/i, /cukc/i, /boob/i, /b0ob/i, /b00b/i, /bo0b/i, /titjob/i, /titty/i, /titti/i, /j0b/i, /w0rk/i, /assjob/i, /buttjob/i, /wank/i, /w4nk/i, 
-	/tittt/i, /tiitt/i, /crotch/i, /thigh/i, /legjob/i, /asssex/i, /buttsex/i, /titsex/i, /buttsex/i, /ass sex/i, /butt sex/i, /tit sex/i, /butt sex/i, /buttstuff/i, /butt stuff/i, /p0rn/i, /redtube/i, /xhamster/i, /asstube/i, /butttube/i, /FapAI/i, 
-	/adulttube/i, /adult tube/i, /HerAi/i, /AiHer/i, /SheAi/i, /AIShe/i, /AroundAI/i, /HerAround/i, /AroundHer/i, /TurnHer/i, /HerTurn/i, /SheAround/i, /AroundShe/i, /TurnShe/i, /SheTurn/i, /-her/i, /her-/i, /-she/i, /she-/i, /AIFap/i, /AIHug/i, 
-	/FapAI/i, /HugAI/i, /AIAdult/i, /AdultAI/i, /AIContent/i, /ContentAI/i, /AICreate/i, /CreateAI/i, /AICreating/i, /CreatingAI/i, /AICreation/i, /CreationAI/i, /AIMake/i, /MakeAI/i, /AIMaking/i, /MakingAI/i, /AIOut/i, /OutAI/i, /AIStuff/i, /StuffAI/i,
-	/t0ol/i, /to0l/i, /t00l/i, /70ol/i, /7o0l/i, /700l/i, /FindAI/i, /FinderAI/i, /FindingAI/i, /AIFind/i, /DirectoryAI/i, /AIDirect/i, /AILook/i, /LookAI/i, /LooksAI/i, /LookupAI/i, /Look-upAI/i, /LookingUpAI/i, /UpLookAI/i, /AIUpLook/i, /ButtAPP/i,
-	/APPAI/i, /AIAPP/i, /AssAI/i, /AIAss/i, /AssAPP/i, /AppAss/i, /Ass-/i, /-Ass/i, /Butt-/i, /-Butt/i, /Cooch-/i, /-Cooch/i, /Coochie-/i, /Kewch-/i, /-Kewch/i, /Kewchie-/i, /Coachie/i, /K3wc/i, /cooch/i, /tush/i, /7ush/i, /7u5h/i, /tu5h/i, /AITit/i,
-	/TitAI/i, /TitsAI/i, /AIBoob/i, /BoobAI/i, /BoobsAI/i, /BoobieAI/i, /BoobiesAI/i, /BoobyAI/i, /BoobysAI/i, /Boob/i, /titti/i, /titty/i, /ellie/i, /3llie/i, /elli3/i, /3lli3/i, /cha0tic/i, /AISketch/i, /SketchAI/i, /AIDraw/i, /AIDrew/i, /DrawAI/i, 
-	/DrewAI/i, /DrawsAI/i, /DrawingAI/i, /DrawingsAI/i, /PaintAI/i, /PaintsAI/i, /PaintingAI/i, /PaintingsAI/i, /AIPain/i, /OpenHerLegs/i, /OpenLegs/i, /OpeningLegs/i, /OpeningHerLegs/i, /OpensLegs/i, /OpensHerLegs/i, /SpreadLeg/i, /SpreadHerLeg/i,
-	/cunnt/i, /cunnn/i, /SpreadingLeg/i, /SpreadingHerLeg/i, /SpreadsLeg/i, /SpreadsHerLeg/i, /HerThig/i, /HerLeg/i, /HerThic/i, /SheThig/i, /SheLeg/i, /SheThic/i, /HerLeg/i, /HerThic/i, /LegShe/i, /LegsShe/i, /Thicc/i, /ThickShe/i, 
+        /genhead/i, /genhead/i, /HeyGen/i, /GenHey/i, /Mafiaprinsessa/i, /ai twerk/i, /twerk ai/i, /mangoanimat/i, /photo jiggle/i, /animat pic/i, /animat pho/i, /animat ima/i, /animat img/i, /pic animat/i, /pho animat/i, /animat ima/i, /animat pic/i, 
+        /animat pho/i, /animat ima/i, /animat img/i, /pic animat/i, /pho animat/i, /img animat/i, /ima animat/i, /photo animat/i, /image animat/i, /make pic mov/i, /make pho mov/i, /make img mov/i, /make ima mov/i, /gif pic/i, /gif pho/i, /gif img/i, 
+        /gif ima/i, /photo to gif/i, /image to gif/i, /pic to gif/i, /pic to vid/i, /photo to video/i, /image to video/i, /ph0t/i, /pho7/i, /ph07/i, /1m4g/i, /im4g/i, /1mag/i, /!mag/i, /!m4g/i, /!mg/i, /v1d3/i, /vid3/i, /v1de/i, /vld3/i, /v1d3/i, /g!f/i,
+        /RemovingAI/i, /blowjob/i, /bjob/i, /mangoai/i, /mangoapp/i, /mango-app/i, /ai-app/i, /mangoanim/i, /mango anim/i, /mango-anim/i, /lantaai/i, /lantaaa/i, /motionai/i, /changemotion/i, /swapmotion/i, /motionsw/i, /motionc/i, /\bmotion\b/i, /poseai/i,
+        /AIblow/i, /5uck/i, /Suckin/i, /Sucks/i, /Sucki/i, /Sucky/i, /AIsuck/i, /AI-suck/i, /drool/i, /RemovingAI/i, /blowjob/i, /bjob/i, /b-job/i, /bj0b/i, /bl0w/i, /blowj0b/i, /dr0ol/i, /dro0l/i, /dr00l/i, /BJAI/i, /AIBJ/i, /BJ0b/i, /BJob/i, /B-J0b/i, 
+        /B-Job/i, /Suckjob/i, /Suckj0b/i, /Suck-job/i, /Suck-j0b/i, /Mouthjob/i, /Mouthj0b/i, /M0uthjob/i, /M0uthj0b/i, /Mouth-job/i, /Mouth-j0b/i, /M0uth-job/i, /M0uth/i, /M0u7h/i, /Mou7h/i, /MouthAI/i, /MouthinAI/i, /MouthingAI/i, /AIMouth/i, /BlowAI/i, 
+        /AIBlow/i, /BlowsAI/i, /BlowingAI/i, /JobAI/i, /AIJob/i, /Mouthig/i, /Suck/i, /ZuckCock/i, /ZuckC/i, /ZuckD/i, /ZuckP/i, /Zuckz/i, /Zucks/i, /Zuckc/i, /Zuzkc/i, /YouZuck/i, /ZuckYou/i, /AIZuck/i, /ZuckAI/i, /Cuck/i, /Guck/i, /SDuck/i, /Cheek/i,
+        /Sukc/i, /Sukz/i, /AISucc/i, /SuccAI/i, /Suqz/i, /Suqs/i, /Suqc/i, /Suqq/i, /Suqq/i, /Suqi/i, /Suqz/i, /Sucq/i, /cukc/i, /boob/i, /b0ob/i, /b00b/i, /bo0b/i, /titjob/i, /titty/i, /titti/i, /j0b/i, /w0rk/i, /assjob/i, /buttjob/i, /wank/i, /w4nk/i, 
+        /tittt/i, /tiitt/i, /crotch/i, /thigh/i, /legjob/i, /asssex/i, /buttsex/i, /titsex/i, /buttsex/i, /ass sex/i, /butt sex/i, /tit sex/i, /butt sex/i, /buttstuff/i, /butt stuff/i, /p0rn/i, /redtube/i, /xhamster/i, /asstube/i, /butttube/i, /FapAI/i, 
+        /adulttube/i, /adult tube/i, /HerAi/i, /AiHer/i, /SheAi/i, /AIShe/i, /AroundAI/i, /HerAround/i, /AroundHer/i, /TurnHer/i, /HerTurn/i, /SheAround/i, /AroundShe/i, /TurnShe/i, /SheTurn/i, /-her/i, /her-/i, /-she/i, /she-/i, /AIFap/i, /AIHug/i, 
+        /FapAI/i, /HugAI/i, /AIAdult/i, /AdultAI/i, /AIContent/i, /ContentAI/i, /AICreate/i, /CreateAI/i, /AICreating/i, /CreatingAI/i, /AICreation/i, /CreationAI/i, /AIMake/i, /MakeAI/i, /AIMaking/i, /MakingAI/i, /AIOut/i, /OutAI/i, /AIStuff/i, /StuffAI/i,
+        /t0ol/i, /to0l/i, /t00l/i, /70ol/i, /7o0l/i, /700l/i, /FindAI/i, /FinderAI/i, /FindingAI/i, /AIFind/i, /DirectoryAI/i, /AIDirect/i, /AILook/i, /LookAI/i, /LooksAI/i, /LookupAI/i, /Look-upAI/i, /LookingUpAI/i, /UpLookAI/i, /AIUpLook/i, /ButtAPP/i,
+        /APPAI/i, /AIAPP/i, /AssAI/i, /AIAss/i, /AssAPP/i, /AppAss/i, /Ass-/i, /-Ass/i, /Butt-/i, /-Butt/i, /Cooch-/i, /-Cooch/i, /Coochie-/i, /Kewch-/i, /-Kewch/i, /Kewchie-/i, /Coachie/i, /K3wc/i, /cooch/i, /tush/i, /7ush/i, /7u5h/i, /tu5h/i, /AITit/i,
+        /TitAI/i, /TitsAI/i, /AIBoob/i, /BoobAI/i, /BoobsAI/i, /BoobieAI/i, /BoobiesAI/i, /BoobyAI/i, /BoobysAI/i, /Boob/i, /titti/i, /titty/i, /ellie/i, /3llie/i, /elli3/i, /3lli3/i, /cha0tic/i, /AISketch/i, /SketchAI/i, /AIDraw/i, /AIDrew/i, /DrawAI/i, 
+        /DrewAI/i, /DrawsAI/i, /DrawingAI/i, /DrawingsAI/i, /PaintAI/i, /PaintsAI/i, /PaintingAI/i, /PaintingsAI/i, /AIPain/i, /OpenHerLegs/i, /OpenLegs/i, /OpeningLegs/i, /OpeningHerLegs/i, /OpensLegs/i, /OpensHerLegs/i, /SpreadLeg/i, /SpreadHerLeg/i,
+        /cunnt/i, /cunnn/i, /SpreadingLeg/i, /SpreadingHerLeg/i, /SpreadsLeg/i, /SpreadsHerLeg/i, /HerThig/i, /HerLeg/i, /HerThic/i, /SheThig/i, /SheLeg/i, /SheThic/i, /HerLeg/i, /HerThic/i, /LegShe/i, /LegsShe/i, /Thicc/i, /ThickShe/i, /fondl/i, /bdsm/i,
+        /4ppli/i, /4ppl1/i, /appl1/i, /pr0gram/i, /progr4m/i, /pr0gr4m/i, /pr0/i, /gr4m/i, /römpsä/i, /römpsä/i, /rompsä/i, /römpsa/i, /rompsa/i, /tussu/i, /tusspa/i, /tuspand/i, /pilde/i, /pilpe/i, /persaus/i, /persvako/i, /persevako/i, /persreikä/i, 
+        /persereikä/i, /kyrpa/i, /kyrpä/i, /kikkeli/i, /pippeli/i, /tekoäly/i, /teko äly/i, /generativ/i,
     ];
 
     // Special Regexes array, kept separate for readability.
@@ -341,12 +344,12 @@
         /gizmodo\.com/i,
         /comfy\.org/i,
         /runcomfy\.com/i,
-	/picsart\.com/i,
-	/capcut\.com/i,
+        /picsart\.com/i,
+        /capcut\.com/i,
         /canva\.com/i,
-	/topazlabs\.com/i,
-	/online\.visual-paradigm\.com/i,
-	/skylum\.com/i,
+        /topazlabs\.com/i,
+        /online\.visual-paradigm\.com/i,
+        /skylum\.com/i,
         /stable-diffusion-art\.com/i,
         /comfyui\.org/i,
         /thinkdiffusion\.com/i,
@@ -392,7 +395,7 @@
         /123rf\./i,
         /virtualbox\./i,
         /oracle\./i,
-	/play.google./i,
+        /play.google./i,
         /formulae\./i,
         /rem\./i,
         /remove\./i,
@@ -431,22 +434,22 @@
         /workingtools\./i,
         /working-tool\./i,
         /working-tools\./i,
-	/videoaihug\./i,
-	/aihugvideo\./i,
-	/fotor\./i,
-	/imyfone\./i,
-	/aihug\./i,
-	/hugai\./i,
-	/ai-hug\./i,
-	/hug-ai\./i,
-	/aihugging\./i,
-	/huggingai\./i,
-	/ai-hugging\./i,
-	/hugging-ai\./i,
-	/ai-videogenerator\./i,
-	/aivideogenerator\./i,
-	/videogeneratorai\./i,
-	/videogenerator-ai\./i,
+        /videoaihug\./i,
+        /aihugvideo\./i,
+        /fotor\./i,
+        /imyfone\./i,
+        /aihug\./i,
+        /hugai\./i,
+        /ai-hug\./i,
+        /hug-ai\./i,
+        /aihugging\./i,
+        /huggingai\./i,
+        /ai-hugging\./i,
+        /hugging-ai\./i,
+        /ai-videogenerator\./i,
+        /aivideogenerator\./i,
+        /videogeneratorai\./i,
+        /videogenerator-ai\./i,
         /any-video\./i,
         /anyvideo\./i,
         /any-video-convert\./i,
@@ -463,29 +466,29 @@
         /aidirectory\./i,
         /ai‑directorys\./i,
         /aidirectorys\./i,
-	/aitoolsdirectory\./i,
-	/aitoolsdirectory\./i,
-	/aidirectory\./i, 
-	/onlineaidirectory\./i, 
-	/aidirectoryonline\./i, 
-	/online-aidirectory\./i, 
-	/aidirectory-online\./i, 
-	/onlineaidirectorys\./i, 
-	/aidirectorysonline\./i, 
-	/online-aidirectorys\./i, 
-	/aidirectorys-online\./i, 
-	/ai-directory\./i,
-	/assistingintelligence\./i,
-	/assisting-intelligence\./i,
-	/intelligenceassisting\./i,
-	/intelligence-assisting\./i,
-	/assistintelligence\./i,
-	/assist-intelligence\./i,
-	/intelligenceassist\./i,
-	/intelligence-assist\./i,
-	/aidirectorylist\./i,
-	/aiagentsdirectory\./i,
-	/aiagentsdirectory\./i,
+        /aitoolsdirectory\./i,
+        /aitoolsdirectory\./i,
+        /aidirectory\./i, 
+        /onlineaidirectory\./i, 
+        /aidirectoryonline\./i, 
+        /online-aidirectory\./i, 
+        /aidirectory-online\./i, 
+        /onlineaidirectorys\./i, 
+        /aidirectorysonline\./i, 
+        /online-aidirectorys\./i, 
+        /aidirectorys-online\./i, 
+        /ai-directory\./i,
+        /assistingintelligence\./i,
+        /assisting-intelligence\./i,
+        /intelligenceassisting\./i,
+        /intelligence-assisting\./i,
+        /assistintelligence\./i,
+        /assist-intelligence\./i,
+        /intelligenceassist\./i,
+        /intelligence-assist\./i,
+        /aidirectorylist\./i,
+        /aiagentsdirectory\./i,
+        /aiagentsdirectory\./i,
         /aiphoto\./i,
         /ai-photo\./i,
         /photoai\./i,
@@ -495,12 +498,12 @@
         /aiphoto-hq\./i,
         /ai-photo-hq\./i,
         /axis-intelligence\.com/i,
-	/letsview\.com/i,
-	/trendhunter\./i,
-	/trendhunt\./i,
-	/trend-hunter\./i,
-	/trend-hunt\./i,
-	/dev\./i,
+        /letsview\.com/i,
+        /trendhunter\./i,
+        /trendhunt\./i,
+        /trend-hunter\./i,
+        /trend-hunt\./i,
+        /dev\./i,
         /feishu\.cn/i,
         /n8ked\./i,
         /imgur\.com.*nude/i,
@@ -575,6 +578,7 @@
         /stable-diffusionapi\./i,
         /stablediffusion-api\./i,
         /stable-diffusion-api\./i,
+        /stablediffusionapi\./i,
         /huggingface\./i,
         /hugging-face\./i,
         /huntscreen\./i,
@@ -605,46 +609,46 @@
         /scribd\./i,
         /alu-care\./i,
         /noxilo\./i,
-	/aichef\./i,
-	/ai-chef\./i,
-	/chefai\./i,
-	/chef-ai\./i,
-	/aichief\./i,
-	/ai-chief\./i,
-	/chiefai\./i,
-	/chief-ai\./i,
+        /aichef\./i,
+        /ai-chef\./i,
+        /chefai\./i,
+        /chef-ai\./i,
+        /aichief\./i,
+        /ai-chief\./i,
+        /chiefai\./i,
+        /chief-ai\./i,
         /noxillo\./i,
         /vadoo\./i,
         /vidnoz\./i,
-	/theresanaiforthat\./i,
-	/futuretools\./i,
-	/future-tools\./i,
-	/futurepedia\./i,
-	/future-pedia\./i,
-	/aitooldirectory\./i,
-	/aitoolsforme\./i,
-	/aixploria\./i,  
-	/topai\./i, 
-	/top-ai\./i,
-	/aitop\./i, 
-	/ai-top\./i,
-	/toolify\./i,  
-	/allaitool\./i,  
-	/toolsaiapp\./i,  
-	/aitoolhunt\./i,  
-	/openfuture\./i,  
-	/seofai\./i,   
-	/alltheaitools\./i,  
-	/aitools\./i,   
-	/aitoptools\./i,  
-	/allthingsai\./i,  
-	/aidir\./i, 
+        /theresanaiforthat\./i,
+        /futuretools\./i,
+        /future-tools\./i,
+        /futurepedia\./i,
+        /future-pedia\./i,
+        /aitooldirectory\./i,
+        /aitoolsforme\./i,
+        /aixploria\./i,  
+        /topai\./i, 
+        /top-ai\./i,
+        /aitop\./i, 
+        /ai-top\./i,
+        /toolify\./i,  
+        /allaitool\./i,  
+        /toolsaiapp\./i,  
+        /aitoolhunt\./i,  
+        /openfuture\./i,  
+        /seofai\./i,   
+        /alltheaitools\./i,  
+        /aitools\./i,   
+        /aitoptools\./i,  
+        /allthingsai\./i,  
+        /aidir\./i, 
         /wegocup\./i,
         /modcombo\./i,
         /monica\./i,
         /aimonica\./i,
         /ai-monica\./i,
-	/monicaai\./i,
+        /monicaai\./i,
         /monica-ai\./i,
         /monicai\./i,
         /monic-ai\./i,
@@ -666,31 +670,31 @@
         /undress-app\./i,
         /appundress\./i,
         /app-undress\./i,
-	/solo\./i,
-	/robeoff\./i,
-	/offrobe\./i,
-	/robe-off\./i,
-	/off-robe\./i,
-	/sendfame\./i,
-	/send-fame\./i,
-	/sendingfame\./i,
-	/sending-fame\./i,
-	/sendsfame\./i,
-	/sends-fame\./i,
-	/sentfame\./i,
-	/sent-fame\./i,
-	/famesend\./i,
-	/fame-send\./i,
-	/famesending\./i,
-	/fame-sending\./i,
-	/famesends\./i,
-	/fame-sends\./i,
-	/famesent\./i,
-	/fame-sent\./i,
-	/headgenai\./i,
-	/headgen-ai\./i,
-	/head-genai\./i,
-	/head-gen-ai\./i,
+        /solo\./i,
+        /robeoff\./i,
+        /offrobe\./i,
+        /robe-off\./i,
+        /off-robe\./i,
+        /sendfame\./i,
+        /send-fame\./i,
+        /sendingfame\./i,
+        /sending-fame\./i,
+        /sendsfame\./i,
+        /sends-fame\./i,
+        /sentfame\./i,
+        /sent-fame\./i,
+        /famesend\./i,
+        /fame-send\./i,
+        /famesending\./i,
+        /fame-sending\./i,
+        /famesends\./i,
+        /fame-sends\./i,
+        /famesent\./i,
+        /fame-sent\./i,
+        /headgenai\./i,
+        /headgen-ai\./i,
+        /head-genai\./i,
+        /head-gen-ai\./i,
         /whatisthebigdata\./i,
         /whatsthebigdata\./i,
         /mangoanimate\./i,
@@ -760,10 +764,10 @@
         /f4wonline\.com/i,
         /medium\.com\/@/i,
         /waterfox\.\/@/i,
-	/tenereteam\./i,
+        /tenereteam\./i,
         /awfulannouncing\.com/i,
         /pwpix\.net/i,
-	/reddit\.com\/r\/photoshop/i,
+        /reddit\.com\/r\/photoshop/i,
         /reddit\.com\/r\/StableDiffusion/i,
         /reddit\.com\/r\/AlexaBliss/i,
         /reddit\.com\/r\/BeckyLynch/i,
@@ -947,7 +951,7 @@
     // Record details of the last forbidden match for better debugging
     function recordMatchDetail(kind, value, inText) {
         lastMatchDetails = {
-            kind,                          // 'regex' | 'special' | 'string'
+            kind,                          // 'regex' | 'special' | 'string' | 'ai-boundary'
             value: String(value || ''),
             snippet: String(inText || '').substring(0, 200),
             when: new Date().toISOString()
@@ -955,7 +959,8 @@
         devLog('FORBIDDEN ' + kind.toUpperCase() + ' MATCH:', value, 'in:', lastMatchDetails.snippet);
     }
 
-    function containsForbiddenKeywords(text) {
+    // === BASE KEYWORD CHECKER (NO AI BOUNDARY) ===
+    function containsForbiddenKeywordsBase(text) {
         if (!text) return false;
 
         // First: special high-complexity regexes
@@ -989,6 +994,180 @@
             }
         }
         return false;
+    }
+
+    // === AI-BOUNDARY FUNCTION (USED FOR QUERIES ETC.) ===
+    function containsAiBoundary(text) {
+        if (!text) return false;
+
+        function escapeRegExp(s) {
+            if (typeof s !== 'string') s = String(s);
+            return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+
+        // -- Sexual/AI keywords regexes --
+        const AIRegexes = [
+            /sex/i, /porn/i, /nud/i, /naked/i, /nsfw/i, /oral/i, /blow/i, /fell/i, /tit/i, /boob/i, /pussy/i, /vag/i, /veg/i, /cock/i, /trap/i, /boinking/i, /lesbian/i,
+            /dick/i, /cum/i, /penis/i, /fuck/i, /suck/i, /mast/i, /jerk/i, /fap/i, /ass/i, /butt/i, /boot/i, /bra/i, /bro/i, /pant/i, /strip/i, /stripping/i, /raping/i,
+            /head/i, /give/i, /giving/i, /her/i, /she/i, /him/i, /his/i, /woman/i, /women/i, /fem/i, /male/i, /girl/i, /rassling/i, /gril/i, /cumshots/i, /picture/i,
+            /boy/i, /lady/i, /ladi/i, /guy/i, /gal/i, /g4l/i, /tush/i, /anal/i, /penet/i, /anim/i, /mode/i, /LLM/i, /MLM/i, /deep/i, /visuals/i, /visualis/i, /open/i,
+            /learn/i, /learning/i, /diff/i, /diffuse/i, /diffusion/i, /cloth/i, /clothing/i, /clothes/i, /wwe/i, /aew/i, /tna/i, /njpw/i, /ajpw/i, /allelite/i, /gene/i,
+            /wrestl/i, /wrestle/i, /wrestles/i, /wrestling/i, /rassl/i, /rassle/i, /anal/i, /suck/i, /sucking/i, /sucks/i, /spread/i, /spreads/i, /spreading/i, /generates/i,
+            /opens/i, /opening/i, /hole/i, /thigh/i, /leg/i, /legs/i, /toe/i, /toes/i, /pen/i, /penly/i, /pens/i, /pencil/i, /pic/i, /photo/i, /generated/i, /generati/i,
+            /imag/i, /img/i, /graph/i, /graphs/i, /graphic/i, /graphics/i, /journey/i, /journal/i, /new/i, /list/i, /listof/i, /lists/i, /listsof/i, /about/i, /fella/i,
+            /gf/i, /friend/i, /friends/i, /buddy/i, /buddi/i, /buddies/i, /mate/i, /mates/i, /panty/i, /pantys/i, /panti/i, /panties/i, /ladies/i, /ladys/i, /booby/i,
+            /tool/i, /tools/i, /find/i, /finding/i, /finder/i, /twerk/i, /twerks/i, /twerking/i, /jerking/i, /jerks/i, /wank/i, /wanker/i, /wanks/i, /fapp/i, /seksikäs/i,
+            /faps/i, /faping/i, /fapping/i, /fappening/i, /leak/i, /leaks/i, /talk/i, /leaked/i, /leaking/i, /leakings/i, /edit/i, /editing/i, /editation/i, /lesbians/i,
+            /pictures/i, /photos/i, /image/i, /images/i, /imgs/i, /photograph/i, /photographs/i, /visual/i, /visualiz/i, /visualization/i, /visualize/i, /raped/i, /rape/i,
+            /visualisation/i, /visualise/i, /visualic/i, /visualication/i, /visualice/i, /speech/i, /gen/i, /gener/i, /genera/i, /generat/i, /generate/i, /nipple/i, /horny/i, 
+            /generativ/i, /generative/i, /vid/i, /vide/i, /vidu/i, /video/i, /tube/i, /tubes/i, /bf/i, /blows/i, /blowing/i, /titti/i, /tittie/i, /titties/i, /hornier/i,
+            /fellat/i, /fellati/i, /fellatio/i, /fellation/i, /tits/i, /titty/i, /tittys/i, /tittyes/i, /boob/i, /boobs/i, /boobi/i, /boobie/i, /boobies/i, /handjob/i,
+            /boobye/i, /boobyes/i, /pus/i, /puss/i, /pussy/i, /pussi/i, /pussie/i, /pussies/i, /vag/i, /vagi/i, /vagin/i, /vagina/i, /vaginal/i, /vaginall/i, /peeping/i,
+            /vaginally/i, /vaginaly/i, /vega/i, /vegana/i, /vegane/i, /vagane/i, /vagene/i, /vagena/i, /anall/i, /anally/i, /analli/i, /anaali/i, /seksi/i, /spanking/i,
+            /seksikkyys/i, /masturbate/i, /masturbation/i, /masturbating/i, /jizz/i, /ejaculate/i, /ejaculated/i, /ejaculating/i, /blowjob/i, /blowjobs/i, /underwear/i,
+            /stripper/i, /strippers/i, /erotic/i, /erotica/i, /kink/i, /kinky/i, /fetish/i, /fetishes/i, /bdsm/i, /bondage/i, /domination/i, /submission/i, /sexcapade/i,
+            /gay/i, /gays/i, /queer/i, /bi/i, /bisexual/i, /trans/i, /transgender/i, /transexual/i, /intersex/i, /nonbinary/i, /genderfluid/i, /ladyboy/i, /fondling/i,
+            /screwing/i, /fucking/i, /fuckin/i, /fucks/i, /orgasm/i, /orgasms/i, /threesome/i, /foursome/i, /gangbang/i, /voyeur/i, /voyeurism/i, /peep/i, /cumshot/i,
+            /nipples/i, /clit/i, /clitoris/i, /labia/i, /labial/i, /sexed/i, /sexes/i, /sexting/i, /porned/i, /fondled/i, /porning/i, /fetishize/i, /fetishized/i, 
+            /spanked/i, /touch/i, /touching/i, /touched/i, /suck/i, /sucks/i, /sucking/i, /lick/i, /licked/i, /licking/i, /panty/i, /panties/i, /briefs/i, /spank/i, 
+            /lingerie/i, /bra/i, /bras/i, /corset/i, /corsets/i, /thong/i, /thongs/i, /gstring/i, /gstrings/i, /erot/i, /erotic/i, /erotica/i, /vibrator/i, /scrotum/i,
+            /horniest/i, /moan/i, /moaned/i, /moaning/i, /moans/i, /grope/i, /groped/i, /groping/i, /sexually/i, /sensual/i, /seduce/i, /seduced/i, /seducing/i, /mast/i,
+            /sexcapades/i, /nudephoto/i, /nudephotos/i, /nudes/i, /bare/i, /barely/i, /bareback/i, /naught/i, /naughty/i, /kissing/i, /kissed/i, /fondle/i, /handjobs/i,
+            /thrust/i, /thrusted/i, /thrusting/i, /penetrate/i, /penetrated/i, /penetrating/i, /balls/i, /testicle/i, /testicles/i, /vibrators/i, /spit/i, /spitting/i,
+            /squirting/i, /squirt/i, /bdsm/i, /dom/i, /sub/i, /voyeur/i, /exhibitionist/i, /masturb/i, /art/i, /arts/i, /artsy/i, /arti/i, /artis/i, /artist/i, /artisan/i, 
+            /creat/i, /creati/i, /creatio/i, /creation/i, /creatin/i, /creating/i, /create/i, /creates/i, /make/i, /makes/i, /maki/i, /makin/i, /making/i, /site/i, /sites/i,
+            /app/i, /apps/i, /application/i, /applications/i, /applic/i, /work/i, /works/i, /working/i, /worked/i, /job/i, /jobs/i, /chat/i, /chatt/i, /chatte/i, /chatter/i,
+            /anima/i, /animat/i, /animate/i, /animates/i, /animati/i, /animatio/i, /animation/i, /animations/i, /sora/i, /gemini/i, /claude/i, /cunt/i, /twat/i, /dress/i,  
+            /pillu/i, /pimppi/i, /pinppi/i, /vittu/i, /pano/i, /pane/i, /ban/i, /mua/i, /mut/i, /riisu/i, /riisua/i, /riisumis/i, /poist/i, /poiso/i, /poistaa/i, /poistam/i, 
+            /poistami/i, /poistamis/i, /poistamine/i, /poistamen/i, /sovellus/i, /applikaatio/i, /kuva/i, /kuvia/i, /kuvien/i, /käsittely/i, /käsitellä/i, /banned/i, /pers/i, 
+            /bans/i, /perse/i, /persaus/i, /persvako/i, /persevako/i, /persreikä/i, /persereikä/i, /trans/i, /transf/i, /transfo/i, /transfor/i, /transform/i, /transformi/i, 
+            /animated/i, /transforming/i, /transforms/i, /transformings/i, /transformed/i, /convert/i, /converted/i, /convers/i, /conversi/i, /conversio/i, /conversion/i,
+            /slut/i, /sluts/i, /slutt/i, /slutti/i, /sluttin/i, /slutting/i,
+            /-/i, /=/i, /\+/i, /_/i,
+        ];
+
+        // -- List of finnish surname suffixes (such as NEN) --
+        const finnishWordsList = [
+            /nen/i, /lampi/i, /lehti/i, /mäki/i, /maki/i, /lahti/i, /järvi/i, /jarvi/i, /koski/i, /kallio/i, /niemi/i, /aho/i,
+            /salo/i, /kari/i, /oja/i, /pelto/i, /luoto/i, /saari/i, /ranta/i, /virta/i, /keto/i, /vaara/i, /lä/i, /la/i, /maa/i, 
+            /kosken/i, /pää/i, /paa/i, /mäen/i, /mae/i, /sivu/i, /vieri/i, /kaarto/i, /kaarre/i, /aito/i, /aira/i, /man/i, /hauki/i, 
+            /rauma/i, /liite/i, /laine/i, /salmi/i, /harju/i, /kangas/i, /vuori/i, /korpi/i, /suo/i, /tal[oö]/i, /nius/i, /kuiva/i,
+            /timo/i, /olli/i, /nyman/i, /nylund/i, /nygard/i, /aine/i, /nygård/i, /raunio/i,
+
+        // -- General Finnish words that contain term "AI" -- //
+            /aika/i, /aino/i, /aikuinen/i, /saippua/i, /aisti/i, /aivo/i, /tilaisuus/i, /aikuiskoulutus/i, /paikka/i, /saippua/i, 
+            /hais/i, /mais/i, /kais/i, /tais/i, /raiska/i, /raippa/i, /pais/i, /alainen/i, /koululainen/i, /Kuinka/i, /Miten/i, 
+            /Miksi/i, /Milloin/i, /Milloin/i, /Miksei/i, 
+            /maanantai/i, /tiistai/i, /torstai/i, /perjantai/i, /lauantai/i, /sunnuntai/i, 
+        ];
+
+        function isFinnishLike(word) {
+            const w = word.toLowerCase();
+            return finnishWordsList.some(rx => rx.test(w));
+        }
+
+        // Tokenize text
+        let tokens = [];
+        try {
+            const re = /\p{L}+/gu;
+            let m;
+            while ((m = re.exec(text)) !== null) tokens.push(m[0]);
+        } catch (e) {
+            const re2 = /[A-Za-z]+/g;
+            let m2;
+            while ((m2 = re2.exec(text)) !== null) tokens.push(m2[0]);
+        }
+        if (tokens.length === 0) tokens = [text];
+
+        for (let tok of tokens) {
+            if (!tok || tok.length < 1) continue;
+
+            // NEW: if token is exactly uppercase "AI" (or variations like "AI,"/"AI."), block immediately
+            if (/^AI[\.,!?]?$/.test(tok)) {
+                return 'AI';
+            }
+
+            if (tok.length < 2) continue;
+
+            const lowerTok = tok.toLowerCase();
+
+            // Quick sexual/AI keyword check (kept as-is)
+            for (let r of AIRegexes) {
+                try { if (r.test(tok)) return 'AI'; } catch(e){}
+            }
+
+            // Count 'ai' occurrences (kept as-is)
+            const aiMatches = lowerTok.match(/ai/gi) || [];
+            if (aiMatches.length >= 2) return 'AI';
+
+            const originalIsFinnish = isFinnishLike(tok);
+
+            // Check uppercase AI strictly at start/end:
+            const hasUpperAIAtStart = tok.startsWith('AI');
+            const hasUpperAIAtEnd   = tok.endsWith('AI');
+
+            // If there is no explicit uppercase AI at edges, treat this as a natural word case.
+            if (!hasUpperAIAtStart && !hasUpperAIAtEnd) {
+                // For purely Finnish-like words (maanantai, Aitokiuas etc.), we do not treat 'ai' as suffix/prefix here.
+                continue;
+            }
+
+            // Remove uppercase AI at edges to see the "root" part
+            let root = tok;
+            if (hasUpperAIAtStart) root = root.substring(2);
+            if (hasUpperAIAtEnd)   root = root.substring(0, root.length - 2);
+            const lowerRoot = root.toLowerCase();
+
+            if (!root) {
+                // Token is just "AI" or "AI" plus punctuation -> treat as AI word
+                return 'AI';
+            }
+
+            const rootIsFinnish = isFinnishLike(root);
+
+            // Case 1: AI + Finnish-root, or Finnish-root + AI -> treat as "word + AI" => blocked.
+            if (rootIsFinnish && (hasUpperAIAtStart || hasUpperAIAtEnd)) {
+                // Examples: "AIAitokiuas", "AitokiuasAI" => block
+                return 'AI';
+            }
+
+            // Case 2: If full token itself is a Finnish-like word and only has 'ai' at *one* edge in a natural way,
+            // we allow it. (E.g. "MaanantAI" if you ever capitalize in a weird way.)
+            if (originalIsFinnish && !rootIsFinnish) {
+                continue;
+            }
+
+            // Case 3: Non-Finnish root + uppercase AI at edge => treat as AI stick-on (LegAI, AIStuff, etc.) => blocked.
+            if (!rootIsFinnish && (hasUpperAIAtStart || hasUpperAIAtEnd)) {
+                return 'AI';
+            }
+        }
+
+        return false;
+    }
+
+    // === AI-AWARE FORBIDDEN CHECKER (used for queries, forms, etc.) ===
+    function containsForbiddenKeywords(text) {
+        if (!text) return false;
+        devLog('containsForbiddenKeywords called with:', JSON.stringify(String(text)));
+
+        // 0) Quick AI-boundary check: if matches, record and return immediately.
+        const aiHit = containsAiBoundary(text);
+        if (aiHit) {
+            recordMatchDetail('ai-boundary', aiHit, text);
+            return aiHit;
+        }
+
+        // Then fall back to the legacy keyword logic.
+        return containsForbiddenKeywordsBase(text);
+    }
+
+    // Expose functions for debugging from the page console
+    if (typeof window !== 'undefined') {
+        window.containsAiBoundary = containsAiBoundary;
+        window.containsForbiddenKeywords = containsForbiddenKeywords;
+        window.GoogleJS = window.GoogleJS || {};
+        window.GoogleJS.getLastRedirectInfo = () => lastRedirectInfo || readPersistedRedirect();
     }
 
     function isBannedImage(textOrUrl) {
@@ -1026,8 +1205,6 @@
             'span.gL9Hy', 'a.spell', 'p.spell_orig', '.KDCVqf', '.card-section.p64x9c'
         ];
         if (isFirefoxAndroid) {
-            // Option A.2 (Android-only narrowing): use only the desktop/base suggestion selectors on Firefox Android.
-            // This prevents monitorSelectorsAndRedirect from scanning broad generic containers like #search, div[jsname], etc.
             return base;
         }
         return base;
@@ -1340,7 +1517,8 @@
             for (let i = 0; i < elements.length; ++i) {
                 const txt = elements[i].textContent || '';
                 if (containsAllowedWords(txt)) continue;
-                if (containsForbiddenKeywords(txt)) return true;
+                // IMPORTANT: use base checker here (no AI-boundary) so harmless AI mentions don't cause redirect
+                if (containsForbiddenKeywordsBase(txt)) return true;
             }
         }
         return false;
@@ -1351,9 +1529,9 @@
         if (!isFirefoxAndroid || isRedirecting) return false;
 
         const selectors = getSuggestionSelectors().concat([
-    		'div[aria-live]',
-    		'div[role="alert"]',
-    		'div[aria-atomic]'
+            'div[aria-live]',
+            'div[role="alert"]',
+            'div[aria-atomic]'
         ]);
         let redirected = false;
 
@@ -1364,8 +1542,8 @@
                 if (!txt) continue;
                 if (containsAllowedWords(txt)) continue;
 
-                // Quick positive path: any forbidden keyword inside a likely "did you mean/showing" container
-                const hasForbidden = containsForbiddenKeywords(txt);
+                // For FF Android suggestions, also use base logic (no AI-boundary)
+                const hasForbidden = containsForbiddenKeywordsBase(txt);
                 if (hasForbidden) {
                     overlay && (overlay.style.display = 'block');
                     doRedirect('ffAndroid:' + selectors[s], hasForbidden);
@@ -1385,7 +1563,8 @@
             for (let i = 0; i < elements.length; ++i) {
                 const txt = elements[i].textContent || '';
                 if (containsAllowedWords(txt)) continue;
-                const forbiddenMatch = containsForbiddenKeywords(txt);
+                // CRITICAL: use base checker here to avoid AI-boundary on suggestion text
+                const forbiddenMatch = containsForbiddenKeywordsBase(txt);
                 if (forbiddenMatch) {
                     overlay && (overlay.style.display = 'block');
                     if (!redirected) { redirected = true; doRedirect('selector:' + selectors[s], forbiddenMatch); }
