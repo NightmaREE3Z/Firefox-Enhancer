@@ -194,7 +194,8 @@
         /DrewAI/i, /DrawsAI/i, /DrawingAI/i, /DrawingsAI/i, /PaintAI/i, /PaintsAI/i, /PaintingAI/i, /PaintingsAI/i, /AIPain/i, /OpenHerLegs/i, /OpenLegs/i, /OpeningLegs/i, /OpeningHerLegs/i, /OpensLegs/i, /OpensHerLegs/i, /SpreadLeg/i, /SpreadHerLeg/i,
         /cunnt/i, /cunnn/i, /SpreadingLeg/i, /SpreadingHerLeg/i, /SpreadsLeg/i, /SpreadsHerLeg/i, /HerThig/i, /HerLeg/i, /HerThic/i, /SheThig/i, /SheLeg/i, /SheThic/i, /HerLeg/i, /HerThic/i, /LegShe/i, /LegsShe/i, /Thicc/i, /ThickShe/i, /fondl/i, /bdsm/i,
         /4ppli/i, /4ppl1/i, /appl1/i, /pr0gram/i, /progr4m/i, /pr0gr4m/i, /pr0/i, /gr4m/i, /römpsä/i, /römpsä/i, /rompsä/i, /römpsa/i, /rompsa/i, /tussu/i, /tusspa/i, /tuspand/i, /pilde/i, /pilpe/i, /persaus/i, /persvako/i, /persevako/i, /persreikä/i, 
-        /penis/i, /kulli/i, /kyrpa/i, /kyrpä/i, /kikkeli/i, /pippeli/i,  /persereikä/i, /tekoäly/i, /teko äly/i, /generativ/i, /reveals/i, /reveali/i, /revealing/i, /reveale/i, 
+        /penis/i, /kulli/i, /kyrpa/i, /kyrpä/i, /kikkeli/i, /pippeli/i,  /persereikä/i, /tekoäly/i, /teko äly/i, /generativ/i, /reveals/i, /reveali/i, /revealing/i, /reveale/i, /stripp/i, /strips/i, /stripz/i, /stripi/i, /striper/i, /stripes/i, /striped/i,
+	/shetakeoff/i, /takeoffher/i, /takesoffher/i, /shetakesoff/i, /takingoff/i, /tookoffher/i, /shetookoff/i, /baring/i, /bares/i, /b4re/i, /bar3/i, /b4r3/i, /b4r1/i, /bar1/i, /b4ri/i,
     ];
 
     // Special Regexes array, kept separate for readability.
@@ -1047,8 +1048,13 @@
             /bans/i, /perse/i, /persaus/i, /persvako/i, /persevako/i, /persreikä/i, /persereikä/i, /trans/i, /transf/i, /transfo/i, /transfor/i, /transform/i, /transformi/i, 
             /animated/i, /transforming/i, /transforms/i, /transformings/i, /transformed/i, /convert/i, /converted/i, /convers/i, /conversi/i, /conversio/i, /conversion/i,
             /slut/i, /sluts/i, /slutt/i, /slutti/i, /sluttin/i, /slutting/i, /reveal/i, /skin/i, /body/i, /belly/i, /backside/i, /frontside/i, /belf/i, /belfie/i, /bottom/i, 
-            /front/i, /frontal/i, /perc/i, /perv/i, /pervert/i, /perverted/i,
-            /-/i, /=/i, /\+/i, /_/i,
+            /front/i, /frontal/i, /perc/i, /perv/i, /pervert/i, /perverted/i, /strip/i, /strips/i, /stripz/i, /stripe/i, /stripp/i, /takeoff/i, /takesoff/i, /takesoff/i,
+            /shap/i, /shape/i, /shapes/i, /shapeing/i, /shaping/i, /POS/i, /position/i, /adjust/i, /change/i, /replaces/i, /replacing/i, /replacement/i, /hehe/i, /hihi/i,
+            /adjustment/i,/adjusted/i, /adjustin/i, /adjusting/i, /change/i, /changes/i, /changin/i, /changing/i, /mod/i, /modify/i, /modif/i, /modification/i, /mods/i, /mode/i,
+            /modifyin/i, /modifying/i, /tweak/i, /tweakin/i, /tweaking/i, /back/i, /front/i, /legging/i, /leggings/i, /cloth/i, /clothy/i, /clothes/i, /clothing/i, /clothying/i,
+            /page/i, /pages/i, /site/i, /mango/i, /mangos/i, /mangoing/i, /icegirl/i, /icegirls/i, /ismartta/i, /ismart/i, /ismartt/i, /gasm/i, /org/i, /replac/i, /replace/i,
+            /stuffed/i, /stuffing/i, /around/i, /off/i, /spin/i, /spins/i, /spun/i, /spinned/i, /spinning/i, 
+            /-/i, /=/i, /\+/i, /_/i, 
         ];
 
         // -- List of finnish surname suffixes (such as NEN) --

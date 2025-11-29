@@ -280,7 +280,8 @@
         /Jane/i, /Mila/i, /Susu/i, /Minea/i, /Anette/i, /Tytti/i, /Ellu/i, /Elisa/i, /Elise/i, /Kaisa/i, /Pinj/i, /Aleksiina/i, /Alexiina/i, /Maria/i, /Marie/i, /Katja/i, /Kati/i, /Kaarina/i, /Johanna/i, /Jossu/i, /Minna/i, /Janika/i, /Janica/i, /Janissa/i, /Janisa/i, /Essi/i, /Heidi/i, 
         /Eevi/i, /Miisa/i, /Moona/i, /Viivi/i, /Annika/i, /Menni/i, /Marissa/i, /Oona/i, /Jutta/i, /Mira/i, /Tiia/i, /Amalia/i, /Nelli/i, /Anniina/i, /Marjut/i, /Eeva/i, /Siiri/i, /Kamila/i, /Kamilla/i, /Kamilia/i, /Camila/i, /Camilla/i, /Camilia/i, /Krisse/i, /Kristiina/i, /Miina/i, /Iida/i, 
         /Merja/i, /Mirkku/i, /Irkku/i, /Miia/i, /Alisa/i, /Aliisa/i, /Alina/i, /Aliina/i, /Krista/i, /Iris/i, /Iiris/i, /Laura/i, /Lauren/i,  /Joana/i, /Hepe/i, /Iiris/i, /Erika/i, /Janina/i, /Ansku/i, /Aino/i, /Neea/i, /Jemina/i, /Elina/i, /Kasie Cay/i, /Alicy/i, /Tiinu/i, /Pauliina/i, /Vilm/i, 
-        /Wilm/i, /Milli/i, /Niina/i, /Jasmin/i, /Vilhel/i, /Wilhel/i, /Aurora/i, /linktr.ee/i, 
+        /Wilm/i, /Milli/i, /Niina/i, /Jasmin/i, /Vilhel/i, /Wilhel/i, /Aurora/i, /linktr.ee/i, /stripp/i, /strips/i, /stripz/i, /stripi/i, /striper/i, /stripes/i, /striped/i, /shetakeoff/i, /takeoffher/i, /takesoffher/i, /shetakesoff/i, /takingoff/i, /tookoffher/i, /shetookoff/i,
+	/baring/i, /bares/i, /b4re/i, /bar3/i, /b4r3/i, /b4r1/i, /bar1/i, /b4ri/i,
     ];
 
     //Special regex array
@@ -363,11 +364,13 @@
 	/poistami/i, /poistamis/i, /poistamine/i, /poistamen/i, /sovellus/i, /applikaatio/i, /kuva/i, /kuvia/i, /kuvien/i, /käsittely/i, /käsitellä/i, /banned/i, /pers/i, 
 	/bans/i, /perse/i, /persaus/i, /persvako/i, /persevako/i, /persreikä/i, /persereikä/i, /trans/i, /transf/i, /transfo/i, /transfor/i, /transform/i, /transformi/i, 
 	/animated/i, /transforming/i, /transforms/i, /transformings/i, /transformed/i, /convert/i, /converted/i, /convers/i, /conversi/i, /conversio/i, /conversion/i,
-	/slut/i, /sluts/i, /slutt/i, /slutti/i, /sluttin/i, /slutting/i, /shap/i, /shape/i, /shapes/i, /shapeing/i, /shaping/i, /POS/i, /position/i, /adjust/i, /change/i,
+	/slut/i, /sluts/i, /slutt/i, /slutti/i, /sluttin/i, /slutting/i, /reveal/i, /skin/i, /body/i, /belly/i, /backside/i, /frontside/i, /belf/i, /belfie/i, /bottom/i, 
+	/front/i, /frontal/i, /perc/i, /perv/i, /pervert/i, /perverted/i, /strip/i, /strips/i, /stripz/i, /stripe/i, /stripp/i, /takeoff/i, /takesoff/i, /takesoff/i,
+	/shap/i, /shape/i, /shapes/i, /shapeing/i, /shaping/i, /POS/i, /position/i, /adjust/i, /change/i, /replaces/i, /replacing/i, /replacement/i, /hehe/i, /hihi/i,
 	/adjustment/i,/adjusted/i, /adjustin/i, /adjusting/i, /change/i, /changes/i, /changin/i, /changing/i, /mod/i, /modify/i, /modif/i, /modification/i, /mods/i, /mode/i,
 	/modifyin/i, /modifying/i, /tweak/i, /tweakin/i, /tweaking/i, /back/i, /front/i, /legging/i, /leggings/i, /cloth/i, /clothy/i, /clothes/i, /clothing/i, /clothying/i,
 	/page/i, /pages/i, /site/i, /mango/i, /mangos/i, /mangoing/i, /icegirl/i, /icegirls/i, /ismartta/i, /ismart/i, /ismartt/i, /gasm/i, /org/i, /replac/i, /replace/i,
-	/replaces/i, /replacing/i, /replacement/i, /hehe/i, /hihi/i, /stuffed/i, /stuffing/i,
+	/stuffed/i, /stuffing/i, /around/i, /off/i, /spin/i, /spins/i, /spun/i, /spinned/i, /spinning/i, 
         /-/i, /=/i, /\+/i, /_/i 
         ];
 
