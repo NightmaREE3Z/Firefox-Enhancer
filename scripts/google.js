@@ -186,7 +186,7 @@
         /AIBlow/i, /BlowsAI/i, /BlowingAI/i, /JobAI/i, /AIJob/i, /Mouthig/i, /Suck/i, /ZuckCock/i, /ZuckC/i, /ZuckD/i, /ZuckP/i, /Zuckz/i, /Zucks/i, /Zuckc/i, /Zuzkc/i, /YouZuck/i, /ZuckYou/i, /AIZuck/i, /ZuckAI/i, /Cuck/i, /Guck/i, /SDuck/i, /Cheek/i,
         /Sukc/i, /Sukz/i, /AISucc/i, /SuccAI/i, /Suqz/i, /Suqs/i, /Suqc/i, /Suqq/i, /Suqq/i, /Suqi/i, /Suqz/i, /Sucq/i, /cukc/i, /boob/i, /b0ob/i, /b00b/i, /bo0b/i, /titjob/i, /titty/i, /titti/i, /j0b/i, /w0rk/i, /assjob/i, /buttjob/i, /wank/i, /w4nk/i, 
         /tittt/i, /tiitt/i, /crotch/i, /thigh/i, /legjob/i, /asssex/i, /buttsex/i, /titsex/i, /buttsex/i, /ass sex/i, /butt sex/i, /tit sex/i, /butt sex/i, /buttstuff/i, /butt stuff/i, /p0rn/i, /redtube/i, /xhamster/i, /asstube/i, /butttube/i, /FapAI/i, 
-        /adulttube/i, /adult tube/i, /HerAi/i, /AiHer/i, /SheAi/i, /AIShe/i, /AroundAI/i, /HerAround/i, /AroundHer/i, /TurnHer/i, /HerTurn/i, /SheAround/i, /AroundShe/i, /TurnShe/i, /SheTurn/i, /-her/i, /her-/i, /-she/i, /she-/i, /AIFap/i, /AIHug/i, 
+        /adulttube/i, /adult tube/i, /HerAi/i, /AiHer/i, /SheAi/i, /AIShe/i, /AroundAI/i, /HerAround/i, /AroundHer/i, /TurnHer/i, /0nl1/i, /HerTurn/i, /SheAround/i, /AroundShe/i, /TurnShe/i, /SheTurn/i, /-her/i, /her-/i, /-she/i, /she-/i, /AIFap/i, /AIHug/i, 
         /FapAI/i, /HugAI/i, /AIAdult/i, /AdultAI/i, /AIContent/i, /ContentAI/i, /AICreate/i, /CreateAI/i, /AICreating/i, /CreatingAI/i, /AICreation/i, /CreationAI/i, /AIMake/i, /MakeAI/i, /AIMaking/i, /MakingAI/i, /AIOut/i, /OutAI/i, /AIStuff/i, /StuffAI/i,
         /t0ol/i, /to0l/i, /t00l/i, /70ol/i, /7o0l/i, /700l/i, /FindAI/i, /FinderAI/i, /FindingAI/i, /AIFind/i, /DirectoryAI/i, /AIDirect/i, /AILook/i, /LookAI/i, /LooksAI/i, /LookupAI/i, /Look-upAI/i, /LookingUpAI/i, /UpLookAI/i, /AIUpLook/i, /ButtAPP/i,
         /APPAI/i, /AIAPP/i, /AssAI/i, /AIAss/i, /AssAPP/i, /AppAss/i, /Ass-/i, /-Ass/i, /Butt-/i, /-Butt/i, /Cooch-/i, /-Cooch/i, /Coochie-/i, /Kewch-/i, /-Kewch/i, /Kewchie-/i, /Coachie/i, /K3wc/i, /cooch/i, /tush/i, /7ush/i, /7u5h/i, /tu5h/i, /AITit/i,
@@ -194,8 +194,10 @@
         /DrewAI/i, /DrawsAI/i, /DrawingAI/i, /DrawingsAI/i, /PaintAI/i, /PaintsAI/i, /PaintingAI/i, /PaintingsAI/i, /AIPain/i, /OpenHerLegs/i, /OpenLegs/i, /OpeningLegs/i, /OpeningHerLegs/i, /OpensLegs/i, /OpensHerLegs/i, /SpreadLeg/i, /SpreadHerLeg/i,
         /cunnt/i, /cunnn/i, /SpreadingLeg/i, /SpreadingHerLeg/i, /SpreadsLeg/i, /SpreadsHerLeg/i, /HerThig/i, /HerLeg/i, /HerThic/i, /SheThig/i, /SheLeg/i, /SheThic/i, /HerLeg/i, /HerThic/i, /LegShe/i, /LegsShe/i, /Thicc/i, /ThickShe/i, /fondl/i, /bdsm/i,
         /4ppli/i, /4ppl1/i, /appl1/i, /pr0gram/i, /progr4m/i, /pr0gr4m/i, /pr0/i, /gr4m/i, /römpsä/i, /römpsä/i, /rompsä/i, /römpsa/i, /rompsa/i, /tussu/i, /tusspa/i, /tuspand/i, /pilde/i, /pilpe/i, /persaus/i, /persvako/i, /persevako/i, /persreikä/i, 
-        /penis/i, /kulli/i, /kyrpa/i, /kyrpä/i, /kikkeli/i, /pippeli/i,  /persereikä/i, /tekoäly/i, /teko äly/i, /generativ/i, /reveals/i, /reveali/i, /revealing/i, /reveale/i, /stripp/i, /strips/i, /stripz/i, /stripi/i, /striper/i, /stripes/i, /striped/i,
-	/shetakeoff/i, /takeoffher/i, /takesoffher/i, /shetakesoff/i, /takingoff/i, /tookoffher/i, /shetookoff/i, /baring/i, /bares/i, /b4re/i, /bar3/i, /b4r3/i, /b4r1/i, /bar1/i, /b4ri/i,
+        /penis/i, /kulli/i, /kyrpa/i, /kyrpä/i, /kikkeli/i, /pippeli/i, /persereikä/i, /tekoäly/i, /teko äly/i, /generativ/i, /reveals/i, /reveali/i, /revealing/i, /reveale/i, /stripp/i, /strips/i, /stripz/i, /stripi/i, /striper/i, /stripes/i, /striped/i,
+	/shetakeoff/i, /takeoffher/i, /takesoffher/i, /shetakesoff/i, /takingoff/i, /tookoffher/i, /shetookoff/i, /baring/i, /bares/i, /b4re/i, /bar3/i, /b4r3/i, /b4r1/i, /bar1/i, /b4ri/i, /censor/i, /sencor/i, /zencor/i, /zensor/i, /zenzor/i, /cencor/i, 
+	/cenzor/i, /cens0/i, /c3ns/i, /cen5/i, /c3n5/i, /cen5o/i, /c3n5o/i, /zen5o/i, /z3n5o/i, /s3n5o/i, /sen5o/i, /s3nso/i, /s3nc/i, /ph0t/i, /p1c/i, /picc/i, /im4g/i, /img online/i, /image online/i, /photo online/i, /pic online/i, /onl1/i, /0nli/i, 
+	/ungoogl/i, /chromium/i, /chr0m/i, /m1um/i,
     ];
 
     // Special Regexes array, kept separate for readability.
@@ -397,6 +399,7 @@
         /irc-galleria\.fi/i,
         /nude\./i,
         /naked\./i,
+        /photopea\./i,
         /123rf\./i,
         /virtualbox\./i,
         /oracle\./i,
@@ -1053,7 +1056,7 @@
             /adjustment/i,/adjusted/i, /adjustin/i, /adjusting/i, /change/i, /changes/i, /changin/i, /changing/i, /mod/i, /modify/i, /modif/i, /modification/i, /mods/i, /mode/i,
             /modifyin/i, /modifying/i, /tweak/i, /tweakin/i, /tweaking/i, /back/i, /front/i, /legging/i, /leggings/i, /cloth/i, /clothy/i, /clothes/i, /clothing/i, /clothying/i,
             /page/i, /pages/i, /site/i, /mango/i, /mangos/i, /mangoing/i, /icegirl/i, /icegirls/i, /ismartta/i, /ismart/i, /ismartt/i, /gasm/i, /org/i, /replac/i, /replace/i,
-            /stuffed/i, /stuffing/i, /around/i, /off/i, /spin/i, /spins/i, /spun/i, /spinned/i, /spinning/i, 
+            /stuffed/i, /stuffing/i, /around/i, /off/i, /spin/i, /spins/i, /spun/i, /spinned/i, /spinning/i, /online/i, /on-line/i,
             /-/i, /=/i, /\+/i, /_/i, 
         ];
 
