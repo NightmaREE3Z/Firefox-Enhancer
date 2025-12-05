@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         ArchiveRedirect
-// @version      2.3
+// @version      2.31
 // @description  Redirects specific archive pages (and xcancel.com search) to the appropriate front page when banned terms are detected.
 // @match        *://web.archive.org/*
 // @match        *://archive.org/*
@@ -280,9 +280,9 @@
         /Jane/i, /Mila/i, /Susu/i, /Minea/i, /Anette/i, /Tytti/i, /Ellu/i, /Elisa/i, /Elise/i, /Kaisa/i, /Pinj/i, /Aleksiina/i, /Alexiina/i, /Maria/i, /Marie/i, /Katja/i, /Kati/i, /Kaarina/i, /Johanna/i, /Jossu/i, /Minna/i, /Janika/i, /Janica/i, /Janissa/i, /Janisa/i, /Essi/i, /Heidi/i, 
         /Eevi/i, /Miisa/i, /Moona/i, /Viivi/i, /Annika/i, /Menni/i, /Marissa/i, /Oona/i, /Jutta/i, /Mira/i, /Tiia/i, /Amalia/i, /Nelli/i, /Anniina/i, /Marjut/i, /Eeva/i, /Siiri/i, /Kamila/i, /Kamilla/i, /Kamilia/i, /Camila/i, /Camilla/i, /Camilia/i, /Krisse/i, /Kristiina/i, /Miina/i, /Iida/i, 
         /Merja/i, /Mirkku/i, /Irkku/i, /Miia/i, /Alisa/i, /Aliisa/i, /Alina/i, /Aliina/i, /Krista/i, /Iris/i, /Iiris/i, /Laura/i, /Lauren/i,  /Joana/i, /Hepe/i, /Iiris/i, /Erika/i, /Janina/i, /Ansku/i, /Aino/i, /Neea/i, /Jemina/i, /Elina/i, /Kasie Cay/i, /Alicy/i, /Tiinu/i, /Pauliina/i, /Vilm/i, 
-        /Wilm/i, /Milli/i, /Niina/i, /Jasmin/i, /Vilhel/i, /Wilhel/i, /Aurora/i, /linktr.ee/i, /stripp/i, /strips/i, /stripz/i, /stripi/i, /striper/i, /stripes/i, /striped/i, /shetakeoff/i, /takeoffher/i, /takesoffher/i, /shetakesoff/i, /takingoff/i, /tookoffher/i, /shetookoff/i,
+         /Wilm/i, /Milli/i, /Niina/i, /Jasmin/i, /Vercel/i, /Vilhel/i, /Wilhel/i, /Aurora/i, /linktr.ee/i, /stripp/i, /strips/i, /stripz/i, /stripi/i, /striper/i, /stripes/i, /striped/i, /shetakeoff/i, /takeoffher/i, /takesoffher/i, /shetakesoff/i, /takingoff/i, /tookoffher/i, /shetookoff/i,
 	/baring/i, /bares/i, /b4re/i, /bar3/i, /b4r3/i, /b4r1/i, /bar1/i, /b4ri/i, /censor/i, /sencor/i, /zencor/i, /zensor/i, /zenzor/i, /cencor/i, /cenzor/i, /cens0/i, /c3ns/i, /cen5/i, /c3n5/i, /cen5o/i, /c3n5o/i, /zen5o/i, /z3n5o/i, /s3n5o/i, /sen5o/i, /s3nso/i, /s3nc/i, /ph0t/i, /p1c/i, 
-	/picc/i, /im4g/i, /imageonline/i, /photoonline/i, /img online/i, /image online/i, /photo online/i, /pic online/i, /ungoogl/i, /chromium/i, /chr0m/i, /m1um/i,
+	/picc/i, /im4g/i, /imageonline/i, /photoonline/i, /img online/i, /image online/i, /photo online/i, /pic online/i, /ungoogl/i, /chromium/i, /chr0m/i, /m1um/i, /skirt/i, /skirr/i, /skitr/i, /sk1r/i, /5kir/i, /5k1r/i, /5k1r/i, /\bH3r\b/i, /\bsh3\b/i, /\b5he\b/i, /\b5h3\b/i, /v3rc/i, /v3rz/i, 
     ];
 
     //Special regex array
