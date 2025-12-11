@@ -128,12 +128,12 @@ const bannedRegexes = [
    /changemotion/i, /swapmotion/i, /motionsw/i, /motionc/i, /\bmotion\b/i, /poseai/i, /ai-/i, /-ai/i, /maarit/i, /taija/i, /saija/i, /seija/i, /tiina/i, /teija/i, /Miska/i, /AIblow/i, /Suckin/i, 
    /Sucks/i, /Sucki/i, /Sucky/i, /AIsuck/i, /AI-suck/i, /drool/i, /RemovingAI/i, /blowjob/i,  /b-job/i, /bj0b/i, /bl0w/i, /blowj0b/i, /dr0ol/i, /dro0l/i, /Lumikki/i, /Lumiikki/i, /Rosa/i, /Rose/i, 
    /Roosa/i, /Ella/i, /Elli/i, /Eveliina/i, /Julle/i, /Jensku/i, /Emmi/i, /Viola/i, /Mari/i, /Doll/i, /Sofi/i, /Sandra/i, /Peppi/i, /Matilda/i, /Minka/i, /Milla/i, /Mirka/i, /Henriikka/i, /Henni/i, 
-   /Henna/i, /Henna/i, /Hanna/i, /Hannele/i, /\bAnni\b/i, /Heidi/i, /Riikka/i, /Helmi/i, /Rebecca/i, /Jonna/i, /Janna/i, /Janika/i, /Sara/i, /Saara/i, /Noora/i, /Nooru/i, /Kata/i, /Katri/i, /Kiia/i, 
+   /Henna/i, /Henna/i, /Hanna/i, /Hannele/i, /\bAnni\b/i, /Heidi/i, /Riikka/i, /Helmi/i, /Rebecca/i, /Jonna/i, /Janna/i, /Janika/i, /Sara/i, /Saara/i, /Noora/i, /Nooru/i, /Kiia/i, /Niina/i, /Jasmin/i,
    /Katherin/i, /Janita/i, /Kira/i, /Susu/i, /Susa/i, /Sirja/i, /Venla/i, /Jenn/i, /Irene/i, /Jane/i, /Mila/i, /Susu/i, /Minea/i, /Anette/i, /Tytti/i, /Ellu/i, /Elisa/i, /Elise/i, /Kaisa/i, /Pinj/i,
-   /Aleksiina/i, /Alexiina/i, /Maria/i, /Marie/i, /Katja/i, /Kati/i, /Kaarina/i, /Johanna/i, /Jossu/i, /Minna/i, /Janika/i, /Janica/i, /Janissa/i, /Janisa/i, /Essi/i, /Heidi/i, /Eevi/i, /Miisa/i, 
+   /Aleksiina/i, /Alexiina/i, /Maria/i, /Marie/i, /Katja/i, /Johanna/i, /Jossu/i, /Minna/i, /Janika/i, /Janica/i, /Janissa/i, /Janisa/i, /Essi/i, /Heidi/i, /Eevi/i, /Miisa/i, /Vilm/i, /Wilm/i, /Milli/i, 
    /Moona/i, /Viivi/i, /Annika/i, /Menni/i, /Marissa/i, /Oona/i, /Jutta/i, /Mira/i, /Tiia/i, /Amalia/i, /Nelli/i, /Anniina/i, /Marjut/i, /Eeva/i, /Siiri/i, /Kamila/i, /Kamilla/i, /Kamilia/i, /Camila/i, 
    /Camilla/i, /Camilia/i, /Krisse/i, /Kristiina/i, /Miina/i, /Iida/i, /Merja/i, /Mirkku/i, /Irkku/i, /Miia/i, /Alisa/i, /Aliisa/i, /Alina/i, /Aliina/i, /Krista/i, /Iris/i, /Iiris/i, /Laura/i, /Lauren/i, 
-   /Joana/i, /Hepe/i, /Iiris/i, /Erika/i, /Janina/i, /Ansku/i, /Aino/i, /Neea/i, /Jemina/i, /Elina/i, /Kasie Cay/i, /Alicy/i, /Tiinu/i, /Pauliina/i, /Vilm/i, /Wilm/i, /Milli/i, /Niina/i, /Jasmin/i,
+   /Joana/i, /Hepe/i, /Iiris/i, /Erika/i, /Janina/i, /Ansku/i, /Aino/i, /Neea/i, /Jemina/i, /Elina/i, /Kasie Cay/i, /Alicy/i, /Tiinu/i, /Pauliina/i, 
    /Vilhel/i, /Wilhel/i, /Aurora/i, /linktr.ee/i, 
 ]; 
 
