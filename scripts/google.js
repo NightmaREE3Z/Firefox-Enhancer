@@ -1346,13 +1346,16 @@
         ];
 
         const finnishWordsList = [
+	//finnish names list:
             /nen/i, /lampi/i, /lehti/i, /mäki/i, /maki/i, /lahti/i, /järvi/i, /jarvi/i, /koski/i, /kallio/i, /niemi/i, /aho/i, /aho/i, /salo/i, /kari/i, /oja/i, /pelto/i, /luoto/i, 
             /saari/i, /ranta/i, /virta/i, /keto/i, /vaara/i, /lä/i, /la/i, /maa/i,  /kosken/i, /pää/i, /paa/i, /mäen/i, /mae/i, /sivu/i, /vieri/i, /kaarto/i, /kaarre/i, /aito/i, /aira/i, 
             /man/i, /hauki/i, /rauma/i, /liite/i, /laine/i, /salmi/i, /harju/i, /kangas/i, /vuori/i, /korpi/i, /suo/i, /tal[oö]/i, /nius/i, /kuiva/i, /timo/i, /olli/i, /nyman/i, /nylund/i, 
-            /nygard/i, /aine/i, /nygård/i, /raunio/i, /mies/i, /nainen/i, /aitto/i, /jylhä/i, /anoai/i,
-            /aika/i, /aino/i, /aikuinen/i, /saippua/i, /aisti/i, /aivo/i, /tilaisuus/i, /aikuiskoulutus/i, /paikka/i, /saippua/i, 
-            /hais/i, /mais/i, /kais/i, /tais/i, /raiska/i, /raippa/i, /pais/i, /alainen/i, /koululainen/i, /Kuinka/i, /Miten/i, 
-            /Miksi/i, /Milloin/i, /Milloin/i, /Miksei/i, /aita/i, /aidan/i, /maailma/i, /avoin/i,
+            /nygard/i, /aine/i, /nygård/i, /raunio/i, /mies/i, /nainen/i, /aitto/i, /jylhä/i, /anoai/i, /aitto/i, /aino/i, /kaija/i, /anneli/i,
+
+	//Finnish words list
+            /aika/i, /aino/i, /aikuinen/i, /saippua/i, /aisti/i, /aivo/i, /tilaisuus/i, /aikuiskoulutus/i, /paikka/i, /saippua/i, /aivast/i,
+            /hais/i, /mais/i, /kais/i, /tais/i, /raiska/i, /raippa/i, /pais/i, /alainen/i, /koululainen/i, /Kuinka/i, /Miten/i, /avain/i,
+            /Miksi/i, /Milloin/i, /Milloin/i, /Miksei/i, /aita/i, /aidan/i, /maailma/i, /avoin/i, /avaim/i,
             /maanantai/i, /tiistai/i, /torstai/i, /perjantai/i, /lauantai/i, /sunnuntai/i, 
         ];
 
