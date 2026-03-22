@@ -600,9 +600,17 @@
         if (storedApprovals) approvedFBPostIDs = new Set(JSON.parse(storedApprovals));
     } catch(e) { devLog('Error loading approved posts from local storage'); }
 
-    const saveApprovedPostID = (postID) => {
-        if (!postID || approvedFBPostIDs.has(postID)) return;
-        approvedFBPostIDs.add(postID);
+    // --- NEW BULK APPROVAL SAVING ---
+    const saveApprovedPostIDs = (postIDs) => {
+        if (!postIDs || postIDs.length === 0) return;
+        let added = false;
+        postIDs.forEach(id => {
+            if (!approvedFBPostIDs.has(id)) {
+                approvedFBPostIDs.add(id);
+                added = true;
+            }
+        });
+        if (!added) return;
         try {
             if (approvedFBPostIDs.size > 2000) {
                 const arr = Array.from(approvedFBPostIDs).slice(-2000);
@@ -612,28 +620,53 @@
         } catch(e) {}
     };
 
+    // --- ENHANCED ID EXTRACTION ---
+    // Catches posts, permalinks, videos, groups, photos, fbid, story_fbid, multi_permalinks, v=...
     const extractPostIdFromUrl = (href) => {
         try {
-            const match = href.match(/\/(?:posts|permalink|videos|reels|groups\/[^/]+\/user)\/?([a-zA-Z0-9_]+)/) || href.match(/fbid=([0-9]+)/) || href.match(/multi_permalinks=([0-9]+)/);
+            const match = href.match(/\/(?:posts|permalink|videos|reels|groups\/[^/]+\/user)\/?([a-zA-Z0-9_]+)/) || 
+                          href.match(/(?:story_fbid|fbid|multi_permalinks|v)=([a-zA-Z0-9_]+)/) ||
+                          href.match(/\/photos\/(?:a\.[0-9]+\/)?([0-9]+)/);
             return (match && match[1] && match[1].length > 5) ? match[1] : null;
         } catch (e) { return null; }
     };
 
-    const getFBPostID = (node) => {
+    // --- NEW GLOBAL APPROVED POST CHECKER ---
+    const isCurrentPostApproved = () => {
         try {
-            let extractedId = null;
-            const links = Array.from(node.querySelectorAll('a[role="link"], a[href*="/posts/"], a[href*="/permalink/"], a[href*="fbid="]'));
+            const currentURL = window.location.href;
+            const currentID = extractPostIdFromUrl(currentURL);
+            if (currentID && approvedFBPostIDs.has(currentID)) return true;
+            
+            // Fallback: Check if ANY ID extracted from the URL matches (sometimes URLs have multiple parameters)
+            const allMatches = [...currentURL.matchAll(/(?:story_fbid|fbid|multi_permalinks|v)=([a-zA-Z0-9_]+)/g)];
+            for (const m of allMatches) {
+                if (m[1] && approvedFBPostIDs.has(m[1])) return true;
+            }
+        } catch(e) {}
+        return false;
+    };
+
+    // --- EXTRACT ALL IDs FROM A POST ---
+    const getFBPostIDs = (node) => {
+        const ids = new Set();
+        try {
+            // Find all potential links inside the post that might contain an ID (timestamp, photos, videos)
+            const links = Array.from(node.querySelectorAll('a[role="link"], a[href*="/posts/"], a[href*="/permalink/"], a[href*="fbid="], a[href*="/photo/"]'));
             for (let i = 0; i < links.length; i++) {
                 const href = links[i].getAttribute('href') || '';
                 if (href === '#' || href.includes('comment_id')) continue;
-                extractedId = extractPostIdFromUrl(href);
-                if (extractedId) return extractedId;
+                const extractedId = extractPostIdFromUrl(href);
+                if (extractedId) ids.add(extractedId);
             }
-            if (!extractedId && (window.location.pathname.includes('/posts/') || window.location.pathname.includes('/permalink.php'))) {
-                return extractPostIdFromUrl(window.location.href);
+            
+            // Fallback for single-post views where the ID is purely in the main URL
+            if (window.location.pathname.includes('/posts/') || window.location.pathname.includes('/permalink.php') || window.location.search.includes('fbid=')) {
+                const urlId = extractPostIdFromUrl(window.location.href);
+                if (urlId) ids.add(urlId);
             }
         } catch {}
-        return null;
+        return Array.from(ids);
     };
 
     const extractTextFromPostSafely = (article) => {
@@ -1012,6 +1045,7 @@
     const checkVanityProfileFBID = () => {
         try {
             if (isRedirecting) return;
+            if (isCurrentPostApproved()) return; // Bypass if this is an approved post view
             
             const currentUrl = window.location.href.split('?')[0]; 
             const currentPath = window.location.pathname.toLowerCase();
@@ -1070,6 +1104,7 @@
     const handleRedirects = () => {
         try {
             if (isRedirecting) return; 
+            if (isCurrentPostApproved()) return; // Bypass if this is an approved post view
             
             const urlObj = new URL(window.location.href);
             if (urlObj.pathname === '/' || urlObj.pathname === '/home.php') {
@@ -1192,9 +1227,17 @@
                         return;
                     }
 
-                    const postID = getFBPostID(post);
+                    const postIDs = getFBPostIDs(post);
                     
-                    if (postID && approvedFBPostIDs.has(postID)) {
+                    let isAlreadyApproved = false;
+                    for(let i = 0; i < postIDs.length; i++) {
+                        if(approvedFBPostIDs.has(postIDs[i])) {
+                            isAlreadyApproved = true;
+                            break;
+                        }
+                    }
+                    
+                    if (isAlreadyApproved) {
                         post.classList.add('fb-post-processed');
                         post.classList.add('fb-post-approved');
                         return; 
@@ -1241,7 +1284,7 @@
                                 safelyHideFBElement(post);
                             } else {
                                 post.classList.add('fb-post-approved');
-                                if (postID) saveApprovedPostID(postID);
+                                if (postIDs.length > 0) saveApprovedPostIDs(postIDs);
                             }
                         } catch (e) {
                             post.classList.add('fb-post-approved');
@@ -1302,6 +1345,12 @@
                 const isRegexBlocked = regexBlockedWords.some(regex => regex.test(elementText));
                 
                 if (isRestricted || isRegexBlocked) {
+                    
+                    // NEW CHECK: Ignore restricted words and prevent redirects if the post is explicitly approved
+                    if (element.closest('.fb-post-approved') || isCurrentPostApproved()) {
+                        return; 
+                    }
+
                     const currentPath = window.location.pathname.toLowerCase();
                     const isMediaViewer = element.closest('[data-pagelet="MediaViewerPhoto"]') || currentPath.includes('/photo') || currentPath.includes('/reel/') || currentPath.includes('/posts/') || currentPath.includes('/permalink.php') || currentPath.includes('/videos/');
                     
