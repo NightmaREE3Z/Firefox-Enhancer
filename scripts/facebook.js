@@ -81,7 +81,7 @@
             __fbEventCleanups.forEach(fn => { try { fn(); } catch {} });
             __fbEventCleanups.clear();
 
-            ['fb-inline-style', 'fb-specific-url-style', 'fb-specific-profile-style', 'fb-specific-url-prehide-style'].forEach(id => {
+            ['fb-inline-style', 'fb-personal-profile-style', 'fb-specific-url-style', 'fb-specific-profile-style', 'fb-specific-url-prehide-style'].forEach(id => {
                 try { const s = document.getElementById(id); if (s) s.remove(); } catch {}
             });
             devLog('Cleanup complete.');
@@ -147,6 +147,36 @@
         setTimeout(() => {
             window.location.replace('https://www.facebook.com/?ref=logo');
         }, 10);
+    };
+
+    // ==========================================
+    // CSS INJECTION FUNCTIONS
+    // ==========================================
+
+    const PersonalProfileCSS = () => {
+        let style = document.getElementById('fb-personal-profile-style');
+        if (!style) {
+            devLog('Injecting Personal Profile CSS');
+            style = document.createElement('style');
+            style.id = 'fb-personal-profile-style';
+            style.textContent = `
+            /* Personal Profile No-Glimpse Immunization */
+            /* Hide the giant specific SVG image of the Suosituksia box to stop flashing without harming posts */
+            svg[viewBox="0 0 112 112"][width="112"][height="112"], 
+	    div:has(> img[src*="M12 2.5a9.5 9.5 0 1 0 0 19"]) {
+                display: none !important;
+                visibility: hidden !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
+                position: absolute !important;
+            }
+            `;
+            if (document.head) {
+                document.head.appendChild(style);
+            } else if (document.documentElement) {
+                document.documentElement.appendChild(style);
+            }
+        }
     };
 
     const injectInlineCSS = () => {
@@ -355,7 +385,59 @@
         } catch (err) {}
     };
     
-    injectInlineCSS();
+    // ==========================================
+    // UNIFIED REGEX-POWERED PROFILE / CHAT BYPASS CHECKER
+    // ==========================================
+
+    const excludedRegexPatterns = [
+        /\/(messages|messenger)\b/i,
+        /\/notifications\b/i,
+        /\/ilmoitukset\b/i,
+        /\/groups\/(317493608736721|342124472533278|2484497081612438|390555733810362|934038190050109)\b/i,
+        /\/(haukkis|tapio\.haukirauma|1267550854|100005050653554|me)\b/i,
+        /id=(100005050653554|1267550854)\b/i
+    ];
+
+    // 1. Checks ONLY for structurally whitelisted URLs. (Redirect logic uses ONLY this)
+    const isSafeWhitelistedPath = (path, url = '') => {
+        if (!path) return false;
+        const p = path.toLowerCase();
+        const u = url.toLowerCase();
+        return excludedRegexPatterns.some(regex => regex.test(p) || regex.test(u));
+    };
+
+    // 2. Checks ONLY if a Profile page is present on screen.
+    const isAnyProfileTimeline = () => {
+        return !!(document.querySelector('[data-pagelet="ProfileTimeline"]') || 
+                  document.querySelector('[data-pagelet="ProfileSelfTimeline"]') ||
+                  document.querySelector('[data-pagelet="ProfileTimelineComposer"]'));
+    };
+
+    // 3. Combined check used exclusively for DOM scrubbing to protect your profile posts from being hidden.
+    const isExcludedPathForDOM = (path, url = '') => {
+        return isSafeWhitelistedPath(path, url) || isAnyProfileTimeline();
+    };
+
+    const manageCSSStyles = () => {
+        try {
+            const path = window.location.pathname.toLowerCase();
+            const url = window.location.href.toLowerCase();
+            const isPersonal = isExcludedPathForDOM(path, url);
+            
+            if (isPersonal) {
+                const globalStyle = document.getElementById('fb-inline-style');
+                if (globalStyle) globalStyle.remove();
+                PersonalProfileCSS();
+            } else {
+                const personalStyle = document.getElementById('fb-personal-profile-style');
+                if (personalStyle) personalStyle.remove();
+                injectInlineCSS();
+            }
+            return isPersonal;
+        } catch(e) { return false; }
+    };
+
+    manageCSSStyles(); // Initial eval on load
 
     // ==========================================
     // ULTIMATE SAFETY NET FOR HIDING ELEMENTS
@@ -372,6 +454,9 @@
         // Never hide massive structural wrappers
         if (el.matches('main, [role="main"], [role="feed"], #mount_0_0_fb, #globalContainer, #content')) return true;
         
+        // Protect elements that *contain* major structural components so profiles don't vanish
+        if (el.querySelector('main, [role="main"], [role="feed"], [data-pagelet="ProfileTimeline"]')) return true;
+
         // PROTECT THE COMPOSER (Status Update Box)
         if (el.querySelector('div[aria-label="Luo julkaisu"]') || el.querySelector('div[aria-label="Create a post"]')) return true;
         if (el.textContent && (el.textContent.includes('Mitä mietit') || el.textContent.includes("What's on your mind"))) return true;
@@ -469,6 +554,54 @@
         
         if (!element.classList.contains('fb-element-banned')) element.classList.add('fb-element-banned');
         hiddenElements.add(element);
+    };
+
+    // ==========================================
+    // ISOLATED PERSONAL PROFILE SELECTORS
+    // ==========================================
+    const PersonalProfileSelectors = () => {
+        try {
+            // Nuke "Poista kavereista" from any chat/friends list overlay menu
+            document.querySelectorAll('div[role="menuitem"], span[dir="auto"]').forEach(el => {
+                if (el.textContent && el.textContent.includes('Poista kavereista')) {
+                    const wrapper = el.closest('div[role="menuitem"]') || el;
+                    if (!isDangerousToHide(wrapper)) safelyHideFBElement(wrapper);
+                }
+            });
+
+            // Structurally Nuke "Sinulle ehdotettua" / "Lisää kavereita" Ghost Box exclusively by Text mapping
+            const textToFind = ["Lisää kavereita saadaksesi suosituksia", "Kun lisäät kavereita, näet tässä listan ihmisistä, jotka saatat tuntea."];
+            
+            document.querySelectorAll('span[dir="auto"], h2.html-h2, div[dir="auto"]').forEach(el => {
+                if (el.textContent && textToFind.some(t => el.textContent.includes(t))) {
+                    let parent = el.parentElement;
+                    let wrapperToHide = el; // default to hiding just the text if climbing fails
+                    
+                    while (parent && parent !== document.body) {
+                        if (parent.classList.contains('x1exxf4d') || parent.classList.contains('html-div') || parent.classList.contains('x1yztbdb')) {
+                            if (isDangerousToHide(parent)) break;
+                            if (parent.querySelector('[data-pagelet^="FeedUnit"]') || parent.matches('[role="feed"]')) break;
+                            
+                            wrapperToHide = parent;
+                            if (parent.classList.contains('x1exxf4d')) break;
+                        }
+                        parent = parent.parentElement;
+                    }
+                    
+                    if (wrapperToHide && !isDangerousToHide(wrapperToHide)) {
+                        safelyHideFBElement(wrapperToHide);
+                    }
+                }
+            });
+            
+            // Clean up standalone stray icon if text mapping misses it
+            document.querySelectorAll('i[style*="BXcBrMYpzXO.png"][style*="background-position: 0px -84px"]').forEach(el => {
+                if (isSafeElement(el)) return; 
+                if (isDangerousToHide(el)) return;
+                safelyHideFBElement(el);
+            });
+            
+        } catch (e) {}
     };
 
     const hideCriticalElements = () => {
@@ -994,20 +1127,6 @@
         /meta\.ai/i
     ];
 
-    const excludedPaths = [
-        '/messages',
-        '/messenger',
-        '/notifications',
-        '/ilmoitukset',
-        '/groups/317493608736721',
-        '/groups/342124472533278',
-        '/groups/2484497081612438',
-        '/groups/390555733810362',
-        '/groups/934038190050109',
-        '/haukkis',
-        '/tapio.haukirauma'
-    ];
-
     const paramsToDelete = ['fbclid', 'mibextid', 'set', 'idorvanity'];
 
     const cleanUrl = () => {
@@ -1030,14 +1149,7 @@
         } catch (e) {}
     };
 
-    const isExcludedPath = (path) => {
-        if (!path) return false;
-        const lowerPath = path.toLowerCase();
-        return excludedPaths.some(excluded => lowerPath.includes(excluded.toLowerCase()));
-    };
-    
     const getRegexBlockedWords = () => regexBlockedWords;
-    const getAllowedUrls = () => allowedUrls;
 
     let lastVanityUrl = '';
     let vanityCheckCount = 0;
@@ -1045,12 +1157,13 @@
     const checkVanityProfileFBID = () => {
         try {
             if (isRedirecting) return;
-            if (isCurrentPostApproved()) return; // Bypass if this is an approved post view
+            if (isCurrentPostApproved()) return; 
             
             const currentUrl = window.location.href.split('?')[0]; 
             const currentPath = window.location.pathname.toLowerCase();
 
-            if (isExcludedPath(currentPath) || isExcludedPath(currentUrl)) return;
+            // ONLY skip if it's explicitly safely whitelisted. Do NOT skip for just any profile layout!
+            if (isSafeWhitelistedPath(currentPath, currentUrl)) return;
 
             if (currentUrl === lastVanityUrl && vanityCheckCount > 150) return;
 
@@ -1104,14 +1217,15 @@
     const handleRedirects = () => {
         try {
             if (isRedirecting) return; 
-            if (isCurrentPostApproved()) return; // Bypass if this is an approved post view
+            if (isCurrentPostApproved()) return; 
             
             const urlObj = new URL(window.location.href);
             if (urlObj.pathname === '/' || urlObj.pathname === '/home.php') {
                 return;
             }
 
-            if (isExcludedPath(urlObj.pathname) || isExcludedPath(urlObj.href)) {
+            // ONLY skip if it's explicitly safely whitelisted. Do NOT skip for just any profile layout!
+            if (isSafeWhitelistedPath(urlObj.pathname, urlObj.href)) {
                 return; 
             }
 
@@ -1188,6 +1302,8 @@
 
     const deleteBlockedElements = () => {
         try {
+            if (isExcludedPathForDOM(window.location.pathname, window.location.href)) return;
+
             const elements = document.querySelectorAll('img[src]:not(.fb-sanity-checked), a[href]:not(.fb-sanity-checked), div[data-fbid]:not(.fb-sanity-checked)');
             elements.forEach(element => {
                 element.classList.add('fb-sanity-checked');
@@ -1212,6 +1328,8 @@
 
     const scanAndBanEntirePosts = () => {
         try {
+            if (isExcludedPathForDOM(window.location.pathname, window.location.href)) return;
+
             const postSelectors = [
                 'div[data-pagelet^="FeedUnit_"]',
                 'div[data-pagelet^="TimelineFeedUnit_"]',
@@ -1307,6 +1425,8 @@
 
     const deleteRestrictedWords = () => {
         try {
+            if (isExcludedPathForDOM(window.location.pathname, window.location.href)) return;
+
             const selectors = [
 		        'div[data-ad-comet-preview="message"]',
                 'div[data-ad-preview="message"]',
@@ -1346,7 +1466,6 @@
                 
                 if (isRestricted || isRegexBlocked) {
                     
-                    // NEW CHECK: Ignore restricted words and prevent redirects if the post is explicitly approved
                     if (element.closest('.fb-post-approved') || isCurrentPostApproved()) {
                         return; 
                     }
@@ -1458,6 +1577,8 @@
 
     const deleteRestrictedPhrases = () => {
         try {
+            if (isExcludedPathForDOM(window.location.pathname, window.location.href)) return;
+
             const restrictedPhrasesLower = [
                 "liity", "reels", "kelat", "sinulle suositeltua", "suositeltua", "tilaa", "ryhmiä sinulle", "meta ai", "ihmisiä,", "joita saatat tuntea", "ihmisiä, joita saatat tuntea", 
                 "kun lisäät kavereita, näet tässä listan ihmisistä, jotka saatat tuntea.", "lisää kavereita saadaksesi suosituksia", "sisältö ei ole käytettävissä tällä hetkellä", "sinulle ehdotettua", "ehdotettu sinulle", "seuraa"
@@ -2014,48 +2135,61 @@
             checkVanityProfileFBID(); 
             cleanUrl(); 
             
-            const currentPath = window.location.pathname.toLowerCase();
-            const currentUrl = window.location.href.toLowerCase();
+            const isPersonal = manageCSSStyles();
             
-            // Completely disable DOM filtering on functional pages like messages to save CPU
-            if (currentPath.includes('/messages') || currentPath.includes('/messenger') || currentPath.includes('/notifications') || currentPath.includes('/ilmoitukset')) {
-                return; 
+            if (isPersonal) {
+                PersonalProfileSelectors();
+                
+                // Force reveal any posts that the CSS anti-glimpse might have automatically hidden before the CSS toggle kicked in
+                document.querySelectorAll('div[data-pagelet^="FeedUnit_"], div[data-pagelet^="TimelineFeedUnit_"], [role="article"]').forEach(el => {
+                    el.classList.add('fb-post-approved');
+                });
+                
+                return; // TERMINATES HERE. NOTHING ELSE RUNS ON PERSONAL PROFILES!
             }
 
-            // These are hyper-specific nukes that you want EVERYWHERE, even on excluded paths!
+            // Normal execution
             nukeGlobalBadElements();
+            eliminateSuggestedGroups(); 
+            hideCriticalElements();
+            deletePeopleYouMayKnow(); 
+            processSearchResults(); 
+            deleteRestrictedPhrases(); 
+            deleteSelectorsForSpecificUrl();
+            deleteElement();
 
-            // If user explicitly excluded this path (like their own profile), abort general DOM filtering!
-            if (isExcludedPath(currentPath) || isExcludedPath(currentUrl)) {
-                // Force reveal any posts that the CSS anti-glimpse might have automatically hidden
+            const currentPath = window.location.pathname.toLowerCase();
+            const currentUrl = window.location.href.toLowerCase();
+
+            if (isExcludedPathForDOM(currentPath, currentUrl)) {
                 document.querySelectorAll('div[data-pagelet^="FeedUnit_"], div[data-pagelet^="TimelineFeedUnit_"], [role="article"]').forEach(el => {
                     el.classList.add('fb-post-approved');
                 });
                 return; 
             }
 
-            eliminateSuggestedGroups(); 
-            hideCriticalElements(); 
             deleteBlockedElements(); 
             scanAndBanEntirePosts();
             deleteRestrictedWords(); 
-            processSearchResults(); 
-            deleteRestrictedPhrases(); 
-            deletePeopleYouMayKnow(); 
-            deleteSelectorsForSpecificUrl();
-            deleteElement();
         } catch (e) {}
     };
 
     const immediateInit = () => {
-        const currentPath = window.location.pathname.toLowerCase();
-        if (currentPath.includes('/messages') || currentPath.includes('/messenger') || currentPath.includes('/notifications') || currentPath.includes('/ilmoitukset')) return;
+        const isPersonal = manageCSSStyles();
+        
+        if (isPersonal) {
+            PersonalProfileSelectors();
+            return; // TERMINATES HERE.
+        }
         
         nukeGlobalBadElements();
-        if (isExcludedPath(currentPath) || isExcludedPath(window.location.href)) return;
-
-        eliminateSuggestedGroups(); hideCriticalElements(); scanAndBanEntirePosts(); deleteRestrictedWords(); processSearchResults();
+        eliminateSuggestedGroups(); hideCriticalElements(); processSearchResults();
         deleteRestrictedPhrases(); deletePeopleYouMayKnow(); deleteSelectorsForSpecificUrl(); deleteElement(); 
+
+        const currentPath = window.location.pathname.toLowerCase();
+        if (isExcludedPathForDOM(currentPath, window.location.href)) return;
+
+        scanAndBanEntirePosts(); deleteRestrictedWords(); deleteBlockedElements(); 
     };
 
     const ensureDOMReady = () => {
@@ -2069,14 +2203,18 @@
     const init = () => {
         ensureDOMReady(); handleRedirects(); cleanUrl(); 
         
-        const currentPath = window.location.pathname.toLowerCase();
-        if (!currentPath.includes('/messages') && !currentPath.includes('/messenger') && !currentPath.includes('/notifications') && !currentPath.includes('/ilmoitukset')) {
-            
+        const isPersonal = manageCSSStyles();
+        
+        if (isPersonal) {
+            PersonalProfileSelectors();
+        } else {
             nukeGlobalBadElements();
-            if (!isExcludedPath(currentPath) && !isExcludedPath(window.location.href)) {
-                eliminateSuggestedGroups(); deleteBlockedElements(); scanAndBanEntirePosts();
-                deleteRestrictedWords(); processSearchResults(); deleteRestrictedPhrases(); deletePeopleYouMayKnow(); deleteSelectorsForSpecificUrl();
-                deleteElement();
+            eliminateSuggestedGroups(); hideCriticalElements(); processSearchResults(); deleteRestrictedPhrases(); deletePeopleYouMayKnow(); deleteSelectorsForSpecificUrl();
+            deleteElement();
+            
+            const currentPath = window.location.pathname.toLowerCase();
+            if (!isExcludedPathForDOM(currentPath, window.location.href)) {
+                deleteBlockedElements(); scanAndBanEntirePosts(); deleteRestrictedWords(); 
             }
         }
         

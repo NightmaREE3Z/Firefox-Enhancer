@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         InstaTolerable
-// @version      2026-03-20
+// @version      2026-03-24
 // @description  Trying to make my Instagram experience tolerable. 
 // @match        *://www.instagram.com/*
 // @match        *://www.instagram.com/?next=%2F/*
@@ -38,7 +38,7 @@
     function addRAF(fn) {
         const id = requestAnimationFrame((ts) => {
             __rafIds.delete(id);
-            try { fn(ts); } catch {}
+            try { fn(); } catch {}
         });
         __rafIds.add(id);
         return id;
@@ -1572,13 +1572,11 @@ ${p}, ${p} * {
             spans.forEach(span => {
                 if (!span.textContent) return;
                 const txt = span.textContent.trim();
-                if (txt !== 'Sinulle ehdotettua') return;
+                if (txt !== 'Sinulle ehdotettua' && txt !== 'Sinulle ehdotettu' && txt !== 'Suggested for you') return;
 
-                // prefer the header html-div
                 let container = span.closest('div.html-div') || span.parentElement;
                 if (!container) return;
 
-                // require "Näytä kaikki" link or a /explore/people/ link nearby to avoid false positives
                 const scope = container.closest('div') || container;
                 const hasShowAllLink =
                     !!scope.querySelector('a[href="/explore/people/"] span') ||
@@ -1586,7 +1584,6 @@ ${p}, ${p} * {
 
                 if (!hasShowAllLink) return;
 
-                // climb up html-div ancestors to find the module root, avoiding main/body/html/nav
                 let lvl = 0;
                 let candidate = container;
                 while (candidate && lvl < 6) {
@@ -1596,23 +1593,17 @@ ${p}, ${p} * {
                     const plausibleSize = area > 200 && area < 300000;
                     const isHtmlDiv = candidate.classList.contains('html-div');
 
+                    // Make sure we never hide a container holding an <article>
                     if (isHtmlDiv &&
                         plausibleSize &&
-                        !candidate.matches('main, section[role="main"], div[role="main"], body, html, nav')) {
+                        !candidate.matches('main, section[role="main"], div[role="main"], body, html, nav') && 
+                        !candidate.querySelector('article')) {
                         collapseElement(candidate);
                         return;
                     }
 
                     candidate = candidate.parentElement;
                     lvl++;
-                }
-
-                // fallback: hide the immediate header row if nothing else matched
-                const rect = container.getBoundingClientRect ? container.getBoundingClientRect() : null;
-                const area = rect ? rect.width * rect.height : 0;
-                if (area > 80 && area < 150000 &&
-                    !container.matches('main, section[role="main"], div[role="main"], body, html, nav')) {
-                    collapseElement(container);
                 }
             });
         } catch {}
@@ -1629,14 +1620,16 @@ const injectInlineCSS = () => {
             const searchBanCSS = buildSearchBanCSS();
 
             const sinulleEhdotettuaCSS = `
-            div:has(> div > div > a[href^="/explore/people"]),
-            div[style*="max-width: 315px"] div:has(a[href^="/explore/people"]),
-            div:has(> div > span[dir="auto"]):has(a[href^="/explore/people"]) {
+            /* Core Suggestion Block Wrappers (uBlock equivalent) */
+            div.xyqm7xq.x1ys307a,
+             {
                 display: none !important;
                 visibility: hidden !important;
                 opacity: 0 !important;
                 height: 0 !important;
                 width: 0 !important;
+                margin: 0 !important;
+                padding: 0 !important;
                 position: absolute !important;
                 left: -9999px !important;
                 top: -9999px !important;
@@ -1708,17 +1701,29 @@ const injectInlineCSS = () => {
                 overflow: hidden !important;
             }
             
-/* 1. PUSH THE RIGHT SIDEBAR PROFILE DOWN */
-/* Targets the wrapper holding your profile pic on the right side */
-div[style*="--x-width:100%"]:has(a[role="link"] img[alt*="profiilikuva"]) {
-    margin-top: 40px !important; /* Increase this if you want it pushed down further */
+/* Fix vertical alignment of PFP and username */
+.x1oa3qoh.x1nhvcw1 div.xozqiw3 {
+    align-items: center !important;
+    margin-top: 32px !important;
 }
 
-/* 2. PUSH THE FOOTER UP */
-/* Targets the footer nav and reduces its top spacing so it sits higher */
-div:has(> nav ul li a[href*="about.instagram.com"]) {
-    margin-top: -15px !important; /* Low value to pull it up */
+/* 3. PUSH THE FOOTER UP */
+.x1oa3qoh.x1nhvcw1 div:has(> nav ul li a[href*="about.instagram.com"]) {
+    margin-top: -12px !important;
     padding-top: 0px !important;
+}
+
+/* 4. ADJUST STORIES TRAY PLACEMENT */
+div[data-pagelet="story_tray"] {
+    margin-top: -16px !important; 
+}
+
+/* 5. GHOST FEED (Smooth loading, zero flash, NO INFINITE LOOP) */
+article:not([data-banned-scan="safe"]) {
+    opacity: 0 !important;
+}
+article[data-banned-scan="safe"] {
+    opacity: 1 !important;
 }
 
             ${sinulleEhdotettuaCSS}
@@ -2239,12 +2244,31 @@ div:has(> nav ul li a[href*="about.instagram.com"]) {
         const path = location.pathname.toLowerCase();
         const isNightmareStory = path.startsWith('/stories/nightmaree3z/');
         const targets = ['poista', 'delete', 'remove', 'poista seuraaja', 'remove follower', 'lopeta seuraaminen', 'unfollow', 'estä', 'block'];
+        
+        // Target phrases for zero-glimpse sniper
+        const flashTargets = ['sinulle ehdotettua', 'sinulle ehdotettu', 'suggested for you', 'tiliehdotuksia', 'myös metalta'];
 
         for (let i = 0; i < mutations.length; i++) {
             const added = mutations[i].addedNodes;
             for (let j = 0; j < added.length; j++) {
                 const node = added[j];
                 if (node.nodeType !== 1) continue;
+
+                // === ZERO-GLIMPSE SNIPER ===
+                // Check if this newly injected React node is the suggestion block itself
+                const text = (node.textContent || '').toLowerCase();
+                if (flashTargets.some(t => text.includes(t))) {
+                    // Confirm it's the explore block or Myös metalta to avoid false positives on legitimate posts
+                    if (node.querySelector('a[href^="/explore/people"]') || text.includes('myös metalta')) {
+                        // Safe to nuke this newly injected container entirely before it hits the screen
+                        node.style.setProperty('display', 'none', 'important');
+                        node.style.setProperty('opacity', '0', 'important');
+                        node.style.setProperty('height', '0', 'important');
+                        node.style.setProperty('pointer-events', 'none', 'important');
+                        hiddenElements.add(node);
+                        continue; 
+                    }
+                }
                 
                 let elements;
                 try {

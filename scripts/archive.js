@@ -319,7 +319,8 @@
         /clothes.*remove/i,
         /remove.*(clothes|clothing|dress)/i,
         /dress.*remov/i,
-        /face.*(swap|deepfake|replace)/i
+        /face.*(swap|deepfake|replace)/i,
+	/robe.*(wwe|tna|aew|njpw|wrestl|rasll|rasslin)/i, /robe.*(malf|func)/i, /malfunc.*(wwe|tna|aew|njpw|wrestl|rasll|rasslin|ring)/i, /ring gear|trunk|pant|shirt|jacket.*(malf|func)/i, /malfunc.*(wwe|tna|aew|njpw|wrestl|rasll|rasslin|ring)/i, 
     ];
 
     // Merge special regexes into the main list without changing existing logic

@@ -383,7 +383,8 @@
     const specialRegexes = [
         /gr[a4][i1l]n(?:[\s_\-\/.]{0,3}(?:re(?:mov(?:e|al|ing)?|m)|(?:delet(?:e|ing|ion)?|del)|eras(?:e|ing)?|(?:ph(?:o|0)?t(?:o|0)?|pic(?:t(?:ure|ures)?)?|image|img)))|(?:re(?:mov(?:e|al|ing)?|m)|(?:delet(?:e|ing|ion)?|del)|eras(?:e|ing)?|fix|denois(?:e|er|ing)?)(?:[\s_\-\/.]{0,3}(?:ph(?:o|0)?t(?:o|0)?|pic(?:t(?:ure|ures)?)?|image|img))?(?:[\s_\-\/.]{0,3}gr[a4][i1l]n)|gr[a4][i1l]n(?:[\s_\-\/.]{0,3}(?:ph(?:o|0)?t(?:o|0)?|pic|image|img))|(?:ph(?:o|0)?t(?:o|0)?|pic|image|img)(?:[\s_\-\/.]{0,3}fix)/i, /lex.*bl/i, /liv.*morgan/i, /saad.*pipar/i, /s4ad.*pipar/i, /s44d.*pipar/i, /sa4d.*pipar/i, /rint.*pois/i, /dress.*remov/i,
         /(?:n(?:o|0)ise(?:[\s_\-\/.]{0,3}(?:re(?:mov(?:e|al|ing)?|m|duc(?:e|ed|ing|tion)?)|(?:delet(?:e|ing|ion)?|del)|eras(?:e|ing)?|fix|filter(?:ing)?))|(?:re(?:mov(?:e|al|ing)?|m|duc(?:e|ed|ing|tion)?)|(?:delet(?:e|ing|ion)?|del)|eras(?:e|ing)?|fix|filter(?:ing)?)(?:[\s_\-\/.]{0,3})n(?:o|0)ise|de[\s_\-\.]?n(?:o|0)is(?:e|er|ing)?)/i, /make.*(move|gif|video)/i, /photo.*(move|gif|video)/i, /image.*(move|gif|video)/i, /pic.*(move|gif|video)/i, /img.*(move|gif|video)/i, /booty/i, /ass.*(animat|ai|move)/i, /twerk/i, /twerking/i, /jiggle/i, /bounce.*(ai|gif)/i, /booty.*(ai|gif|video|animat)/i, /ass.*(ai|gif|video|animat)/i, /mangoanimat/i, /deepnude/i, /undress/i, /strip.*ai/i, /nude.*ai/i, /clothes.*remove/i, /remove.*(clothes|clothing|dress)/i, /face.*(swap|deepfake|replace)/i, /vaat.*pois/i, /hous.*pois/i, /pait.*pois/i, /pait.*pois/i, /liiv.*pois/i, /alushous.*pois/i, /alkkarit.*pois/i, /alusvaat.*pois/i, /clothing.*remove/i, 
-/alexa.*(wwe|wrest|ras|NXT|pro)/i, /blis.*(wwe|wrest|ras|NXT|pro)/i, /lexa.*(wwe|wrest|ras|NXT|pro)/i, /lexi.*(wwe|wrest|ras|NXT|pro)/i, /blis.*(wwe|wrest|ras|NXT|pro)/i, /bils.*(wwe|wrest|ras|NXT|pro)/i, /lex.*(kauf|cabr|carb)/i, /model.*(mach|langu)/i,
+/alexa.*(wwe|wrest|ras|NXT|pro)/i, /blis.*(wwe|wrest|ras|NXT|pro)/i, /lexa.*(wwe|wrest|ras|NXT|pro)/i, /lexi.*(wwe|wrest|ras|NXT|pro)/i, /blis.*(wwe|wrest|ras|NXT|pro)/i, /bils.*(wwe|wrest|ras|NXT|pro)/i, /lex.*(kauf|cabr|carb)/i, /model.*(mach|langu)/i, /robe.*(wwe|tna|aew|njpw|wrestl|rasll|rasslin)/i,
+/robe.*(malf|func)/i, /ring gear|trunk|pant|shirt|jacket.*(malf|func)/i, /malfunc.*(wwe|tna|aew|njpw|wrestl|rasll|rasslin|ring)/i, 
 
     ];
 
@@ -469,7 +470,7 @@
         /atherosclerosis cerebri/i, /arteriae cerebri/i, /cerebral atherosclerosis/i, /brain artery disease/i, /status post extirpationem uteri totalis/i, /extirpationem uteri totalis/i, /extirpationem/i, /hysterectomy/i, /uterus removal/i, /total/i,
         /Carcinoma parvocellulare pancreatis cum/i, /Carcinoma parvocellulare pancreatis/i, /Carcinoma/i, /parvocellulare/i, /pancreatis/i, /metastasibus/i, /pulmonum/i, /pulmonum l. dx./i, /lymphnodi mediastini/i, /l. dx./i, /mediastini/i, /GPT-5.1/i,
         /metastasibus pulmonum l. dx. lymphnodi mediastini/i, /et retroperinonei renis sin/i, /retroperinonei renis sin/i, /renis sin/i, /retroperinonei renis sin/i, /retroperinonei sin/i, /black friday/i, /SmackDown/i, /OpenAI/i, /ChatGPT/i, /GPT-4o/i,
-	/search/i, /GPT-5.4/i, /lookup/i, /findidfb/i, /fbid/i, /idfb/i, /techpowerup/i, /tech powerup/i, /tech/i, /hardware/i, /powerup/i, /wayback/i, /artifact/i,
+	/search/i, /GPT-5.4/i, /lookup/i, /findidfb/i, /fbid/i, /idfb/i, /techpowerup/i, /tech powerup/i, /tech/i, /hardware/i, /powerup/i, /wayback/i, /artifact/i, /dagonhai/i, /Dagon'hai/i, /Dagon´hai/i, /Dagon`hai/i,
     ];
 
     // === NEW: Firefox Only Allowed Words (Browser Promos) ===
@@ -1350,12 +1351,12 @@
             /nen/i, /lampi/i, /lehti/i, /mäki/i, /maki/i, /lahti/i, /järvi/i, /jarvi/i, /koski/i, /kallio/i, /niemi/i, /aho/i, /aho/i, /salo/i, /kari/i, /oja/i, /pelto/i, /luoto/i, 
             /saari/i, /ranta/i, /virta/i, /keto/i, /vaara/i, /lä/i, /la/i, /maa/i,  /kosken/i, /pää/i, /paa/i, /mäen/i, /mae/i, /sivu/i, /vieri/i, /kaarto/i, /kaarre/i, /aito/i, /aira/i, 
             /man/i, /hauki/i, /rauma/i, /liite/i, /laine/i, /salmi/i, /harju/i, /kangas/i, /vuori/i, /korpi/i, /suo/i, /tal[oö]/i, /nius/i, /kuiva/i, /timo/i, /olli/i, /nyman/i, /nylund/i, 
-            /nygard/i, /aine/i, /nygård/i, /raunio/i, /mies/i, /nainen/i, /aitto/i, /jylhä/i, /anoai/i, /aitto/i, /aino/i, /kaija/i, /anneli/i,
+            /nygard/i, /aine/i, /nygård/i, /raunio/i, /mies/i, /nainen/i, /aitto/i, /jylhä/i, /anoai/i, /aitto/i, /aino/i, /kaija/i, /anneli/i, 
 
 	//Finnish words list
             /aika/i, /aino/i, /aikuinen/i, /saippua/i, /aisti/i, /aivo/i, /tilaisuus/i, /aikuiskoulutus/i, /paikka/i, /saippua/i, /aivast/i,
             /hais/i, /mais/i, /kais/i, /tais/i, /raiska/i, /raippa/i, /pais/i, /alainen/i, /koululainen/i, /Kuinka/i, /Miten/i, /avain/i,
-            /Miksi/i, /Milloin/i, /Milloin/i, /Miksei/i, /aita/i, /aidan/i, /maailma/i, /avoin/i, /avaim/i,
+            /Miksi/i, /Milloin/i, /Milloin/i, /Miksei/i, /aita/i, /aidan/i, /maailma/i, /avoin/i, /avaim/i, /dagonhai/i, /Dagon'hai/i, /Dagon´hai/i, /Dagon`hai/i,
             /maanantai/i, /tiistai/i, /torstai/i, /perjantai/i, /lauantai/i, /sunnuntai/i, 
         ];
 

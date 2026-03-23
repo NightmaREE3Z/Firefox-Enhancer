@@ -198,7 +198,8 @@
         '.upgrade-container',
         '.upgrade-button-container',
         'button.upsell-button',
-        '.upgrade-text-container'
+        '.upgrade-text-container',
+	'div.safety-disclaimer-container-for-medical.ng-star-inserted'
     ];
 
     // NEW: Snapchat Camera selector to expand to fill available space (not full screen)
