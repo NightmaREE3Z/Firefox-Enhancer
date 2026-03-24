@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         FB Sanity Enhancer
-// @version      2026-03-22
+// @version      2026-03-24
 // @description  Makes my Facebook experience tolerable. With less algorithmic bullshit.
 // @match        *://*.facebook.com/*
 // @grant        none
@@ -181,201 +181,209 @@
 
     const injectInlineCSS = () => {
         try {
-            devLog('Injecting inline CSS');
             let style = document.getElementById('fb-inline-style');
             if (!style) {
+                devLog('Injecting inline CSS');
                 style = document.createElement('style');
                 style.id = 'fb-inline-style';
-            }
-            style.textContent = `
-            /* Permanently hide banned posts and elements */
-            .fb-post-banned,
-            .fb-element-banned {
-                visibility: hidden !important;
-                display: none !important;
-                opacity: 0 !important;
-                pointer-events: none !important;
-                position: absolute !important;
-                left: -9999px !important;
-                top: -9999px !important;
-                height: 0 !important;
-                width: 0 !important;
-                overflow: hidden !important;
-                content-visibility: hidden !important;
-            }
+                
+                style.textContent = `
+                /* Permanently hide banned posts and elements */
+                .fb-post-banned,
+                .fb-element-banned {
+                    visibility: hidden !important;
+                    display: none !important;
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                    position: absolute !important;
+                    left: -9999px !important;
+                    top: -9999px !important;
+                    height: 0 !important;
+                    width: 0 !important;
+                    overflow: hidden !important;
+                    content-visibility: hidden !important;
+                }
 
-            /* INSTANT SEARCH HIDING */
-            .is-search-page li[role="row"]:not(.fb-search-approved),
-            .is-search-page a[aria-describedby]:not(.fb-search-approved),
-            .is-search-page div[role="option"]:not(.fb-search-approved),
-            .is-search-page div[data-testid="search-result"]:not(.fb-search-approved),
-            .is-search-page div[role="presentation"] a:not(.fb-search-approved) {
-                visibility: hidden !important; 
-                display: none !important; 
-                opacity: 0 !important;
-            }
+                /* INSTANT SEARCH HIDING */
+                .is-search-page li[role="row"]:not(.fb-search-approved),
+                .is-search-page a[aria-describedby]:not(.fb-search-approved),
+                .is-search-page div[role="option"]:not(.fb-search-approved),
+                .is-search-page div[data-testid="search-result"]:not(.fb-search-approved),
+                .is-search-page div[role="presentation"] a:not(.fb-search-approved) {
+                    visibility: hidden !important; 
+                    display: none !important; 
+                    opacity: 0 !important;
+                }
 
-            /* ANTI-FLASHING FOR KNOWN GARBAGE */
-            div[aria-label="People You May Know"],
-            div[aria-label="Ihmisiä, jotka saatat tuntea"],
-            a[href="https://www.facebook.com/friends/suggestions/"],
-            div[aria-label="Näytä suosituksia"],
-            [aria-label="Näytä suositukset"],
-            [role="button"][aria-label="Näytä suositukset"],  
-            div[aria-label="Kelat"][role="region"],
-            div[aria-label="Reels"][role="region"],
-            div[aria-label="Sinulle ehdotettua"][role="region"],
-            div[aria-label="Suggested for you"][role="region"],
-            div.x1yztbdb:has(div[aria-label="Edelliset kohteet"]),
-            div.x1yztbdb:has(div[aria-label="Seuraavat kohteet"]),
-            div.x1yztbdb:has(div[aria-label="Suositeltu"][role="region"]) {
-                display: none !important;
-            }
-            
-            /* ABSOLUTE ZERO-GLIMPSE for Meta AI & Kaverit (Friends) */
-            a[href*="meta.ai" i], 
-            a[href*="www.meta.ai"],
-            a[href*="/metaai/" i], 
-            a[href="/Meta AI/"],
-            a[href*="/messages/t/36327"],
-            a[aria-label="Meta AI"],
-            div[aria-label="Meta AI"],
-            span[aria-label="Meta AI"],
-            [title*="Meta AI" i],
-            [data-testid*="meta_ai" i],
-            input[placeholder*="Meta AI" i],
-	    div.html-div.x1n2onr6.x1ja2u2z.x1jx94hy.xw5cjc7.x1dmpuos.x1vsv7so:has(div[aria-label="Kelat"][role="region"]),
-	    div.html-div.x1n2onr6.x1ja2u2z.x1jx94hy.xw5cjc7.x1dmpuos.x1vsv7so:has(div[aria-label="Reels"][role="region"]),
-	    div.x78zum5.x1q0g3np.x1qughib.xz9dl7a.xpdmqnj.x1120s5i.x1g0dm76:has(div[aria-label="Kelat"][role="region"]),
-     	    div.x78zum5.x1q0g3np.x1qughib.xz9dl7a.xpdmqnj.x1120s5i.x1g0dm76:has(div[aria-label="Reels"][role="region"]),
-	/* 1. ZERO-GLIMPSE: META AI & KAVERIT (Left Menu & Chat List) */
-        /* Targets the links AND their immediate parent list-items/wrappers to completely collapse the space */
-	    a[href^="https://www.meta.ai/"],
-	    li:has(a[href^="https://www.meta.ai/"]),
-	    div:has(> a[href^="https://www.meta.ai/"]),
-	    a[href*="/messages/t/36327"],
-	    li:has(a[href*="/messages/t/36327"]),
-	    div:has(> a[href*="/messages/t/36327"]),
-            a[href*="meta.ai" i], 
-            a[href*="www.meta.ai"],
-            a[href*="/metaai/" i], 
-            a[href="/Meta AI/"],
-            a[aria-label="Meta AI"],
-            div[aria-label="Meta AI"],
-            span[aria-label="Meta AI"],
-            [title*="Meta AI" i],
-            [data-testid*="meta_ai" i],
-            input[placeholder*="Meta AI" i],
-            a[aria-label="Kaverit"],
-            div[aria-label="Kaverit"],
+                /* ANTI-FLASHING FOR KNOWN GARBAGE */
+                div[aria-label="People You May Know"],
+                div[aria-label="Ihmisiä, jotka saatat tuntea"],
+                a[href="https://www.facebook.com/friends/suggestions/"],
+                div[aria-label="Näytä suosituksia"],
+                [aria-label="Näytä suositukset"],
+                [role="button"][aria-label="Näytä suositukset"],  
+                div[aria-label="Kelat"][role="region"],
+                div[aria-label="Reels"][role="region"],
+                div[aria-label="Sinulle ehdotettua"][role="region"],
+                div[aria-label="Suggested for you"][role="region"],
+                div.x1yztbdb:has(div[aria-label="Edelliset kohteet"]),
+                div.x1yztbdb:has(div[aria-label="Seuraavat kohteet"]),
+                div.x1yztbdb:has(div[aria-label="Suositeltu"][role="region"]) {
+                    display: none !important;
+                }
+                
+                /* ABSOLUTE ZERO-GLIMPSE for Meta AI & Kaverit (Friends) */
+                a[href*="meta.ai" i], 
+                a[href*="www.meta.ai"],
+                a[href*="/metaai/" i], 
+                a[href="/Meta AI/"],
+                a[href*="/messages/t/36327"],
+                a[aria-label="Meta AI"],
+                div[aria-label="Meta AI"],
+                span[aria-label="Meta AI"],
+                [title*="Meta AI" i],
+                [data-testid*="meta_ai" i],
+                input[placeholder*="Meta AI" i],
+            div.html-div.x1n2onr6.x1ja2u2z.x1jx94hy.xw5cjc7.x1dmpuos.x1vsv7so:has(div[aria-label="Kelat"][role="region"]),
+            div.html-div.x1n2onr6.x1ja2u2z.x1jx94hy.xw5cjc7.x1dmpuos.x1vsv7so:has(div[aria-label="Reels"][role="region"]),
+            div.x78zum5.x1q0g3np.x1qughib.xz9dl7a.xpdmqnj.x1120s5i.x1g0dm76:has(div[aria-label="Kelat"][role="region"]),
+                div.x78zum5.x1q0g3np.x1qughib.xz9dl7a.xpdmqnj.x1120s5i.x1g0dm76:has(div[aria-label="Reels"][role="region"]),
+        /* 1. ZERO-GLIMPSE: META AI & KAVERIT (Left Menu & Chat List) */
+            /* Targets the links AND their immediate parent list-items/wrappers to completely collapse the space */
             a[href^="https://www.meta.ai/"],
             li:has(a[href^="https://www.meta.ai/"]),
             div:has(> a[href^="https://www.meta.ai/"]),
             a[href*="/messages/t/36327"],
             li:has(a[href*="/messages/t/36327"]),
             div:has(> a[href*="/messages/t/36327"]),
+                a[href*="meta.ai" i], 
+                a[href*="www.meta.ai"],
+                a[href*="/metaai/" i], 
+                a[href="/Meta AI/"],
+                a[aria-label="Meta AI"],
+                div[aria-label="Meta AI"],
+                span[aria-label="Meta AI"],
+                [title*="Meta AI" i],
+                [data-testid*="meta_ai" i],
+                input[placeholder*="Meta AI" i],
+                a[aria-label="Kaverit"],
+                div[aria-label="Kaverit"],
+                a[href^="https://www.meta.ai/"],
+                li:has(a[href^="https://www.meta.ai/"]),
+                div:has(> a[href^="https://www.meta.ai/"]),
+                a[href*="/messages/t/36327"],
+                li:has(a[href*="/messages/t/36327"]),
+                div:has(> a[href*="/messages/t/36327"]),
+                a[href="https://www.facebook.com/friends/"],
+                a[href^="/friends/"],
+                a[href*="facebook.com/friends"],
+                li:has(a[href="https://www.facebook.com/friends/"]),
+                div:has(> a[href="https://www.facebook.com/friends/"]),
+                div:has(> a[href*="meta.ai" i]),
+                div:has(> a[aria-label="Meta AI" i]),
+                li:has(a[aria-label="Meta AI" i]),
+                li:has(a[href*="meta.ai" i]),
+                li:has(a[href^="/friends/"]),
+                li:has(a[href*="facebook.com/friends"]),
             a[href="https://www.facebook.com/friends/"],
-            a[href^="/friends/"],
-            a[href*="facebook.com/friends"],
             li:has(a[href="https://www.facebook.com/friends/"]),
-            div:has(> a[href="https://www.facebook.com/friends/"]),
-            div:has(> a[href*="meta.ai" i]),
-            div:has(> a[aria-label="Meta AI" i]),
-            li:has(a[aria-label="Meta AI" i]),
-            li:has(a[href*="meta.ai" i]),
-            li:has(a[href^="/friends/"]),
-            li:has(a[href*="facebook.com/friends"]),
-	    a[href="https://www.facebook.com/friends/"],
-	    li:has(a[href="https://www.facebook.com/friends/"]),
-	    div:has(> a[href="https://www.facebook.com/friends/"]) {
-                display: none !important;
-                visibility: hidden !important;
-                opacity: 0 !important;
-                height: 0 !important;
-                width: 0 !important;
-                margin: 0 !important;
-                padding: 0 !important;
-                position: absolute !important;
-                pointer-events: none !important;
-            }
+            div:has(> a[href="https://www.facebook.com/friends/"]) {
+                    display: none !important;
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    height: 0 !important;
+                    width: 0 !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    position: absolute !important;
+                    pointer-events: none !important;
+                }
 
-            /* HIDE SPECIFIC PEOPLE FROM CHAT LIST */
-            a[href*="/messages/t/100000645744865"],
-            li:has(a[href*="/messages/t/100000645744865"]),
-            div:has(> a[href*="/messages/t/100000645744865"]) {
-                display: none !important; 
-                visibility: hidden !important;
-                opacity: 0 !important;
-                width: 0 !important;
-                height: 0 !important;
-                margin: 0 !important;
-                padding: 0 !important;
-                position: absolute !important;
-                pointer-events: none !important;
-            }
+                /* HIDE SPECIFIC PEOPLE FROM CHAT LIST */
+                a[href*="/messages/t/100000645744865"],
+                li:has(a[href*="/messages/t/100000645744865"]),
+                div:has(> a[href*="/messages/t/100000645744865"]) {
+                    display: none !important; 
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    width: 0 !important;
+                    height: 0 !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    position: absolute !important;
+                    pointer-events: none !important;
+                }
 
-            /* 2. COMPLETELY ERADICATE THE REELS WRAPPER & SEPARATOR LINE */
-            /* Targets the outer wrapper when it contains a banned Reels element */
-            div.x6ikm8r.x10wlt62:has(> div.x78zum5.x1q0g3np.x1qughib.xz9dl7a:has(.fb-element-banned)),
-            div.x78zum5.x1q0g3np.x1qughib.xz9dl7a.xpdmqnj.x1120s5i.x1g0dm76:has(.fb-element-banned),
-            /* Targets the annoying empty spacer/border line right below the Reels box */
-            div.x1tz4bnf.x1yqjg3l.x25epmt.xkkygvr.x16qb05n.xi7iut8 {
-                display: none !important;
-                visibility: hidden !important;
-                opacity: 0 !important;
-                height: 0 !important;
-                max-height: 0 !important;
-                min-height: 0 !important;
-                margin: 0 !important;
-                padding: 0 !important;
-                border: none !important;
-            }
+                /* 2. COMPLETELY ERADICATE THE REELS WRAPPER & SEPARATOR LINE */
+                /* Targets the outer wrapper when it contains a banned Reels element */
+                div.x6ikm8r.x10wlt62:has(> div.x78zum5.x1q0g3np.x1qughib.xz9dl7a:has(.fb-element-banned)),
+                div.x78zum5.x1q0g3np.x1qughib.xz9dl7a.xpdmqnj.x1120s5i.x1g0dm76:has(.fb-element-banned),
+                /* Targets the annoying empty spacer/border line right below the Reels box */
+                div.x1tz4bnf.x1yqjg3l.x25epmt.xkkygvr.x16qb05n.xi7iut8 {
+                    display: none !important;
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    height: 0 !important;
+                    max-height: 0 !important;
+                    min-height: 0 !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    border: none !important;
+                }
 
-            /* COMPLETELY NUKE THE OUTER FEEDUNIT GHOST BOXES IF THEY HOLD REELS OR SUGGESTED GARBAGE */
-            div[data-pagelet^="FeedUnit_"]:has(div[aria-label="Kelat"][role="region"]),
-            div[data-pagelet^="FeedUnit_"]:has(div[aria-label="Reels"][role="region"]),
-            div[data-pagelet^="FeedUnit_"]:has(div[aria-label="Sinulle ehdotettua"][role="region"]),
-            div[data-pagelet^="FeedUnit_"]:has(div[aria-label="Suggested for you"][role="region"]),
-            div[data-pagelet^="TimelineFeedUnit_"]:has(div[aria-label="Kelat"][role="region"]),
-            div[data-pagelet^="TimelineFeedUnit_"]:has(div[aria-label="Reels"][role="region"]) {
-                display: none !important;
-                visibility: hidden !important;
-                opacity: 0 !important;
-                height: 0 !important;
-                max-height: 0 !important;
-                min-height: 0 !important;
-                margin: 0 !important;
-                padding: 0 !important;
-                border: none !important;
-                position: absolute !important;
-                pointer-events: none !important;
-            }
-            
-            /* ANTI-GLIMPSE POST REVEAL FALLBACK (Smooth Feed) - NO LONGER APPLIES TO COMMENTS */
-            @keyframes fb-failsafe-reveal {
-                to { opacity: 1 !important; visibility: visible !important; pointer-events: auto !important; }
-            }
-            div[data-pagelet^="FeedUnit_"]:not(.fb-post-approved):not(.fb-post-banned):not(:has([data-visualcompletion="loading-state"])),
-            div[data-pagelet^="TimelineFeedUnit_"]:not(.fb-post-approved):not(.fb-post-banned):not(:has([data-visualcompletion="loading-state"])) {
-                opacity: 0 !important;
-                pointer-events: none !important;
-                animation: fb-failsafe-reveal 0.1s 0.2s forwards !important; 
-            }
+                /* COMPLETELY NUKE THE OUTER FEEDUNIT GHOST BOXES IF THEY HOLD REELS OR SUGGESTED GARBAGE */
+                div[data-pagelet^="FeedUnit_"]:has(div[aria-label="Kelat"][role="region"]),
+                div[data-pagelet^="FeedUnit_"]:has(div[aria-label="Reels"][role="region"]),
+                div[data-pagelet^="FeedUnit_"]:has(div[aria-label="Sinulle ehdotettua"][role="region"]),
+                div[data-pagelet^="FeedUnit_"]:has(div[aria-label="Suggested for you"][role="region"]),
+                div[data-pagelet^="TimelineFeedUnit_"]:has(div[aria-label="Kelat"][role="region"]),
+                div[data-pagelet^="TimelineFeedUnit_"]:has(div[aria-label="Reels"][role="region"]) {
+                    display: none !important;
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    height: 0 !important;
+                    max-height: 0 !important;
+                    min-height: 0 !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    border: none !important;
+                    position: absolute !important;
+                    pointer-events: none !important;
+                }
+                
+                /* ZERO-GLIMPSE POST REVEAL FALLBACK (Smooth Feed) - 3 SECOND DELAY */
+                /* Holds the post completely invisible until evaluating finishes. Safe posts get .fb-post-approved to override this instantly. */
+                @keyframes fb-failsafe-reveal {
+                    to { opacity: 1 !important; visibility: visible !important; pointer-events: auto !important; }
+                }
+                div[data-pagelet^="FeedUnit_"]:not(.fb-post-approved):not(.fb-post-banned):not(:has([data-visualcompletion="loading-state"])),
+                div[data-pagelet^="TimelineFeedUnit_"]:not(.fb-post-approved):not(.fb-post-banned):not(:has([data-visualcompletion="loading-state"])) {
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                    animation: fb-failsafe-reveal 0.1s 3.0s forwards !important; 
+                }
 
-            /* IMMUNITY SHIELD FOR DIALOGS AND CRITICAL BUTTONS */
-            [role="dialog"]:not(.fb-element-banned):not(:has(div[data-pagelet="MediaViewerPhoto"])),
-            [role="dialog"] *:not(.fb-element-banned):not(:has(div[data-pagelet="MediaViewerPhoto"])),
-            div[aria-label="Poistetaanko?"],
-            div[aria-label="Poista"],
-            div[aria-label="Peruuta"],
-            div[aria-label="Luo julkaisu"],
-            div[aria-label="Create a post"] {
-                visibility: visible !important;
-                opacity: 1 !important;
-                pointer-events: auto !important;
-            }
-            `;
-            if (!style.isConnected) {
+                /* Ensure approved posts snap back instantly */
+                div[data-pagelet^="FeedUnit_"].fb-post-approved,
+                div[data-pagelet^="TimelineFeedUnit_"].fb-post-approved {
+                    opacity: 1 !important;
+                    pointer-events: auto !important;
+                }
+
+                /* IMMUNITY SHIELD FOR DIALOGS AND CRITICAL BUTTONS */
+                [role="dialog"]:not(.fb-element-banned):not(:has(div[data-pagelet="MediaViewerPhoto"])),
+                [role="dialog"] *:not(.fb-element-banned):not(:has(div[data-pagelet="MediaViewerPhoto"])),
+                div[aria-label="Poistetaanko?"],
+                div[aria-label="Poista"],
+                div[aria-label="Peruuta"],
+                div[aria-label="Luo julkaisu"],
+                div[aria-label="Create a post"] {
+                    visibility: visible !important;
+                    opacity: 1 !important;
+                    pointer-events: auto !important;
+                }
+                `;
+                
                 if (document.head) {
                     document.head.appendChild(style);
                 } else if (document.documentElement) {
@@ -415,7 +423,8 @@
 
     // 3. Combined check used exclusively for DOM scrubbing to protect your profile posts from being hidden.
     const isExcludedPathForDOM = (path, url = '') => {
-        return isSafeWhitelistedPath(path, url) || isAnyProfileTimeline();
+        // Strictly restricted to Regex paths to prevent Facebook Pages like The 434 from triggering the immunity
+        return isSafeWhitelistedPath(path, url);
     };
 
     const manageCSSStyles = () => {
@@ -602,6 +611,119 @@
             });
             
         } catch (e) {}
+    };
+
+// FIXED: Function to delete elements for specific profiles - now with proper URL restriction
+    const filteredProfiles = () => {
+        try {
+            const currentUrl = window.location.href;
+            const url = new URL(currentUrl);
+            const profileIds = [
+                '100000639309471',
+                'jiri.innanen',
+            ];
+
+            // Strictly match only these profile pages
+            const matchesProfile = profileIds.some(profileId => {
+                return (
+                    (url.pathname === '/profile.php' && url.searchParams.get('id') === profileId) ||
+                    (url.pathname === `/${profileId}` || url.pathname === `/${profileId}/`)
+                );
+            });
+            
+            // Only run if we're actually on one of the specified profiles
+            if (!matchesProfile) return; 
+            
+            devLog('Applying selectors for specific profiles');
+            const selectorsToDelete = [
+                '.x1a2a7pz.x1ja2u2z.xh8yej3.x1n2onr6.x10wlt62.x6ikm8r.x1itg65n',
+                '.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > div > .x1jfb8zj.x1qrby5j.x1n2onr6.x7ja8zs.x1t2pt76.x1lytzrv.xedcshv.xarpa2k.x3igimt.x12ejxvf.x1qhmfi1.x1pdmqnj.x9f619.x178xt8z.xm81vs4.xso031l.xy80clv.x1xmf6yo',
+                '.xu06nn8.x1jl3cmp.x2r5gy4.xnpuxes.x1hc1fzr.x879a55.x1q0g3np.xozqiw3.x1qjc9v5.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619 > .xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619',
+                '.xu06nn8.x1jl3cmp.x2r5gy4.xnpuxes.x1hc1fzr.x879a55.x1q0g3np.xozqiw3.x1qjc9v5.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619 > .xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .x1y5dvz6.x16i7wwg.xqdwrps.x1pi30zi.x1swvt13.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619',
+                '.x78zum5 > .xh8yej3.x1n2onr6.xl56j7k.xdt5ytf.x3nfvp2.x9f619.x1a2a7pz.x1lku1pv.x87ps6o.x13rtm0m.x1e5q0jg.x3x9cwd.x1o1ewxj.xggy1nq.x1hl2dhg.x16tdsg8.xkhd6sd.x18d9i69.x4uap5.xexx8yu.x1mh8g0r.xat24cr.x11i5rnm.xdj266r.html-div',
+                '.x78zum5 > .xh8yej3.x1n2onr6.xl56j7k.xdt5ytf.x3nfvp2.x9f619.x1a2a7pz.x1lku1pv.x87ps6o.x13rtm0m.x1e5q0jg.x3x9cwd.x1o1ewxj.xggy1nq.x1hl2dhg.x16tdsg8.xkhd6sd.x18d9i69.x4uap5.xexx8yu.x1mh8g0r.xat24cr.x11i5rnm.xdj266r.html-div > .xquyuld.x10wlt62.x6ikm8r.xh8yej3.x9f619.xt3gfkd.xu5ydu1.xdney7k.x1qpq9i9.x1jx94hy.x1ja2u2z.x1n2onr6.x26u7qi.x178xt8z.xm81vs4.xso031l.xy80clv.xev17xk.x1xmf6yo',
+                '.x1q0g3np.xozqiw3.x6s0dn4.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619 > .xamitd3.xeuugli.x193iq5w.x2lah0s.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .x78zum5',
+                '.x1q0g3np.xozqiw3.x6s0dn4.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619 > .xamitd3.xeuugli.x193iq5w.x2lah0s.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619',
+                '.x1y5dvz6.x16i7wwg.xqdwrps.x1pi30zi.x1swvt13.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .x1q0g3np.xozqiw3.x6s0dn4.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619',
+                '.x2lah0s.xvo6coq.x1ve1bff.x1q0g3np.xozqiw3.x1qjc9v5.xl56j7k.x1n2onr6.x78zum5.x1ja2u2z.x9f619 > .x1y5dvz6.x16i7wwg.xqdwrps.x1pi30zi.x1swvt13.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619',
+                '.x2lah0s.xvo6coq.x1ve1bff.x1q0g3np.xozqiw3.x1qjc9v5.xl56j7k.x1n2onr6.x78zum5.x1ja2u2z.x9f619',
+                '.x7wzq59.x1xzczws.x1ja2u2z.x9f619',
+                'div.xnjli0.x1q8cg2c.xwib8y2.x1y1aw1k.x6s0dn4.x1ja2u2z.x16tdsg8.x1n2onr6.x1gh759c.xnqzcj9.xfvfia3.x1i6fsjq.x2lah0s.x1q0g3np.x78zum5.x1ypdohk.x9f619.xjyslct.x1a2a7pz.x1lku1pv.x87ps6o.x13rtm0m.x1e5q0jg.x3x9cwd.x1o1ewxj.xggy1nq.x1hl2dhg.x13vifvy.x16tdsg8.x1xmf6yo',
+                'div.x78zum5.x12nagc.x1n2onr6.x1s6qhgt:empty',
+                '.x7wzq59 > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(2)',
+                '.x7wzq59 > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(2) > div:nth-child(1) > div:nth-child(1)',
+                'div.x1nhvcw1:nth-child(1)',
+                'div.x1nhvcw1:nth-child(1) > div:nth-child(1)',
+                'div.x1nhvcw1:nth-child(1) > div:nth-child(2)',
+                'div.x1nhvcw1:nth-child(1) > div:nth-child(2) > div:nth-child(1)',
+                'div.x1nhvcw1:nth-child(1) > div:nth-child(2) > div:nth-child(1) > div:nth-child(1)',
+                'div.x1nhvcw1:nth-child(1) > div:nth-child(2) > div:nth-child(1) > div:nth-child(1) > span:nth-child(1)',
+                'div.xifccgj.x4cne27.xbmpl8g.xykv574.xyamay9.x1swvt13.x1pi30zi.x1q0g3np.xozqiw3.x1qjc9v5.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619:nth-of-type(2)',
+                'div.x1yztbdb:nth-child(2)',
+                'div.x1yztbdb:nth-child(2) > div:nth-child(1)',
+                'div.x1yztbdb:nth-child(2) > div:nth-child(1) > div:nth-child(1)',
+                'div.x1yztbdb:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1)',
+                'div.xamitd3:nth-child(1)',
+                'div.xamitd3:nth-child(2)',
+                'div.xamitd3:nth-child(2) > div:nth-child(1)',
+                'div.xamitd3:nth-child(2) > div:nth-child(1) > div:nth-child(1)',
+                'div.xamitd3:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1)',
+                'div.xamitd3:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1)',
+                'div.xamitd3:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1)',
+                'div.xamitd3:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1)',
+                'div.xamitd3:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2)',
+                'div.xamitd3:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > span:nth-child(1)',
+                'div.xamitd3:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > span:nth-child(1) > span:nth-child(1) > span:nth-child(1)',
+                'div.xamitd3:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2)',
+                '.x6d00yu',
+                'mount_0_0_9k > div > div > div > div.x9f619.x1n2onr6.x1ja2u2z > div > div > div.x78zum5.xdt5ytf.x1t2pt76.x1n2onr6.x1ja2u2z.x10cihs4 > div.x78zum5.xdt5ytf.x1t2pt76 > div > div > div.x6s0dn4.x78zum5.xdt5ytf.x193iq5w > div.x9f619.x193iq5w.x1talbiv.x1sltb1f.x3fxtfs.xf7dkkf.xv54qhq.xw7yly9 > div > div.x9f619.x1n2onr6.x1ja2u2z.xeuugli.xs83m0k.xjl7jj.x1xmf6yo.x1xegmmw.x1e56ztr.x13fj5qh.xnp8db0.x1d1medc.x7ep2pv.x1xzczws > div.x7wzq59 > div > div:nth-child(2) > div > div',
+                'div[aria-label="Suodattimet"]',
+                'div[aria-label="Filters"]',
+                'div[aria-label="Suodattimet"][role="button"]',
+                'div[aria-label="Filters"][role="button"]',
+                '.x1i10hfl.xjbqb8w.x1ejq31n.x18oe1m7.x1sy0etr.xstzfhl.x972fbf.x10w94by.x1qhh985.x14e42zd.x1ypdohk.xe8uvvx.xdj266r.x14z9mp.xat24cr.x1lziwak.xexx8yu.xyri2b.x18d9i69.x1c1uobl.x16tdsg8.xat24cr.x1mh8g0r.x6s0dn4.x78zum5.xdt5ytf.xjy6m2a.xl56j7k',
+                '.x1ja2u2z.x78zum5.x2lah0s.x1n2onr6.xl56j7k.x6s0dn4.xozqiw3.x1q0g3np.x14ldlfn.x1b1wa69.xws8118.x5fzff1.x972fbf.x10w94by.x1qhh985.x14e42zd.x9f619.xpdmqnj.x1g0dm76.x1qhmfi1.x1r1pt67',
+                'h2:contains("Julkaisut")',
+                'span:contains("Julkaisut")',
+                'div:contains("Suodattimet")',
+                'span:contains("Suodattimet")'
+            ];
+            
+            selectorsToDelete.forEach(selector => {
+                // Handle our custom pseudo-selector for native JS compatibility!
+                if (selector.includes(':contains(')) {
+                    const match = selector.match(/^(.*?):contains\("(.*?)"\)$/);
+                    if (match) {
+                        const tag = match[1].toUpperCase(); 
+                        const text = match[2];
+                        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
+                        let node;
+                        while ((node = walker.nextNode())) {
+                            if (node.nodeValue.includes(text)) {
+                                let parent = node.parentElement;
+                                while (parent && parent !== document.body) {
+                                    if (parent.tagName === tag) {
+                                        if (!isSafeElement(parent) && !isDangerousToHide(parent)) {
+                                            safelyHideFBElement(parent);
+                                        }
+                                        break;
+                                    }
+                                    parent = parent.parentElement;
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // Standard CSS Selectors
+                    document.querySelectorAll(selector).forEach(element => {
+                        if (isSafeElement(element)) return;
+                        safelyHideFBElement(element);
+                    });
+                }
+            });
+        } catch (e) {
+            console.log('Error deleting selectors for specific profiles: ' + e.message);
+        }
     };
 
     const hideCriticalElements = () => {
@@ -1355,7 +1477,8 @@
                         }
                     }
                     
-                    if (isAlreadyApproved) {
+                    // Immediately approve the container if the current URL is an already safe post ID!
+                    if (isAlreadyApproved || isCurrentPostApproved()) {
                         post.classList.add('fb-post-processed');
                         post.classList.add('fb-post-approved');
                         return; 
@@ -1364,6 +1487,7 @@
                     post.classList.add('fb-post-scanning');
 
                     const seeMoreButtons = Array.from(post.querySelectorAll('[role="button"]')).filter(btn => {
+                        if (isInsideComment(btn)) return false; // Prevents clicking "See more comments" and crashing the feed!
                         const text = (btn.textContent || btn.innerText || '').toLowerCase().trim();
                         return text === 'näytä lisää' || text === 'see more';
                     });
@@ -1870,52 +1994,59 @@
             if (!isSupported) return;
             
             let style = document.getElementById('fb-specific-url-prehide-style');
-            if (!style) { style = document.createElement('style'); style.id = 'fb-specific-url-prehide-style'; }
-            
-            style.textContent = `
-            .x1120s5i.x1n2onr6.x10wlt62.x6ikm8r.x1lliihq:not(:has([data-visualcompletion="loading-state"])),
-            .x1cnzs8.xjkvuk6.x193iq5w.x2lah0s.xdt5ytf.x78zum5.x9f619.x1ja2u2z.x1n2onr6:not(:has([data-visualcompletion="loading-state"])),
-            .xifccgj.x4cne27.xbmpl8g.xykv574.xyamay9.x1swvt13.x1pi30zi.x1q0g3np.xozqiw3.x1qjc9v5.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619:not(:has([data-visualcompletion="loading-state"])),
-            .x7wzq59 > div > div > div > .x1yztbdb > .xh8yej3.x1n2onr6.xl56j7k.xdt5ytf.x3nfvp2.x9f619.x1a2a7pz.x1lku1pv.x87ps6o.x13rtm0m.x1e5q0jg.x3x9cwd.x1o1ewxj.xggy1nq.x1hl2dhg.x16tdsg8.xkhd6sd.x18d9i69.x4uap5.xexx8yu.x1mh8g0r.xat24cr.x11i5rnm.xdj266r.html-div > .xquyuld.x10wlt62.x6ikm8r.xh8yej3.x9f61:not(:has([data-visualcompletion="loading-state"])),
-            .xi81zsa.xo1l8bm.x1sibtaa.x1nxh6w3.x676frb.x4zkp8e.x1943h6x.x1fgarty.x1cpjm7i.x1gmr53x.xhkezso.x1s928wv.x1lliihq.x1xmvt09.x1vvkbs.x13faqbe.xeuugli.x193iq5w > .xt0psk2:not(:has([data-visualcompletion="loading-state"])),
-            footer > .xi81zsa.xo1l8bm.x1sibtaa.x1nxh6w3.x676frb.x4zkp8e.x1943h6x.x1fgarty.x1cpjm7i.x1gmr53x.xhkezso.x1s928wv.x1lliihq.x1xmvt09.x1vvkbs.x13faqbe.xeuugli.x193iq5w:not(:has([data-visualcompletion="loading-state"])),
-            .x1xzczws.x7ep2pv.x1d1medc.xnp8db0.x1i64zmx.x1e56ztr.x1emribx.x1xmf6yo.xjl7jj.xs83m0k.xeuugli.x1ja2u2z.x1n2onr6.x9f619:not(:has([data-visualcompletion="loading-state"])),
-            .x1yrsyyn.x10b6aqq.x16hj40l.xsyo7zv.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .xifccgj.x4cne27.xdt5ytf.x78zum5 > .x1k70j0n.xzueoph > .xeuug:not(:has([data-visualcompletion="loading-state"])),
-            .x1yrsyyn.x10b6aqq.x16hj40l.xsyo7zv.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .x1k70j0n.xzueoph > .xeuug:not(:has([data-visualcompletion="loading-state"])),
-            .x1yrsyyn.x10b6aqq.x16hj40l.xsyo7zv.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5 > .x1k70j0n.xzueoph:not(:has([data-visualcompletion="loading-state"])),
-            .x1yrsyyn.x10b6aqq.x16hj40l.xsyo7zv.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619:not(:has([data-visualcompletion="loading-state"])),
-            .xifccgj.x4cne27.xbmpl8g.xykv574.x1y1aw1k.xwib8y2.x1ye3gou.xn6708d.x1q0g3np.xozqiw3.x6s0dn4.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619:not(:has([data-visualcompletion="loading-state"])),
-            .x1y1aw1k.x150jy0e.x1e558r4.x193iq5w.x2lah0s.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619:not(:has([data-visualcompletion="loading-state"])),
-            .xquyuld.x10wlt62.x6ikm8r.xh8yej3.x9f619.xt3gfkd.xu5ydu1.xdney7k.x1qpq9i9.x1jx94hy.x1ja2u2z.x1n2onr6.x26u7qi.x178xt8z.xm81vs4.xso031l.xy80clv.xev17xk.x1xmf6yo:not(:has([data-visualcompletion="loading-state"])),
-            .xquyuld.x10wlt62.x6ikm8r.xh8yej3.x9f619.xt3gfkd.xu5ydu1.xdney7k.x1qpq9i9.x1jx94hy.x1ja2u2z.x1n2onr6 > .x193iq5w.x2lah0s.xdt5ytf.x78zum5.x9f619.x1ja2u2z.x1n2onr6 > .x2lwn1j.x1iyjqo2.x:not(:has([data-visualcompletion="loading-state"])),
-            .xquyuld.x10wlt62.x6ikm8r.xh8yej3.x9f619.xt3gfkd.xu5ydu1.xdney7k.x1qpq9i9.x1jx94hy.x1ja2u2z.x1n2onr6 > .x193iq5w.x2lah0s.xdt5ytf.x78zum5.x9f619.x1ja2u2z.x1n2onr6:not(:has([data-visualcompletion="loading-state"])),
-            .x1a2a7pz.x1ja2u2z.xh8yej3.x1n2onr6.x10wlt62.x6ikm8r.x1itg65n:not(:has([data-visualcompletion="loading-state"])),
-            .xu06nn8.x1jl3cmp.x2r5gy4.xnpuxes.x1hc1fzr.x879a55.x1q0g3np.xozqiw3.x1qjc9v5.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619 > .xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619:not(:has([data-visualcompletion="loading-state"])),
-            .x1x99re3.x1jdnuiz.x1r1pt67.x1qhmfi1.x9f619.xm0m39n.x1qhh985.xcfux6l.x972fbf.x10w94by.x1qhh985.x14e42zd.x1ypdohk.xe8uvvx.xdj266r.x14zmp.xat24cr.x1lziwak.xexx8yu.xyri2b.x18d9i69.x1c1uobl.x16tdsg8.xat24cr.x1mh8g0r.x6s0dn4.x78zum5.xdt5ytf.xjy6m2a.xl56j7k:not(:has([data-visualcompletion="loading-state"])),
-            .xu06nn8.x1jl3cmp.x2r5gy4.xnpuxes.x1hc1fzr.xh8yej3.xdsb8wn.x10l6tqk.x5yr21d.x1q0g3np.xozqiw3.x1qjc9v5.xqughib.x2lah0s.x78zum5.x1ja2u2z.x9f619:not(:has([data-visualcompletion="loading-state"])),
-            .xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .x1n2onr6.x10wlt62.x6ikm8r.x1ja2u2z.x9f619:not(:has([data-visualcompletion="loading-state"])),
-            div[aria-label="Photos"]:not(:has([data-visualcompletion="loading-state"])),
-	    footer .xi81zsa,
-	    footer > .xi81zsa.xo1l8bm.x1sibtaa.x1nxh6w3.x676frb.x4zkp8e.x1943h6x.x1fgarty.x1cpjm7i.x1gmr53x.xhkezso.x1s928wv.x1lliihq.x1xmvt09.x1vvkbs.x13faqbe.xeuugli.x193iq5w,
-            .xieb3on:not(:has([data-visualcompletion="loading-state"])),
-            div.x9f619.x1n2onr6.x1ja2u2z.xeuugli.xs83m0k.xjl7jj.x1xmf6yo.x1xegmmw.x1e56ztr.x13fj5qh.xnp8db0.x1d1medc.x7ep2pv.x1xzczws:not(:has([data-visualcompletion="loading-state"])),
-            div[data-pagelet^="ProfileTilesFeed_"]:has(a[href*="/photos"]),
-            h2:has(a[href*="/photos"]) {
-                visibility: hidden !important;
-                display: none !important;
-                opacity: 0 !important;
-                pointer-events: none !important;
-                content-visibility: hidden !important;
-                position: absolute !important;
-                left: -9999px !important;
-                top: -9999px !important;
-                height: 0 !important;
-                width: 0 !important;
-                overflow: hidden !important;
-            }
-            `;
+            if (!style) { 
+                style = document.createElement('style'); 
+                style.id = 'fb-specific-url-prehide-style'; 
+                
+                style.textContent = `
+                .x1120s5i.x1n2onr6.x10wlt62.x6ikm8r.x1lliihq:not(:has([data-visualcompletion="loading-state"])),
+                .x1cnzs8.xjkvuk6.x193iq5w.x2lah0s.xdt5ytf.x78zum5.x9f619.x1ja2u2z.x1n2onr6:not(:has([data-visualcompletion="loading-state"])),
+                .xifccgj.x4cne27.xbmpl8g.xykv574.xyamay9.x1swvt13.x1pi30zi.x1q0g3np.xozqiw3.x1qjc9v5.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619:not(:has([data-visualcompletion="loading-state"])),
+                .x7wzq59 > div > div > div > .x1yztbdb > .xh8yej3.x1n2onr6.xl56j7k.xdt5ytf.x3nfvp2.x9f619.x1a2a7pz.x1lku1pv.x87ps6o.x13rtm0m.x1e5q0jg.x3x9cwd.x1o1ewxj.xggy1nq.x1hl2dhg.x16tdsg8.xkhd6sd.x18d9i69.x4uap5.xexx8yu.x1mh8g0r.xat24cr.x11i5rnm.xdj266r.html-div > .xquyuld.x10wlt62.x6ikm8r.xh8yej3.x9f61:not(:has([data-visualcompletion="loading-state"])),
+                .xi81zsa.xo1l8bm.x1sibtaa.x1nxh6w3.x676frb.x4zkp8e.x1943h6x.x1fgarty.x1cpjm7i.x1gmr53x.xhkezso.x1s928wv.x1lliihq.x1xmvt09.x1vvkbs.x13faqbe.xeuugli.x193iq5w > .xt0psk2:not(:has([data-visualcompletion="loading-state"])),
+                footer > .xi81zsa.xo1l8bm.x1sibtaa.x1nxh6w3.x676frb.x4zkp8e.x1943h6x.x1fgarty.x1cpjm7i.x1gmr53x.xhkezso.x1s928wv.x1lliihq.x1xmvt09.x1vvkbs.x13faqbe.xeuugli.x193iq5w:not(:has([data-visualcompletion="loading-state"])),
+                .x1xzczws.x7ep2pv.x1d1medc.xnp8db0.x1i64zmx.x1e56ztr.x1emribx.x1xmf6yo.xjl7jj.xs83m0k.xeuugli.x1ja2u2z.x1n2onr6.x9f619:not(:has([data-visualcompletion="loading-state"])),
+                .x1yrsyyn.x10b6aqq.x16hj40l.xsyo7zv.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .xifccgj.x4cne27.xdt5ytf.x78zum5 > .x1k70j0n.xzueoph > .xeuug:not(:has([data-visualcompletion="loading-state"])),
+                .x1yrsyyn.x10b6aqq.x16hj40l.xsyo7zv.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .x1k70j0n.xzueoph > .xeuug:not(:has([data-visualcompletion="loading-state"])),
+                .x1yrsyyn.x10b6aqq.x16hj40l.xsyo7zv.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5 > .x1k70j0n.xzueoph:not(:has([data-visualcompletion="loading-state"])),
+                .x1yrsyyn.x10b6aqq.x16hj40l.xsyo7zv.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619:not(:has([data-visualcompletion="loading-state"])),
+                .xifccgj.x4cne27.xbmpl8g.xykv574.x1y1aw1k.xwib8y2.x1ye3gou.xn6708d.x1q0g3np.xozqiw3.x6s0dn4.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619:not(:has([data-visualcompletion="loading-state"])),
+                .x1y1aw1k.x150jy0e.x1e558r4.x193iq5w.x2lah0s.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619:not(:has([data-visualcompletion="loading-state"])),
+                .xquyuld.x10wlt62.x6ikm8r.xh8yej3.x9f619.xt3gfkd.xu5ydu1.xdney7k.x1qpq9i9.x1jx94hy.x1ja2u2z.x1n2onr6.x26u7qi.x178xt8z.xm81vs4.xso031l.xy80clv.xev17xk.x1xmf6yo:not(:has([data-visualcompletion="loading-state"])),
+                .xquyuld.x10wlt62.x6ikm8r.xh8yej3.x9f619.xt3gfkd.xu5ydu1.xdney7k.x1qpq9i9.x1jx94hy.x1ja2u2z.x1n2onr6 > .x193iq5w.x2lah0s.xdt5ytf.x78zum5.x9f619.x1ja2u2z.x1n2onr6 > .x2lwn1j.x1iyjqo2.x:not(:has([data-visualcompletion="loading-state"])),
+                .xquyuld.x10wlt62.x6ikm8r.xh8yej3.x9f619.xt3gfkd.xu5ydu1.xdney7k.x1qpq9i9.x1jx94hy.x1ja2u2z.x1n2onr6 > .x193iq5w.x2lah0s.xdt5ytf.x78zum5.x9f619.x1ja2u2z.x1n2onr6:not(:has([data-visualcompletion="loading-state"])),
+                .x1a2a7pz.x1ja2u2z.xh8yej3.x1n2onr6.x10wlt62.x6ikm8r.x1itg65n:not(:has([data-visualcompletion="loading-state"])),
+                .xu06nn8.x1jl3cmp.x2r5gy4.xnpuxes.x1hc1fzr.x879a55.x1q0g3np.xozqiw3.x1qjc9v5.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619 > .xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619:not(:has([data-visualcompletion="loading-state"])),
+                .x1x99re3.x1jdnuiz.x1r1pt67.x1qhmfi1.x9f619.xm0m39n.x1qhh985.xcfux6l.x972fbf.x10w94by.x1qhh985.x14e42zd.x1ypdohk.xe8uvvx.xdj266r.x14zmp.xat24cr.x1lziwak.xexx8yu.xyri2b.x18d9i69.x1c1uobl.x16tdsg8.xat24cr.x1mh8g0r.x6s0dn4.x78zum5.xdt5ytf.xjy6m2a.xl56j7k:not(:has([data-visualcompletion="loading-state"])),
+                .xu06nn8.x1jl3cmp.x2r5gy4.xnpuxes.x1hc1fzr.xh8yej3.xdsb8wn.x10l6tqk.x5yr21d.x1q0g3np.xozqiw3.x1qjc9v5.xqughib.x2lah0s.x78zum5.x1ja2u2z.x9f619:not(:has([data-visualcompletion="loading-state"])),
+                .xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .x1n2onr6.x10wlt62.x6ikm8r.x1ja2u2z.x9f619:not(:has([data-visualcompletion="loading-state"])),
+                div[aria-label="Photos"]:not(:has([data-visualcompletion="loading-state"])),
+            footer .xi81zsa,
+            footer > .xi81zsa.xo1l8bm.x1sibtaa.x1nxh6w3.x676frb.x4zkp8e.x1943h6x.x1fgarty.x1cpjm7i.x1gmr53x.xhkezso.x1s928wv.x1lliihq.x1xmvt09.x1vvkbs.x13faqbe.xeuugli.x193iq5w,
+                .xieb3on:not(:has([data-visualcompletion="loading-state"])),
+                div.x9f619.x1n2onr6.x1ja2u2z.xeuugli.xs83m0k.xjl7jj.x1xmf6yo.x1xegmmw.x1e56ztr.x13fj5qh.xnp8db0.x1d1medc.x7ep2pv.x1xzczws:not(:has([data-visualcompletion="loading-state"])),
+                div[data-pagelet^="ProfileTilesFeed_"]:has(a[href*="/photos"]),
+                h2:has(a[href*="/photos"]) {
+                    visibility: hidden !important;
+                    display: none !important;
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                    content-visibility: hidden !important;
+                    position: absolute !important;
+                    left: -9999px !important;
+                    top: -9999px !important;
+                    height: 0 !important;
+                    width: 0 !important;
+                    overflow: hidden !important;
+                }
+                `;
 
-            if (!style.isConnected) { (document.head || document.documentElement).appendChild(style); }
+                if (document.head) {
+                    document.head.appendChild(style);
+                } else if (document.documentElement) {
+                    document.documentElement.appendChild(style);
+                }
+            }
         } catch (err) {}
     };
 
@@ -2149,8 +2280,10 @@
             }
 
             // Normal execution
+            injectSpecificUrlPrehideCSS();
             nukeGlobalBadElements();
             eliminateSuggestedGroups(); 
+            filteredProfiles();
             hideCriticalElements();
             deletePeopleYouMayKnow(); 
             processSearchResults(); 
@@ -2182,7 +2315,8 @@
             return; // TERMINATES HERE.
         }
         
-        nukeGlobalBadElements();
+        injectSpecificUrlPrehideCSS();
+        nukeGlobalBadElements(); filteredProfiles();
         eliminateSuggestedGroups(); hideCriticalElements(); processSearchResults();
         deleteRestrictedPhrases(); deletePeopleYouMayKnow(); deleteSelectorsForSpecificUrl(); deleteElement(); 
 
@@ -2208,9 +2342,10 @@
         if (isPersonal) {
             PersonalProfileSelectors();
         } else {
+            injectSpecificUrlPrehideCSS();
             nukeGlobalBadElements();
             eliminateSuggestedGroups(); hideCriticalElements(); processSearchResults(); deleteRestrictedPhrases(); deletePeopleYouMayKnow(); deleteSelectorsForSpecificUrl();
-            deleteElement();
+            deleteElement(); filteredProfiles();
             
             const currentPath = window.location.pathname.toLowerCase();
             if (!isExcludedPathForDOM(currentPath, window.location.href)) {

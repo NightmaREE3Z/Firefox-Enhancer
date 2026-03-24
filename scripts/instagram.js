@@ -441,7 +441,27 @@ function getPostIDFromArticle(article) {
     'span[role="button"][tabindex="0"]',
     'div[role="button"][tabindex="0"]:has(> span.html-span)',
     'section:has(div[role="button"][tabindex="0"]:has(> span.html-span))',
+
+    // NEW: Right Sidebar & Footer Protections
+    'nav._ab8c',
+    'div._ab8b',
+    'ul._ab8d',
+    'a[href="/nightmaree3z/"]',
+    'div:has(> a[href="/nightmaree3z/"])',
 ];
+
+    // Helper to safely check if an element or its ancestors match a protected structural element
+    function isElementProtected(element) {
+        if (!element) return false;
+        try {
+            const combined = protectedElements.join(',');
+            if (element.matches(combined) || element.closest(combined)) return true;
+            // Also protect layout containers holding the absolute core structural pillars 
+            // (like the sidebar contents or the main feed) so generic selectors don't squash them
+            if (element.querySelector('article, main, a[href="/nightmaree3z/"], nav._ab8c, a[href*="about.instagram.com"]')) return true;
+            return false;
+        } catch { return false; }
+    }
 
     const selectorsToHide = [
     '.x1azxncr > .x1qrby5j.x7ja8zs.x1t2pt76.x1lytzrv.xedcshv.xarpa2k.x3igimt.x12ejxvf.xaigb6o.x1beo9mf.xv2umb2.x1jfb8zj.x1h9r5lt.x1h91t0o.x4k7w5x > .x1n2onr6 > ._a6hd.x1a2a7pz.xggy1nq.x1hl2dhg.x16',
@@ -477,7 +497,7 @@ function getPostIDFromArticle(article) {
     'a[href*="reels"]',
     'span:has(a[href*="help.instagram.com/347751748650214"])',
     'div.x78zum5.xdt5ytf.xdj266r.x14z9mp.xod5an3.x162z183.x1j7kr1c.xvbhtw8',
-    'div.x9f619.xjbqb8w.x78zum5.x168nmei.x13lgxp2.x5pf9jr.xo71vjh.x12nagc.x1uhb9sk.x1plvlek.xryxfnj.x1c4vz4f.x2lah0s.x2lah0s.xdt5ytf.xqjyukv.x1qjc9v5.x1oa3qoh.x1nhvcw1',
+    'div.x9f619.xjbqb8w.x78zum5.x168nmei.x13lgxp2.x5pf9jr.xo71vjh.x12nagc.x1uhb9sk.x1plvlek.xryxfnj.x1c4vz4f.x2lah0s.xdt5ytf.xqjyukv.x6s0dn4.x1oa3qoh.x13a6bvl.x1diwwjn.x1247r65',
     'span.x1lliihq.x1plvlek.xryxfnj.x1n2onr6.x1ji0vk5.x18bv5gf.x193iq5w.xeuugli.x1fj9vlw.x13faqbe.x1vvkbs.x1s928wv.xhkezso.x1gmr53x.x1cpjm7i.x1fgarty.x1943h6x.x1i0vuye.xvs91rp.x1s688f.x173jzuc.x10',
     'a.x1i10hfl.xjbqb8w.x1ejq31n.x18oe1m7.x1sy0etr.xstzfhl.x972fbf.x10w94by.x1qhh985.x14e42zd.x9f619.x1ypdohk.xt0psk2.xe8uvvx.xdj266r.x14z9mp.xat24cr.x1lziwak.xexx8yu.xyri2b.x18d9i69.x1c1uobl.x16t',
     'a.x1i10hfl[href*="blocked"]','a.x1i10hfl[href*="estetty"]','a.x1i10hfl[href*="Rajoitetut tilit"]','a.x1i10hfl[href*="Restricted accounts"]','a.x1i10hfl[href*="Piiloitetut sanat"]','a.x1i10hfl[href*="Hidden Words"]','a.x1i10hfl[href*="hide_story_and_live"]',
@@ -1408,7 +1428,8 @@ ${p}, ${p} * {
                     const rect = container.getBoundingClientRect ? container.getBoundingClientRect() : null;
                     const area = rect ? rect.width * rect.height : 0;
                     if (area > 80 && area < 60000 &&
-                        !container.matches('main, section[role="main"], div[role="main"], body, html, nav')) {
+                        !container.matches('main, section[role="main"], div[role="main"], body, html, nav') &&
+                        !isElementProtected(container)) {
                         collapseElement(container);
                         break;
                     }
@@ -1438,7 +1459,8 @@ ${p}, ${p} * {
                 const rect = container.getBoundingClientRect ? container.getBoundingClientRect() : null;
                 const area = rect ? rect.width * rect.height : 0;
                 if (area > 80 && area < 60000 &&
-                    !container.matches('main, section[role="main"], div[role="main"], body, html, nav')) {
+                    !container.matches('main, section[role="main"], div[role="main"], body, html, nav') &&
+                    !isElementProtected(container)) {
                     collapseElement(container);
                     break;
                 }
@@ -1593,11 +1615,11 @@ ${p}, ${p} * {
                     const plausibleSize = area > 200 && area < 300000;
                     const isHtmlDiv = candidate.classList.contains('html-div');
 
-                    // Make sure we never hide a container holding an <article>
+                    // Make sure we never hide a container holding an <article> or critical sidebar elements
                     if (isHtmlDiv &&
                         plausibleSize &&
                         !candidate.matches('main, section[role="main"], div[role="main"], body, html, nav') && 
-                        !candidate.querySelector('article')) {
+                        !isElementProtected(candidate)) {
                         collapseElement(candidate);
                         return;
                     }
@@ -1665,8 +1687,9 @@ const injectInlineCSS = () => {
     overflow: visible !important;
 }
 `;
-
-            const overlayGuardedSelectors = selectorsToHide.map(s => `body:not(.ig-overlay-open) ${s}`).join(',\n');
+            // Add a mathematically proven safety suffix to all generic layout hiders
+            const safeSuffix = `:not(:has(a[href="/nightmaree3z/"])):not(:has(nav._ab8c)):not(:has(a[href*="about.instagram.com"]))`;
+            const overlayGuardedSelectors = selectorsToHide.map(s => `body:not(.ig-overlay-open) ${s}${safeSuffix}`).join(',\n');
 
             style.textContent = `
             ${overlayGuardedSelectors} {
@@ -1753,6 +1776,8 @@ article[data-banned-scan="safe"] {
         selectorsToHide.forEach((selector) => {
             document.querySelectorAll(selector).forEach((el) => {
                 if (isInPostOverlay(el)) return;
+                if (isElementProtected(el)) return;
+                
                 if (!hiddenElements.has(el)) {
                     el.style.setProperty('visibility', 'hidden', 'important');
                     el.style.setProperty('display', 'none', 'important');
@@ -1932,13 +1957,11 @@ article[data-banned-scan="safe"] {
         document.querySelectorAll(allSelectors).forEach(element => {
             if (isInPostOverlay(element)) return;
             if (hiddenElements.has(element)) return;
-            const isProtected = protectedElements.some(protectedSelector => {
-                try { return element.matches(protectedSelector); } catch { return false; }
-            });
+            if (isElementProtected(element)) return;
             const containsAllowedWords = allowedWordsLower.some(word =>
                 element.textContent && element.textContent.toLowerCase().includes(word)
             );
-            if (!isProtected && !containsAllowedWords && !isExcludedPath()) {
+            if (!containsAllowedWords && !isExcludedPath()) {
                 collapseElement(element);
             }
         });
@@ -1955,10 +1978,7 @@ article[data-banned-scan="safe"] {
         document.querySelectorAll(allSelectors).forEach(element => {
             if (isInPostOverlay(element)) return;
             if (hiddenElements.has(element)) return;
-            const isProtected = protectedElements.some(protectedSelector => {
-                try { return element.matches(protectedSelector); } catch { return false; }
-            });
-            if (isProtected) return;
+            if (isElementProtected(element)) return;
             if (isExcludedPath()) return;
             const textContent = element.textContent ? element.textContent.toLowerCase() : "";
             
@@ -2015,10 +2035,7 @@ article[data-banned-scan="safe"] {
             querySelectorAllWithContains(target.selector, target.text).forEach(element => {
                 if (isInPostOverlay(element)) return;
                 if (!hiddenElements.has(element)) {
-                    const isProtected = protectedElements.some(protectedSelector => {
-                        try { return element.matches(protectedSelector); } catch { return false; }
-                    });
-                    if (!isProtected) {
+                    if (!isElementProtected(element)) {
                         collapseElement(element);
                     }
                 }
@@ -2148,9 +2165,7 @@ article[data-banned-scan="safe"] {
                 if (el && el.closest('article[data-banned-scan="safe"]')) return;
                 if (el && el.offsetParent !== null && 
                     !el.matches('main, section[role="main"], div[role="main"], body, html, nav') &&
-                    !protectedElements.some(selector => {
-                        try { return el.matches(selector); } catch { return false; }
-                    })) {
+                    !isElementProtected(el)) {
                     // Safety check: Prevents nuking major layout wrappers
                     const rect = el.getBoundingClientRect();
                     if (rect.width > 0 && rect.height > 0 && (rect.width * rect.height > 150000)) return;
@@ -2176,9 +2191,7 @@ article[data-banned-scan="safe"] {
                 if (el && el.closest('article[data-banned-scan="safe"]')) return;
                 if (el && el.offsetParent !== null && 
                     !el.matches('main, section[role="main"], div[role="main"], body, html, nav') &&
-                    !protectedElements.some(selector => {
-                        try { return el.matches(selector); } catch { return false; }
-                    })) {
+                    !isElementProtected(el)) {
                     // Safety check: Prevents nuking major layout wrappers
                     const rect = el.getBoundingClientRect();
                     if (rect.width > 0 && rect.height > 0 && (rect.width * rect.height > 150000)) return;
@@ -2260,13 +2273,19 @@ article[data-banned-scan="safe"] {
                 if (flashTargets.some(t => text.includes(t))) {
                     // Confirm it's the explore block or Myös metalta to avoid false positives on legitimate posts
                     if (node.querySelector('a[href^="/explore/people"]') || text.includes('myös metalta')) {
-                        // Safe to nuke this newly injected container entirely before it hits the screen
-                        node.style.setProperty('display', 'none', 'important');
-                        node.style.setProperty('opacity', '0', 'important');
-                        node.style.setProperty('height', '0', 'important');
-                        node.style.setProperty('pointer-events', 'none', 'important');
-                        hiddenElements.add(node);
-                        continue; 
+                        
+                        // NEW PROTECTION: Check if node CONTAINS the profile switcher or footer
+                        if (!node.querySelector('article, main, a[href="/nightmaree3z/"], nav._ab8c, a[href*="about.instagram.com"]') &&
+                            !node.matches('main, section[role="main"], div[role="main"], body, html, nav')) {
+                            
+                            // Safe to nuke this newly injected container entirely before it hits the screen
+                            node.style.setProperty('display', 'none', 'important');
+                            node.style.setProperty('opacity', '0', 'important');
+                            node.style.setProperty('height', '0', 'important');
+                            node.style.setProperty('pointer-events', 'none', 'important');
+                            hiddenElements.add(node);
+                            continue; 
+                        }
                     }
                 }
                 
