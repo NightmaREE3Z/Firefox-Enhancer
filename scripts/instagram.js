@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         InstaTolerable
-// @version      2026-03-24
+// @version      2026-03-25
 // @description  Trying to make my Instagram experience tolerable. 
 // @match        *://www.instagram.com/*
 // @match        *://www.instagram.com/?next=%2F/*
@@ -21,6 +21,7 @@
     let __cleanupRan = false;
     let __intervalsRunning = false;
     let __isRedirectingFast = false; // guard against double redirects
+    let __lastKnownUrl = window.location.href; // Track URL for strict SPA awareness
 
     function addInterval(fn, ms) {
         const id = setInterval(fn, ms);
@@ -38,7 +39,7 @@
     function addRAF(fn) {
         const id = requestAnimationFrame((ts) => {
             __rafIds.delete(id);
-            try { fn(); } catch {}
+            try { fn(ts); } catch {}
         });
         __rafIds.add(id);
         return id;
@@ -342,6 +343,61 @@ const scannedPostsCache = new Map(); // Map: postID -> isBanned (true/false)
 const feedApprovedPostIDs = new Set(); // Posts approved during initial feed scan
 let isFeedScanPhase = true; // Flag to track if we're in initial feed scanning
 
+// SMART POST WRAPPER LOCATOR
+function findPostWrapper(node) {
+    if (!node) return null;
+    // Safest bet: it's literally an article
+    const article = node.closest('article');
+    if (article) return article;
+
+    let candidate = node.parentElement;
+    let bestCandidate = null;
+    let lvl = 0;
+
+    while (candidate && lvl < 12) {
+        // Absolute fail-safes so we never hit the master page body/main structural tags
+        if (candidate.tagName === 'MAIN' || candidate.getAttribute('role') === 'main' || candidate.tagName === 'BODY' || candidate.tagName === 'HTML' || candidate.tagName === 'NAV' || candidate.tagName === 'FOOTER') {
+            break;
+        }
+
+        // CRITICAL SAFEGUARD: Never select a wrapper that holds multiple articles
+        // This physically prevents the script from ever accidentally collapsing the master feed column!
+        const articleCount = candidate.querySelectorAll('article').length;
+        if (articleCount > 1) {
+            break;
+        }
+
+        // Heuristic 1: Safe Width/Height boundaries for Instagram Posts
+        const rect = candidate.getBoundingClientRect ? candidate.getBoundingClientRect() : null;
+        if (rect) {
+            const area = rect.width * rect.height;
+            // Typical feed post bounds (Desktop + Mobile)
+            if (rect.width > 100 && rect.width <= 800 && rect.height > 100 && rect.height <= 2500) {
+                bestCandidate = candidate;
+            }
+            // Abort safely if we hit a massive layout container (e.g. the entire feed column)
+            if (rect.width > 800 || rect.height > 3000 || area > 2000000) {
+                break;
+            }
+        }
+
+        // Heuristic 2: Sibling Check (Is it next to known organic articles?)
+        if (candidate.parentElement) {
+            const siblings = Array.from(candidate.parentElement.children);
+            const hasArticleSibling = siblings.some(sib => sib !== candidate && sib.tagName === 'ARTICLE');
+            if (hasArticleSibling) {
+                bestCandidate = candidate;
+                break; // We found the definitive feed column item wrapper, stop climbing.
+            }
+        }
+
+        candidate = candidate.parentElement;
+        lvl++;
+    }
+
+    return bestCandidate;
+}
+
 function getPostIDFromArticle(article) {
     try {
         // Try to find a link with post ID in href
@@ -371,6 +427,18 @@ function getPostIDFromArticle(article) {
     ];
 
     const protectedElements = [
+    // STRUCTURAL PROTECTION (CRITICAL)
+    'footer',
+    'div:has(> footer)',
+    'nav',
+    'div:has(> a[href="/"])', // Usually left sidebar wrapper
+    'svg[aria-label="Lisää"]', // Lower left Settings menu
+    'div:has(> div > div > div > svg[aria-label="Lisää"])',
+    'div:has(> div > div > svg[aria-label="Lisää"])',
+    'svg[aria-label="Asetukset"]',
+    'div:has(> article)', // Direct parent of articles (Master Feed column)
+    'div:has(> div > article)', // Grandparent of articles
+
     // Messaging and compose areas
     'div[aria-describedby="Viesti"][aria-label="Viesti"].xzsf02u.x1a2a7pz.x1n2onr6.x14wi4xw.x1iyjqo2.x1gh3ibb.xisnujt.xeuugli.x1odjw0f.notranslate',
     'div[aria-describedby="Viesti"][aria-label="Viesti"].xzsf02u.x1a2a7pz.x1n2onr6.x14wi4xw.x1iyjqo2.x1gh3ibb.xisnujt.xeuugli.x1odjw0f.notranslate[role="textbox"][spellcheck="true"]',
@@ -441,27 +509,26 @@ function getPostIDFromArticle(article) {
     'span[role="button"][tabindex="0"]',
     'div[role="button"][tabindex="0"]:has(> span.html-span)',
     'section:has(div[role="button"][tabindex="0"]:has(> span.html-span))',
-
-    // NEW: Right Sidebar & Footer Protections
-    'nav._ab8c',
-    'div._ab8b',
-    'ul._ab8d',
-    'a[href="/nightmaree3z/"]',
-    'div:has(> a[href="/nightmaree3z/"])',
 ];
 
-    // Helper to safely check if an element or its ancestors match a protected structural element
-    function isElementProtected(element) {
-        if (!element) return false;
-        try {
-            const combined = protectedElements.join(',');
-            if (element.matches(combined) || element.closest(combined)) return true;
-            // Also protect layout containers holding the absolute core structural pillars 
-            // (like the sidebar contents or the main feed) so generic selectors don't squash them
-            if (element.querySelector('article, main, a[href="/nightmaree3z/"], nav._ab8c, a[href*="about.instagram.com"]')) return true;
-            return false;
-        } catch { return false; }
-    }
+// HELPER FUNCTION TO CLEANLY CHECK PROTECTED ELEMENTS
+function isElementProtected(element) {
+    if (!element || element.nodeType !== 1) return false;
+    
+    // STRUCTURAL IMMUNITY: If it is or contains the Footer (Right Sidebar) or Nav/More buttons (Left Sidebar), NEVER hide it.
+    if (element.tagName === 'FOOTER' || element.tagName === 'NAV' || element.tagName === 'MAIN' || element.tagName === 'BODY') return true;
+    if (element.getAttribute('role') === 'feed' || element.getAttribute('role') === 'main') return true;
+    
+    // ULTIMATE FEED PROTECTION: If a container mathematically holds an <article>, it is a master column. It CANNOT be hidden.
+    if (element.tagName !== 'ARTICLE' && element.querySelector('article')) return true;
+
+    if (element.querySelector('footer, nav, svg[aria-label="Lisää"], svg[aria-label="Asetukset"], svg[aria-label="More"], svg[aria-label="Settings"]')) return true;
+    if (element.matches('svg[aria-label="Lisää"], svg[aria-label="Asetukset"], svg[aria-label="More"], svg[aria-label="Settings"]')) return true;
+
+    return protectedElements.some(selector => {
+        try { return element.matches(selector); } catch { return false; }
+    });
+}
 
     const selectorsToHide = [
     '.x1azxncr > .x1qrby5j.x7ja8zs.x1t2pt76.x1lytzrv.xedcshv.xarpa2k.x3igimt.x12ejxvf.xaigb6o.x1beo9mf.xv2umb2.x1jfb8zj.x1h9r5lt.x1h91t0o.x4k7w5x > .x1n2onr6 > ._a6hd.x1a2a7pz.xggy1nq.x1hl2dhg.x16',
@@ -497,7 +564,7 @@ function getPostIDFromArticle(article) {
     'a[href*="reels"]',
     'span:has(a[href*="help.instagram.com/347751748650214"])',
     'div.x78zum5.xdt5ytf.xdj266r.x14z9mp.xod5an3.x162z183.x1j7kr1c.xvbhtw8',
-    'div.x9f619.xjbqb8w.x78zum5.x168nmei.x13lgxp2.x5pf9jr.xo71vjh.x12nagc.x1uhb9sk.x1plvlek.xryxfnj.x1c4vz4f.x2lah0s.xdt5ytf.xqjyukv.x6s0dn4.x1oa3qoh.x13a6bvl.x1diwwjn.x1247r65',
+    'div.x9f619.xjbqb8w.x78zum5.x168nmei.x13lgxp2.x5pf9jr.xo71vjh.x12nagc.x1uhb9sk.x1plvlek.xryxfnj.x1c4vz4f.x2lah0s.x2lah0s.xdt5ytf.xqjyukv.x1qjc9v5.x1oa3qoh.x1nhvcw1',
     'span.x1lliihq.x1plvlek.xryxfnj.x1n2onr6.x1ji0vk5.x18bv5gf.x193iq5w.xeuugli.x1fj9vlw.x13faqbe.x1vvkbs.x1s928wv.xhkezso.x1gmr53x.x1cpjm7i.x1fgarty.x1943h6x.x1i0vuye.xvs91rp.x1s688f.x173jzuc.x10',
     'a.x1i10hfl.xjbqb8w.x1ejq31n.x18oe1m7.x1sy0etr.xstzfhl.x972fbf.x10w94by.x1qhh985.x14e42zd.x9f619.x1ypdohk.xt0psk2.xe8uvvx.xdj266r.x14z9mp.xat24cr.x1lziwak.xexx8yu.xyri2b.x18d9i69.x1c1uobl.x16t',
     'a.x1i10hfl[href*="blocked"]','a.x1i10hfl[href*="estetty"]','a.x1i10hfl[href*="Rajoitetut tilit"]','a.x1i10hfl[href*="Restricted accounts"]','a.x1i10hfl[href*="Piiloitetut sanat"]','a.x1i10hfl[href*="Hidden Words"]','a.x1i10hfl[href*="hide_story_and_live"]',
@@ -1032,28 +1099,48 @@ function getPostIDFromArticle(article) {
 
     function safelyHideFeedArticle(article) {
         if (!article) return;
-        article.innerHTML = '';
-        article.style.setProperty('height', '10px', 'important');
-        article.style.setProperty('min-height', '10px', 'important');
-        article.style.setProperty('margin-bottom', '10px', 'important');
-        article.style.setProperty('padding', '0', 'important');
+        // By leaving a 1px gap, we trick the Intersection Observer into thinking the post loaded, 
+        // entirely stopping the infinite skeleton fetch loop crash, without leaving a massive visual gap.
+        article.style.setProperty('max-height', '1px', 'important');
+        article.style.setProperty('height', '1px', 'important');
+        article.style.setProperty('min-height', '1px', 'important');
+        article.style.setProperty('margin', '0px', 'important');
+        article.style.setProperty('padding', '0px', 'important');
         article.style.setProperty('opacity', '0', 'important');
         article.style.setProperty('pointer-events', 'none', 'important');
         article.style.setProperty('border', 'none', 'important');
+        article.style.setProperty('overflow', 'hidden', 'important');
+        article.style.removeProperty('visibility'); 
         hiddenElements.add(article);
+        
+        stripImagesWithin(article);
     }
 
     function processFeedPostsForScanning() {
         try {
             if (isReelsPage() || isExcludedPath()) return;
             
-            const articles = document.querySelectorAll('article:not([data-feed-scan-done])');
+            const articles = document.querySelectorAll('article');
             if (articles.length === 0) return;
             
             articles.forEach(article => {
-                article.setAttribute('data-feed-scan-done', '1');
-                
                 const postID = getPostIDFromArticle(article);
+                
+                // VIRTUAL DOM AWARENESS: Check if Instagram recycled this DOM element for a new post
+                const scannedID = article.getAttribute('data-scanned-post-id');
+                if (postID && scannedID && scannedID !== postID) {
+                    // It's a recycled node. Strip safe flags to re-trigger opacity: 0 and rescan.
+                    article.removeAttribute('data-banned-scan');
+                    article.removeAttribute('data-feed-scan-done');
+                }
+
+                // Skip if already processed for this specific state
+                if (article.hasAttribute('data-feed-scan-done')) return;
+                
+                article.setAttribute('data-feed-scan-done', '1');
+                if (postID) {
+                    article.setAttribute('data-scanned-post-id', postID);
+                }
                 
                 expandAndScanNode(article, postID).then(isClean => {
                     if (isClean) {
@@ -1428,8 +1515,8 @@ ${p}, ${p} * {
                     const rect = container.getBoundingClientRect ? container.getBoundingClientRect() : null;
                     const area = rect ? rect.width * rect.height : 0;
                     if (area > 80 && area < 60000 &&
-                        !container.matches('main, section[role="main"], div[role="main"], body, html, nav') &&
-                        !isElementProtected(container)) {
+                        !isElementProtected(container) &&
+                        !container.matches('main, section[role="main"], div[role="main"], body, html, nav')) {
                         collapseElement(container);
                         break;
                     }
@@ -1446,7 +1533,7 @@ ${p}, ${p} * {
             // original strict wrapper
             const strict = div.closest('div.x9f619.x3nfvp2.xr9ek0c');
             if (strict) {
-                if (!hiddenElements.has(strict)) {
+                if (!hiddenElements.has(strict) && !isElementProtected(strict)) {
                     collapseElement(strict);
                 }
                 return;
@@ -1459,8 +1546,8 @@ ${p}, ${p} * {
                 const rect = container.getBoundingClientRect ? container.getBoundingClientRect() : null;
                 const area = rect ? rect.width * rect.height : 0;
                 if (area > 80 && area < 60000 &&
-                    !container.matches('main, section[role="main"], div[role="main"], body, html, nav') &&
-                    !isElementProtected(container)) {
+                    !isElementProtected(container) &&
+                    !container.matches('main, section[role="main"], div[role="main"], body, html, nav')) {
                     collapseElement(container);
                     break;
                 }
@@ -1590,15 +1677,18 @@ ${p}, ${p} * {
 
     function hideSinulleEhdotettuaBlock() {
         try {
+            // Bring back the logic from the user-uploaded file exactly:
             const spans = document.querySelectorAll('span');
             spans.forEach(span => {
                 if (!span.textContent) return;
                 const txt = span.textContent.trim();
-                if (txt !== 'Sinulle ehdotettua' && txt !== 'Sinulle ehdotettu' && txt !== 'Suggested for you') return;
+                if (txt !== 'Sinulle ehdotettua') return;
 
+                // prefer the header html-div
                 let container = span.closest('div.html-div') || span.parentElement;
                 if (!container) return;
 
+                // require "Näytä kaikki" link or a /explore/people/ link nearby to avoid false positives
                 const scope = container.closest('div') || container;
                 const hasShowAllLink =
                     !!scope.querySelector('a[href="/explore/people/"] span') ||
@@ -1606,6 +1696,7 @@ ${p}, ${p} * {
 
                 if (!hasShowAllLink) return;
 
+                // climb up html-div ancestors to find the module root, avoiding main/body/html/nav
                 let lvl = 0;
                 let candidate = container;
                 while (candidate && lvl < 6) {
@@ -1615,11 +1706,13 @@ ${p}, ${p} * {
                     const plausibleSize = area > 200 && area < 300000;
                     const isHtmlDiv = candidate.classList.contains('html-div');
 
-                    // Make sure we never hide a container holding an <article> or critical sidebar elements
                     if (isHtmlDiv &&
                         plausibleSize &&
-                        !candidate.matches('main, section[role="main"], div[role="main"], body, html, nav') && 
-                        !isElementProtected(candidate)) {
+                        !isElementProtected(candidate) && // Safely abort if this matches Right Sidebar structures
+                        !candidate.matches('main, section[role="main"], div[role="main"], body, html, nav')) {
+                        // CRITICAL: Ensure we don't accidentally select a master wrapper that holds feed articles!
+                        if (candidate.querySelector('article')) break;
+
                         collapseElement(candidate);
                         return;
                     }
@@ -1627,157 +1720,183 @@ ${p}, ${p} * {
                     candidate = candidate.parentElement;
                     lvl++;
                 }
+
+                // fallback: hide the immediate header row if nothing else matched
+                const rect = container.getBoundingClientRect ? container.getBoundingClientRect() : null;
+                const area = rect ? rect.width * rect.height : 0;
+                if (area > 80 && area < 150000 &&
+                    !isElementProtected(container) &&
+                    !container.matches('main, section[role="main"], div[role="main"], body, html, nav')) {
+                    collapseElement(container);
+                }
             });
         } catch {}
     }
 
 const injectInlineCSS = () => {
-        try {
-            const styleId = 'extra-redirect-style';
-            let style = document.getElementById(styleId);
-            if (!style) {
-                style = document.createElement('style');
-                style.id = styleId;
-            }
-            const searchBanCSS = buildSearchBanCSS();
+    try {
+        const styleId = 'extra-redirect-style';
+        let style = document.getElementById(styleId);
+        if (!style) {
+            style = document.createElement('style');
+            style.id = styleId;
+        }
+        const searchBanCSS = buildSearchBanCSS();
 
-            const sinulleEhdotettuaCSS = `
-            /* Core Suggestion Block Wrappers (uBlock equivalent) */
-            div.xyqm7xq.x1ys307a,
-             {
-                display: none !important;
-                visibility: hidden !important;
-                opacity: 0 !important;
-                height: 0 !important;
-                width: 0 !important;
-                margin: 0 !important;
-                padding: 0 !important;
-                position: absolute !important;
-                left: -9999px !important;
-                top: -9999px !important;
-                overflow: hidden !important;
-                pointer-events: none !important;
-            }
-            `;
+        const articleProtectionCSS = `
+        /* Prevent flashes of unscanned content in feed and overlays */
+        main article:not([data-banned-scan]),
+        div[role="dialog"] article:not([data-banned-scan]),
+        section[role="dialog"] article:not([data-banned-scan]) {
+            opacity: 0 !important;
+            pointer-events: none !important;
+            transition: opacity 0.1s ease-in !important;
+        }
+        main article[data-banned-scan="safe"],
+        div[role="dialog"] article[data-banned-scan="safe"],
+        section[role="dialog"] article[data-banned-scan="safe"] {
+            opacity: 1 !important;
+            pointer-events: auto !important;
+        }
+        /* KEEP IN DOCUMENT FLOW FOR INTERSECTION OBSERVER, BUT COLLAPSE VISUAL GAP TO 1px */
+        main article[data-banned-scan="banned"],
+        div[role="dialog"] article[data-banned-scan="banned"],
+        section[role="dialog"] article[data-banned-scan="banned"] {
+            height: 1px !important;
+            min-height: 1px !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: hidden !important;
+            opacity: 0 !important;
+            border: none !important;
+            pointer-events: none !important;
+            visibility: hidden !important;
+        }
+        `;
 
-            const approveGateCSS = `
+        const approveGateCSS = `
 [role="listbox"] [role="option"]:not([${IG_SEARCH_APPROVE_ATTR}="1"]),
 [role="listbox"] li:not([${IG_SEARCH_APPROVE_ATTR}="1"]),
 [role="listbox"] a[role="link"]:not([${IG_SEARCH_APPROVE_ATTR}="1"]),
 [role="listbox"] a._a6hd:not([${IG_SEARCH_APPROVE_ATTR}="1"]),
 [role="listbox"] a.x1i10hfl:not([${IG_SEARCH_APPROVE_ATTR}="1"]) {
-    display: none !important;
-    visibility: hidden !important;
-    opacity: 0 !important;
-    pointer-events: none !important;
-    position: absolute !important;
-    left: -9999px !important;
-    top: -9999px !important;
-    height: 0 !important;
-    width: 0 !important;
-    overflow: hidden !important;
+display: none !important;
+visibility: hidden !important;
+opacity: 0 !important;
+pointer-events: none !important;
+position: absolute !important;
+left: -9999px !important;
+top: -9999px !important;
+height: 0 !important;
+width: 0 !important;
+overflow: hidden !important;
 }
 [role="listbox"] [${IG_SEARCH_APPROVE_ATTR}="1"] {
-    visibility: visible !important;
-    opacity: 1 !important;
-    pointer-events: auto !important;
-    position: static !important;
-    height: auto !important;
-    width: auto !important;
-    overflow: visible !important;
+visibility: visible !important;
+opacity: 1 !important;
+pointer-events: auto !important;
+position: static !important;
+height: auto !important;
+width: auto !important;
+overflow: visible !important;
 }
 `;
-            // Add a mathematically proven safety suffix to all generic layout hiders
-            const safeSuffix = `:not(:has(a[href="/nightmaree3z/"])):not(:has(nav._ab8c)):not(:has(a[href*="about.instagram.com"]))`;
-            const overlayGuardedSelectors = selectorsToHide.map(s => `body:not(.ig-overlay-open) ${s}${safeSuffix}`).join(',\n');
 
-            style.textContent = `
-            ${overlayGuardedSelectors} {
-                visibility: hidden !important;
-                display: none !important;
-                opacity: 0 !important;
-                pointer-events: none !important;
-                position: absolute !important;
-                left: -9999px !important;
-                top: -9999px !important;
-                height: 0 !important;
-                width: 0 !important;
-                max-height: 0 !important;
-                max-width: 0 !important;
-                overflow: hidden !important;
-                margin: 0 !important;
-                padding: 0 !important;
-                border: none !important;
-                flex: 0 0 0px !important;
-                grid: none !important;
-                transition: none !important;
-            }
-            [href*="hidden_words"], [href*="piiloitetut_sanat"], [href*="restricted_accounts"], [href*="rajoitetut_tilit"], [href*="hide_story_and_live"] {
-                display: none !important;
-                visibility: hidden !important;
-                opacity: 0 !important;
-                height: 0 !important;
-                width: 0 !important;
-                position: absolute !important;
-                left: -9999px !important;
-                top: -9999px !important;
-                overflow: hidden !important;
-            }
-            
-/* Fix vertical alignment of PFP and username */
-.x1oa3qoh.x1nhvcw1 div.xozqiw3 {
-    align-items: center !important;
-    margin-top: 32px !important;
-}
+        const safeSuffix = `:not(:has(nav)):not(:has(footer)):not(:has(svg[aria-label="Lisää"])):not(:has(svg[aria-label="Asetukset"])):not(:has(svg[aria-label="More"])):not(:has(a[href*="about.instagram.com"])):not(:has(article)):not(:has(a[href*="instagram.com/direct"]))`;
+        const overlayGuardedSelectors = selectorsToHide.map(s => `body:not(.ig-overlay-open) ${s}${safeSuffix}`).join(',\n');
 
-/* 3. PUSH THE FOOTER UP */
-.x1oa3qoh.x1nhvcw1 div:has(> nav ul li a[href*="about.instagram.com"]) {
-    margin-top: -12px !important;
-    padding-top: 0px !important;
-}
+        style.textContent = `
+        ${articleProtectionCSS}
 
-/* 4. ADJUST STORIES TRAY PLACEMENT */
-div[data-pagelet="story_tray"] {
-    margin-top: -16px !important; 
-}
-
-/* 5. GHOST FEED (Smooth loading, zero flash, NO INFINITE LOOP) */
-article:not([data-banned-scan="safe"]) {
-    opacity: 0 !important;
-}
-article[data-banned-scan="safe"] {
-    opacity: 1 !important;
-}
-
-            ${sinulleEhdotettuaCSS}
-            ${searchBanCSS}
-            ${approveGateCSS}
-            `;
-            
-            if (!style.isConnected) {
-                if (document.head) {
-                    document.head.appendChild(style);
-                } else if (document.documentElement) {
-                    document.documentElement.insertBefore(style, document.documentElement.firstChild);
-                }
-            }
-        } catch (err) {
-            try {
-                const styleTag = document.createElement('style');
-                styleTag.textContent = `${selectorsToHide.slice(0, 10).join(', ')} { display: none !important; }`;
-                (document.head || document.documentElement).appendChild(styleTag);
-            } catch (e) {}
+        ${overlayGuardedSelectors} {
+            visibility: hidden !important;
+            display: none !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+            position: absolute !important;
+            left: -9999px !important;
+            top: -9999px !important;
+            height: 0 !important;
+            width: 0 !important;
+            max-height: 0 !important;
+            max-width: 0 !important;
+            overflow: hidden !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            border: none !important;
+            flex: 0 0 0px !important;
+            grid: none !important;
+            transition: none !important;
         }
-    };
-    
-    injectInlineCSS();
+        [href*="hidden_words"], [href*="piiloitetut_sanat"], [href*="restricted_accounts"], [href*="rajoitetut_tilit"], [href*="hide_story_and_live"] {
+            display: none !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+            height: 0 !important;
+            width: 0 !important;
+            position: absolute !important;
+            left: -9999px !important;
+            top: -9999px !important;
+            overflow: hidden !important;
+        }
+        [role="dialog"] button.xjbqb8w.x1qhh985.x10w94by.x14e42zd.x1yvgwvq.x13fuv20.x178xt8z.x1ypdohk.xvs91rp.x1evy7pa.xdj266r.x14z9mp.xat24cr.x1lziwak.x1wxaq2x.x1iorvi4.xf159sx.xjkvuk6.xmzvs34.x2b8uid.x87ps6o.xxymvpz.xh8yej3.x52vrxo.x4gyw5p.xkmlbd1.x1xlr1w8 {
+            display: none !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+            position: absolute !important;
+            left: -9999px !important;
+            top: -9999px !important;
+            height: 0 !important;
+            width: 0 !important;
+            overflow: hidden !important;
+        }
+
+        /* 1. PUSH THE RIGHT SIDEBAR PROFILE DOWN */
+        /* Targets the wrapper holding your profile pic on the right side */
+        div[style*="--x-width: 100%;"]:has(a[role="link"] img[alt*="profiilikuva"]),
+        div[style*="--x-width:100%"]:has(a[role="link"] img[alt*="profiilikuva"]) {
+            margin-top: 26px !important; 
+        }
+
+        /* 2. PUSH THE FOOTER UP */
+        /* Targets the footer nav and reduces its top spacing so it sits higher */
+        div:has(> nav ul li a[href*="about.instagram.com"]) {
+            margin-top: 7px !important; 
+            padding-top: 0px !important;
+        }
+
+        /* ADJUST STORIES TRAY PLACEMENT */
+        div[data-pagelet="story_tray"] {
+            margin-top: -16px !important; 
+        }
+
+        ${searchBanCSS}
+        ${approveGateCSS}
+        `;
+        
+        if (!style.isConnected) {
+            if (document.head) {
+                document.head.appendChild(style);
+            } else if (document.documentElement) {
+                document.documentElement.insertBefore(style, document.documentElement.firstChild);
+            }
+        }
+    } catch (err) {
+        try {
+            const styleTag = document.createElement('style');
+            styleTag.textContent = `${selectorsToHide.slice(0, 10).join(', ')} { display: none !important; }`;
+            (document.head || document.documentElement).appendChild(styleTag);
+        } catch (e) {}
+    }
+};
+
+injectInlineCSS();
 
     const hideCriticalElements = () => {
         selectorsToHide.forEach((selector) => {
             document.querySelectorAll(selector).forEach((el) => {
                 if (isInPostOverlay(el)) return;
-                if (isElementProtected(el)) return;
-                
                 if (!hiddenElements.has(el)) {
                     el.style.setProperty('visibility', 'hidden', 'important');
                     el.style.setProperty('display', 'none', 'important');
@@ -1917,23 +2036,38 @@ article[data-banned-scan="safe"] {
 
     function collapseElement(element) {
         if (!hiddenElements.has(element)) {
+            if (isElementProtected(element)) return;
+
             stripImagesWithin(element);
-            element.style.setProperty('display', 'none', 'important');
-            element.style.setProperty('max-height', '0', 'important');
-            element.style.setProperty('height', '0', 'important');
-            element.style.setProperty('min-height', '0', 'important');
-            element.style.setProperty('overflow', 'hidden', 'important');
-            element.style.setProperty('padding', '0', 'important');
-            element.style.setProperty('margin', '0', 'important');
-            element.style.setProperty('border', 'none', 'important');
-            element.style.setProperty('visibility', 'hidden', 'important');
-            element.style.setProperty('flex', '0 0 0px', 'important');
-            element.style.setProperty('grid', 'none', 'important');
-            element.style.setProperty('transition', 'none', 'important');
-            element.style.setProperty('opacity', '0', 'important');
-            element.style.setProperty('position', 'absolute', 'important');
-            element.style.setProperty('left', '-9999px', 'important');
-            element.style.setProperty('top', '-9999px', 'important');
+            
+            const isArticle = element.tagName === 'ARTICLE';
+            
+            if (isArticle) {
+                // Keep the article in the document flow with a tiny 1px height so IntersectionObserver stays happy.
+                element.style.setProperty('max-height', '1px', 'important');
+                element.style.setProperty('height', '1px', 'important');
+                element.style.setProperty('min-height', '1px', 'important');
+                element.style.setProperty('margin', '0', 'important'); 
+                element.style.setProperty('overflow', 'hidden', 'important');
+                element.style.setProperty('padding', '0', 'important');
+                element.style.setProperty('border', 'none', 'important');
+                element.style.setProperty('visibility', 'hidden', 'important');
+                element.style.setProperty('opacity', '0', 'important');
+                element.style.setProperty('pointer-events', 'none', 'important');
+                // Hide its children so nothing bleeds over the 1px boundary
+                Array.from(element.children).forEach(child => {
+                    child.style.setProperty('display', 'none', 'important');
+                });
+            } else {
+                // UI buttons and tiny elements safely removed from flow entirely.
+                element.style.setProperty('display', 'none', 'important');
+                element.style.setProperty('opacity', '0', 'important');
+                element.style.setProperty('position', 'absolute', 'important');
+                element.style.setProperty('height', '0', 'important');
+                element.style.setProperty('width', '0', 'important');
+                element.style.setProperty('pointer-events', 'none', 'important');
+            }
+            
             hiddenElements.add(element);
         }
     }
@@ -1957,11 +2091,13 @@ article[data-banned-scan="safe"] {
         document.querySelectorAll(allSelectors).forEach(element => {
             if (isInPostOverlay(element)) return;
             if (hiddenElements.has(element)) return;
-            if (isElementProtected(element)) return;
+            
+            const isProtected = isElementProtected(element);
+            
             const containsAllowedWords = allowedWordsLower.some(word =>
                 element.textContent && element.textContent.toLowerCase().includes(word)
             );
-            if (!containsAllowedWords && !isExcludedPath()) {
+            if (!isProtected && !containsAllowedWords && !isExcludedPath()) {
                 collapseElement(element);
             }
         });
@@ -1978,7 +2114,9 @@ article[data-banned-scan="safe"] {
         document.querySelectorAll(allSelectors).forEach(element => {
             if (isInPostOverlay(element)) return;
             if (hiddenElements.has(element)) return;
-            if (isElementProtected(element)) return;
+            
+            const isProtected = isElementProtected(element);
+            if (isProtected) return;
             if (isExcludedPath()) return;
             const textContent = element.textContent ? element.textContent.toLowerCase() : "";
             
@@ -2012,21 +2150,22 @@ article[data-banned-scan="safe"] {
                 }
             }
             if (matched) {
-                const parentArticle = element.closest('article');
-                if (parentArticle && parentArticle.getAttribute('data-banned-scan') === 'safe') {
+                let postWrapper = findPostWrapper(element);
+                if (!postWrapper) postWrapper = element.closest('article');
+
+                if (postWrapper && postWrapper.getAttribute('data-banned-scan') === 'safe') {
                     // This post is globally safe, do not hide!
-                } else if (parentArticle && isInPostOverlay(parentArticle)) {
+                } else if (postWrapper && isInPostOverlay(postWrapper)) {
                     // skip
-                } else if (parentArticle && !hiddenElements.has(parentArticle)) {
+                } else if (postWrapper && !hiddenElements.has(postWrapper)) {
                     const containsAllowedWords = allowedWordsLower.some(word =>
-                        parentArticle.textContent && parentArticle.textContent.toLowerCase().includes(word)
+                        postWrapper.textContent && postWrapper.textContent.toLowerCase().includes(word)
                     );
                     if (!containsAllowedWords) {
-                        Array.from(parentArticle.children).forEach(child => {
-                            child.style.setProperty('display', 'none', 'important');
-                        });
-                        hiddenElements.add(parentArticle);
+                        collapseElement(postWrapper);
                     }
+                } else if (!postWrapper) {
+                    collapseElement(element);
                 }
             }
         });
@@ -2035,7 +2174,8 @@ article[data-banned-scan="safe"] {
             querySelectorAllWithContains(target.selector, target.text).forEach(element => {
                 if (isInPostOverlay(element)) return;
                 if (!hiddenElements.has(element)) {
-                    if (!isElementProtected(element)) {
+                    const isProtected = isElementProtected(element);
+                    if (!isProtected) {
                         collapseElement(element);
                     }
                 }
@@ -2148,6 +2288,8 @@ article[data-banned-scan="safe"] {
             allTextNodes.push(node);
         }
         
+        const nukeTargets = ['sponsoroitu', 'sponsored', 'sinulle ehdotettu', 'sinulle ehdotettua', 'suggested for you'];
+
         allTextNodes.forEach(node => {
             let txtRaw = node.nodeValue || '';
             let txt = txtRaw.toLowerCase();
@@ -2159,6 +2301,17 @@ article[data-banned-scan="safe"] {
             if (['peruuta', 'cancel'].includes(exactTrimmed)) return;
 
             if (allowedWordsLower.some(word => txt.includes(word))) return;
+            
+            // Handle massive targets globally via findPostWrapper to bypass generic protective logic
+            if (nukeTargets.includes(exactTrimmed)) {
+                // EXACT LOGIC FROM UPLOADED FILE (No blind side-bar nuking fallback)
+                const wrapper = findPostWrapper(node.parentElement);
+                if (wrapper && !isElementProtected(wrapper) && !wrapper.matches('main, section[role="main"], div[role="main"], body, html, nav')) {
+                    collapseElement(wrapper);
+                }
+                return; 
+            }
+
             if (bannedKeywordsLower.some(keyword => txt.includes(keyword))) {
                 let el = node.parentElement;
                 if (el && isInPostOverlay(el)) return;
@@ -2257,37 +2410,33 @@ article[data-banned-scan="safe"] {
         const path = location.pathname.toLowerCase();
         const isNightmareStory = path.startsWith('/stories/nightmaree3z/');
         const targets = ['poista', 'delete', 'remove', 'poista seuraaja', 'remove follower', 'lopeta seuraaminen', 'unfollow', 'estä', 'block'];
-        
-        // Target phrases for zero-glimpse sniper
-        const flashTargets = ['sinulle ehdotettua', 'sinulle ehdotettu', 'suggested for you', 'tiliehdotuksia', 'myös metalta'];
+        const nukeTargets = ['sponsoroitu', 'sponsored', 'sinulle ehdotettu', 'sinulle ehdotettua', 'suggested for you'];
 
         for (let i = 0; i < mutations.length; i++) {
-            const added = mutations[i].addedNodes;
-            for (let j = 0; j < added.length; j++) {
-                const node = added[j];
-                if (node.nodeType !== 1) continue;
+            const m = mutations[i];
 
-                // === ZERO-GLIMPSE SNIPER ===
-                // Check if this newly injected React node is the suggestion block itself
-                const text = (node.textContent || '').toLowerCase();
-                if (flashTargets.some(t => text.includes(t))) {
-                    // Confirm it's the explore block or Myös metalta to avoid false positives on legitimate posts
-                    if (node.querySelector('a[href^="/explore/people"]') || text.includes('myös metalta')) {
-                        
-                        // NEW PROTECTION: Check if node CONTAINS the profile switcher or footer
-                        if (!node.querySelector('article, main, a[href="/nightmaree3z/"], nav._ab8c, a[href*="about.instagram.com"]') &&
-                            !node.matches('main, section[role="main"], div[role="main"], body, html, nav')) {
-                            
-                            // Safe to nuke this newly injected container entirely before it hits the screen
-                            node.style.setProperty('display', 'none', 'important');
-                            node.style.setProperty('opacity', '0', 'important');
-                            node.style.setProperty('height', '0', 'important');
-                            node.style.setProperty('pointer-events', 'none', 'important');
-                            hiddenElements.add(node);
-                            continue; 
+            // --- ANTI-FLASH: Virtual DOM Recycled Node Intercept ---
+            if (m.type === 'childList' && m.target) {
+                let nodeForArticle = m.target.nodeType === 1 ? m.target : m.target.parentElement;
+                if (nodeForArticle && nodeForArticle.closest) {
+                    const article = nodeForArticle.closest('article');
+                    if (article && article.hasAttribute('data-banned-scan')) {
+                        const currentId = getPostIDFromArticle(article);
+                        const scannedId = article.getAttribute('data-scanned-post-id');
+                        if (currentId && scannedId && currentId !== scannedId) {
+                            // Virtual DOM swapped this element! Strip safe tag instantly to trigger opacity 0
+                            article.removeAttribute('data-banned-scan');
+                            article.removeAttribute('data-feed-scan-done');
+                            article.removeAttribute('data-scanned-post-id');
                         }
                     }
                 }
+            }
+
+            const added = m.addedNodes;
+            for (let j = 0; j < added.length; j++) {
+                const node = added[j];
+                if (node.nodeType !== 1) continue;
                 
                 let elements;
                 try {
@@ -2302,6 +2451,17 @@ article[data-banned-scan="safe"] {
                         if (el.children.length > 2) continue;
                     }
                     const txt = (el.textContent || '').trim().toLowerCase();
+                    
+                    if (nukeTargets.includes(txt)) {
+                        // EXACT LOGIC FROM UPLOADED FILE (No blind side-bar nuking fallback)
+                        el.style.setProperty('opacity', '0', 'important');
+                        const wrapper = findPostWrapper(el);
+                        if (wrapper && !isElementProtected(wrapper) && !wrapper.matches('main, section[role="main"], div[role="main"], body, html, nav')) {
+                            collapseElement(wrapper);
+                        }
+                        continue;
+                    }
+
                     if (targets.includes(txt)) {
                         if (isNightmareStory && (txt === 'poista' || txt === 'delete' || txt === 'remove' || txt === 'poista tarina' || txt === 'delete story')) {
                             if (hiddenElements.has(el)) {
@@ -2311,17 +2471,25 @@ article[data-banned-scan="safe"] {
                             continue; // DO NOT HIDE
                         }
                         
-                        el.style.setProperty('display', 'none', 'important');
-                        hiddenElements.add(el);
+                        if (!isElementProtected(el)) {
+                            collapseElement(el);
+                        }
                         
                         const parentBtn = el.closest('button, [role="button"], a, .x1i10hfl');
-                        if (parentBtn && parentBtn !== el) {
-                            parentBtn.style.setProperty('display', 'none', 'important');
-                            hiddenElements.add(parentBtn);
+                        if (parentBtn && parentBtn !== el && !isElementProtected(parentBtn)) {
+                            collapseElement(parentBtn);
                         }
                     }
                 }
             }
+        }
+    }
+
+    // CHECK FOR SPA NAVIGATION SILENTLY
+    function checkSPARouting() {
+        if (__lastKnownUrl !== window.location.href) {
+            __lastKnownUrl = window.location.href;
+            window.dispatchEvent(new Event('locationchange'));
         }
     }
 
@@ -2420,6 +2588,7 @@ article[data-banned-scan="safe"] {
 
     function scheduleIntervals() {
         addInterval(() => {
+            checkSPARouting(); // Poll for URL changes on interval
             updateOverlayState();
             makeOverlayLikesClickable(); // Recheck continuously
             if (!isReelsPage() && !document.hidden) {
@@ -2483,6 +2652,7 @@ article[data-banned-scan="safe"] {
     })();
 
     onEvent(window, 'locationchange', function() {
+        isFeedScanPhase = true; // reset feed phase for SPA routes
         reelsStyleInjected = false;
         currentURL = window.location.href;
         injectInlineCSS();

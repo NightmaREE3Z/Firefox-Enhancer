@@ -12,6 +12,7 @@
     
     let lastMatchDetails = null;
     let lastRedirectInfo = null;
+    let __lastKnownUrl = window.location.href; // Track URL for strict SPA awareness
 
     const SS_KEY = 'googlejs_last_redirect';
     function persistRedirect(info) {
@@ -378,6 +379,54 @@
 	/bliswwe/i, /li1vi/i, /p3rs aukko/i, /p3r5 aukko/i, /per5 aukko/i, /0nli/i,/p3rs-aukko/i, /p3r5 aukko/i, /per5 aukko/i, /p3rse/i, /pers3/i, /p3rs3/i, /per5e/i, /per53/i, /p3r5e/i, /p3r53/i, /rints/i, /r1nts/i, /r1nt5/i, /rint5/i, /p1p4r/i, /pip4r/i, /p1par/i, 
 	/machinelearning/i, /Kairi/i, /sexx/i, /4lexa/i, /al3xa/i, /alex4/i, /4l3xa/i, /al3x4/i, /4l3x4/i, /4lex4/i, /bl15s/i, /bl1s5/i, /bl155/i, /blis5/i, /bli5s/i, /artintel/i,
     ]; 
+
+    // --- NEW: DYNAMIC WRESTLER BANS FROM WRESTLING.JS ---
+    function applyDynamicWrestlerBans() {
+        if (typeof chrome !== 'undefined' && chrome.storage) {
+            try {
+                chrome.storage.local.get(['wrestling_women_urls'], function(result) {
+                    if (result.wrestling_women_urls && Array.isArray(result.wrestling_women_urls)) {
+                        let addedCount = 0;
+                        
+                        // Core exclusions to prevent global bans
+                        const localExclusions = ['melina', 'melina-perez', 'aj-lee', 'aj', 'becky-lynch', 'becky'];
+
+                        result.wrestling_women_urls.forEach(url => {
+                            const parts = url.split('/').filter(Boolean);
+                            const slug = parts[parts.length - 1].toLowerCase();
+                            
+                            if (localExclusions.includes(slug)) return;
+
+                            const name = slug.replace(/-/g, ' ');
+                            const namePattern = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                            
+                            // Prevent duplicates
+                            const isDuplicate = regexKeywordsToHide.some(rx => rx.source && rx.source.includes(namePattern));
+
+                            if (!isDuplicate) {
+                                if (name.length <= 6 || !name.includes(' ')) {
+                                    regexKeywordsToHide.push(new RegExp('\\b' + namePattern + '\\b', 'i'));
+                                } else {
+                                    regexKeywordsToHide.push(new RegExp(namePattern, 'i'));
+                                }
+                                addedCount++;
+                            }
+                        });
+                        
+                        if (addedCount > 0) {
+                            devLog(`Dynamically added ${addedCount} wrestler names from shared storage to blocklist.`);
+                            // Re-run main filtering immediately to apply new rules
+                            if (typeof mainFiltering === 'function') {
+                                mainFiltering();
+                            }
+                        }
+                    }
+                });
+            } catch(e) {}
+        }
+    }
+    // Execute immediately
+    applyDynamicWrestlerBans();
 
     // Special Regexes array, kept separate for readability.
     const specialRegexes = [

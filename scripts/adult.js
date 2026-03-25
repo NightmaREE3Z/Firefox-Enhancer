@@ -3,6 +3,9 @@
 
     console.log("XVideos Tracker Blocking and Content Filtering script is running.");
 
+    // --- SPA Awareness State ---
+    let __lastKnownUrl = window.location.href;
+
     // List of blocked content selectors (optional, adjust as needed)
     const blockSelectors = [
         // Leftovers from "extra.js"
@@ -52,6 +55,50 @@
         /LGBT/i, /wondershare/i, /filmora/i, /dreambooth/i, /dream booth/i, /Marg Robb/i, /Margo/i, /Robbie/i, /Elina/i, /Elyna/i, /Elyina/i, /Eliyna/i, /Eliyina/i, /Dualipa/i, /Dua Lipa/i, /Saya Kamitani/i, /Kamitani/i, /Katie/i, /Nikkita/i, /Nikkita Lyons/i, /Lisa Marie/i, 
 	/Lisa Marie Varon/i, /Lisa Varon/i, /Marie Varon/i, /Takaichi/i, /Sakurai/i, /Arrivederci/i, /Alice/i, /Alicy/i, /Alici/i, /Arisu Endo/i, /Crowley/i,  /Ruby Soho/i, /Monica/i, /Castillo/i, /Matsumoto/i, /Shino Suzuki/i, /Lily Adam/i, /\bAi\b/i, /\bMLM\b/i, /\bLLM\b/i,
     ];
+
+    // --- NEW: DYNAMIC WRESTLER BANS ---
+    function applyDynamicWrestlerBans() {
+        const storageAPI = (typeof browser !== 'undefined' && browser.storage && browser.storage.local) ? browser.storage.local : 
+                           (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) ? chrome.storage.local : null;
+
+        if (storageAPI) {
+            try {
+                storageAPI.get(['wrestling_women_urls'], function(result) {
+                    if (result.wrestling_women_urls && Array.isArray(result.wrestling_women_urls)) {
+                        let addedCount = 0;
+                        const localExclusions = ['melina', 'melina-perez', 'aj-lee', 'aj', 'becky-lynch', 'becky'];
+
+                        result.wrestling_women_urls.forEach(url => {
+                            const parts = url.split('/').filter(Boolean);
+                            const slug = parts[parts.length - 1].toLowerCase();
+                            
+                            if (localExclusions.includes(slug)) return;
+
+                            const name = slug.replace(/-/g, ' ');
+                            const namePattern = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                            
+                            const isDuplicate = blockedRegexWords.some(rx => rx.source && rx.source.includes(namePattern));
+
+                            if (!isDuplicate) {
+                                if (name.length <= 6 || !name.includes(' ')) {
+                                    blockedRegexWords.push(new RegExp('\\b' + namePattern + '\\b', 'i'));
+                                } else {
+                                    blockedRegexWords.push(new RegExp(namePattern, 'i'));
+                                }
+                                addedCount++;
+                            }
+                        });
+                        if (addedCount > 0) {
+                            console.log(`Dynamically added ${addedCount} wrestler names to blocklist.`);
+                            hideBlockedContent();
+                            deleteContent();
+                        }
+                    }
+                });
+            } catch(e) {}
+        }
+    }
+    applyDynamicWrestlerBans();
 
     // List of selectors to check for blocked keywords on video pages
     const videoPageSelectors = [
@@ -158,7 +205,43 @@
         }
     }
 
-    // Observe URL changes to check for blocked content on video pages and blocked keywords in URL
+    // --- NEW: Titanium SPA Awareness Hooks ---
+    function checkSPARouting() {
+        if (__lastKnownUrl !== window.location.href) {
+            __lastKnownUrl = window.location.href;
+            window.dispatchEvent(new Event('locationchange'));
+        }
+    }
+    setInterval(checkSPARouting, 70);
+
+    (function() {
+        const _wr = function(type) {
+            const orig = history[type];
+            return function() {
+                const rv = orig.apply(this, arguments);
+                window.dispatchEvent(new Event(type));
+                window.dispatchEvent(new Event('locationchange'));
+                return rv;
+            };
+        };
+        history.pushState = _wr('pushState');
+        history.replaceState = _wr('replaceState');
+        window.addEventListener('popstate', function() {
+            window.dispatchEvent(new Event('locationchange'));
+        });
+    })();
+
+    window.addEventListener('locationchange', function() {
+        if (/xvideos\.com\/video/.test(window.location.href)) {
+            checkAndRedirectVideoPageBlockedContent();
+        }
+        checkAndRedirectUrlBlockedContent();
+        hideBlockedContent();
+        deleteContent();
+        handleHomePage();
+    });
+
+    // Observe URL changes to check for blocked content on video pages and blocked keywords in URL (Legacy Observer)
     function observeUrlChanges() {
         let currentUrl = window.location.href;
         const observer = new MutationObserver(() => {

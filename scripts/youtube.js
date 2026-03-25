@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name         YTSanitizer
-// @version      2026-03-13
+// @name         YTClean
+// @version      2026-03-24
 // @description  Enhances my YouTube experience by blocking trackers and hiding garbage, such as shorts.
 // @match        https://*.youtube.com/*
 // @grant        none
@@ -20,6 +20,7 @@
     const __ytEventCleanups = new Set();
     let __ytCleanupRan = false;
     let __ytIntervalsRunning = false;
+    let isRedirecting = false; // Global redirect flag to prevent loops
 
     function addInterval(fn, ms) {
         const id = setInterval(fn, ms);
@@ -83,42 +84,92 @@
 
     // List of keywords or phrases to block in search queries and page content
     const blockKeywords = [
-        /\balexa\b/i, /Bliss/i, /Alexa Bliss/i, /lex kauf/i, /lex cabr/i, /lex carbr/i, /Tiffany/i, /Tiffy/i, /Stratton/i, /Chelsea Green/i, /Bayley/i, /Blackheart/i, /Alba Fyre/i, 
-        /Becky Lynch/i, /Michin/i, /Mia Yim/i, /#satan666/i, /julmakira/i, /Stephanie/i, /Liv Morgan/i, /Piper Niven/i, /queer/i, /Pride/i, /NXT Womens/i, /model/i, /model/i, /carbrera/i,
-        /Jordynne/i, /Woman/i, /Women/i, /Maryse/i, /\bai\b/i, /Women's/i, /Woman's/i, /Summer Rae/i, /Naomi/i, /Bianca Belair/i, /Charlotte/i, /Jessika Carr/i, /Mercedes/i, /cabrera/i,
+	 
+
+
+	//Names and nicknames
+	/\balexa\b/i, /Bliss/i, /Alexa Bliss/i, /lex kauf/i, /lex cabr/i, /lex carbr/i, /Liv Morgan/i, /Tiffany/i, /Tiffy/i, /Stratton/i, /Chelsea Green/i, /Dua Lipa/i, /Dualipa/i,
+        /Jordynne/i, /Maryse/i, /Women's/i, /Woman's/i, /Summer Rae/i, /Naomi/i, /Bianca Belair/i, /Charlotte/i, /Jessika Carr/i, /Mercedes/i, /cabrera/i, /leks bl/i, /leks kauf/i,
         /Carr WWE/i, /Jessica Karr/i, /bikini/i, /Kristen Stewart/i, /Sydney Sweeney/i, /Nia Jax/i, /Young Bucks/i, /Vice WWE/i, /Candice LeRae/i, /Trish/i, /Stratus/i, /lex kaufman/i,
-        /Jackson/i, /Lash Legend/i, /Jordynne Grace/i, /DeepSeek/i, /TOR-Browser/i, /TOR-selain/i, /Opera GX/i, /prostitute/i, /AI-generated/i, /AI generated/i, /sensuel/i, /\bshe\b/i,
-        /deepnude/i, /undress/i, /nudify/i, /nude/i, /nudifier/i, /faceswap/i, /facemorph/i, /AI app/i, /Sweeney/i, /Alexis/i, /Sydney/i, /Zelina Vega/i, /Mandy Rose/i, /\bher\b/i, /\btor\b/i,
-        /Nikki/i, /Brie/i, /Bella/i, /Opera Browser/i, /by AI/i, /AI edited/i, /Safari/i, /OperaGX/i, /MS Edge/i, /Microsoft Edge/i, /clothes/i, /Lola Vice/i, /leks bl/i, /leks kauf/i,   
-        /crotch/i, /dress/i, /dreamtime/i, /Velvet Sky/i, /LGBTQ/i, /panties/i, /panty/i, /cloth/i, /AI art/i, /cleavage/i, /deviantart/i, /leks cabr/i, /leks carbr/i, /Elyina/i, /Elyna WWE/i, 
-        /Tiffy Time/i, /Steward/i, /Roxanne/i, /cameltoe/i, /dreamtime AI/i, /Joanie/i, /bra/i, /Stewart/i, /Isla Dawn/i, /inpaint/i, /photopea/i, /onlyfans/i, /fantime/i, /lingerie/i, 
-        /upscale/i, /sexy/i, /Alexa WWE/i, /AJ Lee/i, /deepfake/i, /ring gear/i, /Lexi/i, /\bTrans\b/i, /Transvestite/i, /Aleksa/i, /Giulia/i, /\bbooty\b/i, /Paige/i, /Chyna/i, /\bToni\b/i,
-        /Skye Blue/i, /Carmella/i, /Mariah May/i, /Harley Cameron/i, /Hayter/i, /trunks/i, /pant/i, /Ripley/i, /manyvids/i, /five feet of fury/i, /5 feet of fury/i, /selain/i, /\blana\b/i, 
-        /browser/i, /fansly/i, /justforfans/i, /Vince Russo/i, /Tay Conti/i, /Valhalla/i, /IYO SKY/i, /Shirai/i, /Io Sky/i, /Iyo Shirai/i, /Dakota Kai/i, /Asuka/i, /AI model/i, /deep fake/i,
-        /Kairi Sane/i, /Meiko Satomura/i, /NXT Women/i, /Russo/i, /underwear/i, /Rule 34/i, /Miko Satomura/i, /Sarray/i, /Xia Li/i, /Shayna Baszler/i, /Ronda Rousey/i, /nudifying/i, /undressing/i,
-        /Dana Brooke/i, /Izzi Dame/i, /Tamina/i, /Alicia Fox/i, /Madison Rayne/i, /Saraya/i, /attire/i, /Layla/i, /Michelle McCool/i, /Eve Torres/i, /Kelly/i, /Melina WWE/i, /undressifying/i, 
-        /Jillian Hall/i, /Mickie James/i, /Su Yung/i, /Britt/i, /Nick Jackson/i, /Matt Jackson/i, /fan time/i, /Maria Kanellis/i, /Beth Phoenix/i, /Victoria WWE/i, /Kristen/i, /Lana WWE/i,
-        /Molly Holly/i, /Gail Kim/i, /Awesome Kong/i, /Deonna Purrazzo/i, /Anna Jay/i, /\bRiho\b/i, /Britney/i, /Nyla Rose/i, /Angelina Love/i, /Tessmacher/i, /Havok/i, /Toni Storm/i, /Watchorn/i,
-        /Taya Valkyrie/i, /Valkyria/i, /Tay Melo/i, /Willow Nightingale/i, /Statlander/i, /Hikaru Shida/i, /Sasha/i, /Penelope Ford/i, /Shotzi/i, /Tegan/i, /Vladimir Putin/i, /beta male/i,
-        /Nox/i, /Sasha Banks/i, /Sakura/i, /Tessa/i, /Brooke/i, /Jakara/i, /Alba Fyre/i, /Isla Dawn/i, /Scarlett Bordeaux/i, /\bB-Fab\b/i, /Kayden Carter/i, /Katana Chance/i, /\bMina\b/i, /alpha male/i,
-        /Lyra Valkyria/i, /Indi Hartwell/i, /Blair Davenport/i, /Maxxine Dupri/i, /China/i, /Russia/i, /Natalya/i, /Sakazaki/i, /Karmen Petrovic/i, /Ava Raine/i, /CJ Perry/i, /Shira/i, /Elayna/i, 
+	/Lola Vice/i, /Velvet Sky/i, /deviantart/i, /leks cabr/i, /leks carbr/i, /Elyina/i, /Elyna WWE/i, /Tiffy Time/i, /Steward/i, /Roxanne/i, /Joanie/i, /Stewart/i, /Isla Dawn/i, 
+        /Alexa WWE/i, /AJ Lee/i, /deepfake/i, /ring gear/i, /Lexi/i, /Aleksa/i, /Giulia/i, /Paige/i, /Chyna/i, /\bToni\b/i, /\bLin\b/i, /\blana\b/i, /Jackson/i, /Lash Legend/i, 
+	/Jordynne Grace/i, /Sweeney/i, /Alexis/i, /Sydney/i, /Zelina Vega/i, /Mandy Rose/i, /Nikki/i, /Brie/i, /Bella/i,  /Skye Blue/i, /Carmella/i, /Mariah May/i, /Harley Cameron/i, 
+	/Hayter/i, /Ripley/i, /five feet of fury/i, /5 feet of fury/i, /Tay Conti/i, /Valhalla/i, /IYO SKY/i, /Shirai/i, /Io Sky/i, /Iyo Shirai/i, /Dakota Kai/i, /Asuka/i, /Tamina/i,
+        /Kairi Sane/i, /Meiko Satomura/i, /NXT Women/i, /Russo/i, /Miko Satomura/i, /Sarray/i, /Xia Li/i, /Shayna Baszler/i, /Ronda Rousey/i, /Dana Brooke/i, /Izzi Dame/i, /Lana WWE/i,	
+	/Alicia Fox/i, /Madison Rayne/i, /Saraya/i, /attire/i, /Layla/i, /Michelle McCool/i, /Eve Torres/i, /Kelly/i, /Melina WWE/i, /Jillian Hall/i, /Mickie James/i, /Su Yung/i, /Britt/i, 
+	/Nick Jackson/i, /Matt Jackson/i, /Maria Kanellis/i, /Beth Phoenix/i, /Victoria WWE/i, /Kristen/i, /\bLin\b/i, /Watchorn/i, /@LinWatchorn/i, /Courtney Ryan/i, /Elina WWE/i, 
+        /Molly Holly/i, /Gail Kim/i, /Awesome Kong/i, /Deonna Purrazzo/i, /Anna Jay/i, /\bRiho\b/i, /Britney/i, /Nyla Rose/i, /Angelina Love/i, /Tessmacher/i, /Havok/i, /Toni Storm/i, 
+        /Taya Valkyrie/i, /Valkyria/i, /Tay Melo/i, /Willow Nightingale/i, /Statlander/i, /Hikaru Shida/i, /Sasha/i, /Penelope Ford/i, /Shotzi/i, /Tegan/i, /Stephanie/i, /Becky Lynch/i,
+        /Sasha Banks/i, /Sakura/i, /Tessa/i, /Brooke/i, /Jakara/i, /Alba Fyre/i, /Isla Dawn/i, /Scarlett Bordeaux/i, /\bB-Fab\b/i, /Kayden Carter/i, /Katana Chance/i, /Valentina Feroz/i,
+        /Bayley/i, /Lyra Valkyria/i, /Indi Hartwell/i, /Blair Davenport/i, /Maxxine Dupri/i, /Natalya/i, /Sakazaki/i, /Karmen Petrovic/i, /Ava Raine/i, /CJ Perry/i, /Shira/i, /Piper Niven/i,
         /Cora Jade/i, /Jacy Jayne/i, /Gigi Dolin/i, /Thea Hail/i, /Tatum WWE/i, /Paxley/i, /Fallon Henley/i, /Nattie/i, /escort/i, /Sol Ruca/i, /Kelani Jordan/i, /CJ Lana/i, /Lana Perry/i,
-        /Electra Lopez/i, /Wendy Choo/i, /Yulisa Leon/i, /Gina Adam/i, /Valentina Feroz/i, /Amari Miller/i, /Arianna Grace/i, /Courtney Ryan/i, /Venice/i, /Venoice/i, /Venise/i, /Venoise/i, /Sharia/i,
-        /\bLin\b/i, /Watchorn/i, /@LinWatchorn/i, /wondershare/i, /wonder share/i, /filmora/i, /dreambooth/i, /dream booth/i, /dream boot/i, /dreamboot/i, /diffusion/i, /Elina WWE/i, /virtual workstation/i, 
-        /Fantop/i, /Fan top/i, /Fan-top/i, /Topfan/i, /Top fan/i, /Top-fan/i, /VMWare/i, /VM Ware/i, /\bVM\b/i, /Virtual Machine/i, /\bVMs\b/i, /Virtualbox/i, /Virtual box/i, /Virtual laatikko/i, 
-        /Virtuaali laatikko/i, /Virtuaalilaatikko/i, /Virtuaalibox/i, /OracleVM/i, /virtualmachine/i, /virtual machine/i, /virtuaalikone/i, /virtuaali kone/i, /virtuaali tietokone/i, /virtuaalitietokone/i, 
-        /hyper-v/i, /hyper v/i, /virtuaalimasiina/i, /virtuaali masiina/i,  /virtuaalimasiini/i, /virtuaali masiini/i, /virtuaali workstation/i,  /virtual workstation/i, /virtualworkstation/i, 
-        /virtuaaliworkstation/i, /hypervisor/i, /hyper visor/i, /hyperv/i, /vbox/i, /virbox/i, /virtbox/i, /vir box/i, /virt box/i, /virtual box/i, /vrbox/i, /vibox/i, /virbox virtual/i, /virtbox virtual/i, 
-        /vibox virtual/i, /vbox virtual/i, /v-machine/i,  /vmachine/i, /v machine/i, /vimachine/i, /vi-machine/i, /vi machine/i, /virmachine/i, /vir-machine/i, /vir machine/i, /virt machine/i, /virtmachine/i, 
-        /virt-machine/i, /virtumachine/i, /virtu-machine/i, /virtu machine/i, /virtuamachine/i, /virtua-machine/i, /virtua machine/i, /\bMachaine\b/i, /\bMachiine\b/i, /\bMacheine\b/i, /\bMachiene\b/i, 
-        /vi mach/i, /vir mach/i, /virt mach/i, /virtu mach/i, /virtua mach/i, /virtual mach/i, /vi mac/i, /vir mac/i, /virt mac/i, /virtu mac/i, /virtua mac/i, /virtual machi/i, /Dua Lipa/i, /Dualipa/i,
-	/Anthr/i, /\bAnt\b/i, /Antro/i, /\bS0ft\b/i, /s0ftw/i, /softw/i, /\b50ft\b/i, /w4re/i, /war3/i, /w4r3/i, /p41n/i, /pa1n/i, /p4in/i, /ndif/i, /ndfy/i, /nd1f/i, /nd!f/i, /ndlf/i, /shag/i, /5hag/i, 
-	/5h4g/i, /sh4g/i, /f4gg/i, /fagg3/i, /fagger/i, /\bFag\b/i, /wedgi/i, /wedge/i, /wedgy/i, /wedg1/i, /wedg!/i, /w3dg/i, /w33d/i, /we3d/i, /w3ed/i, /w333d/i, /w3333/i, /we333/i, /w3e33/i, /w33e3/i, 
-	/w333e/i, /we33e/i, /we3e3/i, /wee3e/i, /w3e3e/i, /weee/i, /w3333/i, /edgin/i, /3dg1n/i, /edgyi/i, /edgy1/i, /3dgy1/i, /3dgin/i, /edg1n/i, /edg1i/i, /edgi1/i, /3dg1i/i, /3dgi1/i, /edgiy/i,
-	
+        /Electra Lopez/i, /Wendy Choo/i, /Yulisa Leon/i, /Gina Adam/i,  /Amari Miller/i, /Arianna Grace/i, /carbrera/i, /Michin/i, /Mia Yim/i, /\bMina\b/i, /Alba Fyre/i, /\bBlackheart\b/i, 
+
+
+	//Misc stuff
+	/deepnude/i, /undress/i, /nudify/i, /nude/i, /nudifier/i, /faceswap/i, /facemorph/i, /epnud/i, /udify/i, /udifi/i, /ndres/i, /deepfak/i, /\bBra\b/i, /diffusion/i, /trunks/i, /pant/i,
+	/fantime/i, /clothes/i, /crotch/i, /dress/i, /dreamtime/i, /panties/i, /panty/i, /cloth/i, /ndfy/i, /nd1f/i, /nd!f/i, /ndlf/i, /dreambooth/i, /dream booth/i, /dream boot/i, /dreamboot/i,
+	/cleavage/i, /LGBTQ/i, /\bbooty\b/i, /sexy/i, /inpaint/i, /photopea/i, /lingerie/i, /underwear/i, /Rule 34/i, /cameltoe/i, /dreamtime/i, /Venice/i, /Venoice/i, /Venise/i, /Venoise/i, 
+	/ndif/i, /undressifying/i, /prostitut/i, /sensuel/i, /onlyfans/i, /fansly/i, /justforfans/i, /manyvids/i, /fan time/i, /queer/i, /\bTrans\b/i, /Transvestite/i, /wonder share/i,
+	/VMWare/i, /VM Ware/i, /\bVM\b/i, /Virtual Machine/i, /\bVMs\b/i, /Virtualbox/i, /Virtual box/i, /Virtual laatikko/i, /Virtuaali laatikko/i, /Virtuaalilaatikko/i, /Virtuaalibox/i, 
+	/OracleVM/i, /virtualmachine/i, /virtual machine/i, /virtuaalikone/i, /virtuaali kone/i, /virtuaali tietokone/i, /virtuaalitietokone/i, /hyper-v/i, /hyper v/i, /virtuaalimasiina/i, 
+	/virtuaali masiina/i, /virtuaalimasiini/i, /virtuaali masiini/i, /virtuaali workstation/i, /virtual workstation/i, /virtualworkstation/i, /virtual workstation/i, /hypervisor/i, 
+	/hyper visor/i, /hyperv/i, /vbox/i, /virbox/i, /virtbox/i, /vir box/i, /virt box/i, /virtual box/i, /vrbox/i, /vibox/i, /virbox virtual/i, /virtbox virtual/i, /virt machine/i, 
+	/virtmachine/i, /vibox virtual/i, /vbox virtual/i, /v-machine/i,  /vmachine/i, /v machine/i, /vimachine/i, /vi-machine/i, /vi machine/i, /virmachine/i, /vir-machine/i, /virt mac/i,
+        /virt-machine/i, /virtumachine/i, /virtu-machine/i, /virtu machine/i, /virtuamachine/i, /virtua-machine/i, /virtua machine/i, /\bMachaine\b/i, /\bMachiine\b/i, /\bMacheine\b/i, 
+        /\bMachiene\b/i,  /vi mach/i, /vir mach/i, /virt mach/i, /virtu mach/i, /virtua mach/i, /virtual mach/i, /vi mac/i, /vir mac/i, /vir machine/i, /virtu mac/i, /virtual machi/i, 
+	/\bai\b/i, /AI model/i, /AI-generated/i, /generated/i, /\bAI Art\b/i, /\bBy AI\b/i, /AI edited/i, /upscaling/i, /p41n/i, /pa1n/i, /p4in/i, /filmora/i, /wondershare/i, /AI app/i,
+        /Fantop/i, /Fan top/i, /Fan-top/i, /Topfan/i, /Top fan/i, /Top-fan/i, /Anthr/i, /Antro/i, /\bS0ft\b/i, /s0ftw/i, /softw/i, /\b50ft\b/i, /w4re/i, /war3/i, /w4r3/i, /upscaled/i,
+	/Sharia/i, /Pride/i, /\bshe\b/i, /\bher\b/i, /Woman/i, /Women/i, /NXT Womens/i, /beta male/i, /alpha male/i, /DeepSeek/i, /Grok-AI/i, /Elon Musk/i, /\bElon\b/i, /\bMusk\b/i,
+	/selain/i, /Safari/i, /OperaGX/i, /MS Edge/i, /Microsoft Edge/i, /TOR-Browser/i, /TOR-selain/i, /Opera GX/i, /\btor\b/i, /browser/i, /Opera Browser/i, /Vivaldi/i, /Brave-Browser/i,
     ];
 
-    // List of keywords or phrases to allow (overrides blockKeywords in search queries)
+    // --- Dynamic Banned List from Chrome Storage ---
+    function applyDynamicWrestlerBans() {
+        if (typeof chrome !== 'undefined' && chrome.storage) {
+            try {
+                chrome.storage.local.get(['wrestling_women_urls'], function(result) {
+                    if (result.wrestling_women_urls && Array.isArray(result.wrestling_women_urls)) {
+                        let addedCount = 0;
+                        
+                        // Local Exclusions from filtering:
+                        const localExclusions = ['aj-lee', 'aj lee', 'becky-lynch', 'becky'];
+
+                        result.wrestling_women_urls.forEach(url => {
+                            const parts = url.split('/').filter(Boolean);
+                            const slug = parts[parts.length - 1].toLowerCase();
+                            
+                            if (localExclusions.includes(slug)) return;
+
+                            const name = slug.replace(/-/g, ' ');
+                            const namePattern = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                            
+                            const isDuplicate = blockKeywords.some(rx => rx.source && rx.source.includes(namePattern));
+
+                            if (!isDuplicate) {
+                                if (name.length <= 6 || !name.includes(' ')) {
+                                    blockKeywords.push(new RegExp('\\b' + namePattern + '\\b', 'i'));
+                                } else {
+                                    blockKeywords.push(new RegExp(namePattern, 'i'));
+                                }
+                                addedCount++;
+                            }
+                        });
+                        
+                        if (addedCount > 0) {
+                            devLog(`Dynamically added ${addedCount} wrestler names from shared storage to blocklist.`);
+                            // Force an immediate re-check to catch dynamically loaded names before SPA renders them
+                            enforceSanity();
+                            hideBannedVideoCards();
+                        }
+                    }
+                });
+            } catch(e) {}
+        }
+    }
+    applyDynamicWrestlerBans();
+
+    // List of keywords or phrases to allow
     const allowedWords = [
         /tutorial/i, /how to/i, /review/i, /setup/i, /guide/i, /educational/i, /coding/i, /programming/i, /course/i, /demo/i, /learning/i, /Sampsa/i, /Kurri/i, /iotech/i, /Jimms/i, /verkkokauppa/i, /learning/,
         /reddit/i, /OSRS/i, /RS/i, /RS3/i, /Old School/i, /RuneScape/i, /netflix/i, /pushpull/i, /facebook/i, /instagram/i, /Wiki/i, /pedia/i, /hikipedia/i, /fandom/i, /lehti/i, /bond/i, /bonds/i, /2007scape/,
@@ -126,15 +177,12 @@
         /south park/i, /siivoton juttu/i, /poliisin poika/i, /poliisi/i, /poika/i, /Edge WWE/i, /Ravage/i, /Savage/i, /volksvagen/i, /GTA/i, /Grand Theft Auto/i, /videopeli/i, /videogame/i, /video game/i, /ra/,
     ];
 
-    // === NEW: Safe Channels Whitelist ===
-    // If a video card or the current page belongs to one of these channels, 
-    // it will be completely ignored by the block filters.
+    // === Safe Channels Whitelist ===
     const safeChannels = [
         /chrissmoove/i,
         /NerosCinema/i
     ];
 
-    // Anti-adblock warning text patterns (Finnish and other languages)
     const adblockWarningPatterns = [
         /mainostenestoa ei sallita/i,
         /mainostenesto/i,
@@ -154,29 +202,26 @@
         /get youtube premium/i
     ];
 
-    // Redirect URL (YouTube homepage)
     const redirectUrl = "https://www.youtube.com/";
 
-    // Master array of all YouTube video container elements (Desktop + Mobile)
     const videoContainers = [
-        "ytd-rich-item-renderer",             // Home feed & channel videos
-        "ytd-video-renderer",                 // Search results
-        "ytd-grid-video-renderer",            // Older grid layouts
-        "ytd-compact-video-renderer",         // Watch page sidebar suggestions
-        "ytd-compact-autoplay-renderer",      // Watch page up next
-        "ytd-compact-radio-renderer",         // Watch page mix
-        "ytd-playlist-video-renderer",        // Watch Later & standard playlists
-        "ytd-playlist-panel-video-renderer",  // Sidebar in an active running playlist
-        "ytm-rich-item-renderer",             // Mobile variations
+        "ytd-rich-item-renderer",             
+        "ytd-video-renderer",                 
+        "ytd-grid-video-renderer",            
+        "ytd-compact-video-renderer",         
+        "ytd-compact-autoplay-renderer",      
+        "ytd-compact-radio-renderer",         
+        "ytd-playlist-video-renderer",        
+        "ytd-playlist-panel-video-renderer",  
+        "ytm-rich-item-renderer",             
         "ytm-video-renderer",
         "ytm-video-with-context-renderer",
         "ytm-compact-video-renderer",
         "ytm-compact-radio-renderer",
         "ytm-compact-autoplay-renderer",
-        "ytd-miniplayer"                      // Miniplayer in corner
+        "ytd-miniplayer"                      
     ];
 
-    // Specific selectors for adblock warning popups
     const adblockPopupSelectors = [
         "ytd-popup-container",
         "tp-yt-paper-dialog",
@@ -185,25 +230,20 @@
         "yt-confirm-dialog-renderer"
     ];
 
-    // Function to remove specific adblock warning popups
     function removeAdblockPopups() {
         try {
             let removedCount = 0;
             
-            // Check specific popup selectors
             adblockPopupSelectors.forEach(selector => {
                 const elements = document.querySelectorAll(selector);
                 elements.forEach(el => {
                     const text = el.textContent?.toLowerCase() || "";
-                    
-                    // Only remove if it contains adblock warning text
                     if (adblockWarningPatterns.some(pattern => pattern.test(text))) {
                         devLog(`Removing adblock popup: ${selector}`);
                         el.style.display = "none";
                         el.style.visibility = "hidden";
                         removedCount++;
                         
-                        // Find and hide the backdrop/overlay
                         const backdrop = el.closest('[role="presentation"]') || 
                                        el.closest('.scrim') || 
                                        el.closest('[class*="backdrop"]');
@@ -214,7 +254,6 @@
                 });
             });
 
-            // Check for modal dialogs with role="dialog"
             const dialogs = document.querySelectorAll('[role="dialog"]');
             dialogs.forEach(dialog => {
                 const text = dialog.textContent?.toLowerCase() || "";
@@ -224,7 +263,6 @@
                     dialog.style.visibility = "hidden";
                     removedCount++;
                     
-                    // Hide parent container if it's a modal wrapper
                     const parent = dialog.parentElement;
                     if (parent && (parent.classList.contains('scrim') || 
                                   parent.hasAttribute('aria-modal') ||
@@ -234,10 +272,8 @@
                 }
             });
 
-            // Restore body scrolling if it was disabled
             const body = document.body;
             if (body && body.style.overflow === 'hidden') {
-                // Only restore if there are no visible dialogs left
                 const visibleDialogs = document.querySelectorAll('[role="dialog"]:not([style*="display: none"])');
                 if (visibleDialogs.length === 0) {
                     body.style.overflow = '';
@@ -247,47 +283,69 @@
             if (removedCount > 0) {
                 devLog(`Removed ${removedCount} adblock popups`);
             }
-        } catch (err) {
-            console.log('Error removing adblock popups: ' + err.message);
-        }
+        } catch (err) {}
     }
 
-    // Function to check the current search query
-    function checkSearchQuery() {
+    // === THE ULTIMATE SANITY ENFORCER ===
+    // Strictly scans the fully decoded URL parameters and Watch page details
+    function enforceSanity() {
         try {
-            const urlParams = new URLSearchParams(window.location.search);
-            const query = urlParams.get('search_query') || '';
+            if (isRedirecting) return;
 
-            if (query && blockKeywords.some(keyword => keyword.test(query))) {
-                // Check if query contains an allowed word or a safe channel
-                if (!allowedWords.some(word => word.test(query)) && !safeChannels.some(sc => sc.test(query))) {
-                    console.log(`Blocked search query: ${query}`);
-                    window.location.replace(redirectUrl);
-                }
-            } else {
-                if (query) devLog(`Allowed search query: ${query}`);
+            let textToScan = '';
+
+            // 1. Get query directly from URL parameters (automatically handles special chars, +, %20)
+            const urlParams = new URLSearchParams(window.location.search);
+            const query = urlParams.get('search_query');
+            if (query) {
+                textToScan += ' ' + query;
+            }
+
+            // 2. Get Watch Page Title and Channel
+            if (window.location.pathname.startsWith('/watch')) {
+                textToScan += ' ' + (document.title || '');
+                const channelLink = document.querySelector('ytd-video-owner-renderer a.yt-simple-endpoint, ytm-slim-owner-renderer a');
+                if (channelLink) textToScan += ' ' + (channelLink.textContent || '');
+            }
+
+            textToScan = textToScan.toLowerCase().trim();
+            if (!textToScan) return;
+
+            // Check Whitelists exclusively against the clean text
+            if (safeChannels.some(sc => sc.test(textToScan))) return;
+            if (allowedWords.some(aw => aw.test(textToScan))) return;
+
+            // Check Blocklist
+            if (blockKeywords.some(kw => kw.test(textToScan))) {
+                devLog(`Banned content detected! Redirecting out...`);
+                isRedirecting = true;
+                window.location.replace(redirectUrl);
             }
         } catch (err) {
-            console.log('Error checking search query: ' + err.message);
+            console.log('Error enforcing sanity: ' + err.message);
         }
     }
 
-    // === NEW: Hide Banned Video Cards (Playlists, Suggestions, Feeds) ===
+    // Hide Banned Video Cards (Playlists, Suggestions, Feeds)
     function hideBannedVideoCards() {
         try {
             const elements = document.querySelectorAll(videoContainers.join(', '));
             let hiddenCount = 0;
 
             elements.forEach(el => {
-                if (el.style.display === "none") return; // Already hidden, skip
+                if (el.style.display === "none") return; 
 
-                const text = el.textContent?.toLowerCase() || "";
-                const hrefs = Array.from(el.querySelectorAll('a')).map(a => a.href).join(' ').toLowerCase();
-                const combinedText = text + " " + hrefs; // Scan text and underlying URLs
+                const visibleText = el.textContent?.toLowerCase() || "";
+                
+                // ONLY test the visible text against the allowed list to prevent the `?` loophole!
+                const isAllowed = allowedWords.some(aw => aw.test(visibleText)) || safeChannels.some(sc => sc.test(visibleText));
 
-                if (blockKeywords.some(keyword => keyword.test(combinedText))) {
-                    // Bypass block if it's an allowed word or comes from a safe channel
-                    if (!allowedWords.some(aw => aw.test(combinedText)) && !safeChannels.some(sc => sc.test(combinedText))) {
+                if (!isAllowed) {
+                    // Test BOTH visible text and URLs against the ban list
+                    const hrefs = Array.from(el.querySelectorAll('a')).map(a => a.href).join(' ').toLowerCase();
+                    const combinedText = visibleText + " " + hrefs; 
+                    
+                    if (blockKeywords.some(keyword => keyword.test(combinedText))) {
                         el.style.display = "none";
                         el.style.visibility = "hidden";
                         hiddenCount++;
@@ -303,35 +361,6 @@
         }
     }
 
-    // === NEW: Watch Page Enforcer (Redirects if viewing a banned video) ===
-    function checkWatchPage() {
-        try {
-            if (!window.location.pathname.startsWith('/watch')) return;
-            
-            const pageTitle = document.title || ""; // e.g. "Video Title - YouTube"
-            const channelLink = document.querySelector('ytd-video-owner-renderer a.yt-simple-endpoint, ytm-slim-owner-renderer a');
-            const channelText = channelLink ? channelLink.textContent : "";
-            const channelHref = channelLink ? channelLink.href : "";
-            
-            const combinedText = (pageTitle + " " + channelText + " " + channelHref).toLowerCase();
-
-            // If it's from a safe channel, allow it
-            if (safeChannels.some(sc => sc.test(combinedText))) return;
-            
-            // If it contains an explicitly allowed tutorial/safe word, allow it
-            if (allowedWords.some(aw => aw.test(pageTitle))) return;
-
-            // If the title triggers a banned word, redirect out immediately
-            if (blockKeywords.some(kw => kw.test(pageTitle))) {
-                devLog("Banned watch page detected. Redirecting to home...");
-                window.location.replace(redirectUrl);
-            }
-        } catch (err) {
-            console.log('Error checking watch page: ' + err.message);
-        }
-    }
-
-    // Function to handle clicks on "Skip" or "Continue" buttons in popups
     function handlePopupButtons() {
         try {
             const buttons = document.querySelectorAll('button, [role="button"]');
@@ -345,7 +374,6 @@
                     text.includes('ohita') || text.includes('jatka') ||
                     ariaLabel.includes('skip') || ariaLabel.includes('continue')) {
                     
-                    // Check if this button is in an adblock warning popup
                     const popup = button.closest('[role="dialog"], ytd-popup-container, tp-yt-paper-dialog');
                     if (popup) {
                         const popupText = popup.textContent?.toLowerCase() || "";
@@ -361,12 +389,9 @@
             if (clickedCount > 0) {
                 devLog(`Clicked ${clickedCount} popup buttons`);
             }
-        } catch (err) {
-            console.log('Error handling popup buttons: ' + err.message);
-        }
+        } catch (err) {}
     }
 
-    // Observe URL changes to check for search queries (kept)
     let __ytUrlObsInstalled = false;
     function observeUrlChanges() {
         try {
@@ -377,8 +402,7 @@
             const observer = trackObserver(new MutationObserver(() => {
                 if (currentUrl !== window.location.href) {
                     currentUrl = window.location.href;
-                    checkSearchQuery();
-                    checkWatchPage();
+                    enforceSanity();
                     enforceShortsRedirect();
                 }
             }));
@@ -389,12 +413,9 @@
             } else {
                 addTimeout(observeUrlChanges, 100);
             }
-        } catch (err) {
-            console.log('Error setting up URL observer: ' + err.message);
-        }
+        } catch (err) {}
     }
 
-    // Enhanced mutation observer for new popup content and suggestions
     let __ytPopupObsInstalled = false;
     function observePopupChanges() {
         try {
@@ -406,8 +427,7 @@
                 mutations.forEach((mutation) => {
                     if (mutation.addedNodes.length > 0) {
                         mutation.addedNodes.forEach((node) => {
-                            if (node.nodeType === 1) { // Element node
-                                // Check if the new node is a popup
+                            if (node.nodeType === 1) { 
                                 if (node.matches && (
                                     node.matches('[role="dialog"]') ||
                                     node.matches('ytd-popup-container') ||
@@ -422,7 +442,6 @@
                                     }
                                 }
                                 
-                                // Check child elements of the new node
                                 const popupChildren = node.querySelectorAll ? 
                                     node.querySelectorAll('[role="dialog"], ytd-popup-container, tp-yt-paper-dialog') : 
                                     [];
@@ -435,7 +454,6 @@
                                     }
                                 });
 
-                                // Check if we loaded new video cards dynamically
                                 if (!sawNewCards && node.querySelectorAll) {
                                     if (videoContainers.some(selector => node.matches(selector) || node.querySelector(selector))) {
                                         sawNewCards = true;
@@ -457,12 +475,9 @@
                 });
                 devLog('Popup/suggestion observer started');
             }
-        } catch (err) {
-            console.log('Error setting up popup observer: ' + err.message);
-        }
+        } catch (err) {}
     }
 
-    // Robust SPA navigation hooks to restore redirect on banned searches
     let __ytHistoryHooksInstalled = false;
     function installUrlChangeHooks() {
         if (__ytHistoryHooksInstalled) return;
@@ -481,10 +496,8 @@
             history.replaceState = wrap('replaceState');
             onEvent(window, 'popstate', () => window.dispatchEvent(new Event('locationchange')), false);
 
-            // React when URL changes, regardless of how navigation happened
             onEvent(window, 'locationchange', () => {
-                checkSearchQuery();
-                checkWatchPage();
+                enforceSanity();
                 hideBannedVideoCards();
                 enforceShortsRedirect();
                 removeShortsOnPage();
@@ -492,10 +505,8 @@
                 hideShortsGuideEntries();
             }, false);
 
-            // YouTube-specific navigation lifecycle events (best-effort)
             onEvent(window, 'yt-navigate-finish', () => {
-                checkSearchQuery();
-                checkWatchPage();
+                enforceSanity();
                 hideBannedVideoCards();
                 enforceShortsRedirect();
                 removeShortsOnPage();
@@ -503,70 +514,17 @@
                 hideShortsGuideEntries();
             }, false);
             onEvent(window, 'yt-navigate-start', () => {
-                // clear pending intervals if leaving page to avoid bursts
                 stopIntervals();
             }, false);
-        } catch (e) {
-            console.log('[YOUTUBE.JS] history hook error: ' + e.message);
-        }
+        } catch (e) {}
     }
 
-    // Intercept search submissions to block before navigating (desktop + mobile)
-    function interceptSearchSubmissions() {
-        try {
-            // Capture submits globally (YouTube re-renders search box often)
-            onEvent(document, 'submit', (e) => {
-                const form = e.target;
-                if (!form) return;
-
-                // Desktop search box and general results forms
-                const isSearchForm =
-                    form.id === 'search-form' ||
-                    form.closest('ytd-searchbox') ||
-                    form.getAttribute('action') === '/results' ||
-                    form.matches('form[action="/results"]') ||
-                    form.closest('form[action="/results"]');
-
-                if (!isSearchForm) return;
-
-                // Gather possible inputs across desktop + mobile variants
-                const candidates = [
-                    form.querySelector('input[name="search_query"]'),
-                    form.querySelector('#search'),
-                    form.querySelector('input#search'),
-                    form.querySelector('input[type="search"]'),
-                    form.querySelector('input[aria-label="Search YouTube"]'),
-                    document.querySelector('ytd-searchbox input#search'),
-                    document.querySelector('ytm-searchbox input[type="search"]'),
-                    document.querySelector('ytm-searchbox input[name="search_query"]')
-                ].filter(Boolean);
-
-                const q = (candidates.find(i => (i.value || '').trim().length)?.value || '').trim();
-
-                if (q && blockKeywords.some(rx => rx.test(q))) {
-                    if (!allowedWords.some(rx => rx.test(q)) && !safeChannels.some(sc => sc.test(q))) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        console.log(`Blocked search submission: ${q}`);
-                        window.location.replace(redirectUrl);
-                    }
-                }
-            }, true);
-        } catch (e) {
-            console.log('Error intercepting search submissions: ' + e.message);
-        }
-    }
-
-    // === Shorts remover integration (from main.js and main.css) ===
-
-    // Config for Shorts logic
     const __shortsConfig = {
         enable: true,
         hideTabs: true,
         hideShortsVideos: true
     };
 
-    // Helpers identical to the extension logic
     function logf(message, style) {
         const composed = `[Youtube-shorts block] ${message}`;
         if (style === "error") {
@@ -595,7 +553,6 @@
         return elements;
     }
 
-    // Filters (ported)
     function reelShelfFilter() {
         const reels = document.querySelectorAll(
             "ytd-reel-shelf-renderer, ytm-reel-shelf-renderer"
@@ -639,7 +596,6 @@
         }
     }
 
-    // Convert Shorts URL to watch URL
     function convertShortsToVideoURL(url) {
         const result = url.match(/shorts\/([A-Za-z0-9_-]{11})/);
         if (result) {
@@ -647,24 +603,19 @@
         }
     }
 
-    // Redirect away from Shorts pages (hardened)
     function enforceShortsRedirect() {
         try {
             if (!__shortsConfig.enable) return;
-            if (location.pathname.startsWith('/watch')) return; // already on watch
+            if (location.pathname.startsWith('/watch')) return; 
             const url = convertShortsToVideoURL(location.href);
             if (url && location.href !== url) {
                 devLog(`Redirecting Shorts to watch: ${url}`);
-                // Avoid adding a Shorts entry to history stack repeatedly
                 try { history.replaceState(null, '', url); } catch {}
                 location.replace(url);
             }
-        } catch (e) {
-            console.log('[YOUTUBE.JS] Shorts redirect error: ' + e.message);
-        }
+        } catch (e) {}
     }
 
-    // Non-dangerous "Open in watch" button for Shorts player when visible
     function addOpenInWatchButton() {
         try {
             if (location.href.indexOf('/shorts/') === -1) return;
@@ -705,12 +656,9 @@
 
                 element.insertAdjacentElement('afterbegin', container);
             });
-        } catch (e) {
-            console.log('[YOUTUBE.JS] Open-in button error: ' + e.message);
-        }
+        } catch (e) {}
     }
 
-    // Inject CSS to hide Shorts tab and style the button (Japanese selector removed per request)
     function injectShortsCSS() {
         try {
             if (document.documentElement.querySelector('style[data-ytenhancer-shorts-css]')) return;
@@ -718,19 +666,13 @@
 :root{
     --iron-icon-color: #606060;
 }
-
-/*
-    Hide short tabs in the sidebar
-*/
 .youtube-shorts-block a[title='Shorts']{
     display: none !important;
     pointer-events: none !important;
 }
-
 .youtube-shorts-block ytm-pivot-bar-item-renderer:has(.pivot-bar-item-tab.pivot-shorts){
     display: none !important;
 }
-
 #block.youtube-shorts-block{
     color: white;
     margin: 6px 0;
@@ -745,17 +687,9 @@
     fill: white;
     margin: auto;
 }
-
-/*
-    Disable the display of loading spinners
-*/
 ytd-continuation-item-renderer:not(:last-child){
     display: none;
 }
-
-/*
-    "Open in new tab" button in short player
-*/
 @media screen and (min-width:600px){
     #block.youtube-shorts-block{
         color: var(--iron-icon-color);
@@ -777,27 +711,20 @@ ytd-continuation-item-renderer:not(:last-child){
                     addTimeout(() => { if (document.body) document.body.classList.add('youtube-shorts-block'); }, 100);
                 }
             }
-        } catch (e) {
-            console.log('[YOUTUBE.JS] CSS inject error: ' + e.message);
-        }
+        } catch (e) {}
     }
 
-    // Orchestrate the Shorts filters
     async function removeShortsOnPage() {
         try {
             if (!__shortsConfig.hideShortsVideos) return;
             reelShelfFilter();
             await richShelfFilter();
             shortsFilter();
-        } catch (e) {
-            console.log('[YOUTUBE.JS] Shorts filter error: ' + e.message);
-        }
+        } catch (e) {}
     }
 
-    // Hide Shorts guide entries & mobile pivot (independent of banned words)
     function hideShortsGuideEntries() {
         try {
-            // Desktop & mini guide
             const anchors = document.querySelectorAll('a#endpoint.yt-simple-endpoint[href*="/shorts"], a#endpoint.yt-simple-endpoint[title="Shorts"]');
             anchors.forEach(a => {
                 const entry = a.closest('ytd-guide-entry-renderer, ytd-mini-guide-entry-renderer');
@@ -809,7 +736,6 @@ ytd-continuation-item-renderer:not(:last-child){
                     a.style.visibility = 'hidden';
                 }
             });
-            // Mobile pivot tab
             document.querySelectorAll('ytm-pivot-bar-item-renderer .pivot-bar-item-tab.pivot-shorts')
                 .forEach(tab => {
                     const pivot = tab.closest('ytm-pivot-bar-item-renderer');
@@ -818,12 +744,9 @@ ytd-continuation-item-renderer:not(:last-child){
                         pivot.style.visibility = 'hidden';
                     }
                 });
-        } catch (e) {
-            console.log('[YOUTUBE.JS] hideShortsGuideEntries error: ' + e.message);
-        }
+        } catch (e) {}
     }
 
-    // Observe DOM changes to re-apply Shorts filters quickly
     let __ytShortsObsInstalled = false;
     function observeShortsDomChanges() {
         try {
@@ -832,10 +755,7 @@ ytd-continuation-item-renderer:not(:last-child){
 
             const install = async () => {
                 const target = await querySelectorPromise('#content, #app') || document.body || document.documentElement;
-                if (!target) {
-                    logf("cannot find rootElement. currently, HideShorts isn't working!", "error");
-                    return;
-                }
+                if (!target) return;
                 const observer = trackObserver(new MutationObserver(() => {
                     removeShortsOnPage();
                     addOpenInWatchButton();
@@ -847,21 +767,16 @@ ytd-continuation-item-renderer:not(:last-child){
                 devLog('Shorts DOM observer started');
             };
             install();
-        } catch (e) {
-            console.log('[YOUTUBE.JS] Shorts observer error: ' + e.message);
-        }
+        } catch (e) {}
     }
 
     devLog('YouTube Enhancer initializing');
 
     // Initial checks
-    checkSearchQuery();
-    checkWatchPage();
+    enforceSanity();
     enforceShortsRedirect();
     installUrlChangeHooks();
-    interceptSearchSubmissions();
 
-    // Start observing URL changes (kept) and popup/suggestion changes
     observeUrlChanges();
     observePopupChanges();
     injectShortsCSS();
@@ -869,10 +784,10 @@ ytd-continuation-item-renderer:not(:last-child){
     addOpenInWatchButton();
     hideShortsGuideEntries();
 
-    // Periodic tasks with lifecycle tracking (unchanged cadence)
+    // Periodic tasks with lifecycle tracking
     function scheduleMainIntervals() {
         addInterval(() => { if (!document.hidden) hideBannedVideoCards(); }, 250);
-        addInterval(() => { if (!document.hidden) checkWatchPage(); }, 500); // Check if we are physically watching banned content
+        addInterval(() => { if (!document.hidden) enforceSanity(); }, 500); 
         addInterval(() => { if (!document.hidden) removeShortsOnPage(); }, 300);
         addInterval(() => { if (!document.hidden) removeAdblockPopups(); }, 500);
         addInterval(() => { if (!document.hidden) addOpenInWatchButton(); }, 600);
@@ -882,21 +797,18 @@ ytd-continuation-item-renderer:not(:last-child){
     }
     startIntervals(scheduleMainIntervals);
 
-    // Initial popup removal after page load
     addTimeout(removeAdblockPopups, 1000);
     addTimeout(handlePopupButtons, 2000);
     addTimeout(removeShortsOnPage, 750);
     addTimeout(hideShortsGuideEntries, 800);
 
-    // Pause/resume intervals on visibility change
     onEvent(document, 'visibilitychange', () => {
         if (document.hidden) {
             stopIntervals();
         } else {
             startIntervals(scheduleMainIntervals);
-            // quick sweep on resume for fresh DOM
             hideBannedVideoCards();
-            checkWatchPage();
+            enforceSanity();
             removeShortsOnPage();
             addOpenInWatchButton();
             hideShortsGuideEntries();
@@ -904,9 +816,8 @@ ytd-continuation-item-renderer:not(:last-child){
         }
     }, false);
 
-    // Teardown on pagehide/beforeunload to avoid leaks
     onEvent(window, 'pagehide', cleanup, false);
     onEvent(window, 'beforeunload', cleanup, false);
 
-    devLog('YouTube Enhancer with targeted adblock popup removal loaded');
+    devLog('YouTube Enhancer loaded');
 })();

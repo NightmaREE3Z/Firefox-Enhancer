@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         FB Sanity Enhancer
-// @version      2026-03-24
+// @version      2026-03-25
 // @description  Makes my Facebook experience tolerable. With less algorithmic bullshit.
 // @match        *://*.facebook.com/*
 // @grant        none
@@ -24,6 +24,7 @@
     const __fbObservers = new Set();
     const __fbEventCleanups = new Set();
     let __fbCleanupRan = false;
+    let __lastKnownUrl = window.location.href; // Track URL for strict SPA awareness
 
     let isRedirecting = false; // Global redirect flag to prevent infinite loops
 
@@ -137,16 +138,11 @@
             } catch(e) {}
         }
         
+        // Removed history overriding to prevent React Router from lagging/looping out
         try {
-            window.history.pushState = function() {};
-            window.history.replaceState = function() {};
             window.onbeforeunload = null;
-            window.history.replaceState(null, '', '/');
+            window.location.href = 'https://www.facebook.com/?ref=logo';
         } catch(e) {}
-
-        setTimeout(() => {
-            window.location.replace('https://www.facebook.com/?ref=logo');
-        }, 10);
     };
 
     // ==========================================
@@ -401,9 +397,10 @@
         /\/(messages|messenger)\b/i,
         /\/notifications\b/i,
         /\/ilmoitukset\b/i,
+        /\/stories\b/i,
         /\/groups\/(317493608736721|342124472533278|2484497081612438|390555733810362|934038190050109)\b/i,
         /\/(haukkis|tapio\.haukirauma|1267550854|100005050653554|me)\b/i,
-        /id=(100005050653554|1267550854)\b/i
+        /id=(100005050653554|100000559239899|1267550854)\b/i
     ];
 
     // 1. Checks ONLY for structurally whitelisted URLs. (Redirect logic uses ONLY this)
@@ -681,7 +678,7 @@
                 'div[aria-label="Filters"]',
                 'div[aria-label="Suodattimet"][role="button"]',
                 'div[aria-label="Filters"][role="button"]',
-                '.x1i10hfl.xjbqb8w.x1ejq31n.x18oe1m7.x1sy0etr.xstzfhl.x972fbf.x10w94by.x1qhh985.x14e42zd.x1ypdohk.xe8uvvx.xdj266r.x14z9mp.xat24cr.x1lziwak.xexx8yu.xyri2b.x18d9i69.x1c1uobl.x16tdsg8.xat24cr.x1mh8g0r.x6s0dn4.x78zum5.xdt5ytf.xjy6m2a.xl56j7k',
+                '.x1i10hfl.xjbqb8w.x1ejq31n.x18oe1m7.x1sy0etr.xstzfhl.x972fbf.x10w94by.x1qhh985.x14e42zd.x1ypdohk.xe8uvvx.xdj266r.x14zmp.xat24cr.x1lziwak.xexx8yu.xyri2b.x18d9i69.x1c1uobl.x16tdsg8.xat24cr.x1mh8g0r.x6s0dn4.x78zum5.xdt5ytf.xjy6m2a.xl56j7k',
                 '.x1ja2u2z.x78zum5.x2lah0s.x1n2onr6.xl56j7k.x6s0dn4.xozqiw3.x1q0g3np.x14ldlfn.x1b1wa69.xws8118.x5fzff1.x972fbf.x10w94by.x1qhh985.x14e42zd.x9f619.xpdmqnj.x1g0dm76.x1qhmfi1.x1r1pt67',
                 'h2:contains("Julkaisut")',
                 'span:contains("Julkaisut")',
@@ -799,7 +796,7 @@
         "Lash Legend", "Alba Fyre", "Isla Dawn", "CJ Perry", "Lana WWE", "Raquel Rodriguez", "Zelina Vega", "Alicia Fox", "Willow Nightingale", "Kris Statlander", "Kayden Carter", "Katana Chance",
         "Izzi Dame", "Girlfriend", "Girl", "Woman", "Women", "Girls", "Girl's", "Women's", "Woman's", "Womens", "Womans", "Ladys", "Lady's", "Ladies'", "Ladies", "Lady", "Dame WWE", "Perez",
         "Indi Hartwell", "Blair Davenport", "Lola Vice", "Valhalla", "Maxxine Dupri", "Karmen Petrovic", "Ava Raine", "Cora Jade", "Jacy Jayne", "Gigi Dolin", "Io Sky", "Shirai", "Scarlett", 
-        "Thea Hail", "Tatum Paxley", "Fallon Henley", "Kelani Jordan", "Electra Lopez", "Wendy Choo", "Yulisa Leon", "Valentina", "Amari Miller", "Young Bucks", "Torrie Wilson", "Ripley!", 
+        "Thea Hail", "Tatum Paxley", "Fallon Henley", "Kelani Jordan", "Electra Lopez", "Wendy Choo", "Yulisa Leon", "Valentina", "Amari Miller", "Young Bucks", "Torrie Wilson", "Ripley!", "Monroe",
         "Arianna Grace", "Zelina", "Natalya", "Nattie", "IYO SKY", "Dakota Kai", "Asuka", "Perez", "Kairi Sane", "Satomura", "Candice", "LeRae", "Nia Jax", "Naomi", "Trish", "Stratus", "Roxanne", 
         "Sarray", "Xia Li", "Shayna", "Baszler", "Ronda", "Rousey", "Velvet Sky", "Carmella", "Dana Brooke", "Mercedes", "Martinez", "Marina", "Shafir", "Stacy", "Keibler", "Valkyria", "Primera", 
         "Summer Rae", "Layla", "Michelle McCool", "Eve Torres", "Kelly Kelly", "Tatu Toiviainen", "Jessika Carr", "Jessica Karr", "Venice", "Jessica Carr", "Jessika WWE", "Jessica WWE", "Matt Jackson", 
@@ -828,7 +825,7 @@
 	/5uck/i, /Suckin/i, /Sucks/i, /Sucki/i, /Sucky/i, /AIsuck/i, /AI-suck/i, /drool/i, /RemovingAI/i, /blowjob/i, /bjob/i, /b-job/i, /bj0b/i, /bl0w/i, /blowj0b/i, /dr0ol/i, /dro0l/i, /dr00l/i, /Rhea Ripley/i,
 	/Roxanne/i, /\bBrie\b/i, /Lauren/i, /Suvi Anniina/i, /Saara Autio/i, /Liv Morgan/i, /Alexa Bliss/i, /Marie/i, /Juliette/i, /Artificial/i, /Artificial Intelligence/i, /Powered by AI/i, /AI made/i, /AI creation/i,
 	/\bSex\b/i, /IYO SKY/i, /AI creative/i, /AI created/i, /Tekoäly/i, /Teko äly/i, /Teko-äly/i, /Teko_äly/i, /gener/i, /generoiva/i, /generoitu/i, /generated/i, /generative/i, /AI create/i, /generation/i,
-	/seksi/i, /anaali/i, /pillu/i, /pimppi/i, /kyrpä/i, /kulli/i, /sexual/i, /sensuel/i, /seksuaali/i, /\bAI\b/i, /\bKairi\b/i, /Kairi's/i, /Kairii/i, /Sexxy/i, /Sexy/i, /Sexx/i, /Sexi/i, 
+	/seksi/i, /anaali/i, /pillu/i, /pimppi/i, /kyrpä/i, /kulli/i, /sexual/i, /sensuel/i, /seksuaali/i, /\bAI\b/i, /\bKairi\b/i, /Kairi's/i, /Kairii/i, /Sexxy/i, /Sexy/i, /Sexx/i, /Sexi/i, /Monroe/i, 
     ];
 
     const allowedWords = [
@@ -846,6 +843,57 @@
 
     const restrictedWordsLower = restrictedWords.map(w => w.toLowerCase());
     const allowedWordsLower = allowedWords.map(w => w.toLowerCase());
+
+    // --- NEW: DYNAMIC WRESTLER BANS FROM WRESTLING.JS ---
+    function applyDynamicWrestlerBans() {
+        if (typeof chrome !== 'undefined' && chrome.storage) {
+            try {
+                chrome.storage.local.get(['wrestling_women_urls'], function(result) {
+                    if (result.wrestling_women_urls && Array.isArray(result.wrestling_women_urls)) {
+                        let addedCount = 0;
+                        
+                        // === IRONCLAD EX-GIRLFRIEND SHIELD ===
+                        // Prevents specific names fetched from SmackDown Hotel from being turned into global FB bans
+                        const localExclusions = ['melina', 'melina-perez', 'aj-lee', 'aj', 'becky-lynch', 'becky'];
+
+                        result.wrestling_women_urls.forEach(url => {
+                            const parts = url.split('/').filter(Boolean);
+                            const slug = parts[parts.length - 1].toLowerCase();
+                            
+                            // Skip if the slug matches our exclusions
+                            if (localExclusions.includes(slug)) return;
+
+                            const name = slug.replace(/-/g, ' ');
+                            
+                            // Escape special characters for regex just in case
+                            const namePattern = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                            
+                            // Prevent duplicates in regexBlockedWords
+                            const isDuplicate = regexBlockedWords.some(rx => rx.source && rx.source.includes(namePattern));
+
+                            if (!isDuplicate) {
+                                if (name.length <= 6 || !name.includes(' ')) {
+                                    // Short or single name: bind to word boundaries to prevent false positives
+                                    regexBlockedWords.push(new RegExp('\\b' + namePattern + '\\b', 'i'));
+                                } else {
+                                    // Longer name: regular string match is safe
+                                    regexBlockedWords.push(new RegExp(namePattern, 'i'));
+                                }
+                                addedCount++;
+                            }
+                        });
+                        if (addedCount > 0) {
+                            devLog(`Dynamically added ${addedCount} wrestler names from shared storage to blocklist.`);
+                            // Instantly force a re-run of filters now that new words are loaded!
+                            runAllFilters(); 
+                        }
+                    }
+                });
+            } catch(e) {}
+        }
+    }
+    // Execute immediately upon initialization
+    applyDynamicWrestlerBans();
 
     let approvedFBPostIDs = new Set();
     const hiddenElements = new WeakSet();
@@ -933,6 +981,7 @@
         if (messageEl && !isInsideComment(messageEl)) {
             texts.push(messageEl.textContent.trim());
         } else {
+            // Reverted to match the stable facebookOld.js logic to prevent query limit issues
             Array.from(article.querySelectorAll('span[dir="auto"], div[dir="auto"], span.html-span, div.html-div, span.x1vvkbs'))
                 .filter(s => !isInsideComment(s)) 
                 .slice(0, 40)
@@ -1022,6 +1071,7 @@
         '1060897693941531',
 	'1364634045693372',
         '1458027414228555',
+	'1240143084949993',
 	'100000586987296',
 	'100013206342389',
         '100000586987296',
@@ -1279,7 +1329,7 @@
     const checkVanityProfileFBID = () => {
         try {
             if (isRedirecting) return;
-            if (isCurrentPostApproved()) return; 
+            // Removed isCurrentPostApproved() bypass to ensure numerical profile IDs are ALWAYS strictly checked.
             
             const currentUrl = window.location.href.split('?')[0]; 
             const currentPath = window.location.pathname.toLowerCase();
@@ -1339,7 +1389,7 @@
     const handleRedirects = () => {
         try {
             if (isRedirecting) return; 
-            if (isCurrentPostApproved()) return; 
+            // Removed isCurrentPostApproved() bypass so page-level URL checks (photos/profiles) never fail.
             
             const urlObj = new URL(window.location.href);
             if (urlObj.pathname === '/' || urlObj.pathname === '/home.php') {
@@ -1390,6 +1440,7 @@
             }
 
             if (!isBlocked) {
+                // Safely checks photo view overlays
                 const isMedia = hrefString.includes('/photo') || hrefString.includes('fbid=') || hrefString.includes('/reel/') || hrefString.includes('/videos/') || hrefString.includes('/watch');
                 if (isMedia) {
                     let textToScan = '';
@@ -1551,11 +1602,12 @@
         try {
             if (isExcludedPathForDOM(window.location.pathname, window.location.href)) return;
 
+            // Reverted these selectors back to the facebookOld.js structure to fix the lazy-load tagging bug
             const selectors = [
 		        'div[data-ad-comet-preview="message"]',
                 'div[data-ad-preview="message"]',
                 'div.x1l90r2v.x1iorvi4.x1g0dm76.xpdmqnj',
-                'div.xdj266r.x14z9mp.xat24cr.x1lziwak.x1vvkbs.x126k92a',
+                'div.xdj266r.x14zmp.xat24cr.x1lziwak.x1vvkbs.x126k92a',
         	    'svg[aria-label="Meta AI:n profiilikuva"]',
                 'svg[aria-label*="Meta AI profile"]', 
         	    'a[aria-label="Meta AI"]',
@@ -1590,7 +1642,8 @@
                 
                 if (isRestricted || isRegexBlocked) {
                     
-                    if (element.closest('.fb-post-approved') || isCurrentPostApproved()) {
+                    // Removed global isCurrentPostApproved() bypass here because it blinded the scanner to photo theatre overlays.
+                    if (element.closest('.fb-post-approved')) {
                         return; 
                     }
 
@@ -2022,7 +2075,7 @@
                 .xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .x1n2onr6.x10wlt62.x6ikm8r.x1ja2u2z.x9f619:not(:has([data-visualcompletion="loading-state"])),
                 div[aria-label="Photos"]:not(:has([data-visualcompletion="loading-state"])),
             footer .xi81zsa,
-            footer > .xi81zsa.xo1l8bm.x1sibtaa.x1nxh6w3.x676frb.x4zkp8e.x1943h6x.x1fgarty.x1cpjm7i.x1gmr53x.xhkezso.x1s928wv.x1lliihq.x1xmvt09.x1vvkbs.x13faqbe.xeuugli.x193iq5w,
+            footer > .xi81zsa.xo1l8bm.x1sibtaa.x1nxh6w3.x676frb.x4zkp8e.x1943h6x.x1fgarty.x1cpjm7i.x1gmr53x.xhkezso.x1s928wv.x1lliihq.x1xmvt09.x1vvkbs.x13faqbe.xeuugli.x193iq5w:not(:has([data-visualcompletion="loading-state"])),
                 .xieb3on:not(:has([data-visualcompletion="loading-state"])),
                 div.x9f619.x1n2onr6.x1ja2u2z.xeuugli.xs83m0k.xjl7jj.x1xmf6yo.x1xegmmw.x1e56ztr.x13fj5qh.xnp8db0.x1d1medc.x7ep2pv.x1xzczws:not(:has([data-visualcompletion="loading-state"])),
                 div[data-pagelet^="ProfileTilesFeed_"]:has(a[href*="/photos"]),
@@ -2247,18 +2300,39 @@
         
         const originalPushState = history.pushState;
         history.pushState = function() {
-            originalPushState.apply(this, arguments);
-            handleRedirects();
+            const rv = originalPushState.apply(this, arguments);
+            window.dispatchEvent(new Event('pushState'));
+            window.dispatchEvent(new Event('locationchange'));
+            return rv;
         };
         const originalReplaceState = history.replaceState;
         history.replaceState = function() {
-            originalReplaceState.apply(this, arguments);
-            handleRedirects();
+            const rv = originalReplaceState.apply(this, arguments);
+            window.dispatchEvent(new Event('replaceState'));
+            window.dispatchEvent(new Event('locationchange'));
+            return rv;
         };
-        window.addEventListener('popstate', () => {
-            handleRedirects();
-        });
+        onWindowEvent(window, 'popstate', () => {
+            window.dispatchEvent(new Event('locationchange'));
+        }, false);
     };
+
+    // CHECK FOR SPA NAVIGATION SILENTLY
+    function checkSPARouting() {
+        if (__lastKnownUrl !== window.location.href) {
+            devLog('SPA URL Change Detected via Polling');
+            __lastKnownUrl = window.location.href;
+            window.dispatchEvent(new Event('locationchange'));
+        }
+    }
+
+    onWindowEvent(window, 'locationchange', () => {
+        devLog('SPA Navigation handled');
+        __lastKnownUrl = window.location.href;
+        isRedirecting = false; 
+        manageCSSStyles();
+        runAllFilters();
+    }, false);
 
     const runAllFilters = () => {
         try {
@@ -2365,6 +2439,7 @@
 
     function scheduleMainInterval() {
         addInterval(() => {
+            checkSPARouting();
             if (!document.hidden) {
                 runAllFilters();
             }

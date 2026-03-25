@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CleanArchives
-// @version      2026-03-22
+// @version      2026-03-24
 // @description  Redirects specific archive pages (and xcancel.com search) to the appropriate front page when banned terms are detected.
 // @match        *://web.archive.org/*
 // @match        *://archive.org/*
@@ -325,6 +325,41 @@
 
     // Merge special regexes into the main list without changing existing logic
     try { for (const rx of specialRegexes) { regexTerms.push(rx); } } catch {}
+
+    // --- Dynamic Banned List from Chrome Storage ---
+    // Safely retrieves women urls cached by wrestling.js and converts them to regexes/terms
+    function applyDynamicWrestlerBans() {
+        if (typeof chrome !== 'undefined' && chrome.storage) {
+            try {
+                chrome.storage.local.get(['wrestling_women_urls'], function(result) {
+                    if (result.wrestling_women_urls && Array.isArray(result.wrestling_women_urls)) {
+                        let addedCount = 0;
+                        result.wrestling_women_urls.forEach(url => {
+                            const parts = url.split('/').filter(Boolean);
+                            const slug = parts[parts.length - 1].toLowerCase();
+                            const name = slug.replace(/-/g, ' ');
+                            
+                            // Prevent duplicates
+                            if (!terms.some(t => t.toLowerCase() === name)) {
+                                if (name.length <= 6 || !name.includes(' ')) {
+                                    // Short or single name: bind to word boundaries to prevent false positives
+                                    regexTerms.push(new RegExp('\\b' + name + '\\b', 'i'));
+                                } else {
+                                    // Longer name: regular string match is safe
+                                    terms.push(name);
+                                }
+                                addedCount++;
+                            }
+                        });
+                        // Uncomment if you want to verify via dev console:
+                        // console.log(`[ARCHIVE.JS] Dynamically added ${addedCount} wrestler names from shared storage.`);
+                    }
+                });
+            } catch(e) {}
+        }
+    }
+    // Execute immediately upon initialization
+    applyDynamicWrestlerBans();
 
     // Robust, cross-browser redirect
     function fastRedirect(targetUrl) {

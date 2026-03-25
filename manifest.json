@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "BraveFox Enhancer",
-  "version": "22.0.4",
+  "version": "22.3.0",
   "description": "Enhances browsing experience by blocking unwanted content and cleaning up URLs.",
   "background": {
     "scripts": [
@@ -379,6 +379,15 @@
       ],
       "js": [
         "scripts/adult.js"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://www.thesmackdownhotel.com/*"
+      ],
+      "js": [
+        "scripts/wrestling.js"
       ],
       "run_at": "document_start"
     },
