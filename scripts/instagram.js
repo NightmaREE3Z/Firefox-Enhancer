@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         InstaTolerable
-// @version      2026-03-25
+// @version      2026-03-26
 // @description  Trying to make my Instagram experience tolerable. 
 // @match        *://www.instagram.com/*
 // @match        *://www.instagram.com/?next=%2F/*
@@ -17,11 +17,15 @@
     const __timers = { intervals: new Set(), timeouts: new Set() };
     const __observers = new Set();
     const __eventCleanups = new Set();
-    const __rafIds = new Set(); // track requestAnimationFrame ids
+    const __rafIds = new Set(); 
     let __cleanupRan = false;
     let __intervalsRunning = false;
-    let __isRedirectingFast = false; // guard against double redirects
-    let __lastKnownUrl = window.location.href; // Track URL for strict SPA awareness
+    let __isRedirectingFast = false; 
+    let __lastKnownUrl = window.location.href; 
+
+    function devLog(message) {
+        // console.log('[INSTAGRAM.JS]', message);
+    }
 
     function addInterval(fn, ms) {
         const id = setInterval(fn, ms);
@@ -108,7 +112,6 @@ const bannedKeywords = [
    "misk4", "misk3", "m1sk3", "m1ske", "m1mmuska", "misk33waaa", "misk33waa", "misk33wa", "misk3waa", "misk3waaa", "miskaawq9", "misk3wa", "Matilda", "Malla", "Kamitani", 
    "Nikkita", "linktr.ee", "vsco.co", "Sinulle ehdotettua", "Sinulle ehdotettu", "Suggested for you", "Myös Metalta", 
 
-
 // String hashtags
    "#perse", "#pylly", "#tissit", "#takapuoli", "#takamus", "#boobs", "#boobies", "#boobie", "#booty", "#butt", "#babe", "#aigen", "#aigenerated", "#aigeneration", "#artificial",  
    "#aiapplication", "#aiedit", "#rack", "#finnishgirl", "#girl", "#women", "#woman", "#ladies", "#girls", "#womens", "#womans", "#belfie", "#artificialintelligence", "#bestie", 
@@ -162,171 +165,36 @@ const allowedWords = [
    "Wordable", "lifelearnedfeelings", "feel", "feelings", "feeling", "pcmasterrace_official", "pcmasterrace", "pc masterrace", "pc master race", "gaming", "game",
 ];
 
-
 // Instagram accounts to hide
 const instagramAccountsToHide = [
-  'karabrannbacka',
-  'piia_oksanen',
-  'wiikmaaan',
-  'julmakira',
-  'yaonlylivvonce',
-  'alexa_bliss_wwe_',
-  'samanthathebomb',
-  'tiffanywwe',
-  'beckylynchwwe',
-  'charlottewwe',
-  'biancabelairwwe',
-  'thetrishstratuscom',
-  'thebriebella',
-  'thenikkibella',
-  'niajaxwwe',
-  'mandysacs',
-  'sonyadevillewwe',
-  'natbynature',
-  'zelinavegawwe',
-  'carmellawwe',
-  'itsmebayley',
-  'sashabankswwe',
-  'mercedesmone',
-  'saraya',
-  'theajmendez',
-  'livmorganwwe',
-  'candicelerae',
-  'indihartwell',
-  'raquelwwe',
-  'dakotakaiwwe',
-  'kairi_sane_wwe',
-  'asuka_wwe',
-  'meiko_satomura',
-  'roxanne_wwe',
-  'pipernivenwwe',
-  'nikki_cross_wwe',
-  'jacyjaynewwe',
-  'gigidxdolinnxt',
-  'avawwe_',
-  'blairdavenportwwe',
-  'lyravalkyria',
-  'katana_chance',
-  'kaydenwwe',
-  'maxxinedupri',
-  'chelseaagreen',
-  'fallonhenleywwe',
-  'karmenpetrovicwwe',
-  'danabrookewwe',
-  'valhallawwe',
-  'laceyevanswwe',
-  'shotziwwe',
-  'dejwujs_',
-  'dejwujs',
-  'tegan_nox_wwe',
-  'mia_yim',
-  'candicewwe',
-  'emmalution',
-  'tenille_dashwood',
-  'brittbaker',
-  'jaderedeww',
-  'taijamaarit',
-  'krisstatlander',
-  'jamiehayter',
-  'thunderrosa22',
-  'serenadeeb',
-  'nylarosebeast',
-  'lashlegendwwe',
-  'thepenelopeford',
-  'sylviliukkonen',
-  'sylviorvokki',
-  'willowwrestles',
-  'skye_by_wrestling',
-  'redvelvett',
-  'anna_jay_aew',
-  'tayconti_',
-  'tayconti',
-  'taymelo',
-  'heidika',
-  'heidik',
-  'heidih',
-  'heidit',
-  'grok',
-  'erikavikman',
-  'erika.helin',
-  'hikaru_shida',
-  'jjuliakristiina_',
-  'mafiaprinsessa',
-  'riho_ringstar',
-  'gailkimitsme',
-  'deonnapurrazzo',
-  'jordynnegrace',
-  'mickiejames',
-  'trinity_fatu',
-  'm1mmuska',
-  'mimmi',
-  'juliaerikaaz',
-  'dvondivawwe',
-  'suyung',
-  'madisonraynewrestling',
-  'katariinapohjoiskangas',
-  'angelinalove',
-  'velvet_sky',
-  'brookeadams',
-  'tessblanchard',
-  'thetayavalkyrie',
-  'havokdeathmachine',
-  'killerkellywrestling',
-  'kierahogan',
-  'diamante_lax',
-  'ladyfrost',
-  'taryn_terrell',
-  'rebeltanea',
-  'martimichellewwe',
-  'alishawrestling',
-  'savannah_evanswrestling',
-  'jazzygabert',
-  'masha_slamovich',
-  'paigewwe',
-  'kayfabe_kayla',
-  'roxanne_perez',
-  'cora.jade',
-  'piia_barlund',
-  'lottapupu',
-  'giuliawrestler',
-  'starkz_wrestler',
-  'thedollhousewrestling',
-  'holidead',
-  'tessafblanchard',
-  'thealliebunny',
-  'taya_valkyrie',
-  'thedemonbunny',
-  'rhearipley_wwe',
-  'rosemarythehive',
-  'siennawrestling',
-  'madisonrayne',
-  'kimber_lee90',
-  'kiera_hogan',
-  'diamantelax',
-  'realtenille',
-  'stephaniemcmahon',
-  'stephanie_buttermore',
-  'stephanie.vaquer',
-  'julianarasikannas',
-  'wwe_asuka',
-  'kairi_sane_wwe',
-  'wwe_mandyrose',
-  'stephaniesanzo',
-  'shaqwrestling',
-  'jadecargill',
-  'emimatsumoto',
-  'yukisakazaki',
-  'mizuki_wrestler',
-  'gina.adams',
-  'miskaawq9',
-  'misk33',
-  'misk33waaa',
-  'misk33waa',
-  'misk33wa',
-  'misk3waa',
-  'misk3waaa',
-  'misk3wa',
-  'misk4',
+  'karabrannbacka', 'piia_oksanen', 'wiikmaaan', 'julmakira', 'yaonlylivvonce', 'alexa_bliss_wwe_',
+  'samanthathebomb', 'tiffanywwe', 'beckylynchwwe', 'charlottewwe', 'biancabelairwwe', 'thetrishstratuscom',
+  'thebriebella', 'thenikkibella', 'niajaxwwe', 'mandysacs', 'sonyadevillewwe', 'natbynature',
+  'zelinavegawwe', 'carmellawwe', 'itsmebayley', 'sashabankswwe', 'mercedesmone', 'saraya',
+  'theajmendez', 'livmorganwwe', 'candicelerae', 'indihartwell', 'raquelwwe', 'dakotakaiwwe',
+  'kairi_sane_wwe', 'asuka_wwe', 'meiko_satomura', 'roxanne_wwe', 'pipernivenwwe', 'nikki_cross_wwe',
+  'jacyjaynewwe', 'gigidxdolinnxt', 'avawwe_', 'blairdavenportwwe', 'lyravalkyria', 'katana_chance',
+  'kaydenwwe', 'maxxinedupri', 'chelseaagreen', 'fallonhenleywwe', 'karmenpetrovicwwe', 'danabrookewwe',
+  'valhallawwe', 'laceyevanswwe', 'shotziwwe', 'dejwujs_', 'dejwujs', 'tegan_nox_wwe', 'mia_yim',
+  'candicewwe', 'emmalution', 'tenille_dashwood', 'brittbaker', 'jaderedeww', 'taijamaarit',
+  'krisstatlander', 'jamiehayter', 'thunderrosa22', 'serenadeeb', 'nylarosebeast', 'lashlegendwwe',
+  'thepenelopeford', 'sylviliukkonen', 'sylviorvokki', 'willowwrestles', 'skye_by_wrestling', 'redvelvett',
+  'anna_jay_aew', 'tayconti_', 'tayconti', 'taymelo', 'heidika', 'heidik', 'heidih', 'heidit',
+  'grok', 'erikavikman', 'erika.helin', 'hikaru_shida', 'jjuliakristiina_', 'mafiaprinsessa',
+  'riho_ringstar', 'gailkimitsme', 'deonnapurrazzo', 'jordynnegrace', 'mickiejames', 'trinity_fatu',
+  'm1mmuska', 'mimmi', 'juliaerikaaz', 'dvondivawwe', 'suyung', 'madisonraynewrestling',
+  'katariinapohjoiskangas', 'angelinalove', 'velvet_sky', 'brookeadams', 'tessblanchard',
+  'thetayavalkyrie', 'havokdeathmachine', 'killerkellywrestling', 'kierahogan', 'diamante_lax',
+  'ladyfrost', 'taryn_terrell', 'rebeltanea', 'martimichellewwe', 'alishawrestling',
+  'savannah_evanswrestling', 'jazzygabert', 'masha_slamovich', 'paigewwe', 'kayfabe_kayla',
+  'roxanne_perez', 'cora.jade', 'piia_barlund', 'lottapupu', 'giuliawrestler', 'starkz_wrestler',
+  'thedollhousewrestling', 'holidead', 'tessafblanchard', 'thealliebunny', 'taya_valkyrie',
+  'thedemonbunny', 'rhearipley_wwe', 'rosemarythehive', 'siennawrestling', 'madisonrayne',
+  'kimber_lee90', 'kiera_hogan', 'diamantelax', 'realtenille', 'stephaniemcmahon',
+  'stephanie_buttermore', 'stephanie.vaquer', 'julianarasikannas', 'wwe_asuka', 'kairi_sane_wwe',
+  'wwe_mandyrose', 'stephaniesanzo', 'shaqwrestling', 'jadecargill', 'emimatsumoto',
+  'yukisakazaki', 'mizuki_wrestler', 'gina.adams', 'miskaawq9', 'misk33', 'misk33waaa',
+  'misk33waa', 'misk33wa', 'misk3waa', 'misk3waaa', 'misk3wa', 'misk4',
 ];
 
     const instagramBannedPaths = [
@@ -338,15 +206,60 @@ const instagramAccountsToHide = [
         'accounts/restricted_accounts',
     ];
 
-const approvedPostIDs = new Set(); // Track posts we've approved in feed scan
-const scannedPostsCache = new Map(); // Map: postID -> isBanned (true/false)
-const feedApprovedPostIDs = new Set(); // Posts approved during initial feed scan
-let isFeedScanPhase = true; // Flag to track if we're in initial feed scanning
+// === DYNAMIC WRESTLING SYNC ENGINE ===
+const dynamicWrestlingKeywords = [];
+const dynamicWrestlingSlugs = [];
 
-// SMART POST WRAPPER LOCATOR
+function loadDynamicWrestlingData() {
+    const storageApi = (typeof browser !== 'undefined' && browser.storage) ? browser.storage.local : (typeof chrome !== 'undefined' && chrome.storage ? chrome.storage.local : null);
+    if (storageApi) {
+        storageApi.get(['wrestling_women_urls'], (data) => {
+            if (data && data.wrestling_women_urls) {
+                data.wrestling_women_urls.forEach(url => {
+                    const parts = url.split('/').filter(Boolean);
+                    const slug = parts[parts.length - 1]; 
+                    if (slug) {
+                        dynamicWrestlingSlugs.push(slug.toLowerCase());
+                        const name = slug.replace(/-/g, ' ').toLowerCase(); 
+                        if (name.length > 2) dynamicWrestlingKeywords.push(name);
+                    }
+                });
+                
+                dynamicWrestlingKeywords.forEach(kw => {
+                    if (!bannedKeywords.includes(kw)) {
+                        bannedKeywords.push(kw);
+                        bannedKeywordsLower.push(kw.toLowerCase());
+                    }
+                });
+                devLog(`Loaded ${dynamicWrestlingSlugs.length} dynamic wrestling names from SmackDownHotel cache.`);
+            }
+        });
+        
+        if (storageApi.onChanged) {
+            storageApi.onChanged.addListener((changes, area) => {
+                if (area === 'local' && changes.wrestling_women_urls) {
+                    loadDynamicWrestlingData();
+                }
+            });
+        }
+    }
+}
+loadDynamicWrestlingData();
+// ===================================
+
+const bannedKeywordsLower = bannedKeywords.map(k => k.toLowerCase());
+const instagramBannedPathsLower = instagramBannedPaths.map(p => p.toLowerCase());
+const allowedWordsLower = allowedWords.map(w => w.toLowerCase());
+const instagramAccountsToHideLower = instagramAccountsToHide.map(a => a.toLowerCase());
+const instagramAccountsSet = new Set(instagramAccountsToHideLower);
+
+const approvedPostIDs = new Set(); 
+const scannedPostsCache = new Map(); 
+const feedApprovedPostIDs = new Set(); 
+let isFeedScanPhase = true; 
+
 function findPostWrapper(node) {
     if (!node) return null;
-    // Safest bet: it's literally an article
     const article = node.closest('article');
     if (article) return article;
 
@@ -355,39 +268,32 @@ function findPostWrapper(node) {
     let lvl = 0;
 
     while (candidate && lvl < 12) {
-        // Absolute fail-safes so we never hit the master page body/main structural tags
         if (candidate.tagName === 'MAIN' || candidate.getAttribute('role') === 'main' || candidate.tagName === 'BODY' || candidate.tagName === 'HTML' || candidate.tagName === 'NAV' || candidate.tagName === 'FOOTER') {
             break;
         }
 
-        // CRITICAL SAFEGUARD: Never select a wrapper that holds multiple articles
-        // This physically prevents the script from ever accidentally collapsing the master feed column!
         const articleCount = candidate.querySelectorAll('article').length;
         if (articleCount > 1) {
             break;
         }
 
-        // Heuristic 1: Safe Width/Height boundaries for Instagram Posts
         const rect = candidate.getBoundingClientRect ? candidate.getBoundingClientRect() : null;
         if (rect) {
             const area = rect.width * rect.height;
-            // Typical feed post bounds (Desktop + Mobile)
             if (rect.width > 100 && rect.width <= 800 && rect.height > 100 && rect.height <= 2500) {
                 bestCandidate = candidate;
             }
-            // Abort safely if we hit a massive layout container (e.g. the entire feed column)
             if (rect.width > 800 || rect.height > 3000 || area > 2000000) {
                 break;
             }
         }
 
-        // Heuristic 2: Sibling Check (Is it next to known organic articles?)
         if (candidate.parentElement) {
             const siblings = Array.from(candidate.parentElement.children);
             const hasArticleSibling = siblings.some(sib => sib !== candidate && sib.tagName === 'ARTICLE');
             if (hasArticleSibling) {
                 bestCandidate = candidate;
-                break; // We found the definitive feed column item wrapper, stop climbing.
+                break; 
             }
         }
 
@@ -400,14 +306,12 @@ function findPostWrapper(node) {
 
 function getPostIDFromArticle(article) {
     try {
-        // Try to find a link with post ID in href
         const postLink = article.querySelector('a[href*="/p/"], a[href*="/reel/"], a[href*="/tv/"]');
         if (postLink) {
             const href = postLink.getAttribute('href') || '';
             const match = href.match(/\/(p|reel|tv)\/([A-Za-z0-9_-]+)/);
             if (match && match[2]) return match[2];
         }
-        // Fallback: try to extract from canonical link
         const canonical = document.querySelector('link[rel="canonical"]');
         if (canonical) {
             const href = canonical.getAttribute('href') || '';
@@ -423,7 +327,7 @@ function getPostIDFromArticle(article) {
         'inbox',
         'direct/t',
         'stories/nightmaree3z/',
-        'stories/m1mmuska/',
+        'stories/nightmaree3z',
     ];
 
     const protectedElements = [
@@ -431,13 +335,29 @@ function getPostIDFromArticle(article) {
     'footer',
     'div:has(> footer)',
     'nav',
-    'div:has(> a[href="/"])', // Usually left sidebar wrapper
-    'svg[aria-label="Lisää"]', // Lower left Settings menu
+    'div:has(> a[href="/"])', 
+    'svg[aria-label="Lisää"]', 
     'div:has(> div > div > div > svg[aria-label="Lisää"])',
     'div:has(> div > div > svg[aria-label="Lisää"])',
     'svg[aria-label="Asetukset"]',
-    'div:has(> article)', // Direct parent of articles (Master Feed column)
-    'div:has(> div > article)', // Grandparent of articles
+    'div:has(> article)', 
+    'div:has(> div > article)', 
+
+    // === SEARCH SIDEBAR PROTECTION ===
+    'input[type="text"]',
+    'input[type="search"]',
+    'input[placeholder*="Search"]',
+    'input[placeholder*="Haku"]',
+    'input[placeholder*="Hae"]',
+    'form[role="search"]',
+    '[role="listbox"]',
+    'div:has(> [role="listbox"])',
+    'div:has(> div > [role="listbox"])',
+    'div:has(> form[role="search"])',
+    'div:has(> input[placeholder*="Search"])',
+    'div:has(> input[placeholder*="Haku"])',
+    'div:has(> input[placeholder*="Hae"])',
+    // ==================================
 
     // Messaging and compose areas
     'div[aria-describedby="Viesti"][aria-label="Viesti"].xzsf02u.x1a2a7pz.x1n2onr6.x14wi4xw.x1iyjqo2.x1gh3ibb.xisnujt.xeuugli.x1odjw0f.notranslate',
@@ -503,7 +423,7 @@ function getPostIDFromArticle(article) {
     'div:has(> textarea#pepBio)',
     'div:has(> label[for="pepBio"])',
 
-    // Protect Likes / Tykkäykset sections (Added exact structures)
+    // Protect Likes / Tykkäykset sections
     'a[href*="/liked_by/"]',
     'section:has(a[href*="/liked_by/"])',
     'span[role="button"][tabindex="0"]',
@@ -511,15 +431,18 @@ function getPostIDFromArticle(article) {
     'section:has(div[role="button"][tabindex="0"]:has(> span.html-span))',
 ];
 
-// HELPER FUNCTION TO CLEANLY CHECK PROTECTED ELEMENTS
 function isElementProtected(element) {
     if (!element || element.nodeType !== 1) return false;
     
-    // STRUCTURAL IMMUNITY: If it is or contains the Footer (Right Sidebar) or Nav/More buttons (Left Sidebar), NEVER hide it.
     if (element.tagName === 'FOOTER' || element.tagName === 'NAV' || element.tagName === 'MAIN' || element.tagName === 'BODY') return true;
-    if (element.getAttribute('role') === 'feed' || element.getAttribute('role') === 'main') return true;
+    if (element.getAttribute('role') === 'feed' || element.getAttribute('role') === 'main' || element.getAttribute('role') === 'listbox') return true;
     
-    // ULTIMATE FEED PROTECTION: If a container mathematically holds an <article>, it is a master column. It CANNOT be hidden.
+    // === SEARCH SIDEBAR PROTECTION ===
+    if (element.tagName === 'INPUT' || element.tagName === 'FORM') return true;
+    if (element.closest('form[role="search"]') || element.closest('[role="listbox"]')) return true;
+    if (element.querySelector('form[role="search"], [role="listbox"], input[placeholder*="Search"], input[placeholder*="Haku"], input[placeholder*="Hae"]')) return true;
+    // === END SEARCH PROTECTION ===
+
     if (element.tagName !== 'ARTICLE' && element.querySelector('article')) return true;
 
     if (element.querySelector('footer, nav, svg[aria-label="Lisää"], svg[aria-label="Asetukset"], svg[aria-label="More"], svg[aria-label="Settings"]')) return true;
@@ -598,6 +521,9 @@ function isElementProtected(element) {
 'div:nth-of-type(4) > div:nth-of-type(4) > div > a',
 'div:nth-of-type(5) > div:nth-of-type(7) > div',
 'div:nth-of-type(6) > div > a',
+'div.html-div.xdj266r.x14z9mp.xat24cr.x1lziwak.x9f619.xjbqb8w.x78zum5.xv54qhq.xf7dkkf.x1uhb9sk.x1plvlek.xryxfnj.x1c4vz4f.x2lah0s.xdt5ytf.xqjyukv.x1qjc9v5.x1oa3qoh.x1nhvcw1.x5ur3kl.x6usi7g.x1bs97v6.x18dxpii.x12ol6y4.x180vkcf.x1khw62d.x709u02.x13fuv20.x18b5jzi.x1q0q8m5.x1t7ytsu.xt8cgyo.x128c8uf.x1co6499.xc5fred.x1a8lsjc.x889kno',
+'form > div:nth-of-type(3)',
+'form > div:nth-of-type(4) > div',
     ];
 
     const selectorsToMonitor = [
@@ -698,12 +624,6 @@ function isElementProtected(element) {
         { selector: 'span', text: 'Threads' }
     ];
 
-    const bannedKeywordsLower = bannedKeywords.map(k => k.toLowerCase());
-    const instagramBannedPathsLower = instagramBannedPaths.map(p => p.toLowerCase());
-    const allowedWordsLower = allowedWords.map(w => w.toLowerCase());
-    const instagramAccountsToHideLower = instagramAccountsToHide.map(a => a.toLowerCase());
-    const instagramAccountsSet = new Set(instagramAccountsToHideLower);
-
     let currentURL = window.location.href;
     const hiddenElements = new WeakSet();
     let reelsStyleInjected = false;
@@ -711,6 +631,14 @@ function isElementProtected(element) {
     const IG_SEARCH_HIDDEN_ATTR = 'data-ig-search-hidden-reason';
     const IG_SEARCH_APPROVE_ATTR = 'data-ig-approve';
     const IG_SEARCH_ROW_ATTR = 'data-ig-row';
+
+    // Helper to unhide nodes
+    const unhideNode = (n) => {
+        if (n) {
+            n.style.removeProperty('display');
+            if (hiddenElements.has(n)) hiddenElements.delete(n);
+        }
+    };
 
     function stripImagesWithin(el) {
         try {
@@ -854,13 +782,11 @@ function isElementProtected(element) {
         return Array.from(out);
     }
     
-    // NEW ROBUST AUTHOR EXTRACTOR (Handles non-article div-soup permalinks)
     function getAuthorFromNode(node) {
         if (!node) return '';
         const RESERVED = new Set(['p','reel','tv','explore','reels','accounts','stories','direct','meta-ai','ai', 'about', 'help', 'legal']);
         
         try {
-            // Priority 1: Look specifically for standard a[role="link"] profile pic containers
             const profileLinks = Array.from(node.querySelectorAll('a[role="link"][href^="/"]'));
             for (const a of profileLinks) {
                 const href = a.getAttribute('href') || '';
@@ -872,7 +798,6 @@ function isElementProtected(element) {
                 }
             }
             
-            // Priority 2: Fallback to any clean 1-part link within the node
             const allLinks = Array.from(node.querySelectorAll('a[href^="/"]'));
             for (const a of allLinks) {
                 const href = a.getAttribute('href') || '';
@@ -885,30 +810,23 @@ function isElementProtected(element) {
         return '';
     }
 
-    // LASER-FOCUSED CAPTION ISOLATOR
     function getTargetCaptionNode(rootNode) {
         if (!rootNode) return null;
 
-        // 1. If it has an <article>, use it (feeds and some overlays)
         const article = rootNode.tagName === 'ARTICLE' ? rootNode : rootNode.querySelector('article');
         if (article) return article;
 
-        // 2. Look for h1 (Often the main caption in desktop permalinks)
         const h1 = rootNode.querySelector('h1');
         if (h1 && h1.textContent.trim().length > 0) {
-            // Traverse up slightly to grab the immediate text block container
             let parent = h1;
             for (let i=0; i<3; i++) { if (parent.parentElement) parent = parent.parentElement; }
             return parent;
         }
 
-        // 3. Fallback: Find the FIRST <time> element. It anchors the post header/caption
-        // and strictly ignores comments (comments have subsequent <time> elements).
         const timeEls = Array.from(rootNode.querySelectorAll('time'));
         if (timeEls.length > 0) {
             const firstTime = timeEls[0];
             let parent = firstTime.parentElement;
-            // Go up ~7 levels to encapsulate the post header + text flexbox block, but abort before hitting MAIN
             for (let i = 0; i < 7; i++) {
                 if (parent && parent.parentElement && parent.tagName !== 'MAIN' && parent.getAttribute('role') !== 'dialog') {
                     parent = parent.parentElement;
@@ -917,7 +835,7 @@ function isElementProtected(element) {
             return parent;
         }
 
-        return null; // Safely abort if we can't find a tight container to prevent overzealous scanning
+        return null; 
     }
 
     function collectCaptionTextsFromArticle(article) {
@@ -937,7 +855,6 @@ function isElementProtected(element) {
         try {
             const texts = collectCaptionTextsFromArticle(article);
             const combinedText = texts.join(' ');
-            // TEXT CONTENT CHECK
             for (const t of texts) {
                 const low = t.toLowerCase();
                 if (!allowedWordsLower.some(w => low.includes(w))) {
@@ -949,7 +866,6 @@ function isElementProtected(element) {
                     }
                 }
             }
-            // HANDLE FROM TEXT
             const handles = extractHandlesFromText(combinedText);
             for (const h of handles) {
                 if (instagramAccountsSet.has(h)) return true;
@@ -962,7 +878,6 @@ function isElementProtected(element) {
                     }
                 }
             }
-            // ATTRIBUTE SCAN (alt/title/aria-label)
             const attrNodes = article.querySelectorAll('[alt],[title],[aria-label]');
             for (const node of attrNodes) {
                 ['alt','title','aria-label'].forEach(attr => {
@@ -976,7 +891,6 @@ function isElementProtected(element) {
                         for (const rx of bannedRegexes) {
                             if (rx.test(val)) { throw 'BANNED_FOUND'; }
                         }
-                        // handles inside attributes
                         extractHandlesFromText(val).forEach(h => {
                             if (instagramAccountsSet.has(h)) { throw 'BANNED_FOUND'; }
                             if (!allowedWordsLower.some(w => h.includes(w))) {
@@ -991,7 +905,6 @@ function isElementProtected(element) {
                     }
                 });
             }
-            // HREF SCAN
             const links = article.querySelectorAll('a[href]');
             for (const a of links) {
                 const hrefRaw = a.getAttribute('href') || '';
@@ -1002,7 +915,6 @@ function isElementProtected(element) {
                 } catch {
                     pathname = hrefRaw.split('?')[0].split('#')[0].toLowerCase();
                 }
-                // extract first segment as potential username
                 const parts = pathname.split('/').filter(Boolean);
                 if (parts.length) {
                     const candidateUser = parts[0];
@@ -1031,25 +943,21 @@ function isElementProtected(element) {
         } catch {}
     }
 
-    // UNIFIED EXPAND AND SCAN (Used for Feed, Permalinks, and Overlays)
     function expandAndScanNode(node, postID) {
         return new Promise((resolve) => {
             try {
                 if (!node) return resolve(true);
 
-                // Check cache FIRST to prevent rescanning perfectly safe overlay posts
                 if (postID && scannedPostsCache.has(postID)) {
                     const isBanned = scannedPostsCache.get(postID);
                     return resolve(!isBanned);
                 }
 
-                // 1. INSTANT PRE-SCAN: If a banned word is in the currently visible text, skip clicking and nuke instantly.
                 if (articleHasBannedCaption(node)) {
                     if (postID) scannedPostsCache.set(postID, true);
-                    return resolve(false); // Returning false means it is banned.
+                    return resolve(false); 
                 }
 
-                // 2. Look for the "more" / "lisää" button
                 const moreBtns = Array.from(node.querySelectorAll('[role="button"], span, div')).filter(el => {
                     if (!el || !el.textContent) return false;
                     const txt = el.textContent.trim().toLowerCase();
@@ -1059,8 +967,6 @@ function isElementProtected(element) {
                 const moreBtn = moreBtns[0];
 
                 if (moreBtn) {
-                    // We found a 'more' button, meaning hidden text needs checking.
-                    // We temporarily make the entire node invisible. This guarantees ZERO glimpse of banned text when expanding!
                     const origOpacity = node.style.opacity;
                     node.style.setProperty('opacity', '0', 'important');
                     
@@ -1075,16 +981,13 @@ function isElementProtected(element) {
                         if (postID) scannedPostsCache.set(postID, hasBanned);
                         
                         if (!hasBanned) {
-                            // The post is clean! We restore visibility smoothly.
                             node.style.setProperty('opacity', origOpacity || '1');
                         }
-                        // If it WAS banned, it stays invisible forever and safelyHideFeedArticle cleans it up.
                         resolve(!hasBanned);
                     }, 300);
                     return;
                 }
 
-                // No 'more' button and pre-scan was clean. Post is genuinely safe.
                 if (postID) {
                     feedApprovedPostIDs.add(postID); 
                     approvedPostIDs.add(postID);
@@ -1092,15 +995,13 @@ function isElementProtected(element) {
                 if (postID) scannedPostsCache.set(postID, false);
                 resolve(true); 
             } catch (e) {
-                resolve(true); // default to clean on error so we don't break layout
+                resolve(true); 
             }
         });
     }
 
     function safelyHideFeedArticle(article) {
         if (!article) return;
-        // By leaving a 1px gap, we trick the Intersection Observer into thinking the post loaded, 
-        // entirely stopping the infinite skeleton fetch loop crash, without leaving a massive visual gap.
         article.style.setProperty('max-height', '1px', 'important');
         article.style.setProperty('height', '1px', 'important');
         article.style.setProperty('min-height', '1px', 'important');
@@ -1126,15 +1027,12 @@ function isElementProtected(element) {
             articles.forEach(article => {
                 const postID = getPostIDFromArticle(article);
                 
-                // VIRTUAL DOM AWARENESS: Check if Instagram recycled this DOM element for a new post
                 const scannedID = article.getAttribute('data-scanned-post-id');
                 if (postID && scannedID && scannedID !== postID) {
-                    // It's a recycled node. Strip safe flags to re-trigger opacity: 0 and rescan.
                     article.removeAttribute('data-banned-scan');
                     article.removeAttribute('data-feed-scan-done');
                 }
 
-                // Skip if already processed for this specific state
                 if (article.hasAttribute('data-feed-scan-done')) return;
                 
                 article.setAttribute('data-feed-scan-done', '1');
@@ -1168,11 +1066,9 @@ function isElementProtected(element) {
             const match = location.pathname.match(/\/(p|reel|tv)\/([A-Za-z0-9_-]+)/);
             if (match) postID = match[2];
 
-            // Direct permalink views (/p/XYZ)
             if (isPermalinkView()) {
                 const root = document.querySelector('main') || document.body;
                 
-                // Laser-focus on the specific node containing the caption, ignoring comments
                 const captionNode = getTargetCaptionNode(root);
                 
                 if (!captionNode) return;
@@ -1182,7 +1078,6 @@ function isElementProtected(element) {
                 
                 expandAndScanNode(captionNode, postID).then(isClean => {
                     if (!isClean) {
-                        // IT IS TRULY BANNED. REDIRECT.
                         let author = getAuthorFromNode(root) || (location.pathname.match(/^\/([^/]+)\//)?.[1]?.toLowerCase() || '');
                         const RESERVED = new Set(['p','reel','tv','explore','reels','accounts','stories','direct','meta-ai','ai']);
                         if (RESERVED.has(author)) author = ''; 
@@ -1200,12 +1095,10 @@ function isElementProtected(element) {
                 return;
             }
             
-            // Scan overlays that came from clicking in the feed or user profile
             if (isPostOverlayOpen()) {
                 const overlay = document.querySelector('div[role="dialog"], section[role="dialog"], div[aria-modal="true"]');
                 if (!overlay) return;
                 
-                // Laser-focus on the overlay's caption
                 const captionNode = getTargetCaptionNode(overlay);
                 if (!captionNode) return;
 
@@ -1225,20 +1118,16 @@ function isElementProtected(element) {
         } catch {}
     }
 
-    // NEW FUNCTION: Force overlay likes to be clickable and redirect to the specific post's likes page.
     function makeOverlayLikesClickable() {
         if (!isPostOverlayOpen()) return;
         
         const overlay = document.querySelector('div[role="dialog"] article, section[role="dialog"] article, div[aria-modal="true"] article');
         if (!overlay) return;
 
-        // Find buttons that might be likes
         const buttons = overlay.querySelectorAll('span[role="button"][tabindex="0"], div[role="button"][tabindex="0"]');
         
         buttons.forEach(btn => {
             const txt = (btn.textContent || '').trim().toLowerCase();
-            // Match numbers + optionally "t.", "tykkäystä", "likes", "k", "m"
-            // Ensure we don't accidentally grab username or other random buttons.
             if (/^[0-9,.\s]+(?:t\.|m|tykkäystä|likes|k)?$/.test(txt)) {
                 if (!btn.hasAttribute('data-ig-likes-fixed')) {
                     btn.setAttribute('data-ig-likes-fixed', '1');
@@ -1252,11 +1141,9 @@ function isElementProtected(element) {
                         const postLink = findPermalink(overlay);
                         if (postLink) {
                             const url = new URL(postLink);
-                            // Ensure the path cleanly ends before appending /liked_by/
                             const likedByUrl = url.origin + url.pathname.replace(/\/$/, '') + '/liked_by/';
                             fastRedirect(likedByUrl);
                         } else {
-                            // Fallback if we can't find a post ID link
                             closeOverlayIfPossible();
                         }
                     }, true);
@@ -1500,7 +1387,6 @@ ${p}, ${p} * {
                 level++;
                 if (!container) break;
 
-                // original strict container match
                 if (container.classList.contains('x9f619') && 
                     container.classList.contains('x3nfvp2') && 
                     container.classList.contains('xr9ek0c') &&
@@ -1510,7 +1396,6 @@ ${p}, ${p} * {
                     break;
                 }
 
-                // extra: allow one level higher small wrapper row
                 if (container.textContent.includes('Myös Metalta')) {
                     const rect = container.getBoundingClientRect ? container.getBoundingClientRect() : null;
                     const area = rect ? rect.width * rect.height : 0;
@@ -1530,7 +1415,6 @@ ${p}, ${p} * {
             const txt = div.textContent.trim();
             if (txt !== 'Myös Metalta') return;
 
-            // original strict wrapper
             const strict = div.closest('div.x9f619.x3nfvp2.xr9ek0c');
             if (strict) {
                 if (!hiddenElements.has(strict) && !isElementProtected(strict)) {
@@ -1539,7 +1423,6 @@ ${p}, ${p} * {
                 return;
             }
 
-            // fallback: generic small row containing the text
             let container = div;
             let level = 0;
             while (container && level < 4) {
@@ -1677,18 +1560,15 @@ ${p}, ${p} * {
 
     function hideSinulleEhdotettuaBlock() {
         try {
-            // Bring back the logic from the user-uploaded file exactly:
             const spans = document.querySelectorAll('span');
             spans.forEach(span => {
                 if (!span.textContent) return;
                 const txt = span.textContent.trim();
                 if (txt !== 'Sinulle ehdotettua') return;
 
-                // prefer the header html-div
                 let container = span.closest('div.html-div') || span.parentElement;
                 if (!container) return;
 
-                // require "Näytä kaikki" link or a /explore/people/ link nearby to avoid false positives
                 const scope = container.closest('div') || container;
                 const hasShowAllLink =
                     !!scope.querySelector('a[href="/explore/people/"] span') ||
@@ -1696,7 +1576,6 @@ ${p}, ${p} * {
 
                 if (!hasShowAllLink) return;
 
-                // climb up html-div ancestors to find the module root, avoiding main/body/html/nav
                 let lvl = 0;
                 let candidate = container;
                 while (candidate && lvl < 6) {
@@ -1708,9 +1587,8 @@ ${p}, ${p} * {
 
                     if (isHtmlDiv &&
                         plausibleSize &&
-                        !isElementProtected(candidate) && // Safely abort if this matches Right Sidebar structures
+                        !isElementProtected(candidate) && 
                         !candidate.matches('main, section[role="main"], div[role="main"], body, html, nav')) {
-                        // CRITICAL: Ensure we don't accidentally select a master wrapper that holds feed articles!
                         if (candidate.querySelector('article')) break;
 
                         collapseElement(candidate);
@@ -1721,7 +1599,6 @@ ${p}, ${p} * {
                     lvl++;
                 }
 
-                // fallback: hide the immediate header row if nothing else matched
                 const rect = container.getBoundingClientRect ? container.getBoundingClientRect() : null;
                 const area = rect ? rect.width * rect.height : 0;
                 if (area > 80 && area < 150000 &&
@@ -1744,7 +1621,6 @@ const injectInlineCSS = () => {
         const searchBanCSS = buildSearchBanCSS();
 
         const articleProtectionCSS = `
-        /* Prevent flashes of unscanned content in feed and overlays */
         main article:not([data-banned-scan]),
         div[role="dialog"] article:not([data-banned-scan]),
         section[role="dialog"] article:not([data-banned-scan]) {
@@ -1758,7 +1634,6 @@ const injectInlineCSS = () => {
             opacity: 1 !important;
             pointer-events: auto !important;
         }
-        /* KEEP IN DOCUMENT FLOW FOR INTERSECTION OBSERVER, BUT COLLAPSE VISUAL GAP TO 1px */
         main article[data-banned-scan="banned"],
         div[role="dialog"] article[data-banned-scan="banned"],
         section[role="dialog"] article[data-banned-scan="banned"] {
@@ -1803,7 +1678,7 @@ overflow: visible !important;
 `;
 
         const safeSuffix = `:not(:has(nav)):not(:has(footer)):not(:has(svg[aria-label="Lisää"])):not(:has(svg[aria-label="Asetukset"])):not(:has(svg[aria-label="More"])):not(:has(a[href*="about.instagram.com"])):not(:has(article)):not(:has(a[href*="instagram.com/direct"]))`;
-        const overlayGuardedSelectors = selectorsToHide.map(s => `body:not(.ig-overlay-open) ${s}${safeSuffix}`).join(',\n');
+        const overlayGuardedSelectors = selectorsToHide.map(s => `html:not(.ig-overlay-open) ${s}${safeSuffix}`).join(',\n');
 
         style.textContent = `
         ${articleProtectionCSS}
@@ -1839,7 +1714,9 @@ overflow: visible !important;
             top: -9999px !important;
             overflow: hidden !important;
         }
-        [role="dialog"] button.xjbqb8w.x1qhh985.x10w94by.x14e42zd.x1yvgwvq.x13fuv20.x178xt8z.x1ypdohk.xvs91rp.x1evy7pa.xdj266r.x14z9mp.xat24cr.x1lziwak.x1wxaq2x.x1iorvi4.xf159sx.xjkvuk6.xmzvs34.x2b8uid.x87ps6o.xxymvpz.xh8yej3.x52vrxo.x4gyw5p.xkmlbd1.x1xlr1w8 {
+
+        /* === CSS SLEDGEHAMMER FOR "POISTA SEURAAJA" MENUS === */
+        html:not(.safe-story-zone) [role="dialog"] button.xjbqb8w.x1qhh985.x10w94by.x14e42zd.x1yvgwvq.x13fuv20.x178xt8z.x1ypdohk.xvs91rp.x1evy7pa.xdj266r.x14z9mp.xat24cr.x1lziwak.x1wxaq2x.x1iorvi4.xf159sx.xjkvuk6.xmzvs34.x2b8uid.x87ps6o.xxymvpz.xh8yej3.x52vrxo.x4gyw5p.xkmlbd1.x1xlr1w8 {
             display: none !important;
             visibility: hidden !important;
             opacity: 0 !important;
@@ -1852,18 +1729,25 @@ overflow: visible !important;
             overflow: hidden !important;
         }
 
-        /* 1. PUSH THE RIGHT SIDEBAR PROFILE DOWN */
-        /* Targets the wrapper holding your profile pic on the right side */
-        div[style*="--x-width: 100%;"]:has(a[role="link"] img[alt*="profiilikuva"]),
-        div[style*="--x-width:100%"]:has(a[role="link"] img[alt*="profiilikuva"]) {
+        /* 1. PUSH THE RIGHT SIDEBAR PROFILE DOWN & KILL THE GHOST GAP */
+        div[style*="--x-width: 100%;"]:has(a[role="link"]),
+        div[style*="--x-width:100%"]:has(a[role="link"]) {
             margin-top: 26px !important; 
+            gap: 0px !important; 
+            transition: none !important;
         }
 
         /* 2. PUSH THE FOOTER UP */
-        /* Targets the footer nav and reduces its top spacing so it sits higher */
         div:has(> nav ul li a[href*="about.instagram.com"]) {
-            margin-top: 7px !important; 
+            margin-top: -20px !important; 
             padding-top: 0px !important;
+            gap: 0px !important;
+            transition: none !important;
+        }
+
+        /* INSTANTLY HIDE "SUGGESTED FOR YOU" TO STABILIZE SIDEBAR */
+        div:has(> div > div > a[href^="/explore/people"]) {
+            display: none !important;
         }
 
         /* ADJUST STORIES TRAY PLACEMENT */
@@ -2019,6 +1903,18 @@ injectInlineCSS();
         for (let i = 0; i < instagramBannedPaths.length; ++i) {
             if (url.includes(instagramBannedPaths[i])) return true;
         }
+        try {
+            const urlObj = new URL(url);
+            const parts = urlObj.pathname.split('/').filter(Boolean);
+            if (parts.length > 0) {
+                const username = parts[0].toLowerCase();
+                const RESERVED = new Set(['p','reel','tv','explore','reels','accounts','stories','direct','meta-ai','ai', 'about', 'help', 'legal', 'archive']);
+                if (!RESERVED.has(username)) {
+                    if (instagramAccountsSet.has(username)) return true;
+                    if (dynamicWrestlingSlugs.some(slug => username === slug || username.includes(slug.replace(/-/g, '')))) return true;
+                }
+            }
+        } catch(e){}
         return false;
     }
 
@@ -2043,7 +1939,6 @@ injectInlineCSS();
             const isArticle = element.tagName === 'ARTICLE';
             
             if (isArticle) {
-                // Keep the article in the document flow with a tiny 1px height so IntersectionObserver stays happy.
                 element.style.setProperty('max-height', '1px', 'important');
                 element.style.setProperty('height', '1px', 'important');
                 element.style.setProperty('min-height', '1px', 'important');
@@ -2054,12 +1949,10 @@ injectInlineCSS();
                 element.style.setProperty('visibility', 'hidden', 'important');
                 element.style.setProperty('opacity', '0', 'important');
                 element.style.setProperty('pointer-events', 'none', 'important');
-                // Hide its children so nothing bleeds over the 1px boundary
                 Array.from(element.children).forEach(child => {
                     child.style.setProperty('display', 'none', 'important');
                 });
             } else {
-                // UI buttons and tiny elements safely removed from flow entirely.
                 element.style.setProperty('display', 'none', 'important');
                 element.style.setProperty('opacity', '0', 'important');
                 element.style.setProperty('position', 'absolute', 'important');
@@ -2121,9 +2014,10 @@ injectInlineCSS();
             const textContent = element.textContent ? element.textContent.toLowerCase() : "";
             
             const exactTrimmed = element.textContent ? element.textContent.trim().toLowerCase() : "";
-            const isNightmareStory = location.pathname.toLowerCase().startsWith('/stories/nightmaree3z/');
+            const currentPathLow = location.pathname.toLowerCase();
+            const isNightmareStory = currentPathLow.includes('/stories/nightmaree3z') || currentPathLow.includes('/archive/');
             const storySafeWords = ['poista', 'delete', 'remove', 'poista julkaisu', 'delete post', 'poista tarina', 'delete story'];
-            if (storySafeWords.includes(exactTrimmed) && isNightmareStory) return;
+            if (isNightmareStory && storySafeWords.includes(exactTrimmed)) return;
             if (['peruuta', 'cancel'].includes(exactTrimmed)) return;
 
             const containsAllowed = allowedWordsLower.some(word => textContent.includes(word));
@@ -2207,13 +2101,22 @@ injectInlineCSS();
     function handleRedirectionsAndContentHiding() {
         currentURL = window.location.href;
 
-        if (currentURL.includes('www.threads.')) {
+        // === THE SAFE ZONE TOGGLE ===
+        const currentPathLow = location.pathname.toLowerCase();
+        if (currentPathLow.includes('/stories/nightmaree3z') || currentPathLow.includes('/archive/')) {
+            document.documentElement.classList.add('safe-story-zone');
+        } else {
+            document.documentElement.classList.remove('safe-story-zone');
+        }
+        // ============================
+
+        if (shouldInstagramRedirect()) {
             window.stop();
             fastRedirect('https://www.instagram.com');
             return;
         }
 
-        if (instagramBannedPaths.some(path => currentURL.includes(path))) {
+        if (currentURL.includes('www.threads.')) {
             window.stop();
             fastRedirect('https://www.instagram.com');
             return;
@@ -2295,16 +2198,15 @@ injectInlineCSS();
             let txt = txtRaw.toLowerCase();
             let exactTrimmed = txtRaw.trim().toLowerCase();
             
-            const isNightmareStory = location.pathname.toLowerCase().startsWith('/stories/nightmaree3z/');
+            const currentPathLow = location.pathname.toLowerCase();
+            const isNightmareStory = currentPathLow.includes('/stories/nightmaree3z') || currentPathLow.includes('/archive/');
             const storySafeWords = ['poista', 'delete', 'remove', 'poista julkaisu', 'delete post', 'poista tarina', 'delete story'];
-            if (storySafeWords.includes(exactTrimmed) && isNightmareStory) return;
+            if (isNightmareStory && storySafeWords.includes(exactTrimmed)) return;
             if (['peruuta', 'cancel'].includes(exactTrimmed)) return;
 
             if (allowedWordsLower.some(word => txt.includes(word))) return;
             
-            // Handle massive targets globally via findPostWrapper to bypass generic protective logic
             if (nukeTargets.includes(exactTrimmed)) {
-                // EXACT LOGIC FROM UPLOADED FILE (No blind side-bar nuking fallback)
                 const wrapper = findPostWrapper(node.parentElement);
                 if (wrapper && !isElementProtected(wrapper) && !wrapper.matches('main, section[role="main"], div[role="main"], body, html, nav')) {
                     collapseElement(wrapper);
@@ -2319,7 +2221,6 @@ injectInlineCSS();
                 if (el && el.offsetParent !== null && 
                     !el.matches('main, section[role="main"], div[role="main"], body, html, nav') &&
                     !isElementProtected(el)) {
-                    // Safety check: Prevents nuking major layout wrappers
                     const rect = el.getBoundingClientRect();
                     if (rect.width > 0 && rect.height > 0 && (rect.width * rect.height > 150000)) return;
                     collapseElement(el);
@@ -2332,9 +2233,10 @@ injectInlineCSS();
             let txt = txtRaw.toLowerCase();
             let exactTrimmed = txtRaw.trim().toLowerCase();
             
-            const isNightmareStory = location.pathname.toLowerCase().startsWith('/stories/nightmaree3z/');
+            const currentPathLow = location.pathname.toLowerCase();
+            const isNightmareStory = currentPathLow.includes('/stories/nightmaree3z') || currentPathLow.includes('/archive/');
             const storySafeWords = ['poista', 'delete', 'remove', 'poista julkaisu', 'delete post', 'poista tarina', 'delete story'];
-            if (storySafeWords.includes(exactTrimmed) && isNightmareStory) return;
+            if (isNightmareStory && storySafeWords.includes(exactTrimmed)) return;
             if (['peruuta', 'cancel'].includes(exactTrimmed)) return;
 
             if (allowedWordsLower.some(word => txt.includes(word))) return;
@@ -2345,7 +2247,6 @@ injectInlineCSS();
                 if (el && el.offsetParent !== null && 
                     !el.matches('main, section[role="main"], div[role="main"], body, html, nav') &&
                     !isElementProtected(el)) {
-                    // Safety check: Prevents nuking major layout wrappers
                     const rect = el.getBoundingClientRect();
                     if (rect.width > 0 && rect.height > 0 && (rect.width * rect.height > 150000)) return;
                     collapseElement(el);
@@ -2372,32 +2273,26 @@ injectInlineCSS();
     }
 
     function hideUnwantedUIButtons() {
-        const isNightmareStory = location.pathname.toLowerCase().startsWith('/stories/nightmaree3z/');
+        const currentPathLow = location.pathname.toLowerCase();
+        const isNightmareStory = currentPathLow.includes('/stories/nightmaree3z') || currentPathLow.includes('/archive/');
         const targets = ['poista', 'delete', 'remove', 'poista seuraaja', 'remove follower', 'lopeta seuraaminen', 'unfollow', 'estä', 'block'];
+        const storySafeWords = ['poista', 'delete', 'remove', 'poista julkaisu', 'delete post', 'poista tarina', 'delete story'];
         
-        // Aggressive catch-all for utility classes often used on buttons
         document.querySelectorAll('button, [role="button"], a, .x1i10hfl, [tabindex="0"], span, div').forEach(btn => {
             const txt = (btn.textContent || '').trim().toLowerCase();
             if (targets.includes(txt)) {
-                // Ignore massive wrapper divs
                 if (btn.tagName === 'DIV' || btn.tagName === 'SPAN') {
                     if (btn.children.length > 2) return; 
                 }
-                if (isNightmareStory && (txt === 'poista' || txt === 'delete' || txt === 'remove' || txt === 'poista tarina' || txt === 'delete story')) {
-                    // Force reveal if it was accidentally hidden by something else
-                    if (hiddenElements.has(btn)) {
-                        btn.style.removeProperty('display');
-                        hiddenElements.delete(btn);
-                    }
-                    const pBtn = btn.closest('button, [role="button"], a, .x1i10hfl');
-                    if (pBtn && hiddenElements.has(pBtn)) {
-                        pBtn.style.removeProperty('display');
-                        hiddenElements.delete(pBtn);
-                    }
-                    return; // Spare the delete button on nightmaree3z stories
-                }
-                collapseElement(btn);
                 
+                if (isNightmareStory && storySafeWords.includes(txt)) {
+                    unhideNode(btn);
+                    let pBtn = btn.closest('button, [role="button"], a, .x1i10hfl');
+                    unhideNode(pBtn);
+                    return; 
+                }
+                
+                collapseElement(btn);
                 const parentBtn = btn.closest('button, [role="button"], a, .x1i10hfl');
                 if (parentBtn && parentBtn !== btn) {
                     collapseElement(parentBtn);
@@ -2408,14 +2303,14 @@ injectInlineCSS();
 
     function fastSynchronousHider(mutations) {
         const path = location.pathname.toLowerCase();
-        const isNightmareStory = path.startsWith('/stories/nightmaree3z/');
+        const isNightmareStory = path.includes('/stories/nightmaree3z') || path.includes('/archive/');
         const targets = ['poista', 'delete', 'remove', 'poista seuraaja', 'remove follower', 'lopeta seuraaminen', 'unfollow', 'estä', 'block'];
         const nukeTargets = ['sponsoroitu', 'sponsored', 'sinulle ehdotettu', 'sinulle ehdotettua', 'suggested for you'];
+        const storySafeWords = ['poista', 'delete', 'remove', 'poista julkaisu', 'delete post', 'poista tarina', 'delete story'];
 
         for (let i = 0; i < mutations.length; i++) {
             const m = mutations[i];
 
-            // --- ANTI-FLASH: Virtual DOM Recycled Node Intercept ---
             if (m.type === 'childList' && m.target) {
                 let nodeForArticle = m.target.nodeType === 1 ? m.target : m.target.parentElement;
                 if (nodeForArticle && nodeForArticle.closest) {
@@ -2424,7 +2319,6 @@ injectInlineCSS();
                         const currentId = getPostIDFromArticle(article);
                         const scannedId = article.getAttribute('data-scanned-post-id');
                         if (currentId && scannedId && currentId !== scannedId) {
-                            // Virtual DOM swapped this element! Strip safe tag instantly to trigger opacity 0
                             article.removeAttribute('data-banned-scan');
                             article.removeAttribute('data-feed-scan-done');
                             article.removeAttribute('data-scanned-post-id');
@@ -2453,7 +2347,6 @@ injectInlineCSS();
                     const txt = (el.textContent || '').trim().toLowerCase();
                     
                     if (nukeTargets.includes(txt)) {
-                        // EXACT LOGIC FROM UPLOADED FILE (No blind side-bar nuking fallback)
                         el.style.setProperty('opacity', '0', 'important');
                         const wrapper = findPostWrapper(el);
                         if (wrapper && !isElementProtected(wrapper) && !wrapper.matches('main, section[role="main"], div[role="main"], body, html, nav')) {
@@ -2463,12 +2356,11 @@ injectInlineCSS();
                     }
 
                     if (targets.includes(txt)) {
-                        if (isNightmareStory && (txt === 'poista' || txt === 'delete' || txt === 'remove' || txt === 'poista tarina' || txt === 'delete story')) {
-                            if (hiddenElements.has(el)) {
-                                el.style.removeProperty('display');
-                                hiddenElements.delete(el);
-                            }
-                            continue; // DO NOT HIDE
+                        if (isNightmareStory && storySafeWords.includes(txt)) {
+                            unhideNode(el);
+                            const pBtn = el.closest('button, [role="button"], a, .x1i10hfl');
+                            unhideNode(pBtn);
+                            continue; 
                         }
                         
                         if (!isElementProtected(el)) {
@@ -2485,7 +2377,6 @@ injectInlineCSS();
         }
     }
 
-    // CHECK FOR SPA NAVIGATION SILENTLY
     function checkSPARouting() {
         if (__lastKnownUrl !== window.location.href) {
             __lastKnownUrl = window.location.href;
@@ -2496,8 +2387,8 @@ injectInlineCSS();
     let observerScheduled = false;
     function observerCallback(mutationsList) {
         updateOverlayState();
-        makeOverlayLikesClickable(); // Added to monitor for new overlays
-        fastSynchronousHider(mutationsList); // Synchronous intercept for no-glimpse hiding
+        makeOverlayLikesClickable(); 
+        fastSynchronousHider(mutationsList); 
         if (observerScheduled) return;
         observerScheduled = true;
         addTimeout(() => {
@@ -2515,13 +2406,11 @@ injectInlineCSS();
             }
             collapseElementsBySelectors(selectorsToHide);
             
-            // Re-trigger feed processing on mutation to catch new posts while scrolling
             processFeedPostsForScanning();
             
             collapseElementsByKeywordsOrPaths(bannedKeywords, instagramBannedPaths, selectorsToMonitor);
             if (location.hostname.includes('instagram.com')) {
                 hideInstagramBannedContent();
-                genericAggressiveHider();
                 checkForRedirectElements();
                 hideMyosMetaltaElements();
                 hideSettingsPageElements();
@@ -2580,7 +2469,7 @@ injectInlineCSS();
         hideUnfollowRowInProfileDialog();
         updateOverlayState();
         scanPermalinkArticleAndAct();
-        makeOverlayLikesClickable(); // Fire on main loop
+        makeOverlayLikesClickable(); 
     }
 
     mainHandler();
@@ -2588,18 +2477,15 @@ injectInlineCSS();
 
     function scheduleIntervals() {
         addInterval(() => {
-            checkSPARouting(); // Poll for URL changes on interval
+            checkSPARouting(); 
             updateOverlayState();
-            makeOverlayLikesClickable(); // Recheck continuously
+            makeOverlayLikesClickable(); 
             if (!isReelsPage() && !document.hidden) {
-                mainHandler();
-                hideMyosMetaltaElements();
-                hideSettingsPageElements();
-                hideSinulleEhdotettuaBlock();
                 hideUnwantedUIButtons();
                 if (isSearchSurfacePresent()) hideInstagramSearchResults();
+                if (Math.random() < 0.3) genericAggressiveHider(); 
             }
-        }, 70);
+        }, 250); 
     }
     startIntervals(scheduleIntervals);
 
@@ -2610,18 +2496,6 @@ injectInlineCSS();
         } else {
             startIntervals(scheduleIntervals);
             mainHandler();
-            if (isSearchSurfacePresent()) hideInstagramSearchResults();
-        }
-    }, false);
-
-    onEvent(document, 'visibilitychange', () => {
-        updateOverlayState();
-        if (!document.hidden && !isReelsPage()) {
-            mainHandler();
-            hideMyosMetaltaElements();
-            hideSettingsPageElements();
-            hideSinulleEhdotettuaBlock();
-            hideUnwantedUIButtons();
             if (isSearchSurfacePresent()) hideInstagramSearchResults();
         }
     }, false);
@@ -2652,7 +2526,7 @@ injectInlineCSS();
     })();
 
     onEvent(window, 'locationchange', function() {
-        isFeedScanPhase = true; // reset feed phase for SPA routes
+        isFeedScanPhase = true; 
         reelsStyleInjected = false;
         currentURL = window.location.href;
         injectInlineCSS();
@@ -2661,19 +2535,6 @@ injectInlineCSS();
         if (isReelsPage()) {
             injectReelsCSS();
         } else {
-            mainHandler();
-            hideMyosMetaltaElements();
-            hideSettingsPageElements();
-            hideSinulleEhdotettuaBlock();
-            hideUnwantedUIButtons();
-            if (isSearchSurfacePresent()) hideInstagramSearchResults();
-        }
-        scanPermalinkArticleAndAct();
-    }, false);
-
-    onEvent(document, 'visibilitychange', function() {
-        updateOverlayState();
-        if (!document.hidden && !isReelsPage()) {
             mainHandler();
             hideMyosMetaltaElements();
             hideSettingsPageElements();
