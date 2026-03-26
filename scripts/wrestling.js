@@ -12,54 +12,39 @@
     // === ENVIRONMENT DETECTOR ===
     const isAndroid = /Android/i.test(navigator.userAgent);
 
-    // === CHROME DEV CONSOLE LOGGING ===
     function devLog(message) {
         console.log('[WRESTLING.JS]', message);
     }
 
     const CACHE_KEY = 'wrestling_women_urls';
     const CACHE_TIME_KEY = 'wrestling_women_urls_time';
-    const CACHE_LIFETIME_MS = 12 * 60 * 60 * 1000; // 12 hours in milliseconds
+    const CACHE_LIFETIME_MS = 12 * 60 * 60 * 1000; 
 
-    // === MANUAL SAFETY NET (EXPANDED WITH HTML HARDCODES) ===
     const manualBans = [
-        // Original Core
         '/wrestlers/lainey-reid', '/wrestlers/kellyanne', '/wrestlers/kellyanne-english',
         '/wrestlers/nikita-naridian', '/wrestlers/riho', '/wrestlers/thekla',
         '/wrestlers/dani-sekelsky', '/wrestlers/kelly-kelly', '/wrestlers/alba-fyre', 
-        '/roster/wwe2k26/alundra-blayze',
-        
-        // User Targets & Single Names (From HTML)
-        '/wrestlers/roxxi', '/wrestlers/zelina-vega', '/wrestlers/rosita', 
-        '/wrestlers/lita', '/wrestlers/chyna', '/wrestlers/maryse', '/wrestlers/aksana', 
-        '/wrestlers/kaitlyn', '/wrestlers/layla', '/wrestlers/tamina', '/wrestlers/melina', 
-        '/wrestlers/jacqueline', '/wrestlers/odb', '/wrestlers/asya', '/wrestlers/debra', 
-        '/wrestlers/lana', '/wrestlers/sable', '/wrestlers/tori', '/wrestlers/carmella', 
-        '/wrestlers/raquel', '/wrestlers/kamille', '/wrestlers/maxine', '/wrestlers/cherry', 
-        '/wrestlers/sarita', '/wrestlers/shaniqua', '/wrestlers/francine', '/wrestlers/trinity',
-        
-        // Short First Names (4 Letters or Less - From HTML)
-        '/wrestlers/ivy-nile', '/wrestlers/aj-lee', '/wrestlers/mia-yim', '/wrestlers/gail-kim', 
-        '/wrestlers/eve-torres', '/wrestlers/dawn-marie', '/wrestlers/joy-giovanni', 
+        '/roster/wwe2k26/alundra-blayze', '/wrestlers/roxxi', '/wrestlers/zelina-vega', 
+        '/wrestlers/rosita', '/wrestlers/lita', '/wrestlers/chyna', '/wrestlers/maryse', 
+        '/wrestlers/aksana', '/wrestlers/kaitlyn', '/wrestlers/layla', '/wrestlers/tamina', 
+        '/wrestlers/melina', '/wrestlers/jacqueline', '/wrestlers/odb', '/wrestlers/asya', 
+        '/wrestlers/debra', '/wrestlers/lana', '/wrestlers/sable', '/wrestlers/tori', 
+        '/wrestlers/carmella', '/wrestlers/raquel', '/wrestlers/kamille', '/wrestlers/maxine', 
+        '/wrestlers/cherry', '/wrestlers/sarita', '/wrestlers/shaniqua', '/wrestlers/francine', 
+        '/wrestlers/trinity', '/wrestlers/ivy-nile', '/wrestlers/aj-lee', '/wrestlers/mia-yim', 
+        '/wrestlers/gail-kim', '/wrestlers/eve-torres', '/wrestlers/dawn-marie', '/wrestlers/joy-giovanni', 
         '/wrestlers/cora-jade', '/wrestlers/taya-valkyrie', '/wrestlers/brie-bella', '/wrestlers/su-yung'
     ];
 
-    // === ANTI-COLLATERAL DAMAGE LIST ===
-    // Slugs that shouldn't be sent to Facebook/YouTube to prevent collateral damage.
     const doNotBroadcast = [
-        '/wrestlers/melina',
-        '/wrestlers/melina-perez',
-        '/wrestlers/aj-lee',
-        '/wrestlers/aj',
-        '/wrestlers/becky-lynch',
-        '/wrestlers/becky',
-        '/wrestlers/katarina',
-        '/wrestlers/jojo',
+        '/wrestlers/melina', '/wrestlers/melina-perez', '/wrestlers/aj-lee',
+        '/wrestlers/aj', '/wrestlers/becky-lynch', '/wrestlers/becky',
+        '/wrestlers/katarina', 'wrestlers/katarina', 'katarina',
+	'/wrestlers/jojo', 'wrestlers/jojo', 'jojo',
     ];
 
     let newlyDiscovered = [];
 
-    // --- BULLETPROOF CROSS-PLATFORM BROADCAST ---
     function broadcastToExtensions(urls) {
         const safeUrls = urls.filter(url => {
             const slug = url.toLowerCase();
@@ -67,24 +52,13 @@
         });
         
         if (typeof browser !== 'undefined' && browser.storage && browser.storage.local) {
-            browser.storage.local.set({'wrestling_women_urls': safeUrls})
-                .then(() => devLog(`Successfully broadcasted ${safeUrls.length} safe URLs to Firefox storage.`))
-                .catch(e => devLog('Error broadcasting to Firefox storage: ' + e.message));
+            browser.storage.local.set({'wrestling_women_urls': safeUrls}).catch(()=>{});
         } 
         else if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-            chrome.storage.local.set({'wrestling_women_urls': safeUrls}, () => {
-                if (chrome.runtime.lastError) {
-                    devLog('Error broadcasting to Chrome storage: ' + chrome.runtime.lastError.message);
-                } else {
-                    devLog(`Successfully broadcasted ${safeUrls.length} safe URLs to Chrome storage.`);
-                }
-            });
-        } else {
-            devLog('WARNING: No cross-extension storage API found in this context.');
+            chrome.storage.local.set({'wrestling_women_urls': safeUrls}, () => {});
         }
     }
 
-    // Function to inject safe CSS to hide the roster tabs and panels for women
     function hideUIElements() {
         const style = document.createElement('style');
         style.textContent = `
@@ -95,10 +69,8 @@
             }
         `;
         (document.head || document.documentElement).appendChild(style);
-        devLog('Injected CSS to hide women tabs and categories.');
     }
 
-    // Function to retrieve the cached list synchronously, merged with manual bans
     function getCachedWomenUrls() {
         let urls = [...manualBans];
         const cached = localStorage.getItem(CACHE_KEY);
@@ -106,14 +78,11 @@
             try {
                 const parsed = JSON.parse(cached);
                 urls = [...new Set([...urls, ...parsed])]; 
-            } catch (e) {
-                devLog('Failed to parse cached URLs.');
-            }
+            } catch (e) {}
         }
         return urls;
     }
 
-    // Function to extract aliases from known banned blocks and learn them
     function learnAliases(element) {
         if (!element || !element.querySelectorAll) return;
         try {
@@ -141,12 +110,9 @@
                     }
                 }
             });
-        } catch(e) {
-            devLog('Error learning aliases: ' + e);
-        }
+        } catch(e) {}
     }
 
-    // Function to push newly learned aliases to the global browser storage
     function flushDiscoveredAliases(currentBlockedUrls) {
         if (newlyDiscovered.length === 0) return currentBlockedUrls;
         
@@ -163,7 +129,6 @@
         if (added) {
             localStorage.setItem(CACHE_KEY, JSON.stringify(updatedUrls));
             broadcastToExtensions(updatedUrls); 
-            devLog(`Learned and broadcasted new aliases! Global list is now: ${updatedUrls.length} profiles.`);
         }
         
         newlyDiscovered = []; 
@@ -178,7 +143,7 @@
         return results;
     }
 
-    // --- HYBRID FETCHING ENGINE ---
+    // --- EXACT MATCH TO BACKGROUND.JS GENDER-TAG SLICER ---
     async function updateWomenUrls() {
         const cachedTime = localStorage.getItem(CACHE_TIME_KEY);
         const now = Date.now();
@@ -187,98 +152,89 @@
         broadcastToExtensions(currentCache);
 
         if (cachedTime && (now - parseInt(cachedTime, 10)) < CACHE_LIFETIME_MS) {
-            devLog('Using recently cached list of women profiles.');
             return currentCache;
         }
 
-        let pagesToFetch = [];
+        if (isAndroid) return currentCache; 
 
-        if (isAndroid) {
-            devLog('Android Environment Detected: Using perfectly tuned 3-page Regex fetcher...');
-            pagesToFetch = [
-                'https://www.thesmackdownhotel.com/wrestlers/?sort=attr.ct176.frontend_value&sortdir=asc&attr.ct8.value=female&page=1',
-                'https://www.thesmackdownhotel.com/wrestlers/?sort=attr.ct176.frontend_value&sortdir=asc&attr.ct8.value=female&page=2',
-                'https://www.thesmackdownhotel.com/wrestlers/?sort=attr.ct176.frontend_value&sortdir=asc&attr.ct8.value=female&page=3'
-            ];
-        } else {
-            devLog('PC Environment Detected: Using heavy DOMParser fetcher...');
-            pagesToFetch = [
-                'https://www.thesmackdownhotel.com/wrestlers/?sort=attr.ct176.frontend_value&sortdir=asc&attr.ct8.value=female&page=1',
-                'https://www.thesmackdownhotel.com/wrestlers/?sort=attr.ct176.frontend_value&sortdir=asc&attr.ct8.value=female&page=2',
-                'https://www.thesmackdownhotel.com/wrestlers/?sort=attr.ct176.frontend_value&sortdir=asc&attr.ct8.value=female&page=3',
-            ];
-        }
+        devLog('Fetching massive Roster pages using strict Gender-Tag Slicer...');
+        const pagesToFetch = [
+            'https://www.thesmackdownhotel.com/roster/?promotion=wwe&date=all-time#women',
+            'https://www.thesmackdownhotel.com/roster/?promotion=aew&date=all-time#women',
+            'https://www.thesmackdownhotel.com/roster/?promotion=tna&date=all-time#women',
+            'https://www.thesmackdownhotel.com/roster/?promotion=njpw&date=all-time#women',
+            'https://www.thesmackdownhotel.com/roster/?promotion=wcw&date=all-time#women',
+            'https://www.thesmackdownhotel.com/roster/?promotion=ecw&date=all-time#women',
+            'https://www.thesmackdownhotel.com/roster/?promotion=aaa&date=all-time#women',    
+            'https://www.thesmackdownhotel.com/roster/?promotion=roh&date=all-time#women',
+            'https://www.thesmackdownhotel.com/roster/?promotion=awa&date=all-time#women',
+            'https://www.thesmackdownhotel.com/roster/?promotion=nwa&date=all-time#women',
+            'https://www.thesmackdownhotel.com/roster/?promotion=lucha-underground&date=all-time#women',
+            'https://www.thesmackdownhotel.com/roster/?promotion=ovw&date=all-time#women',
+            'https://www.thesmackdownhotel.com/roster/?promotion=ajpw&date=all-time#women',
+            'https://www.thesmackdownhotel.com/roster/?promotion=noah&date=all-time#women',
+            'https://www.thesmackdownhotel.com/roster/?promotion=cmll&date=all-time#women',
+            'https://www.thesmackdownhotel.com/roster/?promotion=mlw&date=all-time#women',
+            'https://www.thesmackdownhotel.com/roster/?promotion=czw&date=all-time#women',
+            'https://www.thesmackdownhotel.com/roster/hall-of-fame/#women'
+        ];
 
         let combinedUrls = [...currentCache];
 
         try {
-            const chunks = chunkArray(pagesToFetch, isAndroid ? 2 : 4);
-            
+            const chunks = chunkArray(pagesToFetch, 2);
             for (const chunk of chunks) {
                 const fetchPromises = chunk.map(async (url) => {
                     try {
-                        const response = await fetch(url);
+                        const cleanUrl = url.split('#')[0];
+                        const response = await fetch(cleanUrl);
                         if (!response.ok) return;
                         const html = await response.text();
 
-                        if (isAndroid) {
-                            const linkRegex = /href="(\/wrestlers\/[^"]+)"/gi;
-                            let match;
-                            while ((match = linkRegex.exec(html)) !== null) {
-                                combinedUrls.push(match[1]);
-                            }
-                        } else {
-                            const parser = new DOMParser();
-                            const doc = parser.parseFromString(html, 'text/html');
-
-                            if (url.includes('/roster/')) {
-                                const womenPanel = doc.querySelector('#rlta-panel-women');
-                                if (womenPanel) {
-                                    womenPanel.querySelectorAll('a[href^="/wrestlers/"]').forEach(link => {
-                                        const path = new URL(link.getAttribute('href'), window.location.origin).pathname;
-                                        combinedUrls.push(path);
-                                    });
-                                }
-                            } else {
-                                doc.querySelectorAll('.items-row a[href^="/wrestlers/"], .roster a[href^="/wrestlers/"], .contentheading a[href^="/wrestlers/"]').forEach(link => {
-                                    const path = new URL(link.getAttribute('href'), window.location.origin).pathname;
-                                    combinedUrls.push(path);
-                                });
+                        const femaleChunks = html.split('gender-female');
+                        for (let i = 1; i < femaleChunks.length; i++) {
+                            const htmlChunk = femaleChunks[i];
+                            const isolatedBox = htmlChunk.substring(0, 1500);
+                            const match = /href="(\/wrestlers\/[^"]+)"/i.exec(isolatedBox);
+                            if (match) {
+                                try { combinedUrls.push(new URL(match[1], 'https://www.thesmackdownhotel.com').pathname); } 
+                                catch(e) { combinedUrls.push(match[1]); }
                             }
                         }
-                    } catch(e) {
-                        devLog(`Failed to fetch ${url}: ${e}`);
-                    }
-                });
 
+                        const panelChunks = html.split(/id=["']?(?:rlta-panel-women|rlta-women|roster-women)["']?/i);
+                        for (let i = 1; i < panelChunks.length; i++) {
+                            let pChunk = panelChunks[i];
+                            let endIdx = pChunk.search(/id=["']?(?:rlta|ja-sidebar|<footer)/i);
+                            if (endIdx !== -1) pChunk = pChunk.substring(0, endIdx);
+                            const regex = /href="(\/wrestlers\/[^"]+)"/gi;
+                            let match;
+                            while ((match = regex.exec(pChunk)) !== null) {
+                                try { combinedUrls.push(new URL(match[1], 'https://www.thesmackdownhotel.com').pathname); } 
+                                catch(e) { combinedUrls.push(match[1]); }
+                            }
+                        }
+                    } catch(e) {}
+                });
                 await Promise.all(fetchPromises);
-                if (isAndroid) await new Promise(resolve => setTimeout(resolve, 300)); 
             }
 
             combinedUrls = [...new Set(combinedUrls)]; 
-
             if (combinedUrls.length > 0) {
                 localStorage.setItem(CACHE_KEY, JSON.stringify(combinedUrls));
                 localStorage.setItem(CACHE_TIME_KEY, now.toString());
-                
                 broadcastToExtensions(combinedUrls);
-                
-                devLog(`Successfully fetched and cached ${combinedUrls.length} women profile URLs.`);
             }
-
             return combinedUrls;
         } catch (error) {
-            devLog('Error fetching women profiles: ' + error);
             return getCachedWomenUrls(); 
         }
     }
 
-    // Function to process all links on the current page and wipe the banned ones
     function obliterateBlockedElements(blockedUrls) {
         if (!blockedUrls || blockedUrls.length === 0) return blockedUrls;
 
         let removedCount = 0;
-        
         const isFemaleDatabasePage = window.location.href.toLowerCase().includes('attr.ct8.value=female');
 
         if (isFemaleDatabasePage) {
@@ -289,7 +245,8 @@
                     if (!blockedUrls.includes(urlPath)) {
                         newlyDiscovered.push(urlPath); 
                     }
-                    const parentCard = link.closest('.items-row') || link.closest('.roster') || link.closest('[data-id="blogPost"]') || link;
+                    // THE FIX: Only target .item! Never delete the .items-row or .roster grid container!
+                    const parentCard = link.closest('.item') || link.closest('[data-id="blogPost"]') || link;
                     if (parentCard.isConnected) {
                         learnAliases(parentCard); 
                         parentCard.remove();
@@ -299,7 +256,6 @@
             });
 
             if (removedCount > 0) {
-                devLog(`Aggressive Context Scanner: Auto-nuked and learned ${removedCount} female profiles from database search page.`);
                 return flushDiscoveredAliases(blockedUrls);
             }
         }
@@ -328,11 +284,8 @@
                 }
 
                 if (shouldRemove) {
-                    const parentCard = link.closest('[data-id="blogPost"]') || 
-                                       link.closest('.items-row') || 
-                                       link.closest('.roster_section > a') || 
-                                       link;
-                                       
+                    // THE FIX: Strict targeting of .item wrapper to save the grid!
+                    const parentCard = link.closest('.item') || link.closest('[data-id="blogPost"]') || link;
                     if (parentCard && parentCard.isConnected) {
                         learnAliases(parentCard);
                         parentCard.remove();
@@ -342,7 +295,8 @@
             } catch (e) {}
         });
 
-        const searchItems = document.querySelectorAll('.items-row, .roster, tr.title-reign, [data-id="blogPost"], .item-info, h2.contentheading, p.result__description, .roster_name, img, .page-header, dl.article-info');
+        // THE FIX: Swapped .roster and .items-row for .item so we only scan/delete specific cards, not massive grids!
+        const searchItems = document.querySelectorAll('.item, tr.title-reign, [data-id="blogPost"], .item-info, h2.contentheading, p.result__description, .roster_name, img, .page-header, dl.article-info');
         searchItems.forEach(item => {
             if (!item.isConnected) return;
 
@@ -353,20 +307,22 @@
 
             for (let i = 0; i < bannedProfiles.length; i++) {
                 const profile = bannedProfiles[i];
-                if (profile.name.length > 3 && (textContent.includes(profile.name) || rawHtml.includes(profile.slug))) {
-                    shouldRemove = true;
-                    break;
+                if (profile.name.length > 3) {
+                    const nameRegex = new RegExp('\\b' + profile.name.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&') + '\\b', 'i');
+                    if (nameRegex.test(textContent) || rawHtml.includes('/' + profile.slug + '"') || rawHtml.includes('/' + profile.slug + '/')) {
+                        shouldRemove = true;
+                        break;
+                    }
                 }
             }
 
             if (shouldRemove) {
                 learnAliases(item);
 
-                const parentCard = item.closest('[data-id="blogPost"]') || 
+                // THE FIX: Safe deletion targeting.
+                const parentCard = item.closest('.item') || 
+                                   item.closest('[data-id="blogPost"]') || 
                                    item.closest('tr.title-reign') || 
-                                   item.closest('.items-row') || 
-                                   item.closest('a[href*="/roster/"], a[href*="/wrestlers/"]') || 
-                                   item.closest('.roster') || 
                                    (item.matches('.page-header, dl.article-info') ? item : null) ||
                                    item;
                                    
@@ -377,21 +333,28 @@
             }
         });
 
-        if (removedCount > 0) {
-            devLog(`Removed ${removedCount} banned profile cards/search results from the current view.`);
-        }
-
         return flushDiscoveredAliases(blockedUrls);
     }
 
-    // Main execution function
     async function initFilter() {
         hideUIElements();
 
-        // BUMP TO V10: Clears old caches and locks in the new expanded HTML hardcodes
-        if (!localStorage.getItem('wrestling_cache_v10')) {
+        // THE MANUAL REFRESH COMMAND
+        if (window.location.search.includes('force_refresh=true')) {
              localStorage.removeItem(CACHE_TIME_KEY); 
-             localStorage.setItem('wrestling_cache_v10', 'true');
+             localStorage.removeItem(CACHE_KEY); 
+             if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+                 chrome.storage.local.remove(['wrestling_women_urls_time', 'wrestling_women_urls']);
+             }
+             devLog('🚨 MANUAL FORCE REFRESH TRIGGERED! All caches wiped.');
+             window.history.replaceState({}, document.title, window.location.pathname);
+        }
+
+        // BUMP TO V27: PURGE JOHN CENA AND THE MEN FROM THE CACHE!
+        if (!localStorage.getItem('wrestling_cache_v27')) {
+             localStorage.removeItem(CACHE_TIME_KEY); 
+             localStorage.removeItem(CACHE_KEY); 
+             localStorage.setItem('wrestling_cache_v27', 'true');
         }
 
         let blockedUrls = getCachedWomenUrls();
@@ -409,9 +372,12 @@
             } else {
                 const bannedNames = blockedUrls.map(url => url.split('/').filter(Boolean).pop().replace(/-/g, ' '));
                 for (let i = 0; i < bannedNames.length; i++) {
-                    if (bannedNames[i].length > 3 && pageText.includes(bannedNames[i])) {
-                        shouldRedirect = true;
-                        break;
+                    if (bannedNames[i].length > 3) {
+                        const nameRegex = new RegExp('\\b' + bannedNames[i].replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&') + '\\b', 'i');
+                        if (nameRegex.test(pageText)) {
+                            shouldRedirect = true;
+                            break;
+                        }
                     }
                 }
             }
@@ -445,17 +411,14 @@
                     break;
                 }
             }
-            
             if (shouldProcess) {
                 obliterateBlockedElements(getCachedWomenUrls());
             }
         });
 
         observer.observe(document.documentElement, { childList: true, subtree: true });
-        devLog('Mutation observer actively listening for new profile cards.');
     }
 
-    // Start the script
     initFilter();
 
 })();

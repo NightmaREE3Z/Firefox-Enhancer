@@ -376,7 +376,7 @@ const updateBlocklist = async () => {
 };
 
 // ===================================================================================
-// === WRESTLING DYNAMIC BACKGROUND FETCHER (PC DOMPARSER EDITION) ===
+// === WRESTLING DYNAMIC BACKGROUND FETCHER (THE GENDER-TAG SLICER V27) ===
 // ===================================================================================
 const WRESTLING_CACHE_TIME_KEY = 'wrestling_women_urls_time';
 const WRESTLING_CACHE_LIFETIME_MS = 12 * 60 * 60 * 1000; // 12 hours
@@ -384,8 +384,17 @@ const WRESTLING_CACHE_LIFETIME_MS = 12 * 60 * 60 * 1000; // 12 hours
 const wrestlingManualBans = [
     '/wrestlers/lainey-reid', '/wrestlers/kellyanne', '/wrestlers/kellyanne-english',
     '/wrestlers/nikita-naridian', '/wrestlers/riho', '/wrestlers/thekla',
-    '/wrestlers/dani-sekelsky', '/wrestlers/kelly-kelly', '/wrestlers/lita',
-    '/wrestlers/alba-fyre', '/roster/wwe2k26/alundra-blayze'
+    '/wrestlers/dani-sekelsky', '/wrestlers/kelly-kelly', '/wrestlers/alba-fyre', 
+    '/roster/wwe2k26/alundra-blayze', '/wrestlers/roxxi', '/wrestlers/zelina-vega', 
+    '/wrestlers/rosita', '/wrestlers/lita', '/wrestlers/chyna', '/wrestlers/maryse', 
+    '/wrestlers/aksana', '/wrestlers/kaitlyn', '/wrestlers/layla', '/wrestlers/tamina', 
+    '/wrestlers/melina', '/wrestlers/jacqueline', '/wrestlers/odb', '/wrestlers/asya', 
+    '/wrestlers/debra', '/wrestlers/lana', '/wrestlers/sable', '/wrestlers/tori', 
+    '/wrestlers/carmella', '/wrestlers/raquel', '/wrestlers/kamille', '/wrestlers/maxine', 
+    '/wrestlers/cherry', '/wrestlers/sarita', '/wrestlers/shaniqua', '/wrestlers/francine', 
+    '/wrestlers/trinity', '/wrestlers/ivy-nile', '/wrestlers/aj-lee', '/wrestlers/mia-yim', 
+    '/wrestlers/gail-kim', '/wrestlers/eve-torres', '/wrestlers/dawn-marie', '/wrestlers/joy-giovanni', 
+    '/wrestlers/cora-jade', '/wrestlers/taya-valkyrie', '/wrestlers/brie-bella', '/wrestlers/su-yung'
 ];
 
 const wrestlingDoNotBroadcast = [
@@ -395,36 +404,63 @@ const wrestlingDoNotBroadcast = [
 
 async function updateWrestlingRoster() {
     try {
-        const data = await browser.storage.local.get([WRESTLING_CACHE_TIME_KEY, 'wrestling_women_urls']);
+        const localApi = (typeof browser !== 'undefined' && browser.storage) ? browser.storage.local : chrome.storage.local;
+        
+        const data = await new Promise(resolve => {
+            if (typeof browser !== 'undefined') {
+                localApi.get([WRESTLING_CACHE_TIME_KEY, 'wrestling_women_urls', 'v27_chrome_bump']).then(resolve);
+            } else {
+                localApi.get([WRESTLING_CACHE_TIME_KEY, 'wrestling_women_urls', 'v27_chrome_bump'], resolve);
+            }
+        });
+
         const now = Date.now();
         const lastFetch = data[WRESTLING_CACHE_TIME_KEY] || 0;
 
-        if (data.wrestling_women_urls && data.wrestling_women_urls.length > 0 && (now - lastFetch < WRESTLING_CACHE_LIFETIME_MS)) {
+        // V27 BUMP: Force-clear John Cena and the men globally!
+        if (!data.v27_chrome_bump) {
+            console.log('Force-clearing polluted cache via V27 bump...');
+            await new Promise(resolve => {
+                if (typeof browser !== 'undefined') {
+                    localApi.remove([WRESTLING_CACHE_TIME_KEY, 'wrestling_women_urls']).then(resolve);
+                } else {
+                    localApi.remove([WRESTLING_CACHE_TIME_KEY, 'wrestling_women_urls'], resolve);
+                }
+            });
+            await new Promise(resolve => {
+                if (typeof browser !== 'undefined') {
+                    localApi.set({ 'v27_chrome_bump': true }).then(resolve);
+                } else {
+                    localApi.set({ 'v27_chrome_bump': true }, resolve);
+                }
+            });
+        } 
+        else if (data.wrestling_women_urls && data.wrestling_women_urls.length > 0 && (now - lastFetch < WRESTLING_CACHE_LIFETIME_MS)) {
             console.log('Wrestling roster cache is fresh. Skipping background fetch.');
             return;
         }
 
-        console.log('Fetching wrestling rosters in background (Using DOMParser Engine)...');
+        console.log('Fetching massive Roster pages using strict Gender-Tag Slicer...');
+        
         const pagesToFetch = [
-            'https://www.thesmackdownhotel.com/roster/',
-            'https://www.thesmackdownhotel.com/roster/wwe/',
-            'https://www.thesmackdownhotel.com/wrestlers/?sort=attr.ct176.frontend_value&sortdir=asc&attr.ct8.value=female&page=1',
-            'https://www.thesmackdownhotel.com/wrestlers/?sort=attr.ct176.frontend_value&sortdir=asc&attr.ct8.value=female&page=2',
-            'https://www.thesmackdownhotel.com/wrestlers/?sort=attr.ct176.frontend_value&sortdir=asc&attr.ct8.value=female&page=3',
-            'https://www.thesmackdownhotel.com/wrestlers/?sort=attr.ct176.frontend_value&sortdir=asc&attr.ct8.value=female&page=4',
-            'https://www.thesmackdownhotel.com/wrestlers/?sort=attr.ct176.frontend_value&sortdir=asc&attr.ct8.value=female&page=5',
-            'https://www.thesmackdownhotel.com/wrestlers/?sort=attr.ct176.frontend_value&sortdir=asc&attr.ct8.value=female&page=6',
-            'https://www.thesmackdownhotel.com/wrestlers/?sort=attr.ct176.frontend_value&sortdir=asc&attr.ct8.value=female&page=7',
-            'https://www.thesmackdownhotel.com/wrestlers/?sort=attr.ct176.frontend_value&sortdir=asc&attr.ct8.value=female&page=8',
-            'https://www.thesmackdownhotel.com/roster/?promotion=wwe&date=all-time',
-            'https://www.thesmackdownhotel.com/roster/?promotion=aew&date=all-time',
-            'https://www.thesmackdownhotel.com/roster/?promotion=tna&date=all-time',
-            'https://www.thesmackdownhotel.com/roster/?promotion=njpw&date=all-time',
-            'https://www.thesmackdownhotel.com/roster/?promotion=aaa&date=all-time',
-            'https://www.thesmackdownhotel.com/roster/?promotion=roh&date=all-time',
-            'https://www.thesmackdownhotel.com/roster/?promotion=wcw&date=all-time',
-            'https://www.thesmackdownhotel.com/roster/?promotion=ecw&date=all-time',
-            'https://www.thesmackdownhotel.com/roster/hall-of-fame/'
+            'https://www.thesmackdownhotel.com/roster/?promotion=wwe&date=all-time#women',
+            'https://www.thesmackdownhotel.com/roster/?promotion=aew&date=all-time#women',
+            'https://www.thesmackdownhotel.com/roster/?promotion=tna&date=all-time#women',
+            'https://www.thesmackdownhotel.com/roster/?promotion=njpw&date=all-time#women',
+            'https://www.thesmackdownhotel.com/roster/?promotion=wcw&date=all-time#women',
+            'https://www.thesmackdownhotel.com/roster/?promotion=ecw&date=all-time#women',
+            'https://www.thesmackdownhotel.com/roster/?promotion=aaa&date=all-time#women',    
+            'https://www.thesmackdownhotel.com/roster/?promotion=roh&date=all-time#women',
+            'https://www.thesmackdownhotel.com/roster/?promotion=awa&date=all-time#women',
+            'https://www.thesmackdownhotel.com/roster/?promotion=nwa&date=all-time#women',
+            'https://www.thesmackdownhotel.com/roster/?promotion=lucha-underground&date=all-time#women',
+            'https://www.thesmackdownhotel.com/roster/?promotion=ovw&date=all-time#women',
+            'https://www.thesmackdownhotel.com/roster/?promotion=ajpw&date=all-time#women',
+            'https://www.thesmackdownhotel.com/roster/?promotion=noah&date=all-time#women',
+            'https://www.thesmackdownhotel.com/roster/?promotion=cmll&date=all-time#women',
+            'https://www.thesmackdownhotel.com/roster/?promotion=mlw&date=all-time#women',
+            'https://www.thesmackdownhotel.com/roster/?promotion=czw&date=all-time#women',
+            'https://www.thesmackdownhotel.com/roster/hall-of-fame/#women'
         ];
 
         let combinedUrls = [...wrestlingManualBans];
@@ -434,32 +470,58 @@ async function updateWrestlingRoster() {
 
         for (const url of pagesToFetch) {
             try {
-                const response = await fetch(url);
+                const cleanUrl = url.split('#')[0];
+                const response = await fetch(cleanUrl, {
+                    credentials: 'omit', 
+                    headers: {
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8'
+                    }
+                });
+                
                 if (!response.ok) continue;
                 const html = await response.text();
 
-                // PC MODE: Safe to use DOMParser! This mirrors wrestling.js perfectly.
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(html, 'text/html');
-
-                if (url.includes('/roster/')) {
-                    const womenPanel = doc.querySelector('#rlta-panel-women');
-                    if (womenPanel) {
-                        womenPanel.querySelectorAll('a[href^="/wrestlers/"]').forEach(link => {
-                            const path = new URL(link.getAttribute('href'), 'https://www.thesmackdownhotel.com').pathname;
-                            combinedUrls.push(path);
-                        });
+                // === THE GENDER-TAG SLICER ===
+                const femaleChunks = html.split('gender-female');
+                for (let i = 1; i < femaleChunks.length; i++) {
+                    const chunk = femaleChunks[i];
+                    const isolatedBox = chunk.substring(0, 1500);
+                    
+                    const match = /href="(\/wrestlers\/[^"]+)"/i.exec(isolatedBox);
+                    if (match) {
+                        try {
+                            combinedUrls.push(new URL(match[1], 'https://www.thesmackdownhotel.com').pathname);
+                        } catch(e) {
+                            combinedUrls.push(match[1]);
+                        }
                     }
-                } else {
-                    doc.querySelectorAll('.items-row a[href^="/wrestlers/"], .roster a[href^="/wrestlers/"], .contentheading a[href^="/wrestlers/"]').forEach(link => {
-                        const path = new URL(link.getAttribute('href'), 'https://www.thesmackdownhotel.com').pathname;
-                        combinedUrls.push(path);
-                    });
                 }
-            } catch(e) {
-                console.log(`Failed parsing ${url}: ${e}`);
-            }
-            await new Promise(resolve => setTimeout(resolve, 400));
+                
+                // Fallback for Video Game / Specific Roster pages
+                const panelChunks = html.split(/id=["']?(?:rlta-panel-women|rlta-women|roster-women)["']?/i);
+                for (let i = 1; i < panelChunks.length; i++) {
+                    let chunk = panelChunks[i];
+                    let endIdx = chunk.search(/id=["']?(?:rlta|ja-sidebar|<footer)/i);
+                    if (endIdx !== -1) chunk = chunk.substring(0, endIdx);
+                    
+                    const regex = /href="(\/wrestlers\/[^"]+)"/gi;
+                    let match;
+                    while ((match = regex.exec(chunk)) !== null) {
+                        try {
+                            combinedUrls.push(new URL(match[1], 'https://www.thesmackdownhotel.com').pathname);
+                        } catch(e) {
+                            combinedUrls.push(match[1]);
+                        }
+                    }
+                }
+            } catch(e) {}
+            
+            await new Promise(resolve => {
+                const tid = setTimeout(resolve, 800);
+                if (typeof resourceTracker !== 'undefined' && resourceTracker.addTimeout) {
+                    resourceTracker.addTimeout(tid);
+                }
+            });
         }
 
         combinedUrls = [...new Set(combinedUrls)];
@@ -469,12 +531,19 @@ async function updateWrestlingRoster() {
             return !wrestlingDoNotBroadcast.some(blocked => slug.includes(blocked));
         });
 
-        await browser.storage.local.set({
-            'wrestling_women_urls': safeUrls,
-            [WRESTLING_CACHE_TIME_KEY]: now
+        await new Promise(resolve => {
+            const payload = {
+                'wrestling_women_urls': safeUrls,
+                [WRESTLING_CACHE_TIME_KEY]: now
+            };
+            if (typeof browser !== 'undefined') {
+                localApi.set(payload).then(resolve);
+            } else {
+                localApi.set(payload, resolve);
+            }
         });
 
-        console.log(`✅ Background wrestling roster update complete: ${safeUrls.length} names cached.`);
+        console.log(`✅ Background wrestling roster update complete: ${safeUrls.length} strictly female names cached.`);
 
     } catch (e) {
         console.error('Wrestling background fetch error:', e);
