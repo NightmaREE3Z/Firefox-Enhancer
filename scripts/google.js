@@ -1,6 +1,13 @@
 (function () {
     'use strict';
 
+    // === INSTANT GEMINI ABORT ===
+    // Gemini's React router hates URL parameter stripping. 
+    // Since we don't need filtering here, we kill the script immediately.
+    if (window.location.hostname.includes('gemini.google.com')) {
+    return;
+    }
+
     // === DEBUG CONFIG (0 = off, 1 = on) ===
     const DEBUG = 1;
 
@@ -440,7 +447,7 @@
     const stringKeywordsToHide = [
         "Blis", "Tiffany", "Tiffy", "Stratton", "Chelsea Green", "Bayley", "Blackheart", "Tegan Nox", "Charlotte Flair", "Becky Lynch", "Michin", "Mia Yim", "WWE Woman", "julmakira", "Stephanie", "Liv Morgan", "Piper Niven", "Alba Fyre", "@yaonlylivvonce", 
         "@alexa_bliss_wwe_", "@alexa_bliss", "@samanthathebomb", "Jordynne", "WWE Women", "WWE Women's", "WWE Divas", "WWE Diva", "Maryse", "Samantha", "Irwin WWE", "Irvin WWE", "Irvin AEW", "Irwin AEW", "Candice LeRae", "Nia Jax", "Naomi", "Bianca Belair", 
-        "Charlotte", "Flair", "Trish", "Stratus", "MSEdge", "Izzi Dame", "Izzi WWE", "Dame WWE", "play boy", "Young Bucks", "Jackson", "NXT Women's", "AI app", "NXT Woman", "Jessika Carr", "Carr WWE", "Jessica Carr", "Jessika Karr", "Karr WWE", "poses", 
+        "Charlotte", "Flair", "Trish", "Stratus", "MSEdge", "Izzi Dame", "Izzi WWE", "Dame WWE", "play boy", "Young Bucks", "Jackson", "NXT Women's", "AI appl", "NXT Woman", "Jessika Carr", "Carr WWE", "Jessica Carr", "Jessika Karr", "Karr WWE", "poses", 
         "posing", "Lash Legend", "Jordynne Grace", "Isla Dawn", "editation", "Raquel Rodriguez", "DeepSeek", "Jessika WWE", "Jessica WWE", "Jessica Karr", "WWE Dame", "WWE Izzi", "playboy", "deepnude", "undress", "nudify", "nude app", "nudifier", "faceswap", 
         "facemorph", "morph face", "swapface", "Nikki", "Brie", "Opera Browser", "TOR Browser", "TOR-Browser", "TOR-selain", "TOR selain", "nudecrawler", "AI edit", "AI edited", "browser", "selain", "Brave-selainta", "Brave-selaimen", "Undress AI", "DeepNude AI", 
         "editing", "Skye Blue", "tarkoitiitko: nudify", "undress-app", "deepnude-app", "nudify-app", "Lola Vice", "Vice WWE", "Opera GX", "Sasha Banks", "-selainta", "selaimen", "-selaimen", "Lola WWE", "Alexis", "crotch", "WWE Xoxo", "Morgan Xoxo", "dreamtime", 
@@ -519,7 +526,7 @@
         /atherosclerosis cerebri/i, /arteriae cerebri/i, /cerebral atherosclerosis/i, /brain artery disease/i, /status post extirpationem uteri totalis/i, /extirpationem uteri totalis/i, /extirpationem/i, /hysterectomy/i, /uterus removal/i, /total/i,
         /Carcinoma parvocellulare pancreatis cum/i, /Carcinoma parvocellulare pancreatis/i, /Carcinoma/i, /parvocellulare/i, /pancreatis/i, /metastasibus/i, /pulmonum/i, /pulmonum l. dx./i, /lymphnodi mediastini/i, /l. dx./i, /mediastini/i, /GPT-5.1/i,
         /metastasibus pulmonum l. dx. lymphnodi mediastini/i, /et retroperinonei renis sin/i, /retroperinonei renis sin/i, /renis sin/i, /retroperinonei renis sin/i, /retroperinonei sin/i, /black friday/i, /SmackDown/i, /OpenAI/i, /ChatGPT/i, /GPT-4o/i,
-	/search/i, /GPT-5.4/i, /lookup/i, /findidfb/i, /fbid/i, /idfb/i, /techpowerup/i, /tech powerup/i, /tech/i, /hardware/i, /powerup/i, /wayback/i, /artifact/i, /dagonhai/i, /Dagon'hai/i, /Dagon´hai/i, /Dagon`hai/i,
+	/search/i, /GPT-5.4/i, /lookup/i, /findidfb/i, /fbid/i, /idfb/i, /techpowerup/i, /tech powerup/i, /tech/i, /hardware/i, /powerup/i, /wayback/i, /artifact/i, /dagonhai/i, /Dagon'hai/i, /Dagon´hai/i, /Dagon`hai/i, /Gemini/i, /Google Gemini/i,
     ];
 
     // === NEW: Firefox Only Allowed Words (Browser Promos) ===
@@ -531,7 +538,7 @@
         "archive.org", "iltalehti.fi", "is.fi", "youtube.com", "www.wikipedia.org", "www.netflix.com", "netflix.com", "runescape.wiki", "github.com/paintdotnet", "www.getpaint.net", "oldschool.runescape.com", "runescape.com", "openai.com", "status.openai.com",
         "www.reddit.com", "old.reddit.com", "new.reddit.com", "spotify.com", "www.thesmackdownhotel.com", "thesmackdownhotel.com", "wwe.com", "amd.com", "nvidia.com", "intel.com", "www.techpowerup.com", "chatgpt.com", "github.com/copilot", "gemini.google.com",
 	"www.jimms.fi", "www.verkkokauppa.com", "www.motonet.fi", "datatronic.fi", "www.datatronic.fi", "multitronic.fi", "www.multitronic.fi", "www.proshop.fi", "tori.fi", "www.tori.fi", "hintaopas.fi", "www.yliopistonapteekki.fi", "www.yliopistonapteekki.fi", 
-	"techpowerup.com", "findidfb.com", "lookup-id.com", "web.archive.org", "wayback.archive.org",
+	"techpowerup.com", "findidfb.com", "lookup-id.com", "web.archive.org", "wayback.archive.org", "gemini.google.com/app",
     ];
 
     const urlPatternsToHide = [
@@ -1636,37 +1643,43 @@
 
     if (preflightRedirectIfBanned()) return;
 
-    function cleanGoogleUrl() {
-        if (isFirefox) return; 
-        if (isGoogleImageSearch()) return; 
+function cleanGoogleUrl() {
+    if (isFirefox) return; 
+    if (isGoogleImageSearch()) return; 
+
+    // 1. Bulletproof Gemini Abort
+    if (window.location.hostname.includes('gemini')) return;
+
+    // 2. Only run cleaning logic if we are actually on a search results page
+    // This targets /search, /search/fincore, etc., while ignoring /app or /
+    if (!window.location.pathname.includes('/search')) return;
         
         const keepParams = [
             "q", "tbm", "tbs", "hl", "safe", "biw", "bih", "dpr", "ijn", "ei", "start", "source", "rlz", "oq", "gs_l", "sxsrf",
             "imgrc", "imgdii", "imgurl", "imgrefurl", "prev", "usg", "bvm", "psig", "ust", "chips", "asearch", "udm",
-            "uact", "pbx", "sclient", "aqs", "gs_ivs", "iflsig", "ictx"
+            "uact", "pbx", "sclient", "aqs", "gs_ivs", "iflsig", "ictx", "app", "gemini",
         ];
-        try {
-            const url = new URL(window.location.href);
-            if (/^.*\.google\..*/i.test(window.location.hostname)) {
-                let changed = false;
-                const paramsArray = Array.from(url.searchParams.keys());
-                for (let i = 0; i < paramsArray.length; ++i) {
-                    const param = paramsArray[i];
-                    if (!keepParams.includes(param)) {
-                        url.searchParams.delete(param);
-                        changed = true;
-                    }
-                }
-                if (changed) {
-                    const cleanedUrl = `${window.location.origin}${window.location.pathname}${url.searchParams.toString() ? '?' + url.searchParams.toString() : ''}`;
-                    if (cleanedUrl !== window.location.href) {
-                        window.history.replaceState({}, '', cleanedUrl);
-                        devLog('URL cleaned');
-                    }
-                }
+           try {
+        const url = new URL(window.location.href);
+        let changed = false;
+        const paramsArray = Array.from(url.searchParams.keys());
+        
+        for (let i = 0; i < paramsArray.length; ++i) {
+            const param = paramsArray[i];
+            if (!keepParams.includes(param)) {
+                url.searchParams.delete(param);
+                changed = true;
             }
-        } catch (e) {}
-    }
+        }
+        
+        if (changed) {
+            const cleanedUrl = `${window.location.origin}${window.location.pathname}${url.searchParams.toString() ? '?' + url.searchParams.toString() : ''}`;
+            if (cleanedUrl !== window.location.href) {
+                window.history.replaceState({}, '', cleanedUrl);
+            }
+        }
+    } catch (e) {}
+}
 
     document.addEventListener('submit', function (event) {
         try {
