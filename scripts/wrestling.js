@@ -53,7 +53,8 @@
         '/wrestlers/aj',
         '/wrestlers/becky-lynch',
         '/wrestlers/becky',
-        '/wrestlers/katarina'
+        '/wrestlers/katarina',
+        '/wrestlers/jojo',
     ];
 
     let newlyDiscovered = [];
