@@ -199,7 +199,11 @@
         '.upgrade-button-container',
         'button.upsell-button',
         '.upgrade-text-container',
-	'div.safety-disclaimer-container-for-medical.ng-star-inserted'
+        'div.safety-disclaimer-container-for-medical.ng-star-inserted',
+        // New selectors to nuke the "Päivitä Google AI Pro -tilaukseen" button
+        'upsell-button',
+        '[data-test-id="upsell-button"]',
+        '[data-test-id="bard-upsell-menu-button"]'
     ];
 
     // NEW: Snapchat Camera selector to expand to fill available space (not full screen)
