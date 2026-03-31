@@ -286,7 +286,7 @@
         /\bmorph\b/i, /inpaint/i, /art intel/i, /birpp/i, /safari/i, /Opera Browser/i, /Mozilla/i, /Firefox/i, /Firefux/i, /ismartta/i, /image enhanced/i, /image enhancing/i, /virtual touchup/i, /retouch/i, /touchup/i, /touch up/i,
         /tush/i, /lex bl/i, /image ai/i, /edit ai/i, /v5co/i, /v5c0/i, /vsc0/i, /riisu/i, /deviant/i, /Lex Cabr/i, /Lex Carb/i, /Lex Kauf/i, /Lex Man/i, /nudecrawler/i, /photo AI/i, /pict AI/i, /pics app/i, /enhance image/i, /erootti/i,
         /vegi/i, /vege/i, /AI edit/i, /faceswap/i, /DeepSeek/i, /deepnude ai/i, /deepnude-ai/i, /object/i, /unc1oth/i, /birppis/i, /Opera GX/i, /Perez/i, /Mickie/i, /Micky/i, /Brows/i, /vagena/i, /ed17/i, /Lana Perry/i, /Del Rey/i,
-        /Tiffa/i, /Strat/i, /puzz/i, /vulv/i, /clit/i, /cl1t/i, /cloth/i, /uncloth/i, /decloth/i, /rem cloth/i, /del cloth/i, /izzi dame/i, /eras cloth/i, /Bella/i, /Tiffy/i, /vagi/i, /vagene/i, /Del Ray/i, /CJ Lana/i, /generator/i,
+        /Tiffa/i, /Stratt/i, /puzz/i, /vulv/i, /clit/i, /cl1t/i, /cloth/i, /uncloth/i, /decloth/i, /rem cloth/i, /del cloth/i, /izzi dame/i, /eras cloth/i, /Bella/i, /Tiffy/i, /vagi/i, /vagene/i, /Del Ray/i, /CJ Lana/i, /generator/i,
         /Liv org/i, /pant/i, /off pant/i, /rem pant/i, /Kristen Stewart/i, /Steward/i, /Perze/i, /Brave/i, /Roxan/i, /Browser/i, /Selain/i, /TOR-Selain/i, /Brit Bake/i, /\bVega\b/i, /\bSlut\b/i, /3dit/i, /ed1t/i, /playboy/i, /poses/i,
         /Sydney Sweeney/i, /Sweeney/i, /\bFap\b/i, /Sydnee/i, /del pant/i, /eras pant/i, /her pant/i, /she pant/i, /pussy/i, /adult content/i, /content adult/i, /porn/i, /\bTor\b/i, /editing/i, /3d1t/i, /\bAMX\b/i, /posing/i, /Sweee/i,
         /\bAnal-\b/i, /\bAlexa\b/i, /\bAleksa\b/i, /AI Tool/i, /aitool/i,  /\bAi-\b/i, /\b-Ai\b/i, /Stee/i, /Waaa/i, /Stewart/i, /MS Edge/i, /TOR-browser/i, /Opera/i, /\bADM\b/i, /\bAis\b/i, /\bedit\b/i, /Feikki/i, /syväväärennös/i,
@@ -384,7 +384,7 @@
 	/vaat.*pois/i, /vaatteet pois/i, /3dgin/i, /edg1n/i, /edg1i/i, /edgi1/i, /3dg1i/i, /3dgi1/i, /edgiy/i, /edgye/i, /bliswwe/i, /\bRinnat\b/i, /\bTissi\b/i, /\bTisu\b/i, /\bTisut\b/i, /rintalii/i, /rinta lii/i, /tissi/i, /r1nta/i, /r1nt4/i, /rint4/i, /l1ivi/i, 
 	/sexi/i, /liiv1/i, /l1iv1/i, /li1v1/i, /l11v1/i, /l11vi/i, /bl15s/i, /bl1s5/i, /bl155/i, /bl1ss/i, /bli55/i, /\bAnus\b/i, /anusaukko/i, /anus-aukko/i, /anus aukko/i, /pers aukko/i, /persaukko/i, /perseaukko/i, /perse aukko/i, /perse-aukko/i, /pers-aukko/i,
 	/bliswwe/i, /li1vi/i, /p3rs aukko/i, /p3r5 aukko/i, /per5 aukko/i, /0nli/i,/p3rs-aukko/i, /p3r5 aukko/i, /per5 aukko/i, /p3rse/i, /pers3/i, /p3rs3/i, /per5e/i, /per53/i, /p3r5e/i, /p3r53/i, /rints/i, /r1nts/i, /r1nt5/i, /rint5/i, /p1p4r/i, /pip4r/i, /p1par/i, 
-	/machinelearning/i, /Kairi/i, /sexx/i, /4lexa/i, /al3xa/i, /alex4/i, /4l3xa/i, /al3x4/i, /4l3x4/i, /4lex4/i, /bl15s/i, /bl1s5/i, /bl155/i, /blis5/i, /bli5s/i, /artintel/i,
+	/Stratu/i, /machinelearning/i, /Kairi/i, /sexx/i, /4lexa/i, /al3xa/i, /alex4/i, /4l3xa/i, /al3x4/i, /4l3x4/i, /4lex4/i, /bl15s/i, /bl1s5/i, /bl155/i, /blis5/i, /bli5s/i, /artintel/i,
     ]; 
 
     // --- NEW: DYNAMIC WRESTLER BANS FROM WRESTLING.JS ---

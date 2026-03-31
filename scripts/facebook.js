@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         FB Sanity Enhancer
-// @version      2026-03-26
+// @version      2026-03-31
 // @description  Makes my Facebook experience tolerable. With less algorithmic bullshit.
 // @match        *://*.facebook.com/*
 // @grant        none
@@ -852,9 +852,9 @@
                     if (result.wrestling_women_urls && Array.isArray(result.wrestling_women_urls)) {
                         let addedCount = 0;
                         
-                        // === IRONCLAD EX-GIRLFRIEND SHIELD ===
+                        // === IRONCLAD SHIELD ===
                         // Prevents specific names fetched from SmackDown Hotel from being turned into global FB bans
-                        const localExclusions = ['melina', 'melina-perez', 'aj-lee', 'aj', 'becky-lynch', 'becky'];
+                        const localExclusions = ['melina', 'melina-perez', 'aj-lee', 'aj', 'becky-lynch', 'becky', 'jojo'];
 
                         result.wrestling_women_urls.forEach(url => {
                             const parts = url.split('/').filter(Boolean);
@@ -1505,6 +1505,8 @@
 
             const postSelectors = [
                 'div[data-pagelet^="FeedUnit_"]',
+		'div[data-ad-rendering-role="story_message"]',
+		'div[data-ad-preview="message"]',
                 'div[data-pagelet^="TimelineFeedUnit_"]',
                 'div[data-pagelet="MediaViewerPhoto"]'
             ];
@@ -1604,15 +1606,16 @@
 
             // Reverted these selectors back to the facebookOld.js structure to fix the lazy-load tagging bug
             const selectors = [
-		        'div[data-ad-comet-preview="message"]',
-                'div[data-ad-preview="message"]',
+		'div[data-ad-comet-preview="message"]',
+		'div[data-ad-rendering-role="story_message"]',
+		'div[data-ad-preview="message"]',
                 'div.x1l90r2v.x1iorvi4.x1g0dm76.xpdmqnj',
                 'div.xdj266r.x14zmp.xat24cr.x1lziwak.x1vvkbs.x126k92a',
-        	    'svg[aria-label="Meta AI:n profiilikuva"]',
+        	'svg[aria-label="Meta AI:n profiilikuva"]',
                 'svg[aria-label*="Meta AI profile"]', 
-        	    'a[aria-label="Meta AI"]',
-        	    'div[aria-label="Meta AI"]',
-        	    'span[aria-label="Meta AI"]',
+        	'a[aria-label="Meta AI"]',
+        	'div[aria-label="Meta AI"]',
+        	'span[aria-label="Meta AI"]',
                 'div.x78zum5.x1q0g3np.x1qughib.xz9dl7a.xn6708d.x1120s5i.x1ye3gou',
                 'div.x10l6tqk.xwa60dl.x1d8287x.x19991ni.xwji4o3.x1vjfegm.xg01cxk.x47corl',
                 'div.x1iyjqo2.x1vjfegm',
@@ -1623,7 +1626,7 @@
                 'div.xieb3on:nth-child(1) > svg:nth-child(1)',
                 '.x1p5oq8j > div:nth-child(2)',
                 'div.x6s0dn4.x78zum5.x1qughib.x1iorvi4.xjkvuk6',
-        	    'a[aria-label*="20. heinäkuu klo 14.53"]',
+        	'a[aria-label*="20. heinäkuu klo 14.53"]',
                 'a[href*="facebook.com/permalink"][aria-label*="20. heinäkuu klo 14.53"]',
                 'span.html-span.x1vvkbs',
                 'div.html-div.x1a02dak'
