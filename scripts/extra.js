@@ -212,6 +212,357 @@
     // NEW: Snapchat Minimize Button selector (to auto-click for collapsing spotlight)
     const snapchatMinimizeButtonSelector = 'button.Rknx9';  
 
+    // === NEXTDNS IMPORT/EXPORT SYSTEM ===
+    const NextDNSManager = {
+        isListPage: function() {
+            const url = window.location.href;
+            return url.includes('my.nextdns.io') && (url.includes('/denylist') || url.includes('/allowlist'));
+        },
+
+        isLogsPage: function() {
+            const url = window.location.href;
+            return url.includes('my.nextdns.io') && url.includes('/logs');
+        },
+
+        isTargetPage: function() {
+            return this.isListPage() || this.isLogsPage();
+        },
+        
+        setupInterceptors: function() {
+            // Only set this up once
+            if (this._interceptorsSetup) return;
+            this._interceptorsSetup = true;
+
+            // Capture phase click listener to intercept React events before they happen
+            document.addEventListener('click', (e) => {
+                if (!this.isTargetPage()) return;
+                
+                // Find if the click originated from or inside the X button
+                const btn = e.target.closest('button.btn-link');
+                if (btn && btn.querySelector('svg[data-icon="xmark"]')) {
+                    
+                    // If we already confirmed it, let the click pass through to React
+                    if (btn.dataset.bravefoxConfirmed === 'true') {
+                        delete btn.dataset.bravefoxConfirmed;
+                        return;
+                    }
+                    
+                    // Stop React from seeing this click
+                    e.preventDefault();
+                    e.stopPropagation();
+
+                    // Find the domain name for the confirmation prompt
+                    const listItem = btn.closest('.list-group-item');
+                    let domain = "this domain";
+                    if (listItem) {
+                        const span = listItem.querySelector('span.notranslate');
+                        if (span) domain = span.textContent.replace(/^\*\./, '').trim();
+                    }
+
+                    // Prompt user
+                    if (confirm(`BraveFox:\nAre you sure you want to delete: ${domain}?`)) {
+                        // Mark as confirmed and programmatically click it to trigger React's native handler
+                        btn.dataset.bravefoxConfirmed = 'true';
+                        btn.click();
+                    }
+                }
+            }, true); // TRUE = Capture phase! Extremely important for bypassing React.
+            
+            console.log('BraveFox: NextDNS Delete interceptor active.');
+        },
+
+        exportList: function() {
+            try {
+                const items = document.querySelectorAll('.list-group-item span.notranslate');
+                const domains = [];
+                
+                items.forEach(item => {
+                    let text = item.textContent || '';
+                    // Clean up NextDNS formatting like "*.domain.com"
+                    text = text.replace(/^\*\./, '').trim();
+                    if (text) domains.push(text);
+                });
+                
+                if (domains.length === 0) {
+                    alert('BraveFox: No domains found to export!');
+                    return;
+                }
+                
+                const listType = window.location.href.includes('denylist') ? 'denylist' : 'allowlist';
+                const blob = new Blob([domains.join('\n')], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `nextdns_${listType}_export.txt`;
+                document.body.appendChild(a);
+                a.click();
+                
+                setTimeout(() => {
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                }, 100);
+                
+                console.log(`BraveFox: Successfully exported ${domains.length} domains from ${listType}.`);
+            } catch (err) {
+                console.error('BraveFox: Error exporting list:', err);
+            }
+        },
+
+        exportLogs: function() {
+            try {
+                // Collect domains specifically from the logs stream
+                const items = document.querySelectorAll('.list-group-item span.notranslate, div span.notranslate');
+                const domains = new Set(); // Use Set to automatically remove duplicates
+                
+                items.forEach(item => {
+                    let text = item.textContent || '';
+                    text = text.replace(/^\*\./, '').trim();
+                    
+                    // Basic validation to ensure it's a domain (has a dot, no spaces)
+                    if (text && text.includes('.') && !text.includes(' ')) {
+                        domains.add(text);
+                    }
+                });
+                
+                if (domains.size === 0) {
+                    alert('BraveFox: No domains found to export! (Make sure the logs are loaded on screen)');
+                    return;
+                }
+                
+                const blob = new Blob([Array.from(domains).join('\n')], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `nextdns_logs_export.txt`;
+                document.body.appendChild(a);
+                a.click();
+                
+                setTimeout(() => {
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                }, 100);
+                
+                console.log(`BraveFox: Successfully exported ${domains.size} unique domains from logs.`);
+            } catch (err) {
+                console.error('BraveFox: Error exporting logs:', err);
+            }
+        },
+        
+        importList: async function(file) {
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                const text = e.target.result;
+                const domains = text.split('\n')
+                    .map(line => line.trim())
+                    .filter(line => line.length > 0 && !line.startsWith('#')); // Ignore empties and comments
+                    
+                if (domains.length === 0) {
+                    alert('BraveFox: No valid domains found in file.');
+                    return;
+                }
+                
+                if (!confirm(`BraveFox is about to import ${domains.length} domains. Please don't touch the page until it finishes. Proceed?`)) return;
+
+                const form = document.querySelector('form[action="#submit"]');
+                const input = form ? form.querySelector('input') : null;
+                
+                if (!form || !input) {
+                    alert('BraveFox: Could not find the input form! Make sure you are on the Denylist/Allowlist page.');
+                    return;
+                }
+
+                // Get React native setter to bypass synthetic events proxy
+                const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+
+                let successCount = 0;
+                
+                for (let i = 0; i < domains.length; i++) {
+                    const domain = domains[i];
+                    try {
+                        // 1. Focus the input box
+                        input.focus();
+
+                        // 2. Add URL directly via native setter
+                        nativeInputValueSetter.call(input, domain);
+                        
+                        // Dispatch input/change events for React to register the value
+                        input.dispatchEvent(new Event('input', { bubbles: true }));
+                        input.dispatchEvent(new Event('change', { bubbles: true }));
+                        
+                        // 3. Short wait to let React internally register the state change
+                        await new Promise(r => setTimeout(r, 100));
+                        
+                        // 4. Simulate the enter press
+                        const enterEventOpts = {
+                            key: 'Enter',
+                            code: 'Enter',
+                            keyCode: 13,
+                            which: 13,
+                            bubbles: true,
+                            cancelable: true
+                        };
+                        input.dispatchEvent(new KeyboardEvent('keydown', enterEventOpts));
+                        input.dispatchEvent(new KeyboardEvent('keypress', enterEventOpts));
+                        input.dispatchEvent(new KeyboardEvent('keyup', enterEventOpts));
+                        
+                        // Hard dispatch the form submission as a final fallback
+                        if (typeof form.requestSubmit === 'function') {
+                            form.requestSubmit();
+                        } else {
+                            form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+                        }
+
+                        // Blur input
+                        input.blur();
+                        
+                        successCount++;
+                        console.log(`BraveFox: Imported ${successCount}/${domains.length}: ${domain}`);
+                        
+                        // 5. Long wait to let the server respond and React clear the input field
+                        await new Promise(r => setTimeout(r, 600));
+                    } catch (err) {
+                        console.error(`BraveFox: Failed to import domain ${domain}:`, err);
+                    }
+                }
+                
+                alert(`BraveFox: Successfully imported ${successCount} domains!`);
+            };
+            reader.readAsText(file);
+        },
+
+        injectUI: function() {
+            if (!this.isTargetPage()) return;
+            
+            // Ensure interceptors are active
+            this.setupInterceptors();
+            
+            // Check if we already injected
+            if (document.getElementById('bravefox-nextdns-tools')) return;
+            
+            if (this.isListPage()) {
+                // Find the form container. We are targeting the div.card-header that wraps it.
+                const form = document.querySelector('form[action="#submit"]');
+                if (!form) return;
+                
+                const cardHeader = form.closest('.card-header');
+                if (!cardHeader) return;
+
+                // Create tools container
+                const container = document.createElement('div');
+                container.id = 'bravefox-nextdns-tools';
+                container.style.display = 'flex';
+                container.style.gap = '10px';
+                container.style.marginTop = '12px';
+                container.style.paddingTop = '12px';
+                container.style.borderTop = '1px solid rgba(0,0,0,0.05)';
+                container.style.justifyContent = 'flex-start';
+
+                // Create Export Button
+                const btnExport = document.createElement('button');
+                btnExport.textContent = '📥 Export List';
+                btnExport.className = 'btn btn-light btn-sm';
+                btnExport.style.backgroundColor = '#f8f9fa';
+                btnExport.style.border = '1px solid #ddd';
+                btnExport.style.borderRadius = '6px';
+                btnExport.style.padding = '4px 10px';
+                btnExport.style.cursor = 'pointer';
+                btnExport.style.fontWeight = '500';
+                btnExport.style.color = '#333';
+                
+                btnExport.addEventListener('mouseenter', () => btnExport.style.backgroundColor = '#e2e6ea');
+                btnExport.addEventListener('mouseleave', () => btnExport.style.backgroundColor = '#f8f9fa');
+                btnExport.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    this.exportList();
+                });
+
+                // Create Import wrapper (hidden file input + button)
+                const importWrapper = document.createElement('div');
+                importWrapper.style.position = 'relative';
+                
+                const fileInput = document.createElement('input');
+                fileInput.type = 'file';
+                fileInput.accept = '.txt';
+                fileInput.style.display = 'none';
+                
+                fileInput.addEventListener('change', (e) => {
+                    if (e.target.files && e.target.files.length > 0) {
+                        this.importList(e.target.files[0]);
+                        e.target.value = ''; // Reset input
+                    }
+                });
+
+                const btnImport = document.createElement('button');
+                btnImport.textContent = '📤 Import List';
+                btnImport.className = 'btn btn-light btn-sm';
+                btnImport.style.backgroundColor = '#f8f9fa';
+                btnImport.style.border = '1px solid #ddd';
+                btnImport.style.borderRadius = '6px';
+                btnImport.style.padding = '4px 10px';
+                btnImport.style.cursor = 'pointer';
+                btnImport.style.fontWeight = '500';
+                btnImport.style.color = '#333';
+
+                btnImport.addEventListener('mouseenter', () => btnImport.style.backgroundColor = '#e2e6ea');
+                btnImport.addEventListener('mouseleave', () => btnImport.style.backgroundColor = '#f8f9fa');
+                btnImport.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    fileInput.click();
+                });
+
+                importWrapper.appendChild(fileInput);
+                importWrapper.appendChild(btnImport);
+
+                container.appendChild(btnExport);
+                container.appendChild(importWrapper);
+
+                // Safely append directly into the card header
+                cardHeader.appendChild(container);
+                console.log('BraveFox: Injected NextDNS Import/Export tools');
+                
+            } else if (this.isLogsPage()) {
+                // Target the header wrapper that contains the search bar for the Logs page
+                const searchInput = document.querySelector('input.form-control');
+                const cardHeader = searchInput ? searchInput.closest('.card-header') : document.querySelector('.card-header');
+                
+                if (!cardHeader) return;
+
+                const container = document.createElement('div');
+                container.id = 'bravefox-nextdns-tools';
+                container.style.display = 'flex';
+                container.style.gap = '10px';
+                container.style.marginTop = '12px';
+                container.style.paddingTop = '12px';
+                container.style.borderTop = '1px solid rgba(0,0,0,0.05)';
+                container.style.justifyContent = 'flex-start';
+
+                const btnExportLogs = document.createElement('button');
+                btnExportLogs.textContent = '📥 Export Logs (Visible)';
+                btnExportLogs.className = 'btn btn-light btn-sm';
+                btnExportLogs.style.backgroundColor = '#f8f9fa';
+                btnExportLogs.style.border = '1px solid #ddd';
+                btnExportLogs.style.borderRadius = '6px';
+                btnExportLogs.style.padding = '4px 10px';
+                btnExportLogs.style.cursor = 'pointer';
+                btnExportLogs.style.fontWeight = '500';
+                btnExportLogs.style.color = '#333';
+                
+                btnExportLogs.addEventListener('mouseenter', () => btnExportLogs.style.backgroundColor = '#e2e6ea');
+                btnExportLogs.addEventListener('mouseleave', () => btnExportLogs.style.backgroundColor = '#f8f9fa');
+                btnExportLogs.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    this.exportLogs();
+                });
+                
+                container.appendChild(btnExportLogs);
+                cardHeader.appendChild(container);
+                console.log('BraveFox: Injected NextDNS Logs tools');
+            }
+        }
+    };
+
     let currentURL = window.location.href;
     let kuvakeRedirected = false;
     const hiddenElements = new WeakSet();
@@ -796,6 +1147,11 @@
             observerScheduled = false;
             handleIRCGalleriaThumbDeletion();
             handleGeminiUnwantedHiding();
+            
+            // Re-check and inject NextDNS UI if React dynamically loaded the form
+            if (NextDNSManager.isTargetPage()) {
+                NextDNSManager.injectUI();
+            }
         }, 80);
     }
 
@@ -819,6 +1175,11 @@
         handleRedirectionsAndContentHiding();
         if (currentURL.toLowerCase().includes('irc-galleria.net/user/irpp4')) {
             handleIRCGalleriaThumbDeletion();
+        }
+        
+        // Inject NextDNS tools
+        if (NextDNSManager.isTargetPage()) {
+            NextDNSManager.injectUI();
         }
     }
 
