@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         FB Sanity Enhancer
-// @version      2026-03-31
+// @date      	 2026-04-18
 // @description  Makes my Facebook experience tolerable. With less algorithmic bullshit.
 // @match        *://*.facebook.com/*
 // @grant        none
@@ -347,21 +347,28 @@
                     pointer-events: none !important;
                 }
                 
-                /* ZERO-GLIMPSE POST REVEAL FALLBACK (Smooth Feed) - 3 SECOND DELAY */
-                /* Holds the post completely invisible until evaluating finishes. Safe posts get .fb-post-approved to override this instantly. */
-                @keyframes fb-failsafe-reveal {
-                    to { opacity: 1 !important; visibility: visible !important; pointer-events: auto !important; }
-                }
-                div[data-pagelet^="FeedUnit_"]:not(.fb-post-approved):not(.fb-post-banned):not(:has([data-visualcompletion="loading-state"])),
-                div[data-pagelet^="TimelineFeedUnit_"]:not(.fb-post-approved):not(.fb-post-banned):not(:has([data-visualcompletion="loading-state"])) {
+                /* EXPLICIT PREHIDE ONLY WHILE A POST IS ACTUALLY PENDING / SCANNING */
+                div[data-pagelet^="FeedUnit_"].fb-post-pending,
+                div[data-pagelet^="TimelineFeedUnit_"].fb-post-pending,
+                div[data-ad-rendering-role="story_message"].fb-post-pending,
+                div[data-ad-preview="message"].fb-post-pending,
+                div[data-pagelet^="FeedUnit_"].fb-post-scanning,
+                div[data-pagelet^="TimelineFeedUnit_"].fb-post-scanning,
+                div[data-ad-rendering-role="story_message"].fb-post-scanning,
+                div[data-ad-preview="message"].fb-post-scanning,
+                div[data-pagelet^="FeedUnit_"].fb-post-expanding,
+                div[data-pagelet^="TimelineFeedUnit_"].fb-post-expanding,
+                div[data-ad-rendering-role="story_message"].fb-post-expanding,
+                div[data-ad-preview="message"].fb-post-expanding {
                     opacity: 0 !important;
                     pointer-events: none !important;
-                    animation: fb-failsafe-reveal 0.1s 3.0s forwards !important; 
                 }
 
                 /* Ensure approved posts snap back instantly */
                 div[data-pagelet^="FeedUnit_"].fb-post-approved,
-                div[data-pagelet^="TimelineFeedUnit_"].fb-post-approved {
+                div[data-pagelet^="TimelineFeedUnit_"].fb-post-approved,
+                div[data-ad-rendering-role="story_message"].fb-post-approved,
+                div[data-ad-preview="message"].fb-post-approved {
                     opacity: 1 !important;
                     pointer-events: auto !important;
                 }
@@ -560,6 +567,55 @@
         
         if (!element.classList.contains('fb-element-banned')) element.classList.add('fb-element-banned');
         hiddenElements.add(element);
+    };
+
+
+    const normalizeFBText = (value = '') => {
+        try {
+            return String(value)
+                .replace(/[​-‍﻿]/g, '')
+                .replace(/\s+/g, ' ')
+                .trim()
+                .toLowerCase();
+        } catch (e) {
+            return '';
+        }
+    };
+
+    const bannedPostActionTexts = new Set(['liity', 'join', 'seuraa', 'follow']);
+
+    const hasExplicitBannedPostAction = (root) => {
+        try {
+            if (!root || !root.querySelectorAll) return false;
+
+            const selector = [
+                '[role="button"]',
+                'a',
+                'div[role="button"][tabindex="0"]',
+                'span.x3nfvp2 > div[role="button"][tabindex="0"]',
+                'span[dir="ltr"] span.x3nfvp2 > div[role="button"][tabindex="0"]'
+            ].join(',');
+
+            const candidates = Array.from(root.querySelectorAll(selector));
+            for (let i = 0; i < candidates.length; i++) {
+                const el = candidates[i];
+                if (!el || isInsideComment(el)) continue;
+
+                const textVariants = [
+                    normalizeFBText(el.textContent || el.innerText || ''),
+                    normalizeFBText(el.getAttribute && el.getAttribute('aria-label') || ''),
+                    normalizeFBText((el.querySelector && el.querySelector('span')) ? (el.querySelector('span').textContent || '') : ''),
+                    normalizeFBText((el.querySelector && el.querySelector('span.x193iq5w')) ? (el.querySelector('span.x193iq5w').textContent || '') : '')
+                ];
+
+                for (let j = 0; j < textVariants.length; j++) {
+                    if (bannedPostActionTexts.has(textVariants[j])) {
+                        return true;
+                    }
+                }
+            }
+        } catch (e) {}
+        return false;
     };
 
     // ==========================================
@@ -1292,11 +1348,482 @@
         /www\.facebook\.com\/toni\.harsunen\.1/,
         /www\.facebook\.com\/minna\.kaipio\.5/,
         /www\.tiktok\.com/,
-        /sportskeeda\.com\/.*/,
+        /sportskeeda\.com\/*/,
+        /sportskeeda\.com\/*/,
         /sportskeeda\.com/,
-        /wwfoldschool\.com\/.*/,
+        /wwfoldschool\.com\/*/,
         /wwfoldschool\.com/,
-        /meta\.ai/i
+        /meta\.ai/i,
+        /github\.com\/best-deepnude-ai-apps/i,
+        /github\.com\/AI-Reviewed\/tools\/blob\/main\/Nude%20AI%20:%205%20Best%20AI%20Nude%20Generators%20-%20AIReviewed\.md/i,
+        /github\.com\/nudify-ai/i,
+        /github\.com\/BrowserWorks/i,
+        /github\.com\/comfyanonymous/i,
+        /github\.com\/Top-AI-Apps/i,
+        /github\.com\/Anthropic/i,
+        /github\.com\/HorizonMW\/HorizonMW-Client/i,
+        /github\.com\/HorizonMW\/[^\/]+/i,
+        /github\.com\/Top-AI-Apps\/Review\/blob\/main\/Top%205%20DeepNude%20AI%3A%20Free%20%26%20Paid%20Apps%20for%20Jan%202025%20-%20topai\.md/i,
+        /chromewebstore\.google\.com\/detail\/tor-selain\/eaoamcgoidmhaficdbmcbamiedeklfol/i,
+        /www\.opera\.com/i,
+        /www\.apple\.com/i,
+        /microsoft\.com\/en-us\/edge\//i,
+        /microsoft\.com\/fi-fi\/edge\//i,
+        /brave\.com/i,
+        /aitoolfor\.org/i,
+        /aitoolfor\./i,
+        /aitool4\./i,
+        /aitool4u\./i,
+        /aitool\./i,
+        /remove\.bg/i,
+        /folio\.procreate\./i,
+        /procreate\./i,
+        /folio\.procreate\.com\/deepnude-ai/i,
+        /support\.microsoft\.com\/fi-fi\/microsoft-edge/i,
+        /apps\.microsoft\.com\/detail\/xpdbz4mprknn30/i,
+        /apps\.microsoft\.com\/detail\/xp8cf6s8g2d5t6/i,
+        /apps\.microsoft\.com\/detail\/xpfftq037jwmhs/i,
+        /apps\.microsoft\.com\/detail\/9nzvdkpmr9rd/i,
+        /apps\.microsoft\.com\/detail\/9nrtvfllggtv/i,
+        /researchgate\.net/i,
+        /thefacemerge\.net/i,
+        /faceplusplus\.net/i,
+        /microsoft\.com\/fi-fi\/edge/i,
+        /google\.com\/intl\/fi_fi\/chrome\//i,
+        /play\.google\.com\/store\/apps\/details\?id=com\.microsoft\.emmx/i,
+        /apps\.apple\.com\/us\/app\/microsoft-edge-ai-browser\/id1288723196/i,
+        /torproject\.org/i,
+        /tor\.app/i,
+        /mozilla\.org/i,
+        /mozilla\.fi/i,
+        /tiktok\.com/i,
+        /browser\./i,
+        /porn\./i,
+        /.\porn/i,
+        /tiktok\./i,
+        /download\.fi/i,
+        /evercast\.us/i,
+        /avclabs\.com/i,
+        /wondershare\.com/i,
+        /wondershare\.net/i,
+        /wondershare\.ai/i,
+        /risingmax\.com/i,
+        /gizmodo\.com/i,
+        /comfy\.org/i,
+        /runcomfy\.com/i,
+        /picsart\.com/i,
+        /capcut\.com/i,
+        /canva\.com/i,
+        /gitlab\.com/i,
+        /github.com/i,
+        /topazlabs\.com/i,
+        /online\.visual-paradigm\.com/i,
+        /skylum\.com/i,
+        /stable-diffusion-art\.com/i,
+        /comfyui\.org/i,
+        /thinkdiffusion\.com/i,
+        /comfyuiweb\.com/i,
+        /horizonmw\.org/i,
+        /pinterest\.com/i,
+        /irc-galleria\.fi/i,
+        /irc-galleria\./i,
+        /lite\.irc-galleria\./i,
+        /irc-galleria\.fi/i,
+        /irc\.fi/i,
+	/commentpicker\.com/i,
+        /smallseotools\.com/i,
+        /ai-apps-directory\/tools\/blob\/main\/Top%209%20Deepnude%20AI%20Apps%20In%202025%3A%20Ethical%20Alternatives%20%26%20Cutting-Edge%20Tools\.md/i,
+        /aitoolfor\.org\/tools\/deepnude-ai/i,
+        /eeebuntu\.org\/apk\/deepnude-latest-version/i,
+        /aitoolfor\.org\/tools\/undress-ai-app-deepnude-nudify-free-undress-ai/i,
+        /merlio\.app\/blog\/free-deepnude-ai-alternatives/i,
+        /gitlab\.com\/ai-image-and-text-processing\/DeepNude-an-Image-to-Image-technology/i,
+        /aitoptools\.com\/tool\/deepnude-by-deepany-ai/i,
+        /gitee\.com\/cwq126\/open-deepnude/i,
+        /gitlab\.com\/ai-image-and-text-processing\/DeepNude-an-Image-to-Image-technology\/-\/tree\/master\/DeepNude_software_itself/i,
+        /facetuneapp\.com\/\?srd=[\w-]+/i,
+        /facetuneapp\.com\/$/i,
+        /facetune\./i,
+        /facetuneapp\./i,
+        /play\.google\.com\/store\/apps\/details\?id=com\.lightricks\.facetune\.free/i,
+        /apps\.apple\.com\/us\/app\/facetune-video-photo-editor\/id1149994032/i,
+        /lunapic\.com/i,
+        /tenor\./i,
+        /tenor\.com/i,
+        /azure\./i,
+        /vidu\./i,
+        /vidyu\./i,
+        /viduy\./i,
+        /videy\./i,
+        /vidio\./i,
+        /vsco\./i,
+        /pixelixe\.com/i,
+        /picresize\.com/i,
+        /replicate\.ai/i,
+        /kuvake\.net/i,
+        /reddit\.com\/r\/comfyui\/?/i,
+        /reddit\.com\/r\/stablediffusion\/?/i,
+        /facebook\.com\/tatu\.toiviainen\//i,
+        /viewverio\.com/i,
+        /irc\.fi/i,
+        /kelleyhoaglandphotography\.com/i,
+        /nude\./i,
+        /naked\./i,
+        /photopea\./i,
+        /123rf\./i,
+        /virtualbox\./i,
+        /oracle\./i,
+        /play.google./i,
+        /formulae\./i,
+        /rem\./i,
+        /remove\./i,
+        /remover\./i,
+        /removing\./i,
+        /arxiv\./i,
+        /osboxes\./i,
+        /vmware\./i,
+        /face25\./i,
+        /face26\./i,
+        /anthropic\./i,
+        /writecream\./i,
+        /waterfox\./i,
+        /pixelmator\./i,
+        /flexclip\./i,
+        /uptodown\./i,
+        /perfectcorp\./i,
+        /idphotodiy\./i,
+        /imagetools\./i,
+        /image-tools\./i,
+        /img-tools\./i,
+        /imgtools\./i,
+        /pictools\./i,
+        /pic-tools\./i,
+        /grok\./i,
+        /grokai\./i,
+        /grok-ai\./i,
+        /yahoo\./i,
+        /pict-tools\./i,
+        /picttools\./i,
+        /phototools\./i,
+        /photools\./i,
+        /photo-tools\./i,
+        /picture-tools\./i,
+        /picturetools\./i,
+        /workintool\./i,
+        /sports\.yahoo\./i,
+        /workintools\./i,
+        /workin-tool\./i,
+        /workin-tools\./i,
+        /workingtool\./i,
+        /workingtools\./i,
+        /working-tool\./i,
+        /working-tools\./i,
+        /videoaihug\./i,
+        /aihugvideo\./i,
+        /fotor\./i,
+        /imyfone\./i,
+        /aihug\./i,
+        /hugai\./i,
+        /ai-hug\./i,
+        /hug-ai\./i,
+        /aihugging\./i,
+        /huggingai\./i,
+        /ai-hugging\./i,
+        /hugging-ai\./i,
+        /ai-videogenerator\./i,
+        /aivideogenerator\./i,
+        /videogeneratorai\./i,
+        /videogenerator-ai\./i,
+        /any-video\./i,
+        /anyvideo\./i,
+        /any-video-convert\./i,
+        /anyvideoconvert\./i,
+        /any-videoconvert\./i,
+        /anyvideo-convert\./i,
+        /any-video-converter\./i,
+        /anyvideoconverter\./i,
+        /any-videoconverter\./i,
+        /anyvideo-converter\./i,
+        /ai‑directories\./i,
+        /aidirectories\./i,
+        /ai‑directory\./i,
+        /aidirectory\./i,
+        /ai‑directorys\./i,
+        /aidirectorys\./i,
+        /aitoolsdirectory\./i,
+        /aitoolsdirectory\./i,
+        /aidirectory\./i, 
+        /onlineaidirectory\./i, 
+        /aidirectoryonline\./i, 
+        /online-aidirectory\./i, 
+        /aidirectory-online\./i, 
+        /onlineaidirectorys\./i, 
+        /aidirectorysonline\./i, 
+        /online-aidirectorys\./i, 
+        /aidirectorys-online\./i, 
+        /ai-directory\./i,
+        /assistingintelligence\./i,
+        /assisting-intelligence\./i,
+        /intelligenceassisting\./i,
+        /intelligence-assisting\./i,
+        /assistintelligence\./i,
+        /assist-intelligence\./i,
+        /intelligenceassist\./i,
+        /intelligence-assist\./i,
+        /aidirectorylist\./i,
+        /aiagentsdirectory\./i,
+        /aiagentsdirectory\./i,
+        /aiphoto\./i,
+        /ai-photo\./i,
+        /photoai\./i,
+        /photo-ai\./i,
+        /aiphotohq\./i,
+        /ai-photohq\./i,
+        /aiphoto-hq\./i,
+        /ai-photo-hq\./i,
+        /axis-intelligence\.com/i,
+        /letsview\.com/i,
+        /trendhunter\./i,
+        /trendhunt\./i,
+        /trend-hunter\./i,
+        /trend-hunt\./i,
+        /dev\./i,
+        /feishu\.cn/i,
+        /n8ked\./i,
+        /imgur\.com.*nude/i,
+        /imgur\.com.*deepn/i,
+        /AlexaBliss/i,
+        /DuaLipa/i,
+        /Dua_Lipa/i,
+        /threads\./i,
+        /instagram\./i,
+        /justaistuff\./i,
+        /aistuff\./i,
+        /claude\./i,
+        /browsing\./i,
+        /browsing\./i,
+        /-browser\./i,
+        /-browsing\./i,
+        /a1art\./i,
+        /bangbros/i,
+        /sportskeeda\.com/i,
+        /deviantart\.com/i,
+        /deepnude\./i,
+        /deepany\./i,
+        /deep-any\./i,
+        /nudify\./i,
+        /venice\./i,
+        /venica\./i,
+        /vanica\./i,
+        /vanice\./i,
+        /edit\./i,
+        /-edit\./i,
+        /editor\./i,
+        /-editor\./i,
+        /editing\./i,
+        /-editing\./i,
+        /upscale\./i,
+        /-upscale\./i,
+        /upscaling\./i,
+        /-upscaling\./i,
+        /uncensor\./i,
+        /uncensoring\./i,
+        /uncensored\./i,
+        /softorbits\./i,
+        /softorbit\./i,
+        /soft-orbits\./i,
+        /soft-orbit\./i,
+        /nightcafe\./i,
+        /kuvake\./i,
+        /ai-\./i,
+        /-ai\./i,
+        /ai\./i,
+        /neural\./i,
+        /nudifyer\./i,
+        /nudifying\./i,
+        /nudifier\./i,
+        /theresanaiforthat\./i,
+        /fixthephoto\./i,
+        /fixthatphoto\./i,
+        /fixthisphoto\./i,
+        /nudifyonline\./i,
+        /nudify-online\./i,
+        /nudifyingonline\./i,
+        /nudifying-online\./i,
+        /onlinenudify\./i,
+        /onlinenudifying\./i,
+        /onlinenudifyier\./i,
+        /onlinenudifier\./i,
+        /online-nudify\./i,
+        /online-nudifying\./i,
+        /online-nudifyier\./i,
+        /online-nudifier\./i,
+        /stablediffusionapi\./i,
+        /stablediffusion\./i,
+        /stable-diffusion\./i,
+        /stable-diffusionapi\./i,
+        /stablediffusion-api\./i,
+        /stable-diffusion-api\./i,
+        /stablediffusionapi\./i,
+        /huggingface\./i,
+        /hugging-face\./i,
+        /huntscreen\./i,
+        /huntscreens\./i,
+        /hunt-screen\./i,
+        /hunt-screens\./i,
+        /screenhunt\./i,
+        /screenshunt\./i,
+        /screen-hunt\./i,
+        /screens-hunt\./i,
+        /trendingaitool\./i,
+        /trendingaitools\./i,
+        /toolsfine\./i,
+        /toolfine\./i,
+        /tools-fine\./i,
+        /tool-fine\./i,
+        /finetools\./i,
+        /finetool\./i,
+        /fine-tools\./i,
+        /fine-tool\./i,
+        /HeyGen\./i,
+        /GenHey\./i,
+        /Hey-Gen\./i,
+        /Gen-Hey\./i,
+        /apkpure\./i,
+        /apk-pure\./i,
+        /alucare\./i,
+        /scribd\./i,
+        /alu-care\./i,
+        /noxilo\./i,
+        /aichef\./i,
+        /ai-chef\./i,
+        /chefai\./i,
+        /chef-ai\./i,
+        /aichief\./i,
+        /ai-chief\./i,
+        /chiefai\./i,
+        /chief-ai\./i,
+        /noxillo\./i,
+        /vadoo\./i,
+        /vidnoz\./i,
+        /theresanaiforthat\./i,
+        /futuretools\./i,
+        /future-tools\./i,
+        /futurepedia\./i,
+        /future-pedia\./i,
+        /aitooldirectory\./i,
+        /aitoolsforme\./i,
+        /aixploria\./i,  
+        /topai\./i, 
+        /top-ai\./i,
+        /aitop\./i, 
+        /ai-top\./i,
+        /toolify\./i,  
+        /allaitool\./i,  
+        /toolsaiapp\./i,  
+        /aitoolhunt\./i,  
+        /openfuture\./i,  
+        /seofai\./i,   
+        /alltheaitools\./i,  
+        /aitools\./i,   
+        /aitoptools\./i,  
+        /allthingsai\./i,  
+        /aidir\./i, 
+        /wegocup\./i,
+        /modcombo\./i,
+        /monica\./i,
+        /aimonica\./i,
+        /ai-monica\./i,
+        /monicaai\./i,
+        /monica-ai\./i,
+        /monicai\./i,
+        /monic-ai\./i,
+        /clothoff\./i,
+        /cloth-off\./i,
+        /offcloth\./i,
+        /off-cloth\./i,
+        /clothyoff\./i,
+        /clothy-off\./i,
+        /offclothy\./i,
+        /off-clothy\./i,
+        /clothesoff\./i,
+        /clothes-off\./i,
+        /offclothes\./i,
+        /off-clothes\./i,
+        /cloudbooklet\./i,
+        /cyberlink\./i,
+        /undressapp\./i,
+        /undress-app\./i,
+        /appundress\./i,
+        /app-undress\./i,
+        /reddit\.com\/r\/MachineLearning/i,
+        /reddit\.com\/r\/Grok/i,
+        /solo\./i,
+        /robeoff\./i,
+        /offrobe\./i,
+        /robe-off\./i,
+        /off-robe\./i,
+        /sendfame\./i,
+        /send-fame\./i,
+        /sendingfame\./i,
+        /sending-fame\./i,
+        /sendsfame\./i,
+        /sends-fame\./i,
+        /sentfame\./i,
+        /sent-fame\./i,
+        /famesend\./i,
+        /fame-send\./i,
+        /famesending\./i,
+        /fame-sending\./i,
+        /famesends\./i,
+        /fame-sends\./i,
+        /famesent\./i,
+        /fame-sent\./i,
+        /headgenai\./i,
+        /headgen-ai\./i,
+        /head-genai\./i,
+        /head-gen-ai\./i,
+        /whatisthebigdata\./i,
+        /whatsthebigdata\./i,
+        /mangoanimate\./i,
+        /mangoai\./i,
+        /mango-animate\./i,
+        /mango-anim\./i,
+        /lantaai\./i,
+        /lantai\./i,
+        /lanta-ai\./i,
+        /mango-anims\./i,
+        /coinmarketcap\./i,
+        /imageresizer\./i,
+        /image-resizer\./i,
+        /imageresize\./i,
+        /image-resize\./i,
+        /photoresizer\./i,
+        /photo-resizer\./i,
+        /photoresize\./i,
+        /photo-resize\./i,
+        /mangoanims\./i,
+        /mango-animated\./i,
+        /mango-animations\./i,
+        /mangoanim\./i,
+        /mangoanimated\./i,
+        /mangoanimations\./i,
+        /mango-ai\./i,
+        /insmind\./i,
+        /dreamshoot\./i,
+        /dreamshootai\./i,
+        /faceswapvideo\./i,
+        /faceswapvid\./i,
+        /faceswapvids\./i,
+        /faceswapvideos\./i,
+        /faceswap-video\./i,
+        /faceswap-vid\./i,
+        /faceswap-vids\./i,
+        /faceswap-videos\./i,
+        /saashub\./i,
+        /undress\./i,
+        /twitter\.com/i,
+        /x\.com/i,
     ];
 
     
@@ -1605,7 +2132,8 @@ const tagFeedPostContext = (post) => {
 const revealApprovedPost = (post) => {
     if (!post) return;
     clearFBHideStyles(post);
-    post.classList.remove('fb-post-banned', 'fb-element-banned', 'fb-post-scanning', 'fb-post-expanding');
+    post.classList.remove('fb-post-banned', 'fb-element-banned', 'fb-post-pending', 'fb-post-scanning', 'fb-post-expanding');
+    post.removeAttribute('data-fb-pending-since');
     post.classList.add('fb-post-approved', 'fb-post-processed');
     tagFeedPostContext(post);
 };
@@ -1613,7 +2141,8 @@ const revealApprovedPost = (post) => {
 const resetFeedPostState = (post) => {
     if (!post || !isFeedUnit(post)) return;
     clearFBHideStyles(post);
-    post.classList.remove('fb-post-approved', 'fb-post-banned', 'fb-element-banned', 'fb-post-scanning', 'fb-post-expanding', 'fb-post-processed');
+    post.classList.remove('fb-post-approved', 'fb-post-banned', 'fb-element-banned', 'fb-post-pending', 'fb-post-scanning', 'fb-post-expanding', 'fb-post-processed');
+    post.removeAttribute('data-fb-pending-since');
     post.removeAttribute('data-processed');
     post.removeAttribute('data-processed-text');
     tagFeedPostContext(post);
@@ -1653,10 +2182,43 @@ const resetReusedFeedUnits = (root = document) => {
     } catch (e) {}
 };
 
+const markPendingFeedUnits = (root = document) => {
+    try {
+        const now = Date.now();
+        const candidates = [];
+        if (root && root.nodeType === 1 && isFeedUnit(root)) candidates.push(root);
+        if (root && root.querySelectorAll) root.querySelectorAll(getFeedUnitSelectorString()).forEach(el => candidates.push(el));
+
+        candidates.forEach(post => {
+            if (!post || !isFeedUnit(post)) return;
+            if (post.classList.contains('fb-post-approved') || post.classList.contains('fb-post-banned') || post.classList.contains('fb-element-banned') || post.classList.contains('fb-post-processed') || post.classList.contains('fb-post-scanning') || post.classList.contains('fb-post-expanding')) {
+                post.classList.remove('fb-post-pending');
+                post.removeAttribute('data-fb-pending-since');
+                return;
+            }
+
+            const since = Number(post.getAttribute('data-fb-pending-since') || '0');
+            if (since && (now - since) > 5000) {
+                clearFBHideStyles(post);
+                post.classList.remove('fb-post-pending');
+                post.removeAttribute('data-fb-pending-since');
+                return;
+            }
+
+            if (!post.classList.contains('fb-post-pending')) {
+                post.classList.add('fb-post-pending');
+                post.setAttribute('data-fb-pending-since', String(now));
+            }
+            tagFeedPostContext(post);
+        });
+    } catch (e) {}
+};
+
 const scanAndBanEntirePosts = () => {
     try {
         if (isExcludedPathForDOM(window.location.pathname, window.location.href)) return;
         resetReusedFeedUnits(document);
+        markPendingFeedUnits(document);
 
         const postSelectors = [
             'div[data-pagelet^="FeedUnit_"]',
@@ -1688,6 +2250,8 @@ const scanAndBanEntirePosts = () => {
                     return;
                 }
 
+                post.classList.remove('fb-post-pending');
+                post.removeAttribute('data-fb-pending-since');
                 post.classList.add('fb-post-scanning');
                 tagFeedPostContext(post);
 
@@ -1700,16 +2264,12 @@ const scanAndBanEntirePosts = () => {
                 const evaluatePost = () => {
                     try {
                         post.classList.add('fb-post-processed');
-                        post.classList.remove('fb-post-scanning');
+                        post.classList.remove('fb-post-pending', 'fb-post-scanning');
+                        post.removeAttribute('data-fb-pending-since');
                         let isBanned = false;
 
-                        const actionButtons = Array.from(post.querySelectorAll('[role="button"], a')).filter(btn => !isInsideComment(btn));
-                        for (let i = 0; i < actionButtons.length; i++) {
-                            const btnText = (actionButtons[i].textContent || actionButtons[i].innerText || '').replace(/[\u200B-\u200D\uFEFF]/g, '').toLowerCase().trim();
-                            if (btnText === 'liity' || btnText === 'seuraa' || btnText === 'join' || btnText === 'follow') {
-                                isBanned = true;
-                                break;
-                            }
+                        if (hasExplicitBannedPostAction(post)) {
+                            isBanned = true;
                         }
 
                         let fullPostText = '';
@@ -1747,6 +2307,8 @@ const scanAndBanEntirePosts = () => {
                     return;
                 }
                 post.classList.remove('fb-post-expanding');
+                post.classList.remove('fb-post-pending');
+                post.removeAttribute('data-fb-pending-since');
                 evaluatePost();
             });
         });
@@ -1791,6 +2353,9 @@ const scanAndBanEntirePosts = () => {
                 if (isSafeElement(element)) return; 
                 if (isInsideComment(element)) return;
                 if (element.closest('ul[aria-label]') || element.closest('form[role="search"]')) return;
+
+                const owningFeedPost = element.closest(getFeedUnitSelectorString());
+                if (owningFeedPost && !owningFeedPost.classList.contains('fb-post-processed') && !owningFeedPost.classList.contains('fb-post-approved') && !owningFeedPost.classList.contains('fb-post-banned')) return;
                 
                 const elementText = (element.innerText || '').toLowerCase();
                 const isRestricted = restrictedWordsLower.some(word => elementText.includes(word));
@@ -1924,13 +2489,7 @@ const scanAndBanEntirePosts = () => {
 
                 if (isInsideComment(post)) return;
 
-                let shouldRemove = false;
-                const buttons = Array.from(post.querySelectorAll('[role="button"], a')).filter(btn => !isInsideComment(btn));
-                
-                for (let i = 0; i < buttons.length && !shouldRemove; i++) {
-                    const btnText = (buttons[i].textContent || buttons[i].innerText || '').replace(/[\u200B-\u200D\uFEFF]/g, '').toLowerCase().trim();
-                    if (btnText === 'liity' || btnText === 'seuraa' || btnText === 'join' || btnText === 'follow') shouldRemove = true;
-                }
+                let shouldRemove = hasExplicitBannedPostAction(post);
                 
                 if (!shouldRemove) {
                     const keyElements = Array.from(post.querySelectorAll('h2, h3, h4, div.x1heor9g, [role="button"], span.html-span, div.html-div')).filter(el => !isInsideComment(el));
@@ -2430,25 +2989,43 @@ const scanAndBanEntirePosts = () => {
             if (__fbDomObserverInstalled) return;
             __fbDomObserverInstalled = true;
 
-            const throttledRunAllFilters = createThrottle(() => runAllFilters(), 250);
+            const throttledRunAllFilters = createThrottle(() => runAllFilters(), 400);
 
             const observer = trackObserver(new MutationObserver((mutations) => {
-                
                 handleRedirects(); 
-                
+
                 let hasSearchChanges = false;
+                let hasFeedChanges = false;
+                let hasRelevantUiChanges = false;
+
                 mutations.forEach(mutation => {
                     mutation.addedNodes && mutation.addedNodes.forEach(node => {
-                        if (node.nodeType === 1) {
-                            resetReusedFeedUnits(node);
-                            if (node.matches && (node.matches('li[role="row"]') || node.matches('a[aria-describedby]') || node.matches('div[role="option"]') || node.matches('div[role="presentation"]'))) {
-                                hasSearchChanges = true;
-                            } else if (node.querySelector && (node.querySelector('li[role="row"]') || node.querySelector('a[aria-describedby]') || node.querySelector('div[role="option"]') || node.querySelector('div[role="presentation"]'))) {
-                                hasSearchChanges = true;
-                            }
+                        if (node.nodeType !== 1) return;
+
+                        resetReusedFeedUnits(node);
+
+                        const nodeIsFeed = !!(node.matches && isFeedUnit(node));
+                        const nodeHasFeed = !!(node.querySelector && node.querySelector(getFeedUnitSelectorString()));
+                        if (nodeIsFeed || nodeHasFeed) {
+                            markPendingFeedUnits(node);
+                            hasFeedChanges = true;
+                        }
+
+                        const nodeIsSearch = !!(node.matches && (node.matches('li[role="row"]') || node.matches('a[aria-describedby]') || node.matches('div[role="option"]') || node.matches('div[role="presentation"]')));
+                        const nodeHasSearch = !!(node.querySelector && (node.querySelector('li[role="row"]') || node.querySelector('a[aria-describedby]') || node.querySelector('div[role="option"]') || node.querySelector('div[role="presentation"]')));
+                        if (nodeIsSearch || nodeHasSearch) {
+                            hasSearchChanges = true;
+                        }
+
+                        const nodeIsRelevantUi = !!(node.matches && (node.matches('[role="dialog"]') || node.matches('[role="menu"]') || node.matches('div[aria-label="Kelat"][role="region"]') || node.matches('div[aria-label="Reels"][role="region"]') || node.matches('div[aria-label="Sinulle ehdotettua"][role="region"]') || node.matches('div[aria-label="Suggested for you"][role="region"]')));
+                        const nodeHasRelevantUi = !!(node.querySelector && (node.querySelector('[role="dialog"]') || node.querySelector('[role="menu"]') || node.querySelector('div[aria-label="Kelat"][role="region"]') || node.querySelector('div[aria-label="Reels"][role="region"]') || node.querySelector('div[aria-label="Sinulle ehdotettua"][role="region"]') || node.querySelector('div[aria-label="Suggested for you"][role="region"]')));
+                        if (nodeIsRelevantUi || nodeHasRelevantUi) {
+                            hasRelevantUiChanges = true;
                         }
                     });
                 });
+
+                if (!hasFeedChanges && !hasSearchChanges && !hasRelevantUiChanges) return;
                 if (hasSearchChanges) processSearchResults();
                 throttledRunAllFilters();
             }));
@@ -2519,8 +3096,10 @@ const scanAndBanEntirePosts = () => {
             }
 
             resetReusedFeedUnits(document);
+            markPendingFeedUnits(document);
 
             // Normal execution
+            markPendingFeedUnits(document);
             injectSpecificUrlPrehideCSS();
             nukeGlobalBadElements();
             eliminateSuggestedGroups(); 
@@ -2557,6 +3136,7 @@ const scanAndBanEntirePosts = () => {
             return; // TERMINATES HERE.
         }
         
+        markPendingFeedUnits(document);
         injectSpecificUrlPrehideCSS();
         nukeGlobalBadElements(); filteredProfiles();
         eliminateSuggestedGroups(); hideCriticalElements(); processSearchResults();
@@ -2586,7 +3166,7 @@ const scanAndBanEntirePosts = () => {
     };
 
     const init = () => {
-        ensureDOMReady(); resetReusedFeedUnits(document); handleRedirects(); cleanUrl(); 
+        ensureDOMReady(); resetReusedFeedUnits(document); markPendingFeedUnits(document); handleRedirects(); cleanUrl(); 
         
         const isPersonal = manageCSSStyles();
         
