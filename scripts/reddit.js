@@ -489,8 +489,23 @@
             [data-testid="recent-communities"],
             .recent-communities,
             in-feed-community-recommendations,
-            community-recommendation {
+            community-recommendation,
+            #recent-communities-section,
+            div#recent-communities-section,
+            faceplate-expandable-section-helper#recent-communities-section,
+            summary[aria-controls="RECENT"],
+            [aria-controls="RECENT"],
+            #RECENT {
                 display: none !important;
+                visibility: hidden !important;
+                opacity: 0 !important;
+                height: 0 !important;
+                min-height: 0 !important;
+                max-height: 0 !important;
+                overflow: hidden !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                pointer-events: none !important;
             }
             
             a[href="/answers/"],
@@ -1992,18 +2007,10 @@
 
     function clearRecentPages() {
         try {
-            const recentPagesStore = localStorage.getItem('recent-subreddits-store');
-            if (!recentPagesStore) return;
-            
-            const recentPages = JSON.parse(recentPagesStore);
-            if (!Array.isArray(recentPages)) return;
-            
-            const filteredPages = recentPages.filter(page => {
-                if (typeof page !== 'string') return true;
-                return !isSubredditNameBanned(page);
-            });
-            
-            localStorage.setItem('recent-subreddits-store', JSON.stringify(filteredPages));
+            localStorage.setItem('recent-subreddits-store', '[]');
+            localStorage.removeItem('recent-communities-store');
+            localStorage.removeItem('recent-communities');
+            localStorage.removeItem('reddit-recent-pages');
         } catch (e) {}
     }
 
@@ -2015,17 +2022,50 @@
             '[data-testid="recent-communities"]',
             '.recent-communities',
             'in-feed-community-recommendations',
-            'community-recommendation'
+            'community-recommendation',
+            '#recent-communities-section',
+            'div#recent-communities-section',
+            'faceplate-expandable-section-helper#recent-communities-section',
+            'summary[aria-controls="RECENT"]',
+            '[aria-controls="RECENT"]',
+            '#RECENT'
         ];
         
         for (let i = 0; i < selectors.length; i++) {
             const elements = document.querySelectorAll(selectors[i]);
             for (let j = 0; j < elements.length; j++) {
-                safelyHideElement(elements[j]);
+                const el = elements[j];
+                const wrapper =
+                    el.closest?.('#recent-communities-section') ||
+                    el.closest?.('faceplate-expandable-section-helper#recent-communities-section') ||
+                    el.closest?.('details') ||
+                    el.closest?.('div.mb-sm.pb-sm') ||
+                    el;
+                safelyHideElement(wrapper);
             }
         }
+
+        try {
+            const navScopes = document.querySelectorAll('nav, aside, [data-testid="left-sidebar"], #left-sidebar-container, reddit-sidebar-nav, flex-left-nav-container');
+            for (let i = 0; i < navScopes.length; i++) {
+                const scope = navScopes[i];
+                const items = scope.querySelectorAll('div, li, span, summary, faceplate-expandable-section-helper');
+                for (let j = 0; j < items.length; j++) {
+                    const item = items[j];
+                    const text = (item.textContent || '').trim();
+                    if (!text || !/^RECENT$/i.test(text)) continue;
+                    const wrapper =
+                        item.closest?.('#recent-communities-section') ||
+                        item.closest?.('faceplate-expandable-section-helper#recent-communities-section') ||
+                        item.closest?.('details') ||
+                        item.closest?.('div.mb-sm.pb-sm') ||
+                        item;
+                    safelyHideElement(wrapper);
+                }
+            }
+        } catch (e) {}
         
-        try { localStorage.setItem('recent-subreddits-store', '[]'); } catch (e) {}
+        clearRecentPages();
     }
 
     function checkAndHideNSFWClassElements() {
