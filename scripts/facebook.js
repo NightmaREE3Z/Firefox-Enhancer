@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         FB Sanity Enhancer
-// @date      	 2026-04-18
+// @date      	 2026-04-21
 // @description  Makes my Facebook experience tolerable. With less algorithmic bullshit.
 // @match        *://*.facebook.com/*
 // @grant        none
@@ -583,6 +583,50 @@
     };
 
     const bannedPostActionTexts = new Set(['liity', 'join', 'seuraa', 'follow']);
+    const bannedPostActionRegex = /(?:^|[\s·|,:;.!?()\[\]{}\-–—\/])(liity|join|seuraa|follow)(?:$|[\s·|,:;.!?()\[\]{}\-–—\/])/i;
+    const autoExpandActionRegex = /(?:^|)(näytä lisää|see more|show more)(?:$|)/i;
+
+    const elementHasBannedPostActionText = (el) => {
+        try {
+            if (!el) return false;
+            const variants = [
+                normalizeFBText(el.textContent || el.innerText || ''),
+                normalizeFBText((el.getAttribute && el.getAttribute('aria-label')) || ''),
+                normalizeFBText((el.getAttribute && el.getAttribute('title')) || ''),
+                normalizeFBText((el.getAttribute && el.getAttribute('data-tooltip-content')) || '')
+            ].filter(Boolean);
+
+            return variants.some(value => bannedPostActionTexts.has(value) || bannedPostActionRegex.test(value));
+        } catch (e) {
+            return false;
+        }
+    };
+
+    const isAutoExpandButton = (el) => {
+        try {
+            if (!el) return false;
+            const variants = [
+                normalizeFBText(el.textContent || el.innerText || ''),
+                normalizeFBText((el.getAttribute && el.getAttribute('aria-label')) || ''),
+                normalizeFBText((el.getAttribute && el.getAttribute('title')) || '')
+            ].filter(Boolean);
+            return variants.some(value => autoExpandActionRegex.test(value));
+        } catch (e) {
+            return false;
+        }
+    };
+
+    const hardClickElement = (el) => {
+        try {
+            if (!el) return;
+            ['pointerdown', 'mousedown', 'mouseup', 'click'].forEach(type => {
+                try {
+                    el.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
+                } catch (e) {}
+            });
+            try { el.click(); } catch (e) {}
+        } catch (e) {}
+    };
 
     const hasExplicitBannedPostAction = (root) => {
         try {
@@ -590,29 +634,21 @@
 
             const selector = [
                 '[role="button"]',
+                'button',
                 'a',
                 'div[role="button"][tabindex="0"]',
-                'span.x3nfvp2 > div[role="button"][tabindex="0"]',
-                'span[dir="ltr"] span.x3nfvp2 > div[role="button"][tabindex="0"]'
+                'span[dir="auto"]',
+                'span[dir="ltr"]',
+                'div[dir="auto"]',
+                'h2',
+                'h3'
             ].join(',');
 
             const candidates = Array.from(root.querySelectorAll(selector));
             for (let i = 0; i < candidates.length; i++) {
                 const el = candidates[i];
                 if (!el || isInsideComment(el)) continue;
-
-                const textVariants = [
-                    normalizeFBText(el.textContent || el.innerText || ''),
-                    normalizeFBText(el.getAttribute && el.getAttribute('aria-label') || ''),
-                    normalizeFBText((el.querySelector && el.querySelector('span')) ? (el.querySelector('span').textContent || '') : ''),
-                    normalizeFBText((el.querySelector && el.querySelector('span.x193iq5w')) ? (el.querySelector('span.x193iq5w').textContent || '') : '')
-                ];
-
-                for (let j = 0; j < textVariants.length; j++) {
-                    if (bannedPostActionTexts.has(textVariants[j])) {
-                        return true;
-                    }
-                }
+                if (elementHasBannedPostActionText(el)) return true;
             }
         } catch (e) {}
         return false;
@@ -1978,7 +2014,7 @@ const getRegexBlockedWords = () => regexBlockedWords;
 
             isBlocked = blockedFbids.some(fbid => hrefString.includes(fbid.toLowerCase()));
 
-            if (!isBlocked) isBlocked = blockedUrls.some(blockedUrl => blockedUrl.test(urlObj.href));
+            if (!isBlocked) isBlocked = matchesBlockedUrlCandidates(urlObj.href);
 
             if (!isBlocked && document.head) {
                 const metas = document.head.querySelectorAll('meta[property="al:android:url"], meta[property="al:ios:url"], meta[property="og:url"], meta[content*="profile"]');
@@ -2049,22 +2085,29 @@ const getRegexBlockedWords = () => regexBlockedWords;
         try {
             if (isExcludedPathForDOM(window.location.pathname, window.location.href)) return;
 
-            const elements = document.querySelectorAll('img[src]:not(.fb-sanity-checked), a[href]:not(.fb-sanity-checked), div[data-fbid]:not(.fb-sanity-checked)');
+            const elements = document.querySelectorAll('img[src], a[href], div[data-fbid], [data-lynx-uri], [data-store]');
             elements.forEach(element => {
-                element.classList.add('fb-sanity-checked');
-                if (isSafeElement(element)) return; 
-                
+                if (isSafeElement(element)) return;
                 if (isInsideComment(element)) return;
 
                 const src = element.src || '';
                 const dataFbid = element.getAttribute('data-fbid') || '';
                 const srcSet = element.getAttribute('srcset') || '';
-                const href = element.href || '';
-                const parentLink = element.closest('a') ? element.closest('a').href : '';
+                const href = element.href || element.getAttribute('href') || '';
+                const parentLink = element.closest('a') ? (element.closest('a').href || element.closest('a').getAttribute('href') || '') : '';
+                const lynxUri = element.getAttribute('data-lynx-uri') || '';
+                const dataStore = element.getAttribute('data-store') || '';
+                const signature = [src, dataFbid, srcSet, href, parentLink, lynxUri, dataStore].join('||');
 
-                if (blockedFbids.some(fbid => src.includes(fbid) || dataFbid.includes(fbid) || srcSet.includes(fbid) || href.includes(fbid) || parentLink.includes(fbid))) {
-                    safelyHideFBElement(element.closest('div[data-pagelet^="FeedUnit_"]') || element.closest('[role="article"]') || element.closest('div') || element);
-                } else if (blockedUrls.some(blockedUrl => blockedUrl.test(href) || blockedUrl.test(parentLink))) {
+                if (element.getAttribute('data-fb-urlsig') === signature) return;
+                element.setAttribute('data-fb-urlsig', signature);
+                element.classList.add('fb-sanity-checked');
+
+                const hasBlockedFbid = blockedFbids.some(fbid => src.includes(fbid) || dataFbid.includes(fbid) || srcSet.includes(fbid) || href.includes(fbid) || parentLink.includes(fbid) || lynxUri.includes(fbid) || dataStore.includes(fbid));
+                const hasBlockedUrl = [href, parentLink, lynxUri, dataStore, src, srcSet].some(value => matchesBlockedUrlCandidates(value));
+                const hasBlockedDomainText = postContainsBlockedDomainText(element.closest(getFeedUnitSelectorString()) || element.closest('[role="article"]') || element);
+
+                if (hasBlockedFbid || hasBlockedUrl || hasBlockedDomainText) {
                     safelyHideFBElement(element.closest('div[data-pagelet^="FeedUnit_"]') || element.closest('[role="article"]') || element.closest('div') || element);
                 }
             });
@@ -2127,6 +2170,66 @@ const tagFeedPostContext = (post) => {
     post.setAttribute('data-fb-context', getCurrentFeedContextKey());
     const identity = getFeedPostIdentity(post);
     if (identity) post.setAttribute('data-fb-post-id', identity);
+};
+
+
+const blockedDomainTextNeedles = (() => {
+    const out = new Set();
+    blockedUrls.forEach(rx => {
+        try {
+            const source = String(rx && rx.source || '');
+            const match = source.match(/([a-z0-9-]+(?:\\\.)+[a-z]{2,}(?:(?:\\\.)+[a-z]{2,})?)/i);
+            if (!match) return;
+            const domain = match[1].replace(/\\\./g, '.').toLowerCase();
+            if (domain) out.add(domain);
+        } catch (e) {}
+    });
+    return Array.from(out);
+})();
+
+const collectBlockedUrlVariants = (value = '') => {
+    const variants = new Set();
+    const pushVariant = (candidate) => {
+        if (!candidate) return;
+        const normalized = String(candidate).trim();
+        if (!normalized) return;
+        variants.add(normalized);
+        try { variants.add(decodeURIComponent(normalized)); } catch (e) {}
+    };
+
+    const crawl = (candidate, depth = 0) => {
+        if (!candidate || depth > 3) return;
+        pushVariant(candidate);
+        try {
+            const url = new URL(candidate, window.location.origin);
+            pushVariant(url.href);
+            pushVariant(url.pathname + url.search + url.hash);
+            ['u', 'url', 'href', 'link', 'redirect', 'redirect_uri', 'next'].forEach(param => {
+                const nested = url.searchParams.get(param);
+                if (nested) crawl(nested, depth + 1);
+            });
+        } catch (e) {}
+    };
+
+    crawl(value, 0);
+    return Array.from(variants);
+};
+
+const matchesBlockedUrlCandidates = (value = '') => {
+    if (!value) return false;
+    const variants = collectBlockedUrlVariants(value);
+    return variants.some(candidate => blockedUrls.some(blockedUrl => blockedUrl.test(candidate)));
+};
+
+const postContainsBlockedDomainText = (root) => {
+    try {
+        if (!root || !blockedDomainTextNeedles.length) return false;
+        const text = normalizeFBText(root.textContent || root.innerText || '');
+        if (!text) return false;
+        return blockedDomainTextNeedles.some(domain => text.includes(domain));
+    } catch (e) {
+        return false;
+    }
 };
 
 const revealApprovedPost = (post) => {
@@ -2198,11 +2301,10 @@ const markPendingFeedUnits = (root = document) => {
             }
 
             const since = Number(post.getAttribute('data-fb-pending-since') || '0');
-            if (since && (now - since) > 5000) {
-                clearFBHideStyles(post);
-                post.classList.remove('fb-post-pending');
-                post.removeAttribute('data-fb-pending-since');
-                return;
+            if (since && (now - since) > 12000) {
+                post.classList.remove('fb-post-expanding');
+                post.removeAttribute('data-fb-expand-attempts');
+                post.setAttribute('data-fb-pending-since', String(now));
             }
 
             if (!post.classList.contains('fb-post-pending')) {
@@ -2244,6 +2346,22 @@ const scanAndBanEntirePosts = () => {
                     }
                 }
 
+                const hasImmediateJoinAction = hasExplicitBannedPostAction(post);
+                const hasImmediateBlockedDomainText = postContainsBlockedDomainText(post);
+                const hasImmediateBlockedLink = Array.from(post.querySelectorAll('a[href], [data-lynx-uri]')).some(link => {
+                    if (!link || isInsideComment(link)) return false;
+                    const href = link.href || link.getAttribute('href') || '';
+                    const lynx = link.getAttribute && link.getAttribute('data-lynx-uri') || '';
+                    return matchesBlockedUrlCandidates(href) || matchesBlockedUrlCandidates(lynx);
+                });
+
+                if (hasImmediateJoinAction || hasImmediateBlockedDomainText || hasImmediateBlockedLink) {
+                    post.classList.remove('fb-post-approved');
+                    tagFeedPostContext(post);
+                    safelyHideFBElement(post);
+                    return;
+                }
+
                 if (isAlreadyApproved || isCurrentPostApproved()) {
                     revealApprovedPost(post);
                     if (postIDs.length > 0) saveApprovedPostIDs(postIDs);
@@ -2255,10 +2373,9 @@ const scanAndBanEntirePosts = () => {
                 post.classList.add('fb-post-scanning');
                 tagFeedPostContext(post);
 
-                const seeMoreButtons = Array.from(post.querySelectorAll('[role="button"]')).filter(btn => {
+                const seeMoreButtons = Array.from(post.querySelectorAll('[role="button"], button, a[role="button"], a, div[role="button"]')).filter(btn => {
                     if (isInsideComment(btn)) return false;
-                    const t = (btn.textContent || btn.innerText || '').toLowerCase().trim();
-                    return t === 'näytä lisää' || t === 'see more';
+                    return isAutoExpandButton(btn);
                 });
 
                 const evaluatePost = () => {
@@ -2277,12 +2394,13 @@ const scanAndBanEntirePosts = () => {
                             fullPostText = extractTextFromPostSafely(post).toLowerCase();
                             if (restrictedWordsLower.some(word => fullPostText.includes(word))) isBanned = true;
                             if (!isBanned && regexBlockedWords.some(regex => regex.test(fullPostText))) isBanned = true;
+                            if (!isBanned && postContainsBlockedDomainText(post)) isBanned = true;
                             if (!isBanned) {
-                                const postLinks = Array.from(post.querySelectorAll('a[href]')).filter(link => !isInsideComment(link));
+                                const postLinks = Array.from(post.querySelectorAll('a[href], [data-lynx-uri]')).filter(link => !isInsideComment(link));
                                 for (let i = 0; i < postLinks.length; i++) {
-                                    const href = postLinks[i].href;
+                                    const href = postLinks[i].href || postLinks[i].getAttribute('href') || '';
                                     if (blockedFbids.some(fbid => href.includes(fbid) || href.includes('id=' + fbid))) { isBanned = true; break; }
-                                    if (blockedUrls.some(blockedUrl => blockedUrl.test(href))) { isBanned = true; break; }
+                                    if (matchesBlockedUrlCandidates(href) || matchesBlockedUrlCandidates(postLinks[i].getAttribute('data-lynx-uri') || '')) { isBanned = true; break; }
                                 }
                             }
                         }
@@ -2300,15 +2418,21 @@ const scanAndBanEntirePosts = () => {
                     }
                 };
 
-                if (seeMoreButtons.length > 0 && !post.classList.contains('fb-post-expanding')) {
+                const expandAttempts = Number(post.getAttribute('data-fb-expand-attempts') || '0');
+                if (seeMoreButtons.length > 0 && expandAttempts < 2) {
                     post.classList.add('fb-post-expanding');
-                    seeMoreButtons.forEach(btn => { try { btn.click(); } catch (e) {} });
-                    setTimeout(evaluatePost, 500);
+                    post.setAttribute('data-fb-expand-attempts', String(expandAttempts + 1));
+                    seeMoreButtons.forEach(btn => hardClickElement(btn));
+                    setTimeout(() => {
+                        post.classList.remove('fb-post-expanding');
+                        evaluatePost();
+                    }, 900);
                     return;
                 }
                 post.classList.remove('fb-post-expanding');
                 post.classList.remove('fb-post-pending');
                 post.removeAttribute('data-fb-pending-since');
+                post.removeAttribute('data-fb-expand-attempts');
                 evaluatePost();
             });
         });
@@ -2430,7 +2554,7 @@ const scanAndBanEntirePosts = () => {
                     if (restrictedWordsLower.some(word => textContent.includes(word) || ariaLabel.toLowerCase().includes(word))) isBlocked = true; 
                     if (!isBlocked && regexBlockedWords.some(regex => regex.test(textContent) || regex.test(ariaLabel) || regex.test(href))) isBlocked = true; 
                     if (!isBlocked && blockedFbids.some(fbid => href.includes(fbid) || dataHover.includes(fbid) || href.includes('id=' + fbid) || href.includes('profile.php?id=' + fbid))) isBlocked = true; 
-                    if (!isBlocked && blockedUrls.some(blockedUrl => blockedUrl.test(href))) isBlocked = true; 
+                    if (!isBlocked && matchesBlockedUrlCandidates(href)) isBlocked = true; 
                     
                     if (isBlocked) {
                         result.style.setProperty('display', 'none', 'important');
@@ -2904,7 +3028,7 @@ const scanAndBanEntirePosts = () => {
                 const target = event.target.closest && event.target.closest('a');
                 if (!target) return;
                 if (isNotificationNavigationUrl(target.href)) return;
-                if (blockedUrls.some(blockedUrl => blockedUrl.test(target.href))) {
+                if (matchesBlockedUrlCandidates(target.href)) {
                     event.preventDefault();
                     event.stopPropagation();
                 }
@@ -2913,7 +3037,7 @@ const scanAndBanEntirePosts = () => {
                 const form = event.target;
                 const action = form.action || '';
                 if (isNotificationNavigationUrl(action)) return;
-                if (blockedUrls.some(blockedUrl => blockedUrl.test(action))) {
+                if (matchesBlockedUrlCandidates(action)) {
                     event.preventDefault();
                     event.stopPropagation();
                 }
@@ -2989,48 +3113,73 @@ const scanAndBanEntirePosts = () => {
             if (__fbDomObserverInstalled) return;
             __fbDomObserverInstalled = true;
 
-            const throttledRunAllFilters = createThrottle(() => runAllFilters(), 400);
+            const throttledRunAllFilters = createThrottle(() => runAllFilters(), 450);
 
             const observer = trackObserver(new MutationObserver((mutations) => {
-                handleRedirects(); 
+                handleRedirects();
 
                 let hasSearchChanges = false;
                 let hasFeedChanges = false;
                 let hasRelevantUiChanges = false;
 
+                const flagNode = (node) => {
+                    if (!node) return;
+
+                    resetReusedFeedUnits(node);
+
+                    const nodeIsFeed = !!(node.matches && isFeedUnit(node));
+                    const nodeHasFeed = !!(node.querySelector && node.querySelector(getFeedUnitSelectorString()));
+                    if (nodeIsFeed || nodeHasFeed || (node.closest && node.closest(getFeedUnitSelectorString()))) {
+                        markPendingFeedUnits(node.nodeType === 1 ? node : document);
+                        hasFeedChanges = true;
+                    }
+
+                    const nodeIsSearch = !!(node.matches && (node.matches('li[role="row"]') || node.matches('a[aria-describedby]') || node.matches('div[role="option"]') || node.matches('div[role="presentation"]')));
+                    const nodeHasSearch = !!(node.querySelector && (node.querySelector('li[role="row"]') || node.querySelector('a[aria-describedby]') || node.querySelector('div[role="option"]') || node.querySelector('div[role="presentation"]')));
+                    if (nodeIsSearch || nodeHasSearch) {
+                        hasSearchChanges = true;
+                    }
+
+                    const nodeIsRelevantUi = !!(node.matches && (node.matches('[role="dialog"]') || node.matches('[role="menu"]') || node.matches('div[aria-label="Kelat"][role="region"]') || node.matches('div[aria-label="Reels"][role="region"]') || node.matches('div[aria-label="Sinulle ehdotettua"][role="region"]') || node.matches('div[aria-label="Suggested for you"][role="region"]')));
+                    const nodeHasRelevantUi = !!(node.querySelector && (node.querySelector('[role="dialog"]') || node.querySelector('[role="menu"]') || node.querySelector('div[aria-label="Kelat"][role="region"]') || node.querySelector('div[aria-label="Reels"][role="region"]') || node.querySelector('div[aria-label="Sinulle ehdotettua"][role="region"]') || node.querySelector('div[aria-label="Suggested for you"][role="region"]')));
+                    if (nodeIsRelevantUi || nodeHasRelevantUi) {
+                        hasRelevantUiChanges = true;
+                    }
+                };
+
                 mutations.forEach(mutation => {
-                    mutation.addedNodes && mutation.addedNodes.forEach(node => {
-                        if (node.nodeType !== 1) return;
+                    if (mutation.type === 'childList') {
+                        mutation.addedNodes && mutation.addedNodes.forEach(node => {
+                            if (node.nodeType !== 1) return;
+                            flagNode(node);
+                        });
+                        return;
+                    }
 
-                        resetReusedFeedUnits(node);
+                    if (mutation.type === 'attributes') {
+                        const target = mutation.target;
+                        if (target && target.nodeType === 1) flagNode(target);
+                        return;
+                    }
 
-                        const nodeIsFeed = !!(node.matches && isFeedUnit(node));
-                        const nodeHasFeed = !!(node.querySelector && node.querySelector(getFeedUnitSelectorString()));
-                        if (nodeIsFeed || nodeHasFeed) {
-                            markPendingFeedUnits(node);
-                            hasFeedChanges = true;
-                        }
-
-                        const nodeIsSearch = !!(node.matches && (node.matches('li[role="row"]') || node.matches('a[aria-describedby]') || node.matches('div[role="option"]') || node.matches('div[role="presentation"]')));
-                        const nodeHasSearch = !!(node.querySelector && (node.querySelector('li[role="row"]') || node.querySelector('a[aria-describedby]') || node.querySelector('div[role="option"]') || node.querySelector('div[role="presentation"]')));
-                        if (nodeIsSearch || nodeHasSearch) {
-                            hasSearchChanges = true;
-                        }
-
-                        const nodeIsRelevantUi = !!(node.matches && (node.matches('[role="dialog"]') || node.matches('[role="menu"]') || node.matches('div[aria-label="Kelat"][role="region"]') || node.matches('div[aria-label="Reels"][role="region"]') || node.matches('div[aria-label="Sinulle ehdotettua"][role="region"]') || node.matches('div[aria-label="Suggested for you"][role="region"]')));
-                        const nodeHasRelevantUi = !!(node.querySelector && (node.querySelector('[role="dialog"]') || node.querySelector('[role="menu"]') || node.querySelector('div[aria-label="Kelat"][role="region"]') || node.querySelector('div[aria-label="Reels"][role="region"]') || node.querySelector('div[aria-label="Sinulle ehdotettua"][role="region"]') || node.querySelector('div[aria-label="Suggested for you"][role="region"]')));
-                        if (nodeIsRelevantUi || nodeHasRelevantUi) {
-                            hasRelevantUiChanges = true;
-                        }
-                    });
+                    if (mutation.type === 'characterData') {
+                        const parent = mutation.target && mutation.target.parentElement;
+                        if (parent) flagNode(parent);
+                    }
                 });
 
                 if (!hasFeedChanges && !hasSearchChanges && !hasRelevantUiChanges) return;
                 if (hasSearchChanges) processSearchResults();
                 throttledRunAllFilters();
             }));
-            
-            observer.observe(document.documentElement, { childList: true, subtree: true, attributes: false, characterData: false });
+
+            observer.observe(document.documentElement, {
+                childList: true,
+                subtree: true,
+                attributes: true,
+                attributeFilter: ['href', 'src', 'srcset', 'aria-label', 'title', 'data-lynx-uri', 'data-store'],
+                characterData: true
+            });
         } catch (e) {}
     };
 
