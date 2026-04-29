@@ -196,12 +196,14 @@
         '[data-test-id="notebook-lm-button"]',
         '.g1-upsell-container',
         '.upgrade-container',
+	'g1-dynamic-upsell-button.ng-star-inserted',
         '.upgrade-button-container',
         'button.upsell-button',
         '.upgrade-text-container',
         'div.safety-disclaimer-container-for-medical.ng-star-inserted',
         // New selectors to nuke the "Päivitä Google AI Pro -tilaukseen" button
         'upsell-button',
+	'#chat-history > infinite-scroller > zs-advanced-upsell > div > div',
         '[data-test-id="upsell-button"]',
         '[data-test-id="bard-upsell-menu-button"]'
     ];

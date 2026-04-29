@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         InstaTolerable
-// @version      2026-03-26
-// @description  Trying to make my Instagram experience tolerable. 
+// @name         MetaMangler - IG Edition
+// @version      2026-04-29
+// @description  Trying to make my Instagram experience tolerable.
 // @match        *://www.instagram.com/*
 // @match        *://www.instagram.com/?next=%2F/*
 // @match        *://www.instagram.com/accounts/onetap/?next=%2F/*
@@ -12,6 +12,162 @@
 
 (function() {
 'use strict';
+
+
+    // ===== No-glimpse nav trash kill: exact-link, feed-safe =====
+    // Exact /reels/ and /explore/ only. No a[href*="reel"] nonsense; feed media often uses /reel/<id>/.
+    // Parent selectors are tightly shaped to: span.html-span > div.x1n2onr6 > a._a6hd.
+    function injectMinimalNoGlimpseNavCSS() {
+        try {
+            const id = 'metamangler-minimal-nav-kill';
+            let style = document.getElementById(id);
+            if (!style) {
+                style = document.createElement('style');
+                style.id = id;
+            }
+            style.textContent = `
+                /* Reels nav button: exact /reels/ only, so Reel feed media (/reel/<id>/) is safe */
+                span.html-span:has(> div.x1n2onr6 > a._a6hd[href="/reels/"]),
+                span.html-span:has(> div.x1n2onr6 > a[role="link"][href="/reels/"]),
+                div.x1n2onr6:has(> a._a6hd[href="/reels/"]),
+                div.x1n2onr6:has(> a[role="link"][href="/reels/"]),
+                a._a6hd[href="/reels/"],
+                a[role="link"][href="/reels/"],
+                a[href="/reels/"],
+                a[href="/reels"],
+                svg[aria-label="Reels"] {
+                    display: none !important;
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                    width: 0 !important;
+                    min-width: 0 !important;
+                    max-width: 0 !important;
+                    height: 0 !important;
+                    min-height: 0 !important;
+                    max-height: 0 !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    overflow: hidden !important;
+                    position: absolute !important;
+                    left: -10000px !important;
+                    top: -10000px !important;
+                    transform: none !important;
+                    transition: none !important;
+                }
+
+                /* Explore / Tutki nav button: exact /explore/ and the icon/button label */
+                span.html-span:has(> div.x1n2onr6 > a._a6hd[href="/explore/"]),
+                span.html-span:has(> div.x1n2onr6 > a[role="link"][href="/explore/"]),
+                div.x1n2onr6:has(> a._a6hd[href="/explore/"]),
+                div.x1n2onr6:has(> a[role="link"][href="/explore/"]),
+                a._a6hd[href="/explore/"],
+                a[role="link"][href="/explore/"],
+                a[href="/explore/"],
+                a[href="/explore"],
+                div[role="button"][aria-label="Tutki"],
+                div[role="button"][aria-label="Explore"],
+                svg[aria-label="Tutki"],
+                svg[aria-label="Explore"] {
+                    display: none !important;
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                    width: 0 !important;
+                    min-width: 0 !important;
+                    max-width: 0 !important;
+                    height: 0 !important;
+                    min-height: 0 !important;
+                    max-height: 0 !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    overflow: hidden !important;
+                    position: absolute !important;
+                    left: -10000px !important;
+                    top: -10000px !important;
+                    transform: none !important;
+                    transition: none !important;
+                }
+
+                /* Myös Metalta / Meta AI. This is not feed-media related, so broader aria/title matching is safe enough. */
+                a[href="/ai/"],
+                a[href="/meta-ai/"],
+                a[aria-label*="Meta AI"],
+                div[role="button"][aria-label*="Meta AI"],
+                [aria-label="Meta AI"],
+                [aria-label*="Myös Metalta"],
+                [title*="Myös Metalta"],
+                svg[aria-label*="Myös Metalta"] {
+                    display: none !important;
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                    width: 0 !important;
+                    min-width: 0 !important;
+                    max-width: 0 !important;
+                    height: 0 !important;
+                    min-height: 0 !important;
+                    max-height: 0 !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    overflow: hidden !important;
+                    position: absolute !important;
+                    left: -10000px !important;
+                    top: -10000px !important;
+                    transform: none !important;
+                    transition: none !important;
+                }
+
+                /* Feed gate: no content flash while home-feed posts are being caption-scanned. */
+                html.metamangler-feed-gate main article:not([data-banned-scan="safe"]):not([data-banned-scan="banned"]) {
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                    transition: none !important;
+                }
+
+                html.metamangler-feed-gate main article[data-banned-scan="safe"] {
+                    opacity: 1 !important;
+                    pointer-events: auto !important;
+                    transition: none !important;
+                }
+
+                html.metamangler-feed-gate main article[data-banned-scan="banned"] {
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                    max-height: 1px !important;
+                    min-height: 1px !important;
+                    height: 1px !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    border: 0 !important;
+                    overflow: hidden !important;
+                    transition: none !important;
+                }
+            `;
+            const parent = document.head || document.documentElement;
+            if (parent && !style.isConnected) parent.appendChild(style);
+        } catch {}
+    }
+    injectMinimalNoGlimpseNavCSS();
+
+    // ===== Feed gate: hide feed articles until the caption scan approves them =====
+    function isMetaManglerHomeFeedPath() {
+        try {
+            if (!location.hostname.includes('instagram.com')) return false;
+            const p = location.pathname || '/';
+            // Home feed only. Do not apply this to profiles, permalink views, DMs, search, explore, reels, etc.
+            return p === '/' || p === '';
+        } catch { return false; }
+    }
+
+    function updateMetaManglerFeedGateClass() {
+        try {
+            const root = document.documentElement;
+            if (!root) return;
+            root.classList.toggle('metamangler-feed-gate', isMetaManglerHomeFeedPath());
+        } catch {}
+    }
+    updateMetaManglerFeedGateClass();
 
     // ===== Lightweight lifecycle/memory tracking =====
     const __timers = { intervals: new Set(), timeouts: new Set() };
@@ -258,6 +414,51 @@ const scannedPostsCache = new Map();
 const feedApprovedPostIDs = new Set(); 
 let isFeedScanPhase = true; 
 
+    // ===== RAM guardrails: cap long-scroll caches without changing v20 behavior =====
+    const POST_CACHE_LIMIT = 700;
+
+    function trimSetToLimit(set, limit = POST_CACHE_LIMIT) {
+        try {
+            while (set && set.size > limit) {
+                const oldest = set.values().next().value;
+                if (oldest === undefined) break;
+                set.delete(oldest);
+            }
+        } catch {}
+    }
+
+    function trimMapToLimit(map, limit = POST_CACHE_LIMIT) {
+        try {
+            while (map && map.size > limit) {
+                const oldest = map.keys().next().value;
+                if (oldest === undefined) break;
+                map.delete(oldest);
+            }
+        } catch {}
+    }
+
+    function rememberSet(set, value) {
+        try {
+            if (!value) return;
+            set.add(value);
+            trimSetToLimit(set);
+        } catch {}
+    }
+
+    function rememberScannedPost(postID, isBanned) {
+        try {
+            if (!postID) return;
+            scannedPostsCache.set(postID, isBanned);
+            trimMapToLimit(scannedPostsCache);
+        } catch {}
+    }
+
+    function prunePostCaches() {
+        trimSetToLimit(approvedPostIDs);
+        trimSetToLimit(feedApprovedPostIDs);
+        trimMapToLimit(scannedPostsCache);
+    }
+
 function findPostWrapper(node) {
     if (!node) return null;
     const article = node.closest('article');
@@ -466,25 +667,35 @@ function isElementProtected(element) {
     'div.x6bk1ks:nth-child(3) > div:nth-child(3)',
     '.x1xgvd2v > div:nth-child(2) > div:nth-child(4) > span:nth-child(1)',
     '.x1xgvd2v > div:nth-child(2) > div:nth-child(3) > span:nth-child(1) > a:nth-child(1) > div:nth-child(1)',
-    'svg[aria-label="Tutki"]',
+    'nav svg[aria-label="Tutki"]',
+    '[role="navigation"] svg[aria-label="Tutki"]',
     'div[class^="x9f619 xjbqb8w x78zum5 x168nmei x13lgxp2 x5pf9jr xo71vjh"][style*="height: 250px;"]',
     'h4.x1lliihq.x1plvlek.xryxfnj.x1n2onr6.x1ji0vk5.x18bv5gf.x193iq5w.xeuugli.x1fj9vlw.x13faqbe.x1vvkbs.x1s928wv.xhkezso.x1gmr53x.x1cpjm7i.x1fgarty.x1943h6x.x1i0vuye.xvs91rp.x1s688f.x173jzuc.x10wh',
     'a.x1i10hfl.xjbqb8w.x1ejq31n.xd10rxx.x1sy0etr.x17r0tee.x972fbf.xcfux6l.x1qhh985.xm0m39n.x9f619.x1ypdohk.xt0psk2.xe8uvvx.xdj266r.x14z9mp.xat24cr.x1lziwak.xexx8yu.x4uap5.x18d9i69.xkhd6sd.x16tds',
     'span.x1lliihq.x1plvlek.xryxfnj.x1n2onr6.x1ji0vk5.x18bv5gf.x193iq5w.xeuugli.x1fj9vlw.x13faqbe.x1vvkbs.x1s928wv.xhkezso.x1gmr53x.x1cpjm7i.x1fgarty.x1943h6x.x1i0vuye.xvs91rp.x1s688f.x173jzuc.x10',
-    'div[role="button"][tabindex][aria-label="Threads"]',
-    'div[role="button"][tabindex][aria-label="Tutki"]',
-    'div > span.html-span > div.x1n2onr6 > a.x1i10hfl._a6hd[href="/explore/"]',
+    'nav div[role="button"][tabindex][aria-label="Threads"]',
+    '[role="navigation"] div[role="button"][tabindex][aria-label="Threads"]',
+    'nav div[role="button"][tabindex][aria-label="Tutki"]',
+    '[role="navigation"] div[role="button"][tabindex][aria-label="Tutki"]',
+    'nav div > span.html-span > div.x1n2onr6 > a.x1i10hfl._a6hd[href="/explore/"]',
+    '[role="navigation"] div > span.html-span > div.x1n2onr6 > a.x1i10hfl._a6hd[href="/explore/"]',
     'span[aria-describedby*="_R_bmt5bb9klrj5ipd5aq_"]',
     'span[aria-describedby*="_R_rmt5bb9klrj5ipd5aq_"]',
     'div.x1azxncr span[aria-describedby*="_R_bmt5bb9klrj5ipd5aq_"]',
     'div.x1azxncr span[aria-describedby*="_R_rmt5bb9klrj5ipd5aq_"]',
     'a[href="/ai/"], a[href="/meta-ai/"], a[aria-label*="Meta AI"], *[aria-label="Meta AI"]',
-    'a.x1i10hfl[href*="threads"]',
-    'svg[aria-label="Threads"]',
-    'svg[aria-label="reels"]',
-    'a[href="/reels/"]',
-    'a[href*="reels"] *',
-    'a[href*="reels"]',
+    'nav a.x1i10hfl[href*="threads"]',
+    '[role="navigation"] a.x1i10hfl[href*="threads"]',
+    'nav svg[aria-label="Threads"]',
+    '[role="navigation"] svg[aria-label="Threads"]',
+    'nav svg[aria-label="reels"]',
+    '[role="navigation"] svg[aria-label="reels"]',
+    'nav a[href="/reels/"]',
+    '[role="navigation"] a[href="/reels/"]',
+    'nav a[href*="reels"] *',
+    '[role="navigation"] a[href*="reels"] *',
+    'nav a[href*="reels"]',
+    '[role="navigation"] a[href*="reels"]',
     'span:has(a[href*="help.instagram.com/347751748650214"])',
     'div.x78zum5.xdt5ytf.xdj266r.x14z9mp.xod5an3.x162z183.x1j7kr1c.xvbhtw8',
     'div.x9f619.xjbqb8w.x78zum5.x168nmei.x13lgxp2.x5pf9jr.xo71vjh.x12nagc.x1uhb9sk.x1plvlek.xryxfnj.x1c4vz4f.x2lah0s.x2lah0s.xdt5ytf.xqjyukv.x1qjc9v5.x1oa3qoh.x1nhvcw1',
@@ -493,7 +704,7 @@ function isElementProtected(element) {
     'a.x1i10hfl[href*="blocked"]','a.x1i10hfl[href*="estetty"]','a.x1i10hfl[href*="Rajoitetut tilit"]','a.x1i10hfl[href*="Restricted accounts"]','a.x1i10hfl[href*="Piiloitetut sanat"]','a.x1i10hfl[href*="Hidden Words"]','a.x1i10hfl[href*="hide_story_and_live"]',
     'div > span.html-span > div.x1n2onr6 > a.x1i10hfl._a6hd[href*="blocked"]','div > span.html-span > div.x1n2onr6 > a.x1i10hfl._a6hd[href*="estetty"]','div > span.html-span > div.x1n2onr6 > a.x1i10hfl._a6hd[href*="Rajoitetut tilit"]','div > span.html-span > div.x1n2onr6 > a.x1i10hfl._a6hd[href*="Restricted accounts"]','div > span.html-span > div.x1n2onr6 > a.x1i10hfl._a6hd[href*="Piiloitetut sanat"]','div > span.html-span > div.x1n2onr6 > a.x1i10hfl._a6hd[href*="hide_story_and_live"]',
     '[aria-label*="Myös Metalta"]','[title*="Myös Metalta"]','svg[aria-label*="Myös Metalta"]',
-    '[role="navigation"] a[href^="/explore"]','nav[aria-label*="Primary"] a[href^="/explore"]','a[href="/explore/"]','a[href="/explore/?next=%2F"]','a[role="link"][href^="/explore"]',
+    '[role="navigation"] a[href^="/explore"]','nav[aria-label*="Primary"] a[href^="/explore"]','nav a[href="/explore/"]','nav a[href="/explore/?next=%2F"]','nav a[role="link"][href^="/explore"]',
     'section:has(> div > a._a6hd[href*="?next=%2F"])',
     'a._a6hd[href*="?next=%2F"] ~ div[style*="--x-height: 230px"]',
     'section:has(> div > a._a6hd[href*="?next=%2F"]) div[style*="--x-height: 230px"]',
@@ -546,28 +757,36 @@ function isElementProtected(element) {
         'h6',
         'a',
         'button',
-        'div[role="button"][tabindex][aria-label="Threads"]',
-        'div[role="button"][tabindex][aria-label="Tutki"]',
-        'div[role="button"][tabindex][aria-label="Reels"]',
+        'nav div[role="button"][tabindex][aria-label="Threads"]',
+    '[role="navigation"] div[role="button"][tabindex][aria-label="Threads"]',
+        'nav div[role="button"][tabindex][aria-label="Tutki"]',
+    '[role="navigation"] div[role="button"][tabindex][aria-label="Tutki"]',
+        'nav div[role="button"][tabindex][aria-label="Reels"]',
         'div[class*="x1nhvcw1"][class*="xqjyukv"][class*="xdt5ytf"]',
         'span[aria-describedby*="_R_bmt5bb9klrj5ipd5aq_"]',
         'span[aria-describedby*="_R_rmt5bb9klrj5ipd5aq_"]',
         'div.x1azxncr span[aria-describedby*="_R_bmt5bb9klrj5ipd5aq_"]',
         'div.x1azxncr span[aria-describedby*="_R_rmt5bb9klrj5ipd5aq_"]',
-        'a.x1i10hfl[href*="threads"]',
+        'nav a.x1i10hfl[href*="threads"]',
+    '[role="navigation"] a.x1i10hfl[href*="threads"]',
         'canvas.x1upo8f9.xpdipgo.x87ps6o'
     ];
 
     const selectorsForExcludedPaths = [
-        'div[role="button"][tabindex][aria-label="Reels"]',
-        'div[role="button"][tabindex][aria-label="Threads"]',
-        'div[role="button"][tabindex][aria-label="Tutki"]',
-        'div[role="button"][tabindex][aria-label="Myös Metalta"]',
+        'nav div[role="button"][tabindex][aria-label="Reels"]',
+        'nav div[role="button"][tabindex][aria-label="Threads"]',
+    '[role="navigation"] div[role="button"][tabindex][aria-label="Threads"]',
+        'nav div[role="button"][tabindex][aria-label="Tutki"]',
+    '[role="navigation"] div[role="button"][tabindex][aria-label="Tutki"]',
+        'nav div[role="button"][tabindex][aria-label="Myös Metalta"]',
         'a.x1i10hfl[href*="ai"]',
         'a.x1i10hfl[href*="Myös Metalta"]',
-        'a.x1i10hfl[href*="threads"]',
-        'div > span.html-span > div.x1n2onr6 > a.x1i10hfl._a6hd[href="/explore/"]',
-        'div > span.html-span > div.x1n2onr6 > a.x1i10hfl._a6hd[href="/reels/"]',
+        'nav a.x1i10hfl[href*="threads"]',
+    '[role="navigation"] a.x1i10hfl[href*="threads"]',
+        'nav div > span.html-span > div.x1n2onr6 > a.x1i10hfl._a6hd[href="/explore/"]',
+    '[role="navigation"] div > span.html-span > div.x1n2onr6 > a.x1i10hfl._a6hd[href="/explore/"]',
+        'nav div > span.html-span > div.x1n2onr6 > a.x1i10hfl._a6hd[href="/reels/"]',
+        '[role="navigation"] div > span.html-span > div.x1n2onr6 > a.x1i10hfl._a6hd[href="/reels/"]',
         'a.x1i10hfl[href*="blocked"]',
         'a.x1i10hfl[href*="estetty"]',
         'a.x1i10hfl[href*="hide_story_and_live"]',
@@ -641,25 +860,8 @@ function isElementProtected(element) {
     };
 
     function stripImagesWithin(el) {
-        try {
-            el.querySelectorAll('img, source, video').forEach(node => {
-                if (node.tagName === 'IMG') {
-                    node.removeAttribute('srcset');
-                    node.removeAttribute('src');
-                    node.loading = 'lazy';
-                    node.decoding = 'async';
-                    node.style.setProperty('display', 'none', 'important');
-                    node.style.setProperty('visibility', 'hidden', 'important');
-                } else if (node.tagName === 'SOURCE') {
-                    node.removeAttribute('srcset');
-                    node.removeAttribute('src');
-                } else if (node.tagName === 'VIDEO') {
-                    node.pause?.();
-                    node.removeAttribute('src');
-                    node.removeAttribute('poster');
-                }
-            });
-        } catch {}
+        // no-op: never strip src/srcset/poster from IG media. Hiding wrappers is enough.
+        return;
     }
 
     function isInPostOverlay(node) {
@@ -954,7 +1156,7 @@ function isElementProtected(element) {
                 }
 
                 if (articleHasBannedCaption(node)) {
-                    if (postID) scannedPostsCache.set(postID, true);
+                    if (postID) rememberScannedPost(postID, true);
                     return resolve(false); 
                 }
 
@@ -975,10 +1177,10 @@ function isElementProtected(element) {
                     setTimeout(() => {
                         const hasBanned = articleHasBannedCaption(node);
                         if (!hasBanned && postID) {
-                            feedApprovedPostIDs.add(postID); 
-                            approvedPostIDs.add(postID);
+                            rememberSet(feedApprovedPostIDs, postID); 
+                            rememberSet(approvedPostIDs, postID);
                         }
-                        if (postID) scannedPostsCache.set(postID, hasBanned);
+                        if (postID) rememberScannedPost(postID, hasBanned);
                         
                         if (!hasBanned) {
                             node.style.setProperty('opacity', origOpacity || '1');
@@ -989,10 +1191,10 @@ function isElementProtected(element) {
                 }
 
                 if (postID) {
-                    feedApprovedPostIDs.add(postID); 
-                    approvedPostIDs.add(postID);
+                    rememberSet(feedApprovedPostIDs, postID); 
+                            rememberSet(approvedPostIDs, postID);
                 }
-                if (postID) scannedPostsCache.set(postID, false);
+                if (postID) rememberScannedPost(postID, false);
                 resolve(true); 
             } catch (e) {
                 resolve(true); 
@@ -1034,6 +1236,11 @@ function isElementProtected(element) {
                 }
 
                 if (article.hasAttribute('data-feed-scan-done')) return;
+
+                // Hide-first gate: keep the post invisible until expandAndScanNode decides safe/banned.
+                if (!article.hasAttribute('data-banned-scan')) {
+                    article.setAttribute('data-banned-scan', 'pending');
+                }
                 
                 article.setAttribute('data-feed-scan-done', '1');
                 if (postID) {
@@ -1043,12 +1250,24 @@ function isElementProtected(element) {
                 expandAndScanNode(article, postID).then(isClean => {
                     if (isClean) {
                         article.setAttribute('data-banned-scan', 'safe');
+                        // Ensure pending inline opacity from the scan path cannot leave a clean post blank.
+                        article.style.removeProperty('max-height');
+                        article.style.removeProperty('height');
+                        article.style.removeProperty('min-height');
+                        article.style.removeProperty('margin');
+                        article.style.removeProperty('padding');
+                        article.style.removeProperty('border');
+                        article.style.removeProperty('overflow');
+                        article.style.setProperty('opacity', '1', 'important');
+                        article.style.removeProperty('pointer-events');
                     } else {
                         article.setAttribute('data-banned-scan', 'banned');
                         safelyHideFeedArticle(article);
                     }
                 }).catch(() => {
                     article.setAttribute('data-banned-scan', 'safe');
+                    article.style.setProperty('opacity', '1', 'important');
+                    article.style.removeProperty('pointer-events');
                 });
             });
             
@@ -1829,16 +2048,23 @@ injectInlineCSS();
             [aria-label*="Myös Metalta"],
             [title*="Myös Metalta"],
             svg[aria-label*="Myös Metalta"],
-            div[role="button"][tabindex][aria-label="Tutki"],
-            svg[aria-label="Tutki"],
-            div > span.html-span > div.x1n2onr6 > a.x1i10hfl._a6hd[href="/explore/"],
-            a[href="/explore/"],
-	    span:has(a[href*="help.instagram.com/347751748650214"]),
-            div[role="button"][tabindex][aria-label="Threads"],
-            svg[aria-label="Threads"],
-            a.x1i10hfl[href*="threads"],
-            a[href="/explore/"],
-            a[href*="/threads"] {
+            nav div[role="button"][tabindex][aria-label="Tutki"],
+            [role="navigation"] div[role="button"][tabindex][aria-label="Tutki"],
+            nav svg[aria-label="Tutki"],
+            [role="navigation"] svg[aria-label="Tutki"],
+            nav div > span.html-span > div.x1n2onr6 > a.x1i10hfl._a6hd[href="/explore/"],
+            [role="navigation"] div > span.html-span > div.x1n2onr6 > a.x1i10hfl._a6hd[href="/explore/"],
+            nav a[href="/explore/"],
+            [role="navigation"] a[href="/explore/"],
+	    nav span:has(a[href*="help.instagram.com/347751748650214"]),
+            nav div[role="button"][tabindex][aria-label="Threads"],
+            [role="navigation"] div[role="button"][tabindex][aria-label="Threads"],
+            nav svg[aria-label="Threads"],
+            [role="navigation"] svg[aria-label="Threads"],
+            nav a.x1i10hfl[href*="threads"],
+            [role="navigation"] a.x1i10hfl[href*="threads"],
+            nav a[href*="/threads"],
+            [role="navigation"] a[href*="/threads"] {
                 display: none !important;
                 visibility: hidden !important;
                 opacity: 0 !important;
@@ -2386,6 +2612,27 @@ injectInlineCSS();
 
     let observerScheduled = false;
     function observerCallback(mutationsList) {
+        updateMetaManglerFeedGateClass();
+        if (document.hidden) return;
+
+        let hasAddedElement = false;
+        try {
+            for (const mutation of mutationsList) {
+                if (!mutation.addedNodes || !mutation.addedNodes.length) continue;
+                for (const node of mutation.addedNodes) {
+                    if (node && node.nodeType === 1) {
+                        hasAddedElement = true;
+                        break;
+                    }
+                }
+                if (hasAddedElement) break;
+            }
+        } catch {
+            hasAddedElement = true;
+        }
+        if (!hasAddedElement) return;
+
+        injectMinimalNoGlimpseNavCSS();
         updateOverlayState();
         makeOverlayLikesClickable(); 
         fastSynchronousHider(mutationsList); 
@@ -2423,7 +2670,8 @@ injectInlineCSS();
             hideUnfollowRowInProfileDialog();
             updateOverlayState();
             scanPermalinkArticleAndAct();
-        }, 80);
+            prunePostCaches();
+        }, 450);
     }
 
     function initObserver() {
@@ -2441,6 +2689,8 @@ injectInlineCSS();
     }
 
     function mainHandler() {
+        updateMetaManglerFeedGateClass();
+        injectMinimalNoGlimpseNavCSS();
         handleRedirectionsAndContentHiding();
         if (isReelsPage()) {
             updateOverlayState();
@@ -2456,7 +2706,7 @@ injectInlineCSS();
 
         if (location.hostname.includes('instagram.com')) {
             hideInstagramBannedContent();
-            genericAggressiveHider();
+            // genericAggressiveHider(); // disabled in regular home path to reduce churn/RAM
             checkForRedirectElements();
             hideMyosMetaltaElements();
             hideSettingsPageElements();
@@ -2477,15 +2727,17 @@ injectInlineCSS();
 
     function scheduleIntervals() {
         addInterval(() => {
+            updateMetaManglerFeedGateClass();
             checkSPARouting(); 
             updateOverlayState();
             makeOverlayLikesClickable(); 
             if (!isReelsPage() && !document.hidden) {
                 hideUnwantedUIButtons();
                 if (isSearchSurfacePresent()) hideInstagramSearchResults();
-                if (Math.random() < 0.3) genericAggressiveHider(); 
+                prunePostCaches();
+                // genericAggressiveHider disabled here to reduce DOM churn/RAM.
             }
-        }, 250); 
+        }, 2000); 
     }
     startIntervals(scheduleIntervals);
 
@@ -2526,6 +2778,7 @@ injectInlineCSS();
     })();
 
     onEvent(window, 'locationchange', function() {
+        updateMetaManglerFeedGateClass();
         isFeedScanPhase = true; 
         reelsStyleInjected = false;
         currentURL = window.location.href;

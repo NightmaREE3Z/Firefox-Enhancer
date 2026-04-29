@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name         FB Sanity Enhancer
-// @date      	 2026-04-21
+// @name         MetaMangler - FB Edition
+// @date      	 2026-04-29
 // @description  Makes my Facebook experience tolerable. With less algorithmic bullshit.
 // @match        *://*.facebook.com/*
 // @grant        none
@@ -397,17 +397,19 @@
     };
     
     // ==========================================
-    // UNIFIED REGEX-POWERED PROFILE / CHAT BYPASS CHECKER
+    // UNIFIED REGEX-POWERED EXCLUDED PATHS
     // ==========================================
 
     const excludedRegexPatterns = [
         /\/(messages|messenger)\b/i,
         /\/notifications\b/i,
+        /\/marketplace\b/i,
         /\/ilmoitukset\b/i,
         /\/stories\b/i,
         /\/groups\/(317493608736721|342124472533278|2484497081612438|390555733810362|934038190050109)\b/i,
         /\/(haukkis|tapio\.haukirauma|1267550854|100005050653554|me)\b/i,
         /id=(100005050653554|100000559239899|1267550854)\b/i
+
     ];
 
     // 1. Checks ONLY for structurally whitelisted URLs. (Redirect logic uses ONLY this)
