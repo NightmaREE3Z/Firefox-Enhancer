@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name         MetaMangler - IG Edition
-// @version      2026-04-29
+// @name         IGMangler
+// @date      	 2026-05-05
 // @description  Trying to make my Instagram experience tolerable.
 // @match        *://www.instagram.com/*
 // @match        *://www.instagram.com/?next=%2F/*
@@ -98,6 +98,39 @@
                 [aria-label*="Myös Metalta"],
                 [title*="Myös Metalta"],
                 svg[aria-label*="Myös Metalta"] {
+                    display: none !important;
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                    width: 0 !important;
+                    min-width: 0 !important;
+                    max-width: 0 !important;
+                    height: 0 !important;
+                    min-height: 0 !important;
+                    max-height: 0 !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    overflow: hidden !important;
+                    position: absolute !important;
+                    left: -10000px !important;
+                    top: -10000px !important;
+                    transform: none !important;
+                    transition: none !important;
+                }
+
+                /* Profile Threads tag under usernames. Target the real Threads profile link, not IG's class soup. */
+                main header a[target="_blank"][href*="//www.threads.com/@"]:has(svg[aria-label="Threads"]),
+                main header a[target="_blank"][href*="//threads.com/@"]:has(svg[aria-label="Threads"]),
+                main header a[target="_blank"][href*="//www.threads.net/@"]:has(svg[aria-label="Threads"]),
+                main header a[target="_blank"][href*="//threads.net/@"]:has(svg[aria-label="Threads"]),
+                main header div:has(> a[target="_blank"][href*="//www.threads.com/@"]:has(svg[aria-label="Threads"])),
+                main header div:has(> a[target="_blank"][href*="//threads.com/@"]:has(svg[aria-label="Threads"])),
+                main header div:has(> a[target="_blank"][href*="//www.threads.net/@"]:has(svg[aria-label="Threads"])),
+                main header div:has(> a[target="_blank"][href*="//threads.net/@"]:has(svg[aria-label="Threads"])),
+                main div[style*="--x-width: 100%;"]:has(a[target="_blank"][href*="//www.threads.com/@"]:has(svg[aria-label="Threads"])),
+                main div[style*="--x-width: 100%;"]:has(a[target="_blank"][href*="//threads.com/@"]:has(svg[aria-label="Threads"])),
+                main div[style*="--x-width: 100%;"]:has(a[target="_blank"][href*="//www.threads.net/@"]:has(svg[aria-label="Threads"])),
+                main div[style*="--x-width: 100%;"]:has(a[target="_blank"][href*="//threads.net/@"]:has(svg[aria-label="Threads"])) {
                     display: none !important;
                     visibility: hidden !important;
                     opacity: 0 !important;
@@ -2191,6 +2224,80 @@ injectInlineCSS();
         }
     }
 
+    function isInstagramProfilePathForThreadsTag() {
+        try {
+            if (!location.hostname.includes('instagram.com')) return false;
+            const parts = (location.pathname || '/').split('/').filter(Boolean);
+            if (parts.length !== 1) return false;
+            const username = (parts[0] || '').toLowerCase();
+            const reserved = new Set(['p', 'reel', 'tv', 'explore', 'reels', 'accounts', 'stories', 'direct', 'meta-ai', 'ai', 'about', 'help', 'legal', 'archive']);
+            return !!username && !reserved.has(username);
+        } catch { return false; }
+    }
+
+    function isThreadsProfileAnchor(anchor) {
+        try {
+            if (!anchor || !anchor.href) return false;
+            const url = new URL(anchor.href, location.href);
+            const host = url.hostname.replace(/^www\./i, '').toLowerCase();
+            return (host === 'threads.com' || host === 'threads.net') && /^\/@[^/]+/i.test(url.pathname || '');
+        } catch { return false; }
+    }
+
+    function getProfileThreadsTagHideTarget(anchor) {
+        try {
+            const widthWrapper = anchor.closest('div[style*="--x-width: 100%;"], div[style*="--x-width:100%"]');
+            if (
+                widthWrapper &&
+                !widthWrapper.closest('nav, [role="navigation"], article, [role="dialog"], [aria-modal="true"]') &&
+                !isElementProtected(widthWrapper) &&
+                widthWrapper.querySelectorAll('a[target="_blank"][href*="threads.com/@"], a[target="_blank"][href*="threads.net/@"]').length === 1
+            ) {
+                return widthWrapper;
+            }
+
+            const directParent = anchor.parentElement;
+            if (
+                directParent &&
+                directParent.children.length === 1 &&
+                !directParent.matches('main, header, section, article, nav, body, html') &&
+                !directParent.closest('nav, [role="navigation"], article, [role="dialog"], [aria-modal="true"]') &&
+                !isElementProtected(directParent)
+            ) {
+                return directParent;
+            }
+        } catch {}
+        return anchor;
+    }
+
+    function hideProfileThreadsTags(root = document) {
+        try {
+            if (!isInstagramProfilePathForThreadsTag()) return;
+            const scope = root && root.querySelectorAll ? root : document;
+            const links = scope.querySelectorAll([
+                'a[target="_blank"][href*="threads.com/@"]',
+                'a[target="_blank"][href*="threads.net/@"]',
+                'a[target="_blank"][href*="www.threads.com/@"]',
+                'a[target="_blank"][href*="www.threads.net/@"]'
+            ].join(','));
+
+            links.forEach(anchor => {
+                try {
+                    if (!isThreadsProfileAnchor(anchor)) return;
+                    if (anchor.closest('nav, [role="navigation"], article, [role="dialog"], [aria-modal="true"]')) return;
+
+                    const hasThreadsIcon = !!anchor.querySelector('svg[aria-label="Threads"], title');
+                    if (!hasThreadsIcon) return;
+
+                    const target = getProfileThreadsTagHideTarget(anchor);
+                    if (target && !hiddenElements.has(target)) {
+                        collapseElement(target);
+                    }
+                } catch {}
+            });
+        } catch {}
+    }
+
     function querySelectorAllWithContains(selector, containsText) {
         const elements = document.querySelectorAll(selector);
         const matchingElements = [];
@@ -2633,6 +2740,7 @@ injectInlineCSS();
         if (!hasAddedElement) return;
 
         injectMinimalNoGlimpseNavCSS();
+        hideProfileThreadsTags();
         updateOverlayState();
         makeOverlayLikesClickable(); 
         fastSynchronousHider(mutationsList); 
@@ -2652,6 +2760,7 @@ injectInlineCSS();
                 return;
             }
             collapseElementsBySelectors(selectorsToHide);
+            hideProfileThreadsTags();
             
             processFeedPostsForScanning();
             
@@ -2691,6 +2800,7 @@ injectInlineCSS();
     function mainHandler() {
         updateMetaManglerFeedGateClass();
         injectMinimalNoGlimpseNavCSS();
+        hideProfileThreadsTags();
         handleRedirectionsAndContentHiding();
         if (isReelsPage()) {
             updateOverlayState();
@@ -2733,6 +2843,7 @@ injectInlineCSS();
             makeOverlayLikesClickable(); 
             if (!isReelsPage() && !document.hidden) {
                 hideUnwantedUIButtons();
+                hideProfileThreadsTags();
                 if (isSearchSurfacePresent()) hideInstagramSearchResults();
                 prunePostCaches();
                 // genericAggressiveHider disabled here to reduce DOM churn/RAM.
@@ -2789,6 +2900,7 @@ injectInlineCSS();
             injectReelsCSS();
         } else {
             mainHandler();
+            hideProfileThreadsTags();
             hideMyosMetaltaElements();
             hideSettingsPageElements();
             hideSinulleEhdotettuaBlock();

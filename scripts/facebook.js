@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name         MetaMangler - FB Edition
-// @date      	 2026-04-29
+// @name         FBMangler
+// @date      	 2026-05-05
 // @description  Makes my Facebook experience tolerable. With less algorithmic bullshit.
 // @match        *://*.facebook.com/*
 // @grant        none
@@ -14,6 +14,90 @@
     function devLog(message) {
         // console.log('[FACEBOOK.JS]', message);
     }
+
+    // ===== Feed zero-glimpse gate =====
+    // Keep home-feed posts invisible until FBMangler has explicitly approved or denied them.
+    // This prevents Facebook's React render from flashing the first/newest feed card before
+    // our scanner has had a chance to inspect it.
+    const isFBFeedZeroGlimpsePath = () => {
+        try {
+            if (!location.hostname || !location.hostname.includes('facebook.com')) return false;
+            const path = (location.pathname || '/').toLowerCase();
+            return path === '/' || path === '/home.php';
+        } catch (e) {
+            return false;
+        }
+    };
+
+    const updateFBFeedZeroGlimpseGateClass = () => {
+        try {
+            const root = document.documentElement;
+            if (!root) return;
+            root.classList.toggle('fb-feed-zero-glimpse-gate', isFBFeedZeroGlimpsePath());
+        } catch (e) {}
+    };
+
+    const injectFBFeedZeroGlimpseBootstrapCSS = () => {
+        try {
+            const id = 'fb-feed-zero-glimpse-bootstrap-style';
+            let style = document.getElementById(id);
+            if (!style) {
+                style = document.createElement('style');
+                style.id = id;
+            }
+
+            style.textContent = `
+                html.fb-feed-zero-glimpse-gate div[data-pagelet^="FeedUnit_"]:not(.fb-post-approved):not(.fb-post-banned):not(.fb-element-banned),
+                html.fb-feed-zero-glimpse-gate div[data-pagelet^="TimelineFeedUnit_"]:not(.fb-post-approved):not(.fb-post-banned):not(.fb-element-banned),
+                html.fb-feed-zero-glimpse-gate div[data-ad-rendering-role="story_message"]:not(.fb-post-approved):not(.fb-post-banned):not(.fb-element-banned),
+                html.fb-feed-zero-glimpse-gate div[data-ad-preview="message"]:not(.fb-post-approved):not(.fb-post-banned):not(.fb-element-banned) {
+                    opacity: 0 !important;
+                    visibility: hidden !important;
+                    pointer-events: none !important;
+                    transition: none !important;
+                    animation: none !important;
+                }
+
+                html.fb-feed-zero-glimpse-gate div[data-pagelet^="FeedUnit_"].fb-post-approved,
+                html.fb-feed-zero-glimpse-gate div[data-pagelet^="TimelineFeedUnit_"].fb-post-approved,
+                html.fb-feed-zero-glimpse-gate div[data-ad-rendering-role="story_message"].fb-post-approved,
+                html.fb-feed-zero-glimpse-gate div[data-ad-preview="message"].fb-post-approved {
+                    opacity: 1 !important;
+                    visibility: visible !important;
+                    pointer-events: auto !important;
+                    transition: none !important;
+                    animation: none !important;
+                }
+
+                html.fb-feed-zero-glimpse-gate div[data-pagelet^="FeedUnit_"].fb-post-banned,
+                html.fb-feed-zero-glimpse-gate div[data-pagelet^="TimelineFeedUnit_"].fb-post-banned,
+                html.fb-feed-zero-glimpse-gate div[data-ad-rendering-role="story_message"].fb-post-banned,
+                html.fb-feed-zero-glimpse-gate div[data-ad-preview="message"].fb-post-banned,
+                html.fb-feed-zero-glimpse-gate div[data-pagelet^="FeedUnit_"].fb-element-banned,
+                html.fb-feed-zero-glimpse-gate div[data-pagelet^="TimelineFeedUnit_"].fb-element-banned,
+                html.fb-feed-zero-glimpse-gate div[data-ad-rendering-role="story_message"].fb-element-banned,
+                html.fb-feed-zero-glimpse-gate div[data-ad-preview="message"].fb-element-banned {
+                    display: none !important;
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                    height: 0 !important;
+                    min-height: 0 !important;
+                    max-height: 0 !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    border: 0 !important;
+                    overflow: hidden !important;
+                }
+            `;
+
+            const parent = document.head || document.documentElement;
+            if (parent && !style.isConnected) parent.appendChild(style);
+        } catch (e) {}
+    };
+
+    updateFBFeedZeroGlimpseGateClass();
+    injectFBFeedZeroGlimpseBootstrapCSS();
 
     // ===== Memory/observer/timer lifecycle tracking =====
     const __fbTimers = {
@@ -82,7 +166,7 @@
             __fbEventCleanups.forEach(fn => { try { fn(); } catch {} });
             __fbEventCleanups.clear();
 
-            ['fb-inline-style', 'fb-personal-profile-style', 'fb-specific-url-style', 'fb-specific-profile-style', 'fb-specific-url-prehide-style'].forEach(id => {
+            ['fb-inline-style', 'fb-personal-profile-style', 'fb-specific-url-style', 'fb-specific-profile-style', 'fb-specific-url-prehide-style', 'fb-feed-zero-glimpse-bootstrap-style'].forEach(id => {
                 try { const s = document.getElementById(id); if (s) s.remove(); } catch {}
             });
             devLog('Cleanup complete.');
@@ -347,6 +431,31 @@
                     pointer-events: none !important;
                 }
                 
+                /* ZERO-GLIMPSE FEED GATE
+                   On the home feed, posts stay invisible until the scanner explicitly approves them.
+                   Denied posts collapse as if they never existed. */
+                html.fb-feed-zero-glimpse-gate div[data-pagelet^="FeedUnit_"]:not(.fb-post-approved):not(.fb-post-banned):not(.fb-element-banned),
+                html.fb-feed-zero-glimpse-gate div[data-pagelet^="TimelineFeedUnit_"]:not(.fb-post-approved):not(.fb-post-banned):not(.fb-element-banned),
+                html.fb-feed-zero-glimpse-gate div[data-ad-rendering-role="story_message"]:not(.fb-post-approved):not(.fb-post-banned):not(.fb-element-banned),
+                html.fb-feed-zero-glimpse-gate div[data-ad-preview="message"]:not(.fb-post-approved):not(.fb-post-banned):not(.fb-element-banned) {
+                    opacity: 0 !important;
+                    visibility: hidden !important;
+                    pointer-events: none !important;
+                    transition: none !important;
+                    animation: none !important;
+                }
+
+                html.fb-feed-zero-glimpse-gate div[data-pagelet^="FeedUnit_"].fb-post-approved,
+                html.fb-feed-zero-glimpse-gate div[data-pagelet^="TimelineFeedUnit_"].fb-post-approved,
+                html.fb-feed-zero-glimpse-gate div[data-ad-rendering-role="story_message"].fb-post-approved,
+                html.fb-feed-zero-glimpse-gate div[data-ad-preview="message"].fb-post-approved {
+                    opacity: 1 !important;
+                    visibility: visible !important;
+                    pointer-events: auto !important;
+                    transition: none !important;
+                    animation: none !important;
+                }
+
                 /* EXPLICIT PREHIDE ONLY WHILE A POST IS ACTUALLY PENDING / SCANNING */
                 div[data-pagelet^="FeedUnit_"].fb-post-pending,
                 div[data-pagelet^="TimelineFeedUnit_"].fb-post-pending,
@@ -361,7 +470,10 @@
                 div[data-ad-rendering-role="story_message"].fb-post-expanding,
                 div[data-ad-preview="message"].fb-post-expanding {
                     opacity: 0 !important;
+                    visibility: hidden !important;
                     pointer-events: none !important;
+                    transition: none !important;
+                    animation: none !important;
                 }
 
                 /* Ensure approved posts snap back instantly */
@@ -370,7 +482,10 @@
                 div[data-ad-rendering-role="story_message"].fb-post-approved,
                 div[data-ad-preview="message"].fb-post-approved {
                     opacity: 1 !important;
+                    visibility: visible !important;
                     pointer-events: auto !important;
+                    transition: none !important;
+                    animation: none !important;
                 }
 
                 /* IMMUNITY SHIELD FOR DIALOGS AND CRITICAL BUTTONS */
@@ -435,6 +550,9 @@
 
     const manageCSSStyles = () => {
         try {
+            updateFBFeedZeroGlimpseGateClass();
+            injectFBFeedZeroGlimpseBootstrapCSS();
+
             const path = window.location.pathname.toLowerCase();
             const url = window.location.href.toLowerCase();
             const isPersonal = isExcludedPathForDOM(path, url);
@@ -1085,20 +1203,22 @@
     };
 
     const eliminateSuggestedGroups = () => {
-        document.querySelectorAll('[aria-label="Ryhmän ehdotuksien lisävalinnat"], [aria-label="Suggested groups"], [aria-label="Group suggestions"], [aria-label="Ehdotettu sinulle"], [aria-label="Suggested for you"]').forEach(btn => {
+        document.querySelectorAll('[aria-label="Ryhmän ehdotuksien lisävalinnat"], [aria-label="Suggested groups"], [aria-label="Group suggestions"], [aria-label="Ehdotettu sinulle"], [aria-label="Suggested for you"], [aria-label="Recommended for you"], [aria-label="Sinulle ehdotettua"], [aria-label="Sinulle ehdotettu"]').forEach(btn => {
             if (isSafeElement(btn)) return; 
-            const feedUnit = btn.closest('div[data-pagelet^="FeedUnit_"], div[data-pagelet^="TimelineFeedUnit_"]');
-            if (feedUnit && !isDangerousToHide(feedUnit)) safelyHideFBElement(feedUnit);
+            const feedUnit = getOwningFeedPost(btn);
+            if (feedUnit && !isDangerousToHide(feedUnit)) hardBanFeedPost(feedUnit);
         });
 
-        document.querySelectorAll('span[dir="auto"], span.html-span').forEach(span => {
+        document.querySelectorAll('span[dir="auto"], span[dir="ltr"], span.html-span, div.html-div, [data-fb-words-text]').forEach(span => {
             if (isSafeElement(span)) return; 
-            const text = span.textContent ? span.textContent.trim().toLowerCase() : '';
-            if (text === 'ehdotetut ryhmät' || text === 'suggested groups' || text === 'ryhmäehdotukset' || text === 'ehdotettu sinulle' || text === 'sinulle ehdotettua') {
-                const feedUnit = span.closest('div[data-pagelet^="FeedUnit_"], div[data-pagelet^="TimelineFeedUnit_"]');
-                if (feedUnit && !isDangerousToHide(feedUnit)) safelyHideFBElement(feedUnit);
+            const text = span.textContent ? normalizeSuggestedHeaderText(span.textContent) : '';
+            if (text === 'ehdotetut ryhmät' || text === 'suggested groups' || text === 'ryhmäehdotukset' || elementLooksLikeSuggestedForYouHeader(span)) {
+                const feedUnit = getOwningFeedPost(span);
+                if (feedUnit && !isDangerousToHide(feedUnit)) hardBanFeedPost(feedUnit);
             }
         });
+
+        banSuggestedForYouFeedPosts(document);
     };
 
     const blockedFbids = [
@@ -2110,7 +2230,9 @@ const getRegexBlockedWords = () => regexBlockedWords;
                 const hasBlockedDomainText = postContainsBlockedDomainText(element.closest(getFeedUnitSelectorString()) || element.closest('[role="article"]') || element);
 
                 if (hasBlockedFbid || hasBlockedUrl || hasBlockedDomainText) {
-                    safelyHideFBElement(element.closest('div[data-pagelet^="FeedUnit_"]') || element.closest('[role="article"]') || element.closest('div') || element);
+                    const blockedPost = getOwningFeedPost(element);
+                    if (blockedPost) hardBanFeedPost(blockedPost);
+                    else safelyHideFBElement(element.closest('div') || element);
                 }
             });
         } catch (e) {}
@@ -2172,6 +2294,151 @@ const tagFeedPostContext = (post) => {
     post.setAttribute('data-fb-context', getCurrentFeedContextKey());
     const identity = getFeedPostIdentity(post);
     if (identity) post.setAttribute('data-fb-post-id', identity);
+};
+
+// Finds the real feed/card wrapper from any inner caption/link/media node.
+// This prevents the fallback word scrubber from only hiding the description text.
+const getOwningFeedPost = (element) => {
+    try {
+        if (!element || !element.closest) return null;
+
+        const feedUnit = element.closest(getFeedUnitSelectorString());
+        if (feedUnit) return feedUnit;
+
+        const article = element.closest('[role="article"]');
+        if (article) {
+            const outerFeedUnit = article.closest(getFeedUnitSelectorString());
+            return outerFeedUnit || article;
+        }
+    } catch (e) {}
+    return null;
+};
+
+const hardBanFeedPost = (post) => {
+    try {
+        if (!post || isDangerousToHide(post)) return;
+        post.classList.remove('fb-post-approved', 'fb-post-pending', 'fb-post-scanning', 'fb-post-expanding');
+        post.removeAttribute('data-fb-pending-since');
+        post.setAttribute('data-fb-feed-stage', 'denied');
+        post.classList.add('fb-post-banned', 'fb-post-processed');
+        if (isFeedUnit(post)) tagFeedPostContext(post);
+        safelyHideFBElement(post);
+    } catch (e) {}
+};
+
+
+// Hard-nuke feed posts whose header/meta line says Facebook recommended them.
+// These are normal FeedUnit/story cards, not always the older aria-label="Suggested for you" regions,
+// so they need to be denied at the feed-card level before approval/reveal.
+const suggestedForYouFeedHeaderTexts = [
+    'sinulle ehdotettua',
+    'sinulle ehdotettu',
+    'ehdotettu sinulle',
+    'suositeltu sinulle',
+    'suggested for you',
+    'recommended for you'
+];
+
+const normalizeSuggestedHeaderText = (value = '') => {
+    try {
+        return normalizeFBText(value)
+            .replace(/\u00a0/g, ' ')
+            .replace(/[·•]/g, ' · ')
+            .replace(/\s+/g, ' ')
+            .trim();
+    } catch (e) {
+        return '';
+    }
+};
+
+const elementLooksLikeSuggestedForYouHeader = (el) => {
+    try {
+        if (!el || isInsideComment(el)) return false;
+
+        const rawValues = [
+            el.getAttribute && el.getAttribute('data-fb-words-text'),
+            el.getAttribute && el.getAttribute('aria-label'),
+            el.getAttribute && el.getAttribute('title'),
+            el.innerText,
+            el.textContent
+        ].filter(Boolean);
+
+        for (let i = 0; i < rawValues.length; i++) {
+            const text = normalizeSuggestedHeaderText(rawValues[i]);
+            if (!text) continue;
+
+            // Exact tiny label: <span>Sinulle ehdotettua</span>
+            if (suggestedForYouFeedHeaderTexts.includes(text)) return true;
+
+            // Combined meta row: "Sinulle ehdotettua · 9 t ·" / "Recommended for you · 2 h ·"
+            if (text.length <= 180 && suggestedForYouFeedHeaderTexts.some(label => {
+                return text === label ||
+                       text.startsWith(label + ' ·') ||
+                       text.startsWith(label + ' -') ||
+                       text.startsWith(label + ' –') ||
+                       text.startsWith(label + ' —') ||
+                       text.startsWith(label + '  ');
+            })) {
+                return true;
+            }
+        }
+    } catch (e) {}
+    return false;
+};
+
+const postHasSuggestedForYouHeader = (post) => {
+    try {
+        if (!post) return false;
+        if (elementLooksLikeSuggestedForYouHeader(post)) return true;
+
+        const candidates = post.querySelectorAll([
+            '[data-fb-words-text]',
+            'span[dir="auto"]',
+            'span[dir="ltr"]',
+            'span.html-span',
+            'div[dir="auto"]',
+            'div.html-div',
+            '[aria-label]',
+            '[title]'
+        ].join(','));
+
+        for (let i = 0; i < candidates.length; i++) {
+            if (elementLooksLikeSuggestedForYouHeader(candidates[i])) return true;
+        }
+    } catch (e) {}
+    return false;
+};
+
+const banSuggestedForYouFeedPosts = (root = document) => {
+    try {
+        if (isExcludedPathForDOM(window.location.pathname, window.location.href)) return;
+
+        const posts = [];
+        if (root && root.nodeType === 1 && isFeedUnit(root)) posts.push(root);
+        if (root && root.querySelectorAll) root.querySelectorAll(getFeedUnitSelectorString()).forEach(post => posts.push(post));
+
+        posts.forEach(post => {
+            if (!post || post.classList.contains('fb-post-banned') || post.classList.contains('fb-element-banned')) return;
+            if (postHasSuggestedForYouHeader(post)) hardBanFeedPost(post);
+        });
+
+        const labelCandidates = root && root.querySelectorAll ? root.querySelectorAll([
+            '[data-fb-words-text]',
+            'span[dir="auto"]',
+            'span[dir="ltr"]',
+            'span.html-span',
+            'div[dir="auto"]',
+            'div.html-div',
+            '[aria-label]',
+            '[title]'
+        ].join(',')) : [];
+
+        labelCandidates.forEach(el => {
+            if (!elementLooksLikeSuggestedForYouHeader(el)) return;
+            const post = getOwningFeedPost(el);
+            if (post) hardBanFeedPost(post);
+        });
+    } catch (e) {}
 };
 
 
@@ -2239,6 +2506,7 @@ const revealApprovedPost = (post) => {
     clearFBHideStyles(post);
     post.classList.remove('fb-post-banned', 'fb-element-banned', 'fb-post-pending', 'fb-post-scanning', 'fb-post-expanding');
     post.removeAttribute('data-fb-pending-since');
+    post.setAttribute('data-fb-feed-stage', 'approved');
     post.classList.add('fb-post-approved', 'fb-post-processed');
     tagFeedPostContext(post);
 };
@@ -2248,6 +2516,7 @@ const resetFeedPostState = (post) => {
     clearFBHideStyles(post);
     post.classList.remove('fb-post-approved', 'fb-post-banned', 'fb-element-banned', 'fb-post-pending', 'fb-post-scanning', 'fb-post-expanding', 'fb-post-processed');
     post.removeAttribute('data-fb-pending-since');
+    post.removeAttribute('data-fb-feed-stage');
     post.removeAttribute('data-processed');
     post.removeAttribute('data-processed-text');
     tagFeedPostContext(post);
@@ -2255,6 +2524,7 @@ const resetFeedPostState = (post) => {
         post.querySelectorAll('.fb-sanity-checked, .fb-words-checked, .fb-search-processed').forEach(el => {
             el.classList.remove('fb-sanity-checked', 'fb-words-checked', 'fb-search-processed');
             el.removeAttribute('data-processed-text');
+            el.removeAttribute('data-fb-words-text');
         });
         post.querySelectorAll('[data-processed]').forEach(el => el.removeAttribute('data-processed'));
     } catch (e) {}
@@ -2313,6 +2583,7 @@ const markPendingFeedUnits = (root = document) => {
                 post.classList.add('fb-post-pending');
                 post.setAttribute('data-fb-pending-since', String(now));
             }
+            post.setAttribute('data-fb-feed-stage', 'loading');
             tagFeedPostContext(post);
         });
     } catch (e) {}
@@ -2349,6 +2620,7 @@ const scanAndBanEntirePosts = () => {
                 }
 
                 const hasImmediateJoinAction = hasExplicitBannedPostAction(post);
+                const hasImmediateSuggestedForYouHeader = postHasSuggestedForYouHeader(post);
                 const hasImmediateBlockedDomainText = postContainsBlockedDomainText(post);
                 const hasImmediateBlockedLink = Array.from(post.querySelectorAll('a[href], [data-lynx-uri]')).some(link => {
                     if (!link || isInsideComment(link)) return false;
@@ -2357,10 +2629,10 @@ const scanAndBanEntirePosts = () => {
                     return matchesBlockedUrlCandidates(href) || matchesBlockedUrlCandidates(lynx);
                 });
 
-                if (hasImmediateJoinAction || hasImmediateBlockedDomainText || hasImmediateBlockedLink) {
+                if (hasImmediateJoinAction || hasImmediateSuggestedForYouHeader || hasImmediateBlockedDomainText || hasImmediateBlockedLink) {
                     post.classList.remove('fb-post-approved');
                     tagFeedPostContext(post);
-                    safelyHideFBElement(post);
+                    hardBanFeedPost(post);
                     return;
                 }
 
@@ -2372,6 +2644,7 @@ const scanAndBanEntirePosts = () => {
 
                 post.classList.remove('fb-post-pending');
                 post.removeAttribute('data-fb-pending-since');
+                post.setAttribute('data-fb-feed-stage', 'scanning');
                 post.classList.add('fb-post-scanning');
                 tagFeedPostContext(post);
 
@@ -2387,7 +2660,7 @@ const scanAndBanEntirePosts = () => {
                         post.removeAttribute('data-fb-pending-since');
                         let isBanned = false;
 
-                        if (hasExplicitBannedPostAction(post)) {
+                        if (hasExplicitBannedPostAction(post) || postHasSuggestedForYouHeader(post)) {
                             isBanned = true;
                         }
 
@@ -2410,7 +2683,7 @@ const scanAndBanEntirePosts = () => {
                         if (isBanned) {
                             post.classList.remove('fb-post-approved');
                             tagFeedPostContext(post);
-                            safelyHideFBElement(post);
+                            hardBanFeedPost(post);
                         } else {
                             revealApprovedPost(post);
                             if (postIDs.length > 0) saveApprovedPostIDs(postIDs);
@@ -2473,27 +2746,39 @@ const scanAndBanEntirePosts = () => {
                 'div.html-div.x1a02dak'
             ];
 
-            document.querySelectorAll(selectors.map(s => s + ':not(.fb-words-checked)').join(',')).forEach(element => {
-                element.classList.add('fb-words-checked');
-                
+            document.querySelectorAll(selectors.join(',')).forEach(element => {
                 if (isSafeElement(element)) return; 
                 if (isInsideComment(element)) return;
                 if (element.closest('ul[aria-label]') || element.closest('form[role="search"]')) return;
 
-                const owningFeedPost = element.closest(getFeedUnitSelectorString());
-                if (owningFeedPost && !owningFeedPost.classList.contains('fb-post-processed') && !owningFeedPost.classList.contains('fb-post-approved') && !owningFeedPost.classList.contains('fb-post-banned')) return;
+                const owningFeedPost = getOwningFeedPost(element);
+                if (owningFeedPost && !owningFeedPost.classList.contains('fb-post-processed') && !owningFeedPost.classList.contains('fb-post-approved') && !owningFeedPost.classList.contains('fb-post-banned') && !owningFeedPost.classList.contains('fb-element-banned')) {
+                    // Do not mark the inner node as checked yet. First-feed posts often render text
+                    // while the outer card is still pending/scanning; marking here made them invisible
+                    // to later passes once the card was finally ready.
+                    return;
+                }
                 
-                const elementText = (element.innerText || '').toLowerCase();
+                const elementText = (element.innerText || element.textContent || '').toLowerCase();
+
+                if (elementLooksLikeSuggestedForYouHeader(element)) {
+                    const suggestedPost = owningFeedPost || getOwningFeedPost(element);
+                    if (suggestedPost) {
+                        hardBanFeedPost(suggestedPost);
+                        return;
+                    }
+                }
+
+                const processedText = element.getAttribute('data-fb-words-text') || '';
+                if (element.classList.contains('fb-words-checked') && processedText === elementText) return;
+
+                element.classList.add('fb-words-checked');
+                element.setAttribute('data-fb-words-text', elementText);
+
                 const isRestricted = restrictedWordsLower.some(word => elementText.includes(word));
                 const isRegexBlocked = regexBlockedWords.some(regex => regex.test(elementText));
                 
                 if (isRestricted || isRegexBlocked) {
-                    
-                    // Removed global isCurrentPostApproved() bypass here because it blinded the scanner to photo theatre overlays.
-                    if (element.closest('.fb-post-approved')) {
-                        return; 
-                    }
-
                     const currentPath = window.location.pathname.toLowerCase();
                     const isMediaViewer = element.closest('[data-pagelet="MediaViewerPhoto"]') || currentPath.includes('/photo') || currentPath.includes('/reel/') || currentPath.includes('/posts/') || currentPath.includes('/permalink.php') || currentPath.includes('/videos/');
                     
@@ -2502,13 +2787,11 @@ const scanAndBanEntirePosts = () => {
                         return;
                     }
 
-                    const elementToRemove = element.closest('div[data-pagelet^="FeedUnit_"]') || element.closest('[role="article"]') || element;
+                    const elementToRemove = owningFeedPost || element.closest('[role="article"]') || element;
                     if (isDangerousToHide(elementToRemove)) return; 
 
                     if (!elementToRemove.classList.contains('fb-post-banned') && !elementToRemove.classList.contains('fb-element-banned')) {
-                        if (elementToRemove.classList.contains('fb-post-approved') || elementToRemove.closest('.fb-post-approved')) return; 
-                        elementToRemove.classList.remove('fb-post-approved'); 
-                        safelyHideFBElement(elementToRemove);
+                        hardBanFeedPost(elementToRemove);
                     }
                 }
             });
@@ -2631,7 +2914,7 @@ const scanAndBanEntirePosts = () => {
                     if (!post.classList.contains('fb-post-banned') && !post.classList.contains('fb-element-banned')) {
                         if (post.classList.contains('fb-post-approved') || post.closest('.fb-post-approved')) return; 
                         post.classList.remove('fb-post-approved'); 
-                        safelyHideFBElement(post);
+                        hardBanFeedPost(post);
                     }
                 }
             });
@@ -3142,8 +3425,8 @@ const scanAndBanEntirePosts = () => {
                         hasSearchChanges = true;
                     }
 
-                    const nodeIsRelevantUi = !!(node.matches && (node.matches('[role="dialog"]') || node.matches('[role="menu"]') || node.matches('div[aria-label="Kelat"][role="region"]') || node.matches('div[aria-label="Reels"][role="region"]') || node.matches('div[aria-label="Sinulle ehdotettua"][role="region"]') || node.matches('div[aria-label="Suggested for you"][role="region"]')));
-                    const nodeHasRelevantUi = !!(node.querySelector && (node.querySelector('[role="dialog"]') || node.querySelector('[role="menu"]') || node.querySelector('div[aria-label="Kelat"][role="region"]') || node.querySelector('div[aria-label="Reels"][role="region"]') || node.querySelector('div[aria-label="Sinulle ehdotettua"][role="region"]') || node.querySelector('div[aria-label="Suggested for you"][role="region"]')));
+                    const nodeIsRelevantUi = !!(node.matches && (node.matches('[role="dialog"]') || node.matches('[role="menu"]') || node.matches('div[aria-label="Kelat"][role="region"]') || node.matches('div[aria-label="Reels"][role="region"]') || node.matches('div[aria-label="Sinulle ehdotettua"][role="region"]') || node.matches('div[aria-label="Suggested for you"][role="region"]') || node.matches('[aria-label="Recommended for you"]') || elementLooksLikeSuggestedForYouHeader(node)));
+                    const nodeHasRelevantUi = !!(node.querySelector && (node.querySelector('[role="dialog"]') || node.querySelector('[role="menu"]') || node.querySelector('div[aria-label="Kelat"][role="region"]') || node.querySelector('div[aria-label="Reels"][role="region"]') || node.querySelector('div[aria-label="Sinulle ehdotettua"][role="region"]') || node.querySelector('div[aria-label="Suggested for you"][role="region"]') || node.querySelector('[aria-label="Recommended for you"]') || node.querySelector('[data-fb-words-text]')));
                     if (nodeIsRelevantUi || nodeHasRelevantUi) {
                         hasRelevantUiChanges = true;
                     }
@@ -3222,6 +3505,7 @@ const scanAndBanEntirePosts = () => {
         devLog('SPA Navigation handled');
         __lastKnownUrl = window.location.href;
         isRedirecting = false;
+        updateFBFeedZeroGlimpseGateClass();
         resetReusedFeedUnits(document);
         manageCSSStyles();
         runAllFilters();
@@ -3229,6 +3513,7 @@ const scanAndBanEntirePosts = () => {
 
     const runAllFilters = () => {
         try {
+            updateFBFeedZeroGlimpseGateClass();
             handleRedirects(); 
             checkVanityProfileFBID(); 
             cleanUrl(); 
@@ -3251,6 +3536,7 @@ const scanAndBanEntirePosts = () => {
 
             // Normal execution
             markPendingFeedUnits(document);
+            banSuggestedForYouFeedPosts(document);
             injectSpecificUrlPrehideCSS();
             nukeGlobalBadElements();
             eliminateSuggestedGroups(); 
@@ -3279,6 +3565,7 @@ const scanAndBanEntirePosts = () => {
     };
 
     const immediateInit = () => {
+        updateFBFeedZeroGlimpseGateClass();
         resetReusedFeedUnits(document);
         const isPersonal = manageCSSStyles();
         
@@ -3288,6 +3575,7 @@ const scanAndBanEntirePosts = () => {
         }
         
         markPendingFeedUnits(document);
+        banSuggestedForYouFeedPosts(document);
         injectSpecificUrlPrehideCSS();
         nukeGlobalBadElements(); filteredProfiles();
         eliminateSuggestedGroups(); hideCriticalElements(); processSearchResults();
@@ -3317,6 +3605,7 @@ const scanAndBanEntirePosts = () => {
     };
 
     const init = () => {
+        updateFBFeedZeroGlimpseGateClass();
         ensureDOMReady(); resetReusedFeedUnits(document); markPendingFeedUnits(document); handleRedirects(); cleanUrl(); 
         
         const isPersonal = manageCSSStyles();
