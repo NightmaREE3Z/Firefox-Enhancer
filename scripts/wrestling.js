@@ -16,6 +16,10 @@
         console.log('[WRESTLING.JS]', message);
     }
 
+console.log('[Wrestling Filter] chrome.storage.local available inside wrestling.js:',
+    typeof chrome !== 'undefined' && !!chrome.storage && !!chrome.storage.local
+);
+
     const CACHE_KEY = 'wrestling_women_urls';
     const CACHE_TIME_KEY = 'wrestling_women_urls_time';
     const CACHE_LIFETIME_MS = 12 * 60 * 60 * 1000; 

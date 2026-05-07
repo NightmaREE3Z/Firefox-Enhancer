@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         FBMangler
-// @date      	 2026-05-05
-// @description  Makes my Facebook experience tolerable. With less algorithmic bullshit.
+// @name         FBCleaner
+// @version      2026-05-07
+// @description  Makes my Facebook experience less terrible. With reduced algorithmic bullshit.
 // @match        *://*.facebook.com/*
 // @grant        none
 // @run-at       document-start
@@ -14,6 +14,16 @@
     function devLog(message) {
         // console.log('[FACEBOOK.JS]', message);
     }
+
+console.log('[FBCleaner] chrome.storage.local available inside facebook.js:',
+    typeof chrome !== 'undefined' && !!chrome.storage && !!chrome.storage.local
+);
+
+if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+    chrome.storage.local.get(['wrestling_women_urls'], (result) => {
+        console.log('[FBCleaner] wrestling_women_urls from extension storage:', result);
+    });
+}
 
     // ===== Feed zero-glimpse gate =====
     // Keep home-feed posts invisible until FBMangler has explicitly approved or denied them.
@@ -999,48 +1009,97 @@
         } catch (err) {}
     };
 
-    const restrictedWords = [
+    // ===== ACCOUNT-SCOPED STRICT FILTERS =====
+    // Keep the heavier personal blocklists active only for the Haukkis account.
+    // This lets dad/other accounts use Facebook with less aggressive keyword/FBID filtering,
+    // while Haukkis keeps the full restrictions with no questions asked.
+    const HAUKKIS_ACCOUNT_FBID = '100005050653554';
+
+    const getLoggedInFacebookAccountFbid = () => {
+        try {
+            const cookieMatch = String(document.cookie || '').match(/(?:^|;\s*)c_user=(\d+)/);
+            if (cookieMatch && cookieMatch[1]) return cookieMatch[1];
+        } catch (e) {}
+
+        // Fallbacks for cases where Facebook exposes the viewer ID in early boot data.
+        // Kept intentionally small so profile/page hydration does not get hammered.
+        try {
+            const html = document.documentElement ? (document.documentElement.innerHTML || '').slice(0, 250000) : '';
+            const patterns = [
+                /["']ACCOUNT_ID["']\s*[:=]\s*["'](\d+)["']/i,
+                /["']USER_ID["']\s*[:=]\s*["'](\d+)["']/i,
+                /["']actorID["']\s*[:=]\s*["'](\d+)["']/i,
+                /["']userID["']\s*[:=]\s*["'](\d+)["']/i,
+                /["']viewerID["']\s*[:=]\s*["'](\d+)["']/i
+            ];
+            for (let i = 0; i < patterns.length; i++) {
+                const match = html.match(patterns[i]);
+                if (match && match[1]) return match[1];
+            }
+        } catch (e) {}
+
+        return '';
+    };
+
+    const isHaukkisStrictModeEnabled = () => {
+        try {
+            const accountFbid = getLoggedInFacebookAccountFbid();
+            // If Facebook refuses to tell us who is logged in, fail closed for Haukkis safety.
+            if (!accountFbid) return true;
+            return accountFbid === HAUKKIS_ACCOUNT_FBID;
+        } catch (e) {
+            return true;
+        }
+    };
+
+    const __fbHaukkisStrictModeEnabled = isHaukkisStrictModeEnabled();
+    devLog('Haukkis strict personal blocks: ' + (__fbHaukkisStrictModeEnabled ? 'enabled' : 'disabled'));
+
+    const haukkisOnlyRestrictedWords = [
         "Alexa Bliss", "Alexa WWE", "5 feet of fury", "five feet of fury", "Tiffany", "Stratton", "Tiffy time", "Stratton", "Artificial Intelligence", "Samantha", "La Leona", "Mariah May", "B-Fab",
         "Tiffany", "Mandy Rose", "Chelsea Green", "Bayley", "Mercedes", "Sasha Banks", "Sportskeeda", "Vince Russo", "Meltzer", "Shirakawa", "Samantha Irvin", "Brave Software", "AJ Lee's", "Perez",
         "All Elite Wrestling", "Dynamite", "Rampage", "AEW Collision", "Blackheart", "Flair", "Charlotte", "Charlotte", "Flair", "Becky Lynch", "Giulia", "Michin", "Samantha Irwin", "Serena Deeb",
         "Mia Yim", "AJ Lee", "Stephanie", "Liv Morgan", "Piper Niven", "Jordynne Grace", "Jordynne", "Carr WWE", "Iyo Shirai", "Iyo Sky", "Leila Grey", "Trish", "Stratus", "AJ Lee", "Izzi WWE", 
         "Nick Jackson", "NXT Womens", "NXT Women", "NXT Woman", "Sunny", "Maryse", "Jackson", "DeepSeek", "DeepSeek AI", "Rhea Ripley", "Instagram", "Jakara", "Playboy", "Jaida Parker", "Deonna", 
         "Lash Legend", "Alba Fyre", "Isla Dawn", "CJ Perry", "Lana WWE", "Raquel Rodriguez", "Zelina Vega", "Alicia Fox", "Willow Nightingale", "Kris Statlander", "Kayden Carter", "Katana Chance",
-        "Izzi Dame", "Girlfriend", "Girl", "Woman", "Women", "Girls", "Girl's", "Women's", "Woman's", "Womens", "Womans", "Ladys", "Lady's", "Ladies'", "Ladies", "Lady", "Dame WWE", "Perez",
-        "Indi Hartwell", "Blair Davenport", "Lola Vice", "Valhalla", "Maxxine Dupri", "Karmen Petrovic", "Ava Raine", "Cora Jade", "Jacy Jayne", "Gigi Dolin", "Io Sky", "Shirai", "Scarlett", 
-        "Thea Hail", "Tatum Paxley", "Fallon Henley", "Kelani Jordan", "Electra Lopez", "Wendy Choo", "Yulisa Leon", "Valentina", "Amari Miller", "Young Bucks", "Torrie Wilson", "Ripley!", "Monroe",
-        "Arianna Grace", "Zelina", "Natalya", "Nattie", "IYO SKY", "Dakota Kai", "Asuka", "Perez", "Kairi Sane", "Satomura", "Candice", "LeRae", "Nia Jax", "Naomi", "Trish", "Stratus", "Roxanne", 
-        "Sarray", "Xia Li", "Shayna", "Baszler", "Ronda", "Rousey", "Velvet Sky", "Carmella", "Dana Brooke", "Mercedes", "Martinez", "Marina", "Shafir", "Stacy", "Keibler", "Valkyria", "Primera", 
-        "Summer Rae", "Layla", "Michelle McCool", "Eve Torres", "Kelly Kelly", "Tatu Toiviainen", "Jessika Carr", "Jessica Karr", "Venice", "Jessica Carr", "Jessika WWE", "Jessica WWE", "Matt Jackson", 
-        "Karr WWE", "Carr WWE", "Melina wrestler", "Jillian", "Mickie", "Kanellis", "Beth Phoenix", "Victoria", "Jazz WWE", "Molly Holly", "Shirai", "Priscilla", "Kelly", "Red Velvet", "Meta AI",
-        "Gail Kim", "Awesome Kong", "Kara B", "Madison Rayne", "Velvet Sky", "Angelina", "Tessmacher", "Havok", "Su Yung", "Taya Valkyrie", "Bianca Belair", "Skye Blue", "Bordeaux", "Brooke", "#",
-        "Purrazzo", "Thekla", "Toni Storm", "Britt Baker", "Jamie Hayter", "Anna Jay", "Hikaru", "Sakazaki", "Nyla Rose", "Sakura", "Penelope Ford", "Julia Hart", "Kamifuku", "Elayna", "Blake", "Monroe",
-	"Juliette", "Juliana", "Julianna",  "Saya Kamitani", "Kamitani", "Katie", "Nikkita", "Nikkita Lyons", "Marie", "Lisa Varon", "Marie Varon", "Irving", "Naomi", "Belts Mone", "Amanda Huber", "Elayna", 
-	"Sisältö ei ole käytettävissä tällä hetkellä", "Näytä suositukset", "20. heinäkuu klo", "IYO SKY", "Ripley", "Kairi", "Megan Bayne", "Wren Sinclair", "Fallon", "Henley", "Bella Twins", "Kaipio"
+        "Izzi Dame", "Dame WWE", "Perez", "Indi Hartwell", "Blair Davenport", "Lola Vice", "Valhalla", "Maxxine Dupri", "Karmen Petrovic", "Ava Raine", "Cora Jade", "Jacy Jayne", "Gigi Dolin", 
+	"Io Sky", "Shirai", "Scarlett", "Thea Hail", "Tatum Paxley", "Fallon Henley", "Kelani Jordan", "Electra Lopez", "Wendy Choo", "Yulisa Leon", "Valentina", "Amari Miller", "Young Bucks", 
+	"Torrie Wilson", "Ripley!", "Monroe", "Arianna Grace", "Zelina", "Natalya", "Nattie", "IYO SKY", "Dakota Kai", "Asuka", "Perez", "Kairi Sane", "Satomura", "Candice", "LeRae", "Nia Jax", 
+	"Naomi", "Trish", "Stratus", "Roxanne", "Sarray", "Xia Li", "Shayna", "Baszler", "Ronda", "Rousey", "Velvet Sky", "Carmella", "Dana Brooke", "Mercedes", "Martinez", "Marina", "Shafir", "Stacy", 
+	"Keibler", "Valkyria", "Primera", "Summer Rae", "Layla", "Michelle McCool", "Eve Torres", "Kelly Kelly", "Tatu Toiviainen", "Jessika Carr", "Jessica Karr", "Venice", "Jessica Carr", "Jessika WWE", 
+	"Jessica WWE", "Matt Jackson", "Karr WWE", "Carr WWE", "Melina wrestler", "Jillian", "Mickie", "Kanellis", "Beth Phoenix", "Victoria", "Jazz WWE", "Molly Holly", "Shirai", "Priscilla", "Kelly", 
+	"Red Velvet", "Meta AI", "Gail Kim", "Awesome Kong", "Kara B", "Madison Rayne", "Velvet Sky", "Angelina", "Tessmacher", "Havok", "Su Yung", "Taya Valkyrie", "Bianca Belair", "Skye Blue", "Bordeaux", 
+	"Brooke", "#", "Purrazzo", "Thekla", "Toni Storm", "Britt Baker", "Jamie Hayter", "Anna Jay", "Hikaru", "Sakazaki", "Nyla Rose", "Sakura", "Penelope Ford", "Julia Hart", "Kamifuku", "Elayna", "Blake", 
+	"Monroe", "Juliette", "Juliana", "Julianna",  "Saya Kamitani", "Kamitani", "Katie", "Nikkita", "Nikkita Lyons", "Marie", "Lisa Varon", "Marie Varon", "Irving", "Naomi", "Belts Mone", "Amanda Huber", 
+	"Elayna", "IYO SKY", "Ripley", "Kairi", "Megan Bayne", "Wren Sinclair", "Fallon", "Henley", "Bella Twins", "Kaipio", "Sisältö ei ole käytettävissä tällä hetkellä", "Näytä suositukset", "20. heinäkuu klo", 
     ];
 
+    const restrictedWords = __fbHaukkisStrictModeEnabled ? haukkisOnlyRestrictedWords : [];
+
     const regexBlockedWords = [
-        /lex bl/i, /\bSol\b/i, /\bShe\b/i, /\bHer\b/i, /\bHer's\b/i, /\bShe's\b/i, /\bRiho\b/i, /\bCum\b/i, /\bSlut\b/i, /\bTor\b/i, /\bIzzi\b/i, /\bDame\b/i, /\bNox\b/i, /\bLiv\b/i, /\bAlexa\b/i, /\bTay\b/i, 
-	/\bMelo\b/i, /\bConti\b/i, /\bPaige\b/i, /\bShotzi\b/i,  /\bTiffy\b/i, /\bStratton\b/i, /\bAEW\b/i, /\bBy AI\b/i, /\bAis\b/i, /AI\-/i, /-\AI/i, /AI\-suck/i, /\bIvory\b/i, /\bposing\b/i, /Ripl/i, /\bSasha\b/i, 
-	/\bAnal\b/i, /\bBliss\b/i, /\bKara\b/i, /\bGay\b/i, /\bTransvestite\b/i, /\bTransu\b/i, /\bPride\b/i, /\bLesbian\b/i, /\bLesbo\b/i, /\bHomo\b/i, /\bQueer\b/i, /\bSable\b/i, /\bBella\b/i, /\bNikki\b/i,
-	/\bTegan\b/i, /\bNox\b/i, /\bGoddess\b/i, /\bLita\b/i, /\bRusso\b/i, /\bLGBT\b/i, /\bLGBTQ\b/i, /\bLGBTQ\b/i, /\bMami\b/i, /\bTrish\b/i, /\bStratus\b/i, /\bIzzi\b/i, /\bDame\b/i, /\bGiulia\b/i, /\bMichin\b/i, 
-	/\bJayne\b/i, /\bLLM\b/i, /\bMLM\b/i, /Shira/i, /Steph's place/i, /Stephanie's place/i, /Steph McMahon/i, /Stepan/i, /Stratu/i, /Stratt/i, /Gina Adam/i, /\bG1na\b/i, /\bGlna\b/i, /\bG!na\b/i, /\bShe\b/i,
-	/\bHer\b/i, /\bHer's\b/i, /\bShe's\b/i, /\bRiho\b/i, /\bCum\b/i, /\bSlut\b/i, /\bTor\b/i, /\bIzzi\b/i, /\bDame\b/i, /\bNox\b/i, /\bLiv\b/i, /\bAlexa\b/i, /\bODB\b/i, /\bLita\b/i, /\bChyna\b/i, /\bSaraya\b/i, 
-	/\bSol\b/i, /\bBrooke\b/i, /\bCora\b/i, /\bGin4\b/i, /\bG1n4\b/i, /\bTay\b/i, /\bMelo\b/i, /\bConti\b/i, /\bPaige\b/i, /\bShotzi\b/i, /Perez/i, /Ripley/i, /\bTiffy\b/i, /\bStratton\b/i, /\bAEW\b/i, /\bAis\b/i, 
-	/lantaaa/i, /\bAI-\b/i, /\bIvory\b/i, /\bposing\b/i, /\bTamina\b/i, /\bTessa\b/i, /\bRuca\b/i, /\bRuby\b/i, /\bSoho\b/i, /\bSasha\b/i, /\bAnal\b/i, /\bBliss\b/i, /\bGay\b/i, /lantaai/i, /\bTransvestite\b/i, 
-	/\bTrans\b/i,  /\bTransu\b/i, /\bPride\b/i, /\bLesbian\b/i, /\bLesbo\b/i, /\bHomo\b/i, /\bQueer\b/i, /\bSable\b/i, /\bposed\b/i, /\bLayla\b/i, /\bLana\b/i, /\bSol\b/i, /\bJacy\b/i, /\bBella\b/i, /\bNikki\b/i, 
-	/\bBrie\b/i, /\bTegan\b/i, /\bNox\b/i, /\bGoddess\b/i, /\bLita\b/i, /Sherilyn/i, /\bRusso\b/i, /\bLGBT\b/i, /\bLGBTQ\b/i, /\bLGBTQ\b/i, /\bMami\b/i, /\bTrish\b/i, /\bStratus\b/i, /\bYung\b/i, /\bHavok\b/i, 
-	/\bJade\b/i, /\bAthena\b/i, /\bIzzi\b/i, /\bFuku\b/i, /\bDame\b/i, /\bGiulia\b/i, /\bMichin\b/i, /\bJayne\b/i, /\bLLM\b/i, /\bMLM\b/i, /Shira/i, /Steph's place/i, /Stephanie's place/i, /Steph McMahon/i, 
-	/Stepan/i, /Stratu/i, /Stratt/i, /Tiffa/i, /Tiffy/i, /\bGina\b/i, /Dreambooth/i, /Bliss/i, /Dream booth/i, /Dualipa/i, /Dua Lipa/i, /Meta AI/i, /Tatu Toiviainen/i, /IInspiration/i, /IIconics/i,  /\bJade\b/i, 
-	/cargil/i, /cargirl/i, /cargril/i, /gargril/i, /gargirl/i, /garcirl/i, /watanabe/i, /barlow/i, /Nikki/i, /Saya Kamitani/i, /Kamitani/i, /Katie/i, /Nikkita/i, /Nikkita Lyons/i, /Lisa Marie/i, /Lisa Marie Varon/i, 
-	/Lisa Varon/i, /Marie Varon/i, /Takaichi/i, /Sakurai/i, /Arrivederci/i, /Alice/i, /Alicy/i, /Alici/i, /Arisu Endo/i, /Crowley/i, /Ruby Soho/i, /Monica/i, /Castillo/i, /Matsumoto/i, /Shino Suzuki/i, /AIblow/i, 
-	/5uck/i, /Suckin/i, /Sucks/i, /Sucki/i, /Sucky/i, /AIsuck/i, /AI-suck/i, /drool/i, /RemovingAI/i, /blowjob/i, /bjob/i, /b-job/i, /bj0b/i, /bl0w/i, /blowj0b/i, /dr0ol/i, /dro0l/i, /dr00l/i, /Rhea Ripley/i,
-	/Roxanne/i, /\bBrie\b/i, /Lauren/i, /Suvi Anniina/i, /Saara Autio/i, /Liv Morgan/i, /Alexa Bliss/i, /Marie/i, /Juliette/i, /Artificial/i, /Artificial Intelligence/i, /Powered by AI/i, /AI made/i, /AI creation/i,
-	/\bSex\b/i, /IYO SKY/i, /AI creative/i, /AI created/i, /Tekoäly/i, /Teko äly/i, /Teko-äly/i, /Teko_äly/i, /gener/i, /generoiva/i, /generoitu/i, /generated/i, /generative/i, /AI create/i, /generation/i,
-	/seksi/i, /anaali/i, /pillu/i, /pimppi/i, /kyrpä/i, /kulli/i, /sexual/i, /sensuel/i, /seksuaali/i, /\bAI\b/i, /\bKairi\b/i, /Kairi's/i, /Kairii/i, /Sexxy/i, /Sexy/i, /Sexx/i, /Sexi/i, /Monroe/i, 
+    // Classic Regexes (Might cause Meta to go extinct)
+    	/lex bl/i, /AI-/i, /-AI/i, /AI-suck/i, /Ripl/i, /Shira/i, /Steph's place/i, /Stephanie's place/i, /Steph McMahon/i, /Stepan/i, /Stratu/i, /Stratt/i, /Gina Adam/i, /lantaaa/i, /lantaai/i, /Sherilyn/i, /Tiffa/i, 
+	/Tiffy/i, /Dreambooth/i, /Dream booth/i, /Dualipa/i, /Dua Lipa/i, /Meta AI/i, /Tatu Toiviainen/i, /IInspiration/i, /IIconics/i, /cargil/i, /cargirl/i, /cargril/i, /gargril/i, /gargirl/i, /garcirl/i, /watanabe/i, 
+	/barlow/i, /Nikki/i, /Saya Kamitani/i, /Kamitani/i, /Katie/i, /Nikkita/i, /Nikkita Lyons/i, /Lisa Marie/i, /Lisa Marie Varon/i, /Lisa Varon/i, /Marie Varon/i, /Takaichi/i, /Sakurai/i, /Arrivederci/i, /Alice/i,
+	/Alicy/i, /Alici/i, /Arisu Endo/i, /Crowley/i, /Ruby Soho/i, /Monica/i, /Castillo/i, /Matsumoto/i, /Shino Suzuki/i, /AIblow/i, /5uck/i, /Suckin/i, /Sucks/i, /Sucki/i, /Sucky/i, /AIsuck/i, /AI-suck/i, /drool/i, 
+	/RemovingAI/i, /blowjob/i, /bjob/i, /b-job/i, /bj0b/i, /bl0w/i, /blowj0b/i, /dr0ol/i, /dro0l/i, /dr00l/i, /Rhea Ripley/i, /Roxanne/i, /Lauren/i, /Suvi Anniina/i, /Saara Autio/i, /Liv Morgan/i, /Alexa Bliss/i, 
+	/Marie/i, /Juliette/i, /Artificial/i, /Artificial Intelligence/i, /Powered by AI/i, /AI made/i, /AI creation/i, /IYO SKY/i, /AI creative/i, /AI created/i, /Tekoäly/i, /Teko äly/i, /Teko-äly/i, /Teko_äly/i, 
+	/gener/i, /generoiva/i, /generoitu/i, /generated/i, /generative/i, /AI create/i, /generation/i, /seksi/i, /anaali/i, /pillu/i, /pimppi/i, /kyrpä/i, /kulli/i, /sexual/i, /sensuel/i, /seksuaali/i, /Kairi's/i, 
+	/Kairii/i, /Sexxy/i, /Sexy/i, /Sexx/i, /Sexi/i, /Monroe/i, /Girlfriend/i, /Girl's/i, /Women's/i, /Woman's/i, /Lady's/i, /Ladies'/i, /Toni Harsunen/i, /Wikman/i,
+
+
+    // Boundaried regexes (b like a bitch)
+    	/\bSol\b/i, /\bShe\b/i, /\bHer\b/i, /\bHer's\b/i, /\bShe's\b/i, /\bRiho\b/i, /\bCum\b/i, /\bSlut\b/i, /\bTor\b/i, /\bIzzi\b/i, /\bDame\b/i, /\bNox\b/i, /\bLiv\b/i, /\bAlexa\b/i, /\bTay\b/i, /\bMelo\b/i,
+    	/\bConti\b/i, /\bPaige\b/i, /\bShotzi\b/i, /\bTiffy\b/i, /\bStratton\b/i, /\bAEW\b/i, /\bBy AI\b/i, /\bAis\b/i, /\bIvory\b/i, /\bposing\b/i, /\bSasha\b/i, /\bAnal\b/i, /\bBliss\b/i, /\bKara\b/i, /\bGay\b/i, 
+	/\bTransvestite\b/i, /\bTransu\b/i, /\bPride\b/i, /\bLesbian\b/i, /\bLesbo\b/i, /\bHomo\b/i, /\bQueer\b/i, /\bSable\b/i, /\bBella\b/i, /\bNikki\b/i, /\bTegan\b/i, /\bGoddess\b/i, /\bLita\b/i, /\bRusso\b/i, 
+	/\bLGBT\b/i, /\bLGBTQ\b/i, /\bMami\b/i, /\bTrish\b/i, /\bStratus\b/i, /\bGiulia\b/i, /\bMichin\b/i, /\bJayne\b/i, /\bLLM\b/i, /\bMLM\b/i, /\bG1na\b/i, /\bGlna\b/i, /\bG!na\b/i, /\bODB\b/i, /\bChyna\b/i, 
+	/\bSaraya\b/i, /\bBrooke\b/i, /\bCora\b/i, /\bGin4\b/i, /\bG1n4\b/i, /\bTamina\b/i, /\bTessa\b/i, /\bRuca\b/i, /\bRuby\b/i, /\bSoho\b/i, /\bTrans\b/i, /\bposed\b/i, /\bLayla\b/i, /\bLana\b/i, /\bJacy\b/i, 
+	/\bBrie\b/i, /\bYung\b/i, /\bHavok\b/i, /\bJade\b/i, /\bAthena\b/i, /\bFuku\b/i, /\bGina\b/i, /\bSex\b/i, /\bAI\b/i, /\bKairi\b/i, /\bKiana\b/i, /\bGirl\b/i, /\bGirls\b/i, /\bWoman\b/i, /\bWomen\b/i, 
+	/\bWomens\b/i, /\bWomans\b/i, /\bLady\b/i, /\bLadies\b/i, /\bLadys\b/i,
     ];
 
     const allowedWords = [
+    //String based allowed words (There's no term "advertisement" in here!!!)
 	"Lähetä", "Viesti", "Lähetä viesti", "Send a message", "Send message", "Send", "message", "Battlefield", "BF", "BF6", "BF1", "BF4", "BF 1942", "BF2", "Battle field", "memes", "masterrace", "#itsevarmuus",
 	"#memes", "meme", "#meme", "Pearl", "Harbor", "Market", "Bro", "Brother", "Metallica", "Sabaton", "Joakim", "James", "Hetfield", "PC", "Build", "Memory", "Ram", "Motherboard", "Mobo", "Cooling", "pcmaster",
 	"AIO", "CPU", "GPU", "Radeon", "GeForce", "GTX", "RTX", "50", "60", "70", "80", "90", "X3D", "50TI", "60TI", "70TI", "80TI", "90TI", "Processor", "Graphics", "Card", "Intel", "AMD", "NVidia", "RGB", "cooler",
@@ -1050,8 +1109,11 @@
 	"PowerColor", "DDR5", "DDR4", "DDR3", "Computing", "Computer", "AData", "AM3", "AM3+", "AM2", "GSkill", "Memory", "Ram", "Turbo", "Overclock", "Overclocked", "Air cooling", "Radiator", "Pump", "Header", "Water", 
 	"GTA", "Grand Theft Auto", "PlayStation", "PS1", "PS2", "PS3", "PS4", "PS5", "Xbox", "Series", "Pro", "Console", "Sega", "MegaDrive", "Genesis", "Nintendo", "Upgrade", "Room", "Setup", "Christmas", "Wordables",
 	"Wordable", "lifelearnedfeelings", "feel", "feelings", "feeling", "pcmasterrace_official", "pcmasterrace", "pc masterrace", "pc master race", "gaming", "game", "gamer", "Tarina", "Tarinat", "Story", "Stories",
-	"Vice City", "Liberty City", "San Andreas", "North Yankton", "Yankton", "Rockstar", "North", "South", "West", "East", "Johanna", "Jojo",
-    ]; 
+	"Vice City", "Liberty City", "San Andreas", "North Yankton", "Yankton", "Rockstar", "North", "South", "West", "East", "Johanna", "Jojo", "Lääkäri", "Lääke", "Lääkis", "Koulu", "Oppilaitos", "Sairaanhoitaja",
+	"Tohtori", "Professori", "Yliopisto", "Perho", "Perhon", "Perhonjokilaakso", "Jokilaakso", "Talouskauppa", "Ikiliikku", "KPO", "S-Market", "K-Market", "Tikkari", "Valkeinen", "OP", "Osuuspankki", "Pankki",
+	"Sairaus", "Sairas", "Sairastaa", "Sairastu", "Sairastuin", "Sairastuimme", "Korona", "Koronavirus", "Covid-19", "SARS-COV", "SARS-COV2", "Koronatesti", "Koronatestit", "Testi", "Testata", "Testissä", "Testit",
+	"Veikonkone", "Euromarket", "Taloustalo", "Kipakka", "Rautakauppa", "Kauppa", "Google", "Naamakirja", "Veispuuk", "Veispuukki", "naama kirja", "Lärvikirja", "Lärvi kirja",
+     ]; 
 
     const restrictedWordsLower = restrictedWords.map(w => w.toLowerCase());
     const allowedWordsLower = allowedWords.map(w => w.toLowerCase());
@@ -1139,9 +1201,14 @@
     // Catches posts, permalinks, videos, groups, photos, fbid, story_fbid, multi_permalinks, v=...
     const extractPostIdFromUrl = (href) => {
         try {
-            const match = href.match(/\/(?:posts|permalink|videos|reels|groups\/[^/]+\/user)\/?([a-zA-Z0-9_]+)/) || 
-                          href.match(/(?:story_fbid|fbid|multi_permalinks|v)=([a-zA-Z0-9_]+)/) ||
-                          href.match(/\/photos\/(?:a\.[0-9]+\/)?([0-9]+)/);
+            if (!href) return null;
+            const value = String(href);
+            const match =
+                          value.match(/\/groups\/[^/]+\/(?:posts|permalink)\/([a-zA-Z0-9_]+)/i) ||
+                          value.match(/\/(?:posts|permalink|videos|reels?)\/?([a-zA-Z0-9_]+)/i) ||
+                          value.match(/\/share\/(?:p|r|v)\/([a-zA-Z0-9_]+)/i) ||
+                          value.match(/(?:story_fbid|fbid|multi_permalinks|v)=([a-zA-Z0-9_]+)/i) ||
+                          value.match(/\/photos\/(?:a\.[0-9]+\/)?([0-9]+)/i);
             return (match && match[1] && match[1].length > 5) ? match[1] : null;
         } catch (e) { return null; }
     };
@@ -1221,7 +1288,7 @@
         banSuggestedForYouFeedPosts(document);
     };
 
-    const blockedFbids = [
+    const haukkisOnlyBlockedFbids = [
         '1211026318928667',
         '537550366276269',
         '623119941052644',
@@ -1333,6 +1400,7 @@
 	'100001730786421',
         '1099222803442353',
         '1090312024333431',
+	'100026405029973',
         '867521339945835',
         '371863449511629',
 	'156025504001094',
@@ -1370,7 +1438,20 @@
         '8812088588802292',
         '100000927411277',
 	'100027515703287',
+
+	// Bonus blocks
+	'1473251876',
+	'656747282',
+	'533897986',
+	'100006631248795',
+	'100000407754247',
+	'100005219342823',
+	'100000163076132',
+	'100006304518916',
+	'100042472892807',
     ];
+
+    const blockedFbids = __fbHaukkisStrictModeEnabled ? haukkisOnlyBlockedFbids : [];
 
     const blockedUrls = [
         /profile\.php\?id=100000639309471&sk=photos/,
@@ -2053,104 +2134,362 @@ const paramsToDelete = ['fbclid', 'mibextid', 'set', 'idorvanity'];
 
 const getRegexBlockedWords = () => regexBlockedWords;
 
+    // === SPA/comment guardrails + explicit FBID helpers ===
+    let __fbCommentNavigationGraceUntil = 0;
+    let __fbPostNavigationGraceUntil = 0;
+
+    const fbSafeDecode = (value = '') => {
+        try {
+            let out = String(value || '');
+            for (let i = 0; i < 3; i++) {
+                try {
+                    const decoded = decodeURIComponent(out);
+                    if (decoded === out) break;
+                    out = decoded;
+                } catch (e) { break; }
+            }
+            return out
+                .replace(/\u0025/g, '%')
+                .replace(/\u0026/g, '&')
+                .replace(/\u003d/g, '=')
+                .replace(/\u003f/g, '?')
+                .replace(/\u002f/g, '/')
+                .replace(/\\//g, '/')
+                .replace(/&amp;/g, '&')
+                .replace(/&quot;/g, '"')
+                .replace(/&#034;/g, '"')
+                .replace(/&#039;/g, "'");
+        } catch (e) {
+            return String(value || '');
+        }
+    };
+
+    const fbValueHasBlockedFbid = (value = '') => {
+        try {
+            if (!value) return false;
+            const decoded = fbSafeDecode(value);
+            return blockedFbids.some(fbid => decoded.includes(fbid));
+        } catch (e) { return false; }
+    };
+
+    const fbLooksLikeExplicitIdentityCarrier = (value = '') => {
+        try {
+            const decoded = fbSafeDecode(value).toLowerCase();
+            return decoded.includes('hovercard') ||
+                   decoded.includes('profile.php?id=') ||
+                   decoded.includes('user.php?id=') ||
+                   decoded.includes('page.php?id=') ||
+                   decoded.includes('profile_id') ||
+                   decoded.includes('profileid') ||
+                   decoded.includes('page_id') ||
+                   decoded.includes('pageid') ||
+                   decoded.includes('actor_id') ||
+                   decoded.includes('actorid') ||
+                   decoded.includes('entity_id') ||
+                   decoded.includes('entityid') ||
+                   decoded.includes('owner_id') ||
+                   decoded.includes('ownerid') ||
+                   decoded.includes('user_id') ||
+                   decoded.includes('userid');
+        } catch (e) { return false; }
+    };
+
+    const fbExplicitIdentityValueHasBlockedFbid = (value = '') => {
+        try {
+            if (!value) return false;
+            return fbValueHasBlockedFbid(value) && fbLooksLikeExplicitIdentityCarrier(value);
+        } catch (e) { return false; }
+    };
+
+    const fbElementHasBlockedIdentity = (element) => {
+        try {
+            if (!element || !element.getAttribute) return false;
+            const exactAttrs = ['data-profileid', 'data-profile-id', 'data-pageid', 'data-page-id', 'data-ownerid', 'data-owner-id', 'data-actorid', 'data-actor-id', 'data-entityid', 'data-entity-id', 'data-fbid'];
+            for (let i = 0; i < exactAttrs.length; i++) {
+                const value = element.getAttribute(exactAttrs[i]);
+                if (value && blockedFbids.includes(String(value).trim())) return true;
+            }
+
+            const identityAttrs = ['href', 'data-hovercard', 'ajaxify', 'data-lynx-uri', 'data-store', 'data-ft', 'data-testid', 'aria-describedby'];
+            for (let i = 0; i < identityAttrs.length; i++) {
+                const value = element.getAttribute(identityAttrs[i]) || element[identityAttrs[i]] || '';
+                if (fbExplicitIdentityValueHasBlockedFbid(value)) return true;
+            }
+        } catch (e) {}
+        return false;
+    };
+
+    const fbClickedTargetHasBlockedIdentity = (anchor) => {
+        try {
+            if (!anchor) return false;
+            if (fbElementHasBlockedIdentity(anchor)) return true;
+
+            // Scan only the clicked card/link itself and a tiny amount of explicit identity metadata.
+            // Do NOT scan whole feed/profile wrappers; that was the source of the earlier false redirects.
+            const children = anchor.querySelectorAll ? anchor.querySelectorAll('[data-profileid], [data-profile-id], [data-pageid], [data-page-id], [data-ownerid], [data-owner-id], [data-actorid], [data-actor-id], [data-entityid], [data-entity-id], [data-hovercard], [ajaxify], [data-store], [data-ft], [data-fbid]') : [];
+            for (let i = 0; i < children.length && i < 20; i++) {
+                if (fbElementHasBlockedIdentity(children[i])) return true;
+            }
+
+            let parent = anchor.parentElement;
+            let depth = 0;
+            while (parent && parent !== document.body && depth < 3) {
+                if (parent.matches && parent.matches('[data-profileid], [data-profile-id], [data-pageid], [data-page-id], [data-ownerid], [data-owner-id], [data-actorid], [data-actor-id], [data-entityid], [data-entity-id], [data-hovercard], [ajaxify], [data-fbid]')) {
+                    if (fbElementHasBlockedIdentity(parent)) return true;
+                }
+                // Avoid climbing into entire posts/dialogs/search containers and inheriting unrelated IDs.
+                if (parent.matches && parent.matches('[role="article"], [role="feed"], [role="dialog"], main, [role="main"]')) break;
+                parent = parent.parentElement;
+                depth++;
+            }
+        } catch (e) {}
+        return false;
+    };
+
+    const isPlainLeftClick = (event) => {
+        try {
+            return event && event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey;
+        } catch (e) { return false; }
+    };
+
+    const getBestNavigationAnchor = (target) => {
+        try {
+            if (!target || !target.closest) return null;
+
+            const directAnchor = target.closest('a[href]');
+            if (directAnchor) return directAnchor;
+
+            // Facebook search/profile cards sometimes put the real href on a child anchor
+            // while the clicked wrapper is only role="link"/row/option. Use the actual
+            // navigational anchor when it exists so SPA clicks don't hide the target from us.
+            const clickableWrapper = target.closest('[role="link"], [role="option"], li[role="row"], div[role="presentation"], [data-testid*="search" i]');
+            if (clickableWrapper) {
+                if (clickableWrapper.matches && clickableWrapper.matches('a[href]')) return clickableWrapper;
+                const nestedAnchor = clickableWrapper.querySelector && clickableWrapper.querySelector('a[href]');
+                if (nestedAnchor) return nestedAnchor;
+            }
+
+            return target.closest('a, [role="link"]');
+        } catch (e) {
+            return null;
+        }
+    };
+
+    const isLikelyPlainProfileOrPageHref = (inputUrl = '') => {
+        try {
+            if (!inputUrl) return false;
+            const url = new URL(inputUrl, window.location.origin);
+            if (!/facebook\.com$/i.test(url.hostname.replace(/^www\./i, ''))) return false;
+
+            const path = (url.pathname || '/').toLowerCase();
+            if (path === '/' || path === '/home.php') return false;
+            if (isSafeWhitelistedPath(path, url.href)) return false;
+
+            // Keep post/media/comment/search/group/etc. routes under Facebook's normal behavior.
+            // The SPA hard-nav bypass is only for bare profile/page routes, because that is where
+            // Facebook hides vanity->FBID identity until after a full document load.
+            if (/^\/(posts|permalink|photos|photo|videos|watch|reel|share|groups|events|marketplace|messages|messenger|notifications|search|stories|friends|gaming|pages|settings|help)(?:\/|$)/i.test(path)) return false;
+            if (url.searchParams.has('comment_id') || url.searchParams.has('reply_comment_id') || url.searchParams.has('focused_comment_id')) return false;
+            if (/(story_fbid|fbid|multi_permalinks|v)=/i.test(url.search)) return false;
+
+            return path === '/profile.php' || /^\/[a-z0-9_.-]+\/?$/i.test(path);
+        } catch (e) {
+            return false;
+        }
+    };
+
+    const isCommentNavigationUrl = (inputUrl = window.location.href) => {
+        try {
+            const raw = String(inputUrl || '').toLowerCase();
+            const url = new URL(inputUrl, window.location.origin);
+            const combined = (url.search + ' ' + url.hash + ' ' + raw).toLowerCase();
+            return url.searchParams.has('comment_id') ||
+                   url.searchParams.has('reply_comment_id') ||
+                   url.searchParams.has('focused_comment_id') ||
+                   url.searchParams.has('comment_tracking') ||
+                   url.searchParams.has('comment_tracking_token') ||
+                   combined.includes('comment_id=') ||
+                   combined.includes('reply_comment_id=') ||
+                   combined.includes('focused_comment_id=') ||
+                   combined.includes('comment_tracking') ||
+                   combined.includes('comments');
+        } catch (e) {
+            const raw = String(inputUrl || '').toLowerCase();
+            return raw.includes('comment_id') || raw.includes('reply_comment_id') || raw.includes('focused_comment_id') || raw.includes('comment_tracking') || raw.includes('comments');
+        }
+    };
+
+    const markCommentNavigationGrace = () => {
+        __fbCommentNavigationGraceUntil = Date.now() + 12000;
+    };
+
+    const markPostNavigationGrace = () => {
+        __fbPostNavigationGraceUntil = Date.now() + 12000;
+    };
+
+    const isCommentNavigationGraceActive = () => Date.now() < __fbCommentNavigationGraceUntil;
+    const isPostNavigationGraceActive = () => Date.now() < __fbPostNavigationGraceUntil;
+    const isNavigationGraceActive = () => isCommentNavigationGraceActive() || isPostNavigationGraceActive();
+
+    // While Facebook is opening comments/post modals, back off from the heavy scanners.
+    // This keeps comments responsive without weakening hard redirects: direct blocked FBIDs/URLs
+    // are checked before grace in handleRedirects(), and profile/page clicks have no grace.
+    const isFBInteractionLightModeActive = () => {
+        try {
+            if (!isNavigationGraceActive()) return false;
+            const current = window.location.href || '';
+            if (fbUrlHasDirectBlockedFbid(current) || matchesBlockedUrlCandidates(current)) return false;
+            return true;
+        } catch (e) {
+            return isNavigationGraceActive();
+        }
+    };
+
+    const runLightInteractionPass = () => {
+        try {
+            updateFBFeedZeroGlimpseGateClass();
+            manageCSSStyles();
+        } catch (e) {}
+    };
+
+    const isLikelyProfileOrPageRoute = (inputUrl = window.location.href) => {
+        try {
+            const url = new URL(inputUrl, window.location.origin);
+            const path = url.pathname.toLowerCase();
+            if (path === '/' || path === '/home.php') return false;
+            if (/\/(posts|permalink|photos|photo|videos|watch|reel|groups|events|marketplace|messages|messenger|notifications|search|stories)/i.test(path)) return false;
+            return path === '/profile.php' || /^\/[a-z0-9_.-]+\/?$/i.test(path);
+        } catch (e) { return false; }
+    };
+
+    const fbScopedDocumentHasBlockedIdentity = (allowScriptScan = false) => {
+        try {
+            const scopedElements = document.querySelectorAll([
+                '[data-pagelet="ProfileHeader"] [href]',
+                '[data-pagelet="ProfileHeader"] [data-hovercard]',
+                '[data-pagelet="ProfileHeader"] [ajaxify]',
+                '[data-pagelet="ProfileHeader"] [data-profileid]',
+                '[data-pagelet="ProfileHeader"] [data-pageid]',
+                '[data-pagelet="PageHeader"] [href]',
+                '[data-pagelet="PageHeader"] [data-hovercard]',
+                '[data-pagelet="PageHeader"] [ajaxify]',
+                '[data-pagelet="PageHeader"] [data-profileid]',
+                '[data-pagelet="PageHeader"] [data-pageid]',
+                'meta[property="al:android:url"]',
+                'meta[property="al:ios:url"]',
+                'meta[property="og:url"]',
+                'meta[content*="profile.php?id="]',
+                'meta[content*="page.php?id="]'
+            ].join(','));
+            for (let i = 0; i < scopedElements.length; i++) {
+                const el = scopedElements[i];
+                const value = (el.content || el.href || el.getAttribute('href') || el.getAttribute('data-hovercard') || el.getAttribute('ajaxify') || '');
+                if (fbValueHasBlockedFbid(value)) return true;
+                if (fbElementHasBlockedIdentity(el)) return true;
+            }
+
+            if (allowScriptScan && isLikelyProfileOrPageRoute()) {
+                const scripts = document.querySelectorAll('script[type="application/json"], script[data-content-len]');
+                for (let i = 0; i < scripts.length && i < 30; i++) {
+                    const text = scripts[i].textContent || '';
+                    if (!text || text.length > 350000) continue;
+                    const decoded = fbSafeDecode(text);
+                    for (let j = 0; j < blockedFbids.length; j++) {
+                        const fbid = String(blockedFbids[j]).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                        const pattern = new RegExp('(?:profile_id|profileID|profileid|page_id|pageID|pageid|actor_id|actorID|actorid|entity_id|entityID|entityid|user_id|userID|userid|owner_id|ownerID|ownerid|id)[^0-9]{0,80}' + fbid + '|' + fbid + '[^a-zA-Z0-9]{0,80}(?:profile|page|actor|entity|user|owner)', 'i');
+                        if (pattern.test(decoded)) return true;
+                    }
+                }
+            }
+        } catch (e) {}
+        return false;
+    };
+
+    const isPostLikeContentUrl = (inputUrl = window.location.href) => {
+        try {
+            const url = new URL(inputUrl, window.location.origin);
+            const raw = url.href.toLowerCase();
+            const path = url.pathname.toLowerCase();
+            return /\/(posts|permalink|photos|photo|videos|watch|reel|share)(?:\/|$)/i.test(path) ||
+                   /(story_fbid|fbid|multi_permalinks|v)=/i.test(url.search) ||
+                   raw.includes('/story.php');
+        } catch (e) { return false; }
+    };
+
     let lastVanityUrl = '';
     let vanityCheckCount = 0;
 
     const checkVanityProfileFBID = () => {
         try {
             if (isRedirecting) return;
-            // Removed isCurrentPostApproved() bypass to ensure numerical profile IDs are ALWAYS strictly checked.
-            
-            const currentUrl = window.location.href.split('?')[0]; 
+
+            const currentUrlFull = window.location.href;
+            const currentUrl = currentUrlFull.split('?')[0];
             const currentPath = window.location.pathname.toLowerCase();
 
-            // ONLY skip if it's explicitly safely whitelisted. Do NOT skip for just any profile layout!
-            if (isSafeWhitelistedPath(currentPath, currentUrl)) return;
-
-            if (currentUrl === lastVanityUrl && vanityCheckCount > 150) return;
+            if (isSafeWhitelistedPath(currentPath, currentUrlFull)) return;
+            if (currentPath === '/' || currentPath.includes('/home.php') || currentPath.includes('/search/')) {
+                vanityCheckCount = 151;
+                return;
+            }
 
             if (currentUrl !== lastVanityUrl) {
                 lastVanityUrl = currentUrl;
                 vanityCheckCount = 0;
             }
 
-            if (currentPath === '/' || currentPath.includes('/home.php') || currentPath.includes('/search/')) {
-                vanityCheckCount = 151; 
+            if (currentUrl === lastVanityUrl && vanityCheckCount > 150) return;
+            vanityCheckCount++;
+
+            // Direct numeric FBIDs and explicit entity carriers must always win,
+            // including after SPA navigation. The deeper scan is restricted to
+            // profile/page routes so comments/posts do not inherit random IDs.
+            if (fbValueHasBlockedFbid(currentUrlFull)) {
+                triggerRedirect();
                 return;
             }
 
-            vanityCheckCount++;
-
-            let foundBanned = false;
-            
-            const profileElements = document.querySelectorAll(
-                '[data-pagelet="ProfileHeader"] a[href], [data-pagelet="PageHeader"] a[href], [data-pagelet="GroupHeader"] a[href], ' +
-                'meta[property="al:android:url"], meta[property="al:ios:url"], meta[property="og:url"], meta[content*="profile"]'
-            );
-            for (let i = 0; i < profileElements.length; i++) {
-                const textToCheck = (profileElements[i].href || profileElements[i].content || '');
-                if (blockedFbids.some(fbid => textToCheck.includes(fbid))) {
-                    foundBanned = true;
-                    break;
-                }
-            }
-
-            if (!foundBanned && vanityCheckCount % 5 === 0) {
-                const scripts = document.querySelectorAll('script[type="application/json"]');
-                for (let i = 0; i < scripts.length; i++) {
-                    const text = scripts[i].textContent || '';
-                    if (text.length > 0 && text.length < 150000) { 
-                        if (text.includes('profile_id') || text.includes('pageID') || text.includes('entity_id') || text.includes('userID')) {
-                            if (blockedFbids.some(fbid => text.includes(`"${fbid}"`) || text.includes(`:${fbid},`) || text.includes(`:${fbid}}`))) {
-                                foundBanned = true;
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (foundBanned) {
+            if (fbScopedDocumentHasBlockedIdentity(vanityCheckCount >= 2)) {
                 triggerRedirect();
+                return;
             }
         } catch(e) {}
     };
 
     const handleRedirects = () => {
         try {
-            if (isRedirecting) return; 
-            // Removed isCurrentPostApproved() bypass so page-level URL checks (photos/profiles) never fail.
-            
-            const urlObj = new URL(window.location.href);
-            if (urlObj.pathname === '/' || urlObj.pathname === '/home.php') {
-                return;
-            }
+            if (isRedirecting) return;
 
-            // ONLY skip if it's explicitly safely whitelisted. Do NOT skip for just any profile layout!
-            if (isSafeWhitelistedPath(urlObj.pathname, urlObj.href)) {
-                return; 
-            }
+            const urlObj = new URL(window.location.href);
+            if (urlObj.pathname === '/' || urlObj.pathname === '/home.php') return;
+            if (isSafeWhitelistedPath(urlObj.pathname, urlObj.href)) return;
 
             const hrefString = urlObj.href.toLowerCase();
             let isBlocked = false;
 
-            isBlocked = blockedFbids.some(fbid => hrefString.includes(fbid.toLowerCase()));
-
-            if (!isBlocked) isBlocked = matchesBlockedUrlCandidates(urlObj.href);
-
-            if (!isBlocked && document.head) {
-                const metas = document.head.querySelectorAll('meta[property="al:android:url"], meta[property="al:ios:url"], meta[property="og:url"], meta[content*="profile"]');
-                for (let i = 0; i < metas.length; i++) {
-                    const content = metas[i].content || '';
-                    if (blockedFbids.some(fbid => content.includes(fbid))) {
-                        isBlocked = true; break;
-                    }
-                }
+            // Hard redirects that are allowed to bypass all comment/post grace.
+            if (fbValueHasBlockedFbid(urlObj.href) || fbScopedDocumentHasBlockedIdentity(false)) {
+                triggerRedirect();
+                return;
             }
 
-            if (!isBlocked) {
+            if (matchesBlockedUrlCandidates(urlObj.href)) {
+                triggerRedirect();
+                return;
+            }
+
+            // Comment navigation/post views should not be nuked by title/sidebar/comment text.
+            // Direct FBID and explicit blocked URL checks above still win.
+            if (isNavigationGraceActive() || isCommentNavigationUrl(urlObj.href) || isCurrentPostApproved()) {
+                return;
+            }
+
+            const isContentView = isPostLikeContentUrl(urlObj.href);
+
+            // Generic title/path word redirects are for pages/search/regular routes, not post views.
+            // Post/photo/reel views are handled by the scoped description scan below.
+            if (!isContentView) {
                 const rawPathSearch = getSanitizedPathSearchForMatching(urlObj.href);
-                
                 const spacedPathSearch = rawPathSearch.replace(/[\.\,\-\=\!\?\+\_\@]/g, ' ');
                 const strippedPathSearch = rawPathSearch.replace(/[\.\,\-\=\!\?\+\_\s\@]/g, '');
 
@@ -2162,44 +2501,43 @@ const getRegexBlockedWords = () => regexBlockedWords;
                 if (!isBlocked) {
                     isBlocked = regexBlockedWords.some(regex => regex.test(rawPathSearch) || regex.test(spacedPathSearch));
                 }
+
+                if (!isBlocked) {
+                    const pageTitle = document.title.toLowerCase();
+                    isBlocked = restrictedWords.some(word => pageTitle.includes(word.toLowerCase())) || regexBlockedWords.some(regex => regex.test(pageTitle));
+                }
             }
 
-            if (!isBlocked) {
-                const pageTitle = document.title.toLowerCase();
-                isBlocked = restrictedWords.some(word => pageTitle.includes(word.toLowerCase())) || regexBlockedWords.some(regex => regex.test(pageTitle));
-            }
+            if (!isBlocked && isContentView) {
+                let textToScan = '';
+                const targetAreas = Array.from(document.querySelectorAll([
+                    '[data-pagelet="MediaViewer_Sidebar"]',
+                    '[data-pagelet="TahoeRightRail"]',
+                    '[data-pagelet="MediaViewerPhoto"]',
+                    '[role="complementary"]',
+                    'div[role="dialog"]',
+                    'div[role="article"]'
+                ].join(','))).slice(0, 8);
 
-            if (!isBlocked) {
-                // Safely checks photo view overlays
-                const isMedia = hrefString.includes('/photo') || hrefString.includes('fbid=') || hrefString.includes('/reel/') || hrefString.includes('/videos/') || hrefString.includes('/watch');
-                if (isMedia) {
-                    let textToScan = '';
-                    const sidebar = document.querySelector('[data-pagelet="MediaViewer_Sidebar"], [role="complementary"], .x1n2onr6.x1ja2u2z.x1jx94hy.x1qpq9i9');
-                    const targetArea = sidebar || document.querySelector('div[role="dialog"]');
-                    
-                    if (targetArea) {
-                        const textNodes = Array.from(targetArea.querySelectorAll('span[dir="auto"], div[dir="auto"], h2, h3, h4'));
-                        textNodes.forEach(node => {
-                            if (!isInsideComment(node)) {
-                                textToScan += node.textContent + ' ';
-                            }
-                        });
-                    }
+                targetAreas.forEach(area => {
+                    if (!area || isInsideComment(area)) return;
+                    const nodes = Array.from(area.querySelectorAll('span[dir="auto"], div[dir="auto"], h1, h2, h3, h4, [data-ad-comet-preview="message"], [data-ad-preview="message"]')).slice(0, 80);
+                    nodes.forEach(node => {
+                        if (!isInsideComment(node)) textToScan += ' ' + (node.textContent || '');
+                    });
+                });
 
-                    if (textToScan.trim()) {
-                        textToScan = textToScan.toLowerCase();
-                        if (!allowedWordsLower.some(w => textToScan.includes(w))) {
-                            if (restrictedWordsLower.some(w => textToScan.includes(w)) || regexBlockedWords.some(r => r.test(textToScan))) {
-                                isBlocked = true;
-                            }
+                if (textToScan.trim()) {
+                    const lower = normalizeFBText(textToScan);
+                    if (!allowedWordsLower.some(w => lower.includes(w))) {
+                        if (restrictedWordsLower.some(w => lower.includes(w)) || regexBlockedWords.some(r => r.test(lower))) {
+                            isBlocked = true;
                         }
                     }
                 }
             }
-                
-            if (isBlocked) {
-                triggerRedirect();
-            }
+
+            if (isBlocked) triggerRedirect();
         } catch (e) {}
     };
 
@@ -2717,6 +3055,7 @@ const scanAndBanEntirePosts = () => {
     const deleteRestrictedWords = () => {
         try {
             if (isExcludedPathForDOM(window.location.pathname, window.location.href)) return;
+            if (isNavigationGraceActive() || isCommentNavigationUrl(window.location.href) || isCurrentPostApproved()) return;
 
             // Reverted these selectors back to the facebookOld.js structure to fix the lazy-load tagging bug
             const selectors = [
@@ -2968,6 +3307,7 @@ const scanAndBanEntirePosts = () => {
             };
 
             const observer = trackObserver(new MutationObserver((mutations) => {
+                if (isFBInteractionLightModeActive()) return;
                 let shouldProcess = false;
                 for (let i = 0; i < mutations.length; i++) {
                     const mutation = mutations[i];
@@ -2990,7 +3330,7 @@ const scanAndBanEntirePosts = () => {
             }));
 
             observer.observe(document.body, { childList: true, subtree: true, attributes: false, characterData: false });
-            deleteRestrictedPhrases();
+            if (!isFBInteractionLightModeActive()) deleteRestrictedPhrases();
         } catch (e) {}
     };
 
@@ -3310,21 +3650,69 @@ const scanAndBanEntirePosts = () => {
             __fbNavInterceptInstalled = true;
 
             const clickHandler = (event) => {
-                const target = event.target.closest && event.target.closest('a');
-                if (!target) return;
-                if (isNotificationNavigationUrl(target.href)) return;
-                if (matchesBlockedUrlCandidates(target.href)) {
+                const anchor = getBestNavigationAnchor(event.target);
+                if (!anchor) return;
+
+                const href = anchor.href || anchor.getAttribute && anchor.getAttribute('href') || '';
+                if (isNotificationNavigationUrl(href)) return;
+
+                const labelText = normalizeFBText([
+                    anchor.getAttribute && anchor.getAttribute('aria-label') || '',
+                    anchor.getAttribute && anchor.getAttribute('title') || '',
+                    anchor.textContent || ''
+                ].join(' '));
+
+                const isCommentishClick = isCommentNavigationUrl(href) ||
+                    labelText.includes('comment') ||
+                    labelText.includes('komment') ||
+                    !!(anchor.closest && anchor.closest('[aria-label*="comment" i], [aria-label*="komment" i], [title*="comment" i], [title*="komment" i], [data-testid*="comment" i]'));
+
+                if (isCommentishClick) {
+                    markCommentNavigationGrace();
+                    return;
+                }
+
+                if (isPostLikeContentUrl(href)) {
+                    const owningPost = getOwningFeedPost(anchor);
+                    if ((anchor.closest && anchor.closest('.fb-post-approved')) || (owningPost && owningPost.classList && owningPost.classList.contains('fb-post-approved'))) {
+                        markPostNavigationGrace();
+                    }
+                }
+
+                if (!isPlainLeftClick(event)) return;
+
+                if (fbClickedTargetHasBlockedIdentity(anchor)) {
                     event.preventDefault();
                     event.stopPropagation();
+                    triggerRedirect();
+                    return;
+                }
+
+                if (matchesBlockedUrlCandidates(href)) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    triggerRedirect();
+                    return;
+                }
+
+                if (isLikelyPlainProfileOrPageHref(href)) {
+                    // Facebook's SPA router can hide vanity profile/page FBIDs until a refresh.
+                    // For bare profile/page clicks, bypass SPA and use a full document navigation.
+                    // Middle-click already works this way; this makes plain left-click self-police too.
+                    event.preventDefault();
+                    event.stopPropagation();
+                    try { window.location.assign(href); } catch (e) { window.location.href = href; }
+                    return;
                 }
             };
             const submitHandler = (event) => {
                 const form = event.target;
                 const action = form.action || '';
                 if (isNotificationNavigationUrl(action)) return;
-                if (matchesBlockedUrlCandidates(action)) {
+                if (matchesBlockedUrlCandidates(action) || fbExplicitIdentityValueHasBlockedFbid(action)) {
                     event.preventDefault();
                     event.stopPropagation();
+                    triggerRedirect();
                 }
             };
             onWindowEvent(document, 'click', clickHandler, true);
@@ -3398,10 +3786,14 @@ const scanAndBanEntirePosts = () => {
             if (__fbDomObserverInstalled) return;
             __fbDomObserverInstalled = true;
 
-            const throttledRunAllFilters = createThrottle(() => runAllFilters(), 450);
+            const throttledRunAllFilters = createThrottle(() => runAllFilters(), 700);
 
             const observer = trackObserver(new MutationObserver((mutations) => {
-                handleRedirects();
+                if (isFBInteractionLightModeActive()) {
+                    runLightInteractionPass();
+                    return;
+                }
+                if (!isNavigationGraceActive()) handleRedirects();
 
                 let hasSearchChanges = false;
                 let hasFeedChanges = false;
@@ -3462,8 +3854,8 @@ const scanAndBanEntirePosts = () => {
                 childList: true,
                 subtree: true,
                 attributes: true,
-                attributeFilter: ['href', 'src', 'srcset', 'aria-label', 'title', 'data-lynx-uri', 'data-store'],
-                characterData: true
+                attributeFilter: ['href', 'aria-label', 'title', 'data-lynx-uri', 'data-store'],
+                characterData: false
             });
         } catch (e) {}
     };
@@ -3508,13 +3900,28 @@ const scanAndBanEntirePosts = () => {
         updateFBFeedZeroGlimpseGateClass();
         resetReusedFeedUnits(document);
         manageCSSStyles();
-        runAllFilters();
+        if (isFBInteractionLightModeActive()) {
+            runLightInteractionPass();
+        } else if (!isNavigationGraceActive()) {
+            runAllFilters();
+        }
+        [250, 900, 2200].forEach(delay => addTimeout(() => {
+            try {
+                if (isFBInteractionLightModeActive()) return;
+                if (!isNavigationGraceActive()) handleRedirects();
+                checkVanityProfileFBID();
+            } catch(e) {}
+        }, delay));
     }, false);
 
     const runAllFilters = () => {
         try {
             updateFBFeedZeroGlimpseGateClass();
-            handleRedirects(); 
+            if (isFBInteractionLightModeActive()) {
+                runLightInteractionPass();
+                return;
+            }
+            if (!isNavigationGraceActive()) handleRedirects(); 
             checkVanityProfileFBID(); 
             cleanUrl(); 
             
@@ -3566,6 +3973,7 @@ const scanAndBanEntirePosts = () => {
 
     const immediateInit = () => {
         updateFBFeedZeroGlimpseGateClass();
+        if (isFBInteractionLightModeActive()) { runLightInteractionPass(); return; }
         resetReusedFeedUnits(document);
         const isPersonal = manageCSSStyles();
         
@@ -3584,7 +3992,7 @@ const scanAndBanEntirePosts = () => {
         const currentPath = window.location.pathname.toLowerCase();
         if (isExcludedPathForDOM(currentPath, window.location.href)) return;
 
-        scanAndBanEntirePosts(); deleteRestrictedWords(); deleteBlockedElements(); 
+        scanAndBanEntirePosts(); if (!isNavigationGraceActive()) deleteRestrictedWords(); deleteBlockedElements(); 
     };
 
     const ensureDOMReady = () => {
@@ -3606,7 +4014,9 @@ const scanAndBanEntirePosts = () => {
 
     const init = () => {
         updateFBFeedZeroGlimpseGateClass();
-        ensureDOMReady(); resetReusedFeedUnits(document); markPendingFeedUnits(document); handleRedirects(); cleanUrl(); 
+        ensureDOMReady();
+        if (isFBInteractionLightModeActive()) { runLightInteractionPass(); return; }
+        resetReusedFeedUnits(document); markPendingFeedUnits(document); if (!isNavigationGraceActive()) handleRedirects(); cleanUrl(); 
         
         const isPersonal = manageCSSStyles();
         
@@ -3620,27 +4030,41 @@ const scanAndBanEntirePosts = () => {
             
             const currentPath = window.location.pathname.toLowerCase();
             if (!isExcludedPathForDOM(currentPath, window.location.href)) {
-                deleteBlockedElements(); scanAndBanEntirePosts(); deleteRestrictedWords(); 
+                deleteBlockedElements(); scanAndBanEntirePosts(); if (!isNavigationGraceActive()) deleteRestrictedWords(); 
             }
         }
         
-        onWindowEvent(window, 'pageshow', (event) => { if (event.persisted) runAllFilters(); }, false);
+        onWindowEvent(window, 'pageshow', (event) => { if (event.persisted) runFiltersUnlessLight(); }, false);
     };
 
     init();
     immediateInit();
 
-    onWindowEvent(window, 'DOMContentLoaded', runAllFilters, false);
-    onWindowEvent(window, 'load', runAllFilters, false);
-    onWindowEvent(window, 'popstate', runAllFilters, false);
+    const runFiltersUnlessLight = () => {
+        if (isFBInteractionLightModeActive()) { runLightInteractionPass(); return; }
+        runAllFilters();
+    };
 
+    onWindowEvent(window, 'DOMContentLoaded', runFiltersUnlessLight, false);
+    onWindowEvent(window, 'load', runFiltersUnlessLight, false);
+    onWindowEvent(window, 'popstate', runFiltersUnlessLight, false);
+
+    let __fbLastIntervalFilterRun = 0;
     function scheduleMainInterval() {
         addInterval(() => {
             checkSPARouting();
-            if (!document.hidden) {
+            if (document.hidden) return;
+            if (isFBInteractionLightModeActive()) {
+                runLightInteractionPass();
+                return;
+            }
+            const now = Date.now();
+            const wantedInterval = isFBFeedZeroGlimpsePath() ? 350 : 900;
+            if (now - __fbLastIntervalFilterRun >= wantedInterval) {
+                __fbLastIntervalFilterRun = now;
                 runAllFilters();
             }
-        }, 120);
+        }, 250);
     }
 
     startIntervals(scheduleMainInterval);
@@ -3649,7 +4073,7 @@ const scanAndBanEntirePosts = () => {
             stopIntervals();
         } else {
             startIntervals(scheduleMainInterval);
-            runAllFilters();
+            runFiltersUnlessLight();
         }
     }, false);
 

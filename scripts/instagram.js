@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         IGMangler
+// @name         IGCleaner
 // @date      	 2026-05-05
 // @description  Trying to make my Instagram experience tolerable.
 // @match        *://www.instagram.com/*
