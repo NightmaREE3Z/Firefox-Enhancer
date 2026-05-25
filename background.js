@@ -193,7 +193,7 @@ const blockedTLDs = [
     '.you', '.to', '.top', '.me', '.us', '.ru', '.vip', '.online', '.hot', '.her', '.sex', '.xxx', '.nsfw',
     '.porn', '.show', '.work', '.fit', '.tool', '.tools', '.system', '.systems', '.surf', '.review', '.asia',
     '.tokyo', '.monster', '.info', '.机构', '.xn--nqv7f', '.one', '.ee', '.in', '.gf', '.fox', '.fun', '.fyi', 
-    '.fr', '.life', '.now', '.today', '.world', '.xyz', '.zone', '.nude'
+    '.fr', '.life', '.now', '.today', '.world', '.xyz', '.zone', '.nude', '.cat'
 ];
 
 // Dynamically convert TLDs into Match Patterns and inject into urlsToBlock

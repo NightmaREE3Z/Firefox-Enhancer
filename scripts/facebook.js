@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         FBCleaner
-// @version      2026-05-07
+// @version      2026-05-25
 // @description  Makes my Facebook experience less terrible. With reduced algorithmic bullshit.
 // @match        *://*.facebook.com/*
 // @grant        none
@@ -11,8 +11,9 @@
     'use strict';
 
     // === CHROME DEV CONSOLE LOGGING ===
+    const DEBUG = false;
     function devLog(message) {
-        // console.log('[FACEBOOK.JS]', message);
+        if (DEBUG) console.log('[FACEBOOK.JS]', message);
     }
 
 console.log('[FBCleaner] chrome.storage.local available inside facebook.js:',
@@ -25,102 +26,15 @@ if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
     });
 }
 
-    // ===== Feed zero-glimpse gate =====
-    // Keep home-feed posts invisible until FBMangler has explicitly approved or denied them.
-    // This prevents Facebook's React render from flashing the first/newest feed card before
-    // our scanner has had a chance to inspect it.
-    const isFBFeedZeroGlimpsePath = () => {
-        try {
-            if (!location.hostname || !location.hostname.includes('facebook.com')) return false;
-            const path = (location.pathname || '/').toLowerCase();
-            return path === '/' || path === '/home.php';
-        } catch (e) {
-            return false;
-        }
-    };
-
-    const updateFBFeedZeroGlimpseGateClass = () => {
-        try {
-            const root = document.documentElement;
-            if (!root) return;
-            root.classList.toggle('fb-feed-zero-glimpse-gate', isFBFeedZeroGlimpsePath());
-        } catch (e) {}
-    };
-
-    const injectFBFeedZeroGlimpseBootstrapCSS = () => {
-        try {
-            const id = 'fb-feed-zero-glimpse-bootstrap-style';
-            let style = document.getElementById(id);
-            if (!style) {
-                style = document.createElement('style');
-                style.id = id;
-            }
-
-            style.textContent = `
-                html.fb-feed-zero-glimpse-gate div[data-pagelet^="FeedUnit_"]:not(.fb-post-approved):not(.fb-post-banned):not(.fb-element-banned),
-                html.fb-feed-zero-glimpse-gate div[data-pagelet^="TimelineFeedUnit_"]:not(.fb-post-approved):not(.fb-post-banned):not(.fb-element-banned),
-                html.fb-feed-zero-glimpse-gate div[data-ad-rendering-role="story_message"]:not(.fb-post-approved):not(.fb-post-banned):not(.fb-element-banned),
-                html.fb-feed-zero-glimpse-gate div[data-ad-preview="message"]:not(.fb-post-approved):not(.fb-post-banned):not(.fb-element-banned) {
-                    opacity: 0 !important;
-                    visibility: hidden !important;
-                    pointer-events: none !important;
-                    transition: none !important;
-                    animation: none !important;
-                }
-
-                html.fb-feed-zero-glimpse-gate div[data-pagelet^="FeedUnit_"].fb-post-approved,
-                html.fb-feed-zero-glimpse-gate div[data-pagelet^="TimelineFeedUnit_"].fb-post-approved,
-                html.fb-feed-zero-glimpse-gate div[data-ad-rendering-role="story_message"].fb-post-approved,
-                html.fb-feed-zero-glimpse-gate div[data-ad-preview="message"].fb-post-approved {
-                    opacity: 1 !important;
-                    visibility: visible !important;
-                    pointer-events: auto !important;
-                    transition: none !important;
-                    animation: none !important;
-                }
-
-                html.fb-feed-zero-glimpse-gate div[data-pagelet^="FeedUnit_"].fb-post-banned,
-                html.fb-feed-zero-glimpse-gate div[data-pagelet^="TimelineFeedUnit_"].fb-post-banned,
-                html.fb-feed-zero-glimpse-gate div[data-ad-rendering-role="story_message"].fb-post-banned,
-                html.fb-feed-zero-glimpse-gate div[data-ad-preview="message"].fb-post-banned,
-                html.fb-feed-zero-glimpse-gate div[data-pagelet^="FeedUnit_"].fb-element-banned,
-                html.fb-feed-zero-glimpse-gate div[data-pagelet^="TimelineFeedUnit_"].fb-element-banned,
-                html.fb-feed-zero-glimpse-gate div[data-ad-rendering-role="story_message"].fb-element-banned,
-                html.fb-feed-zero-glimpse-gate div[data-ad-preview="message"].fb-element-banned {
-                    display: none !important;
-                    visibility: hidden !important;
-                    opacity: 0 !important;
-                    pointer-events: none !important;
-                    height: 0 !important;
-                    min-height: 0 !important;
-                    max-height: 0 !important;
-                    margin: 0 !important;
-                    padding: 0 !important;
-                    border: 0 !important;
-                    overflow: hidden !important;
-                }
-            `;
-
-            const parent = document.head || document.documentElement;
-            if (parent && !style.isConnected) parent.appendChild(style);
-        } catch (e) {}
-    };
-
-    updateFBFeedZeroGlimpseGateClass();
-    injectFBFeedZeroGlimpseBootstrapCSS();
-
-    // ===== Memory/observer/timer lifecycle tracking =====
+    // ===== Memory/observer/timer lifecycle tracking (added) =====
     const __fbTimers = {
         intervals: new Set(),
         timeouts: new Set(),
-        idleCallbacks: new Set(),
+        idleCallbacks: new Set(), // track rIC ids to avoid leaks in SPAs
     };
     const __fbObservers = new Set();
     const __fbEventCleanups = new Set();
     let __fbCleanupRan = false;
-    let __lastKnownUrl = window.location.href; // Track URL for strict SPA awareness
-
-    let isRedirecting = false; // Global redirect flag to prevent infinite loops
 
     function addInterval(fn, ms) {
         const id = setInterval(fn, ms);
@@ -136,6 +50,7 @@ if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
         return id;
     }
     function addIdleCallback(fn) {
+        // Track requestIdleCallback so we can cancel on cleanup (prevents leaks on SPA navigations)
         if (typeof window.requestIdleCallback === 'function') {
             const id = window.requestIdleCallback(() => {
                 try { fn(); } finally { __fbTimers.idleCallbacks.delete(id); }
@@ -143,6 +58,7 @@ if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
             __fbTimers.idleCallbacks.add(id);
             return id;
         } else {
+            // Fallback is tracked via __fbTimers.timeouts
             return addTimeout(fn, 0);
         }
     }
@@ -176,15 +92,31 @@ if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
             __fbEventCleanups.forEach(fn => { try { fn(); } catch {} });
             __fbEventCleanups.clear();
 
-            ['fb-inline-style', 'fb-personal-profile-style', 'fb-specific-url-style', 'fb-specific-profile-style', 'fb-specific-url-prehide-style', 'fb-feed-zero-glimpse-bootstrap-style'].forEach(id => {
-                try { const s = document.getElementById(id); if (s) s.remove(); } catch {}
-            });
+            // Remove injected style to free memory in long-lived SPA sessions
+            try {
+                const s = document.getElementById('fb-inline-style');
+                if (s) s.remove();
+            } catch {}
+            try {
+                const s2 = document.getElementById('fb-specific-url-style');
+                if (s2) s2.remove();
+            } catch {}
+            try {
+                const s3 = document.getElementById('fb-specific-profile-style');
+                if (s3) s3.remove();
+            } catch {}
+            try {
+                const s4 = document.getElementById('fb-specific-url-prehide-style');
+                if (s4) s4.remove();
+            } catch {}
+
             devLog('Cleanup complete.');
         } catch (e) {
             console.log('[FACEBOOK.JS] cleanup error: ' + e.message);
         }
     }
 
+    // Pause background intervals when hidden (saves CPU/memory)
     let __fbIntervalsRunning = false;
     function stopIntervals() {
         __fbTimers.intervals.forEach(id => { try { clearInterval(id); } catch {} });
@@ -197,6 +129,7 @@ if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
         __fbIntervalsRunning = true;
     }
 
+    // Throttle helper (added)
     function createThrottle(fn, wait) {
         let last = 0;
         let trailingTimeout = null;
@@ -213,807 +146,349 @@ if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
         };
     }
 
-    // CENTRALIZED REDIRECT FUNCTION
-    const triggerRedirect = () => {
-        if (isRedirecting) return;
-        isRedirecting = true;
-        
-        stopIntervals();
-        __fbObservers.forEach(obs => { try { obs.disconnect(); } catch {} });
-        
-        let blackout = document.getElementById('sanity-blackout');
-        if (!blackout) {
-            blackout = document.createElement('div');
-            blackout.id = 'sanity-blackout';
-            blackout.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:#fff;z-index:2147483647;';
-            try {
-                if (document.body) document.body.style.display = 'none';
-                if (document.documentElement) document.documentElement.appendChild(blackout);
-            } catch(e) {}
-        }
-        
-        // Removed history overriding to prevent React Router from lagging/looping out
+    // Variable to cache redirects
+    let lastRedirect = null;
+    let isRedirecting = false;
+
+    const triggerRedirect = (reason = '') => {
         try {
+            if (isRedirecting) return;
+            isRedirecting = true;
+            lastRedirect = window.location.href;
+            devLog('Redirecting to Facebook home' + (reason ? ': ' + reason : ''));
+
+            try { stopIntervals(); } catch (e) {}
+            try { __fbObservers.forEach(obs => { try { obs.disconnect(); } catch (e) {} }); } catch (e) {}
+
+            let blackout = document.getElementById('fbcleaner-redirect-blackout');
+            if (!blackout && document.documentElement) {
+                blackout = document.createElement('div');
+                blackout.id = 'fbcleaner-redirect-blackout';
+                blackout.style.cssText = 'position:fixed;inset:0;background:#fff;z-index:2147483647;';
+                try { document.documentElement.appendChild(blackout); } catch (e) {}
+            }
+
             window.onbeforeunload = null;
-            window.location.href = 'https://www.facebook.com/?ref=logo';
-        } catch(e) {}
+            window.location.replace('https://www.facebook.com/');
+        } catch (e) {
+            try { window.location.href = 'https://www.facebook.com/'; } catch (ignored) {}
+        }
     };
 
-    // ==========================================
-    // CSS INJECTION FUNCTIONS
-    // ==========================================
+    const isFBSearchPagePath = () => {
+        try {
+            return /\/search(?:\/|$)/i.test(location.pathname || '');
+        } catch (e) {
+            return false;
+        }
+    };
 
-    const PersonalProfileCSS = () => {
-        let style = document.getElementById('fb-personal-profile-style');
-        if (!style) {
-            devLog('Injecting Personal Profile CSS');
-            style = document.createElement('style');
-            style.id = 'fb-personal-profile-style';
+    const updateFBSearchPageClass = () => {
+        try {
+            if (document.documentElement) {
+                document.documentElement.classList.toggle('is-search-page', isFBSearchPagePath());
+            }
+        } catch (e) {}
+    };
+
+    updateFBSearchPageClass();
+
+    // ENHANCED: Inject CSS immediately for instant hiding - REMOVED body visibility hidden to prevent white screen
+    // UPDATED: Re-added broad default hiding to prevent flashes, only show approved posts
+    const injectInlineCSS = () => {
+        try {
+            devLog('Injecting inline CSS with instant search hiding and anti-flashing');
+            let style = document.getElementById('fb-inline-style');
+            if (!style) {
+                style = document.createElement('style');
+                style.id = 'fb-inline-style';
+            }
             style.textContent = `
-            /* Personal Profile No-Glimpse Immunization */
-            /* Hide the giant specific SVG image of the Suosituksia box to stop flashing without harming posts */
-            svg[viewBox="0 0 112 112"][width="112"][height="112"], 
-	    div:has(> img[src*="M12 2.5a9.5 9.5 0 1 0 0 19"]) {
-                display: none !important;
+            /* INSTANT SEARCH HIDING - Hide search results by default until approved */
+            html.is-search-page li[role="row"]:not(.fb-search-approved),
+            html.is-search-page a[aria-describedby]:not(.fb-search-approved),
+            html.is-search-page div[role="option"]:not(.fb-search-approved),
+            html.is-search-page div[data-testid="search-result"]:not(.fb-search-approved),
+            html.is-search-page div[role="presentation"] a:not(.fb-search-approved) {
                 visibility: hidden !important;
+                opacity: 0 !important;
+                display: none !important;
+                pointer-events: none !important;
+            }
+            
+            /* Show only approved search results */
+            html.is-search-page li[role="row"].fb-search-approved,
+            html.is-search-page a[aria-describedby].fb-search-approved,
+            html.is-search-page div[role="option"].fb-search-approved,
+            html.is-search-page div[data-testid="search-result"].fb-search-approved,
+            html.is-search-page div[role="presentation"] a.fb-search-approved {
+                visibility: visible !important;
+                opacity: 1 !important;
+                display: block !important;
+                pointer-events: auto !important;
+            }
+            
+            /* Permanently hide banned search results */
+            .fb-search-banned {
+                visibility: hidden !important;
+                display: none !important;
                 opacity: 0 !important;
                 pointer-events: none !important;
                 position: absolute !important;
+                left: -9999px !important;
+                top: -9999px !important;
+            }
+
+            /* Permanently hide banned posts and elements */
+            .fb-post-banned,
+            .fb-element-banned {
+                visibility: hidden !important;
+                display: none !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
+                position: absolute !important;
+                left: -9999px !important;
+                top: -9999px !important;
+                height: 0 !important;
+                width: 0 !important;
+                overflow: hidden !important;
+            }
+
+            /* ANTI-FLASHING: Hide critical elements by default immediately with content-visibility */
+            div[aria-label="People You May Know"],
+            div[aria-label="Ihmisiä, jotka saatat tuntea"],
+            a[href="https://www.facebook.com/friends/suggestions/"],
+            div[aria-label="Näytä suosituksia"],
+            [aria-label="Näytä suositukset"],
+            [role="button"][aria-label="Näytä suositukset"],  
+            a[aria-label="Kaverit"],
+            div[aria-label="Kaverit"],
+            div[aria-label="Kaverit"] > span.x1lliihq,
+            div[aria-label="Kaverit"] span.html-span,
+            a[aria-label="Meta AI"],
+            div[aria-label="Meta AI"],
+            a[href="/Meta AI/"],
+            li:has(a[aria-label="Kaverit"][href*="/friends"]),
+            li:has(a[aria-label="Friends"][href*="/friends"]),
+            a[href="/friends/"],
+            div.x1cy8zhl.x78zum5.xl56j7k.x1fns5xo:has(> img[width="24"][height="24"][aria-hidden="true"][src^="data:image/svg+xml"][src*="M12 2.5a9.5"]),
+            div.x1cy8zhl.x78zum5.xl56j7k.x1fns5xo:has(> img[width="24"][height="24"][aria-hidden="true"][src^="data:image/svg+xml"][src*="M12%202.5a9.5"]),
+            a[aria-label="Näytä kaikki"] > span.x193iq5w.xeuugli.x13faqbe,
+            /* More specific Meta AI selectors */
+            a[aria-label="Meta AI"],
+            div[aria-label="Meta AI"],
+            span[aria-label="Meta AI"],
+            /* Meta AI contact links */
+            a[href*="/messages/t/36327,2227039302/"],
+            a[href*="messages/t/36327"],
+            /* Friends-related links */
+            a[href*="meta.ai"], a[href="/Meta AI/"], a[href="/friends/"],
+            a[role="link"][href="/friends/"], a[role="link"][aria-label="Kaverit"], a[role="link"][aria-label="Friends"],
+            img[src*="w5I9ktz_3Ib.png"],
+            li.x1iyjqo2.xmlsiyf.x1hxoosp.x1l38jg0.x1awlv9s.x1i64zmx.x1gz44f,
+            .x1us19tq > div:nth-child(1) > div:nth-child(1) > ul:nth-child(1) > li:nth-child(2) > div:nth-child(1) > a:nth-child(1),
+            div.x1i10hfl:nth-child(13),
+            div.x1i10hfl:nth-child(13) > div:nth-child(1),
+            div.x1i10hfl:nth-child(13) > div:nth-child(2),
+            div.x1i10hfl:nth-child(13) > div:nth-child(3),
+            .x6s0dn4.x1obq294.x5a5i1n:has(.x1gslohp > span:empty),
+            li.x1c1uobl.x18d9i69.xyri2b.xexx8yu.x1lziwak.xat24cr.x14z9mp.xdj266r.html-li:nth-of-type(2),
+            svg[aria-label="Meta AI:n profiilikuva"],
+            svg[aria-label*="Meta AI profile"],
+            div.x1cy8zhl.x78zum5.xl56j7k.x1fns5xo:has(> img[width="24"][height="24"][aria-hidden="true"][src^="data:image/svg+xml"][src*="M12%202.5a9.5"]),
+            div.x1gefphp.xf7dkkf.x1l90r2v.xv54qhq.xyamay9.x1e56ztr.x78zum5.x9f619.x1olyfxc.x15x8krk.xde0f50.x5a5i1n.x1obq294.x6s0dn4:nth-of-type(6),
+            .xjkvuk6.x1iorvi4.x1qughib.x78zum5.x6s0dn4,
+            .x1vjfegm.x1iyjqo2,
+            div.x1a02dak:nth-child(3) > div:nth-child(1),
+            div.xnp8db0:nth-child(4) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(2) > div:nth-child(1),
+            div.xnp8db0:nth-child(4) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(1),
+            .x1ye3gou.x1120s5i.xn6708d.xz9dl7a.x1qughib.x1q0g3np.x78zum5,
+            .xbbxn1n.xwxc41k.xxbr6pl.x1p5oq8j.xl56j7k.xdt5ytf.x78zum5.x6s0dn4.x1mh8g0r.xat24cr.x11i5rnm.xdj266r.html-div,
+            .x1exxf4d.x1y71gwh.x1nb4dca.xu1343h.x1lq5wgf.xgqcy7u.x30kzoy.x9jhf4c.x13fuv20.xu3j5b3.x1q0q8m5.x26u7qi.x178xt8z.xm81vs4.xso031l.xy80clv.xev17xk.x1xmf6yo,
+            /* ENHANCED: All PYMK selectors for instant hiding */
+            .xquyuld.x10wlt62.x6ikm8r.xh8yej3.x9f619.xt3gfkd.xu5ydu1.xdney7k.x1qpq9i9.x1jx94hy.x1ja2u2z.x1n2onr6,
+            .x1xmf6yo.xev17xk.xy80clv.xso031l.xm81vs4.x178xt8z.x26u7qi.x1q0q8m5.xu3j5b3.x13fuv20.x9jhf4c.x30kzoy.xgqcy7u.x1lq5wgf.xu1343h.x1nb4dca.x1y71gwh.x1exxf4d,
+            svg[viewBox="0 0 112 112"][width="112"][height="112"].xfx01vb.x1lliihq.x1tzjh5l.x1k90msu.x2h7rmj.x1qfuztq,
+            div.html-div.xdj266r.x14z9mp.xat24cr.x1lziwak.x6s0dn4.x78zum5.xdt5ytf.xl56j7k.x1p5oq8j.x64bnmy.xwxc41k.x13jy36j,
+            div.html-div.xdj266r.x14z9mp.xat24cr.x1lziwak.xexx8yu.xyri2b.x18d9i69.x1c1uobl.x8cjs6t.x13fuv20.x178xt8z,
+            div.x1exxf4d.xpv9jar.x1nb4dca.x1nmn18.x1obq294.x5a5i1n.xde0f50.x15x8krk.x13fuv20.x18b5jzi.x1q0q8m5.x1t7ytsu.x178xt8z.x1lun4ml.xso031l.xpilrb4.xev17xk.x1xmf6yo {
+                visibility: hidden !important; /* Instantly make elements invisible */
+                display: none !important; /* Fully remove them */
+                opacity: 0 !important; /* Triple-layer hiding */
+                pointer-events: none !important; /* Prevent interaction */
+                content-visibility: hidden !important; /* Prevent rendering until shown */
+                position: absolute !important;
+                left: -9999px !important;
+                top: -9999px !important;
+                height: 0 !important;
+                width: 0 !important;
+                overflow: hidden !important;
+            }
+            /* Additional aggressive hiding for persistent elements */
+            a[aria-label="Kaverit"],
+            div[aria-label="Kaverit"],
+            a[href="/friends/"],
+            a[aria-label="Meta AI"],
+            div[aria-label="Meta AI"] {
+                visibility: hidden !important;
+                display: none !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
+                position: absolute !important;
+                left: -9999px !important;
+                top: -9999px !important;
+                height: 0 !important;
+                width: 0 !important;
+                overflow: hidden !important;
+                content-visibility: hidden !important; /* Anti-flashing */
+            }
+            /* ENHANCED: Hide all posts by default to prevent flashes, only show approved ones */
+            [role="article"]:not(.fb-post-approved),
+            [role="article"].x1lliihq:not(.fb-post-approved),
+            [role="article"] .x1yztbdb:not(.fb-post-approved),
+            [role="article"] .x1hc1fzr:not(.fb-post-approved),
+            div.x1iyjqo2.x1vjfegm:not(.fb-post-approved) {
+                visibility: hidden !important;
+                display: none !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
+                content-visibility: hidden !important;
+                position: absolute !important;
+                left: -9999px !important;
+                top: -9999px !important;
+                height: 0 !important;
+                width: 0 !important;
+                overflow: hidden !important;
             }
             `;
-            if (document.head) {
-                document.head.appendChild(style);
-            } else if (document.documentElement) {
-                document.documentElement.appendChild(style);
-            }
-        }
-    };
-
-    const injectInlineCSS = () => {
-        try {
-            let style = document.getElementById('fb-inline-style');
-            if (!style) {
-                devLog('Injecting inline CSS');
-                style = document.createElement('style');
-                style.id = 'fb-inline-style';
-                
-                style.textContent = `
-                /* Permanently hide banned posts and elements */
-                .fb-post-banned,
-                .fb-element-banned {
-                    visibility: hidden !important;
-                    display: none !important;
-                    opacity: 0 !important;
-                    pointer-events: none !important;
-                    position: absolute !important;
-                    left: -9999px !important;
-                    top: -9999px !important;
-                    height: 0 !important;
-                    width: 0 !important;
-                    overflow: hidden !important;
-                    content-visibility: hidden !important;
-                }
-
-                /* INSTANT SEARCH HIDING */
-                .is-search-page li[role="row"]:not(.fb-search-approved),
-                .is-search-page a[aria-describedby]:not(.fb-search-approved),
-                .is-search-page div[role="option"]:not(.fb-search-approved),
-                .is-search-page div[data-testid="search-result"]:not(.fb-search-approved),
-                .is-search-page div[role="presentation"] a:not(.fb-search-approved) {
-                    visibility: hidden !important; 
-                    display: none !important; 
-                    opacity: 0 !important;
-                }
-
-                /* ANTI-FLASHING FOR KNOWN GARBAGE */
-                div[aria-label="People You May Know"],
-                div[aria-label="Ihmisiä, jotka saatat tuntea"],
-                a[href="https://www.facebook.com/friends/suggestions/"],
-                div[aria-label="Näytä suosituksia"],
-                [aria-label="Näytä suositukset"],
-                [role="button"][aria-label="Näytä suositukset"],  
-                div[aria-label="Kelat"][role="region"],
-                div[aria-label="Reels"][role="region"],
-                div[aria-label="Sinulle ehdotettua"][role="region"],
-                div[aria-label="Suggested for you"][role="region"],
-                div.x1yztbdb:has(div[aria-label="Edelliset kohteet"]),
-                div.x1yztbdb:has(div[aria-label="Seuraavat kohteet"]),
-                div.x1yztbdb:has(div[aria-label="Suositeltu"][role="region"]) {
-                    display: none !important;
-                }
-                
-                /* ABSOLUTE ZERO-GLIMPSE for Meta AI & Kaverit (Friends) */
-                a[href*="meta.ai" i], 
-                a[href*="www.meta.ai"],
-                a[href*="/metaai/" i], 
-                a[href="/Meta AI/"],
-                a[href*="/messages/t/36327"],
-                a[aria-label="Meta AI"],
-                div[aria-label="Meta AI"],
-                span[aria-label="Meta AI"],
-                [title*="Meta AI" i],
-                [data-testid*="meta_ai" i],
-                input[placeholder*="Meta AI" i],
-            div.html-div.x1n2onr6.x1ja2u2z.x1jx94hy.xw5cjc7.x1dmpuos.x1vsv7so:has(div[aria-label="Kelat"][role="region"]),
-            div.html-div.x1n2onr6.x1ja2u2z.x1jx94hy.xw5cjc7.x1dmpuos.x1vsv7so:has(div[aria-label="Reels"][role="region"]),
-            div.x78zum5.x1q0g3np.x1qughib.xz9dl7a.xpdmqnj.x1120s5i.x1g0dm76:has(div[aria-label="Kelat"][role="region"]),
-                div.x78zum5.x1q0g3np.x1qughib.xz9dl7a.xpdmqnj.x1120s5i.x1g0dm76:has(div[aria-label="Reels"][role="region"]),
-        /* 1. ZERO-GLIMPSE: META AI & KAVERIT (Left Menu & Chat List) */
-            /* Targets the links AND their immediate parent list-items/wrappers to completely collapse the space */
-            a[href^="https://www.meta.ai/"],
-            li:has(a[href^="https://www.meta.ai/"]),
-            div:has(> a[href^="https://www.meta.ai/"]),
-            a[href*="/messages/t/36327"],
-            li:has(a[href*="/messages/t/36327"]),
-            div:has(> a[href*="/messages/t/36327"]),
-                a[href*="meta.ai" i], 
-                a[href*="www.meta.ai"],
-                a[href*="/metaai/" i], 
-                a[href="/Meta AI/"],
-                a[aria-label="Meta AI"],
-                div[aria-label="Meta AI"],
-                span[aria-label="Meta AI"],
-                [title*="Meta AI" i],
-                [data-testid*="meta_ai" i],
-                input[placeholder*="Meta AI" i],
-                a[aria-label="Kaverit"],
-                div[aria-label="Kaverit"],
-                a[href^="https://www.meta.ai/"],
-                li:has(a[href^="https://www.meta.ai/"]),
-                div:has(> a[href^="https://www.meta.ai/"]),
-                a[href*="/messages/t/36327"],
-                li:has(a[href*="/messages/t/36327"]),
-                div:has(> a[href*="/messages/t/36327"]),
-                a[href="https://www.facebook.com/friends/"],
-                a[href^="/friends/"],
-                a[href*="facebook.com/friends"],
-                li:has(a[href="https://www.facebook.com/friends/"]),
-                div:has(> a[href="https://www.facebook.com/friends/"]),
-                div:has(> a[href*="meta.ai" i]),
-                div:has(> a[aria-label="Meta AI" i]),
-                li:has(a[aria-label="Meta AI" i]),
-                li:has(a[href*="meta.ai" i]),
-                li:has(a[href^="/friends/"]),
-                li:has(a[href*="facebook.com/friends"]),
-            a[href="https://www.facebook.com/friends/"],
-            li:has(a[href="https://www.facebook.com/friends/"]),
-            div:has(> a[href="https://www.facebook.com/friends/"]) {
-                    display: none !important;
-                    visibility: hidden !important;
-                    opacity: 0 !important;
-                    height: 0 !important;
-                    width: 0 !important;
-                    margin: 0 !important;
-                    padding: 0 !important;
-                    position: absolute !important;
-                    pointer-events: none !important;
-                }
-
-                /* HIDE SPECIFIC PEOPLE FROM CHAT LIST */
-                a[href*="/messages/t/100000645744865"],
-                li:has(a[href*="/messages/t/100000645744865"]),
-                div:has(> a[href*="/messages/t/100000645744865"]) {
-                    display: none !important; 
-                    visibility: hidden !important;
-                    opacity: 0 !important;
-                    width: 0 !important;
-                    height: 0 !important;
-                    margin: 0 !important;
-                    padding: 0 !important;
-                    position: absolute !important;
-                    pointer-events: none !important;
-                }
-
-                /* 2. COMPLETELY ERADICATE THE REELS WRAPPER & SEPARATOR LINE */
-                /* Targets the outer wrapper when it contains a banned Reels element */
-                div.x6ikm8r.x10wlt62:has(> div.x78zum5.x1q0g3np.x1qughib.xz9dl7a:has(.fb-element-banned)),
-                div.x78zum5.x1q0g3np.x1qughib.xz9dl7a.xpdmqnj.x1120s5i.x1g0dm76:has(.fb-element-banned),
-                /* Targets the annoying empty spacer/border line right below the Reels box */
-                div.x1tz4bnf.x1yqjg3l.x25epmt.xkkygvr.x16qb05n.xi7iut8 {
-                    display: none !important;
-                    visibility: hidden !important;
-                    opacity: 0 !important;
-                    height: 0 !important;
-                    max-height: 0 !important;
-                    min-height: 0 !important;
-                    margin: 0 !important;
-                    padding: 0 !important;
-                    border: none !important;
-                }
-
-                /* COMPLETELY NUKE THE OUTER FEEDUNIT GHOST BOXES IF THEY HOLD REELS OR SUGGESTED GARBAGE */
-                div[data-pagelet^="FeedUnit_"]:has(div[aria-label="Kelat"][role="region"]),
-                div[data-pagelet^="FeedUnit_"]:has(div[aria-label="Reels"][role="region"]),
-                div[data-pagelet^="FeedUnit_"]:has(div[aria-label="Sinulle ehdotettua"][role="region"]),
-                div[data-pagelet^="FeedUnit_"]:has(div[aria-label="Suggested for you"][role="region"]),
-                div[data-pagelet^="TimelineFeedUnit_"]:has(div[aria-label="Kelat"][role="region"]),
-                div[data-pagelet^="TimelineFeedUnit_"]:has(div[aria-label="Reels"][role="region"]) {
-                    display: none !important;
-                    visibility: hidden !important;
-                    opacity: 0 !important;
-                    height: 0 !important;
-                    max-height: 0 !important;
-                    min-height: 0 !important;
-                    margin: 0 !important;
-                    padding: 0 !important;
-                    border: none !important;
-                    position: absolute !important;
-                    pointer-events: none !important;
-                }
-                
-                /* ZERO-GLIMPSE FEED GATE
-                   On the home feed, posts stay invisible until the scanner explicitly approves them.
-                   Denied posts collapse as if they never existed. */
-                html.fb-feed-zero-glimpse-gate div[data-pagelet^="FeedUnit_"]:not(.fb-post-approved):not(.fb-post-banned):not(.fb-element-banned),
-                html.fb-feed-zero-glimpse-gate div[data-pagelet^="TimelineFeedUnit_"]:not(.fb-post-approved):not(.fb-post-banned):not(.fb-element-banned),
-                html.fb-feed-zero-glimpse-gate div[data-ad-rendering-role="story_message"]:not(.fb-post-approved):not(.fb-post-banned):not(.fb-element-banned),
-                html.fb-feed-zero-glimpse-gate div[data-ad-preview="message"]:not(.fb-post-approved):not(.fb-post-banned):not(.fb-element-banned) {
-                    opacity: 0 !important;
-                    visibility: hidden !important;
-                    pointer-events: none !important;
-                    transition: none !important;
-                    animation: none !important;
-                }
-
-                html.fb-feed-zero-glimpse-gate div[data-pagelet^="FeedUnit_"].fb-post-approved,
-                html.fb-feed-zero-glimpse-gate div[data-pagelet^="TimelineFeedUnit_"].fb-post-approved,
-                html.fb-feed-zero-glimpse-gate div[data-ad-rendering-role="story_message"].fb-post-approved,
-                html.fb-feed-zero-glimpse-gate div[data-ad-preview="message"].fb-post-approved {
-                    opacity: 1 !important;
-                    visibility: visible !important;
-                    pointer-events: auto !important;
-                    transition: none !important;
-                    animation: none !important;
-                }
-
-                /* EXPLICIT PREHIDE ONLY WHILE A POST IS ACTUALLY PENDING / SCANNING */
-                div[data-pagelet^="FeedUnit_"].fb-post-pending,
-                div[data-pagelet^="TimelineFeedUnit_"].fb-post-pending,
-                div[data-ad-rendering-role="story_message"].fb-post-pending,
-                div[data-ad-preview="message"].fb-post-pending,
-                div[data-pagelet^="FeedUnit_"].fb-post-scanning,
-                div[data-pagelet^="TimelineFeedUnit_"].fb-post-scanning,
-                div[data-ad-rendering-role="story_message"].fb-post-scanning,
-                div[data-ad-preview="message"].fb-post-scanning,
-                div[data-pagelet^="FeedUnit_"].fb-post-expanding,
-                div[data-pagelet^="TimelineFeedUnit_"].fb-post-expanding,
-                div[data-ad-rendering-role="story_message"].fb-post-expanding,
-                div[data-ad-preview="message"].fb-post-expanding {
-                    opacity: 0 !important;
-                    visibility: hidden !important;
-                    pointer-events: none !important;
-                    transition: none !important;
-                    animation: none !important;
-                }
-
-                /* Ensure approved posts snap back instantly */
-                div[data-pagelet^="FeedUnit_"].fb-post-approved,
-                div[data-pagelet^="TimelineFeedUnit_"].fb-post-approved,
-                div[data-ad-rendering-role="story_message"].fb-post-approved,
-                div[data-ad-preview="message"].fb-post-approved {
-                    opacity: 1 !important;
-                    visibility: visible !important;
-                    pointer-events: auto !important;
-                    transition: none !important;
-                    animation: none !important;
-                }
-
-                /* IMMUNITY SHIELD FOR DIALOGS AND CRITICAL BUTTONS */
-                [role="dialog"]:not(.fb-element-banned):not(:has(div[data-pagelet="MediaViewerPhoto"])),
-                [role="dialog"] *:not(.fb-element-banned):not(:has(div[data-pagelet="MediaViewerPhoto"])),
-                div[aria-label="Poistetaanko?"],
-                div[aria-label="Poista"],
-                div[aria-label="Peruuta"],
-                div[aria-label="Luo julkaisu"],
-                div[aria-label="Create a post"] {
-                    visibility: visible !important;
-                    opacity: 1 !important;
-                    pointer-events: auto !important;
-                }
-                `;
-                
+            // Safe append (no document.write)
+            if (!style.isConnected) {
                 if (document.head) {
                     document.head.appendChild(style);
+                    devLog('CSS injected to head');
                 } else if (document.documentElement) {
                     document.documentElement.appendChild(style);
+                    devLog('CSS injected to documentElement');
                 }
+            } else {
+                devLog('CSS updated (reuse existing style node)');
             }
-        } catch (err) {}
+        } catch (err) {
+            console.log('Error while injecting CSS: ' + err.message);
+            try {
+                const styleTag = document.createElement('style');
+                styleTag.id = 'fb-inline-style-fallback';
+                styleTag.textContent = `a[aria-label="Kaverit"], div[aria-label="Kaverit"], a[href="/friends/"] { display: none !important; }`;
+                (document.head || document.documentElement).appendChild(styleTag);
+                devLog('Fallback CSS injected (safe append)');
+            } catch (e) {
+                console.log('Fallback CSS injection failed: ' + e.message);
+            }
+        }
     };
     
-    // ==========================================
-    // UNIFIED REGEX-POWERED EXCLUDED PATHS
-    // ==========================================
+    // Run CSS injection immediately
+    injectInlineCSS();
 
-    const excludedRegexPatterns = [
-        /\/(messages|messenger)\b/i,
-        /\/notifications\b/i,
-        /\/marketplace\b/i,
-        /\/ilmoitukset\b/i,
-        /\/stories\b/i,
-        /\/groups\/(317493608736721|342124472533278|2484497081612438|390555733810362|934038190050109)\b/i,
-        /\/(haukkis|tapio\.haukirauma|1267550854|100005050653554|me)\b/i,
-        /id=(100005050653554|100000559239899|1267550854)\b/i
-
-    ];
-
-    // 1. Checks ONLY for structurally whitelisted URLs. (Redirect logic uses ONLY this)
-    const isSafeWhitelistedPath = (path, url = '') => {
-        if (!path) return false;
-        const p = path.toLowerCase();
-        const u = url.toLowerCase();
-        return excludedRegexPatterns.some(regex => regex.test(p) || regex.test(u));
-    };
-
-    // 2. Checks ONLY if a Profile page is present on screen.
-    const isAnyProfileTimeline = () => {
-        return !!(document.querySelector('[data-pagelet="ProfileTimeline"]') || 
-                  document.querySelector('[data-pagelet="ProfileSelfTimeline"]') ||
-                  document.querySelector('[data-pagelet="ProfileTimelineComposer"]'));
-    };
-
-    // 3. Combined check used exclusively for DOM scrubbing to protect your profile posts from being hidden.
-    const isExcludedPathForDOM = (path, url = '') => {
-        // Strictly restricted to Regex paths to prevent Facebook Pages like The 434 from triggering the immunity
-        return isSafeWhitelistedPath(path, url);
-    };
-
-    const manageCSSStyles = () => {
-        try {
-            updateFBFeedZeroGlimpseGateClass();
-            injectFBFeedZeroGlimpseBootstrapCSS();
-
-            const path = window.location.pathname.toLowerCase();
-            const url = window.location.href.toLowerCase();
-            const isPersonal = isExcludedPathForDOM(path, url);
-            
-            if (isPersonal) {
-                const globalStyle = document.getElementById('fb-inline-style');
-                if (globalStyle) globalStyle.remove();
-                PersonalProfileCSS();
-            } else {
-                const personalStyle = document.getElementById('fb-personal-profile-style');
-                if (personalStyle) personalStyle.remove();
-                injectInlineCSS();
-            }
-            return isPersonal;
-        } catch(e) { return false; }
-    };
-
-    manageCSSStyles(); // Initial eval on load
-
-    // ==========================================
-    // ULTIMATE SAFETY NET FOR HIDING ELEMENTS
-    // Prevents cascading deletion (blank pages)
-    // ==========================================
-    const isDangerousToHide = (el) => {
-        if (!el) return true;
-        if (el === document.body || el === document.documentElement) return true;
-        
-        // Protect Major Navigation and Headers THEMSELVES from being deleted, 
-        // but DO NOT protect their children (so we can delete Kaverit/Meta AI inside them!)
-        if (el.matches('header, nav, [role="banner"], [role="navigation"]')) return true;
-
-        // Never hide massive structural wrappers
-        if (el.matches('main, [role="main"], [role="feed"], #mount_0_0_fb, #globalContainer, #content')) return true;
-        
-        // Protect elements that *contain* major structural components so profiles don't vanish
-        if (el.querySelector('main, [role="main"], [role="feed"], [data-pagelet="ProfileTimeline"]')) return true;
-
-        // PROTECT THE COMPOSER (Status Update Box)
-        if (el.querySelector('div[aria-label="Luo julkaisu"]') || el.querySelector('div[aria-label="Create a post"]')) return true;
-        if (el.textContent && (el.textContent.includes('Mitä mietit') || el.textContent.includes("What's on your mind"))) return true;
-
-        return false;
-    };
-
-    // ==========================================
-    // COMMENT ISOLATOR (BULLETPROOF BLIND SPOT)
-    // Instantly skips comments using explicit ARIA labels
-    // to completely prevent ghost-banning and lag.
-    // ==========================================
-    const isInsideComment = (element) => {
-        if (!element || !element.closest) return false;
-        
-        // 1. Explicit comment labels (Facebook explicitly tags comment wrappers with aria-label="Kommentti...")
-        if (element.closest('[aria-label*="komment" i], [aria-label*="comment" i]')) return true;
-
-        // 2. Media Viewers (Photo Theater) sidebars are mostly comments
-        const currentPath = window.location.pathname.toLowerCase();
-        const isMediaView = currentPath.includes('/photo') || currentPath.includes('/reel') || currentPath.includes('/videos') || currentPath.includes('/watch');
-        if (!isMediaView && (element.closest('[data-pagelet="RightRail"]') || element.closest('[role="complementary"]'))) {
-            return true;
-        }
-
-        // 3. Comments inside Overlay dialogs (usually in lists)
-        if (element.closest('div[role="dialog"]') && element.closest('ul')) {
-            return true; 
-        }
-        
-        // 4. Nested Articles: Comments in the feed are ALWAYS role="article" nested inside another role="article"
-        const article = element.closest('[role="article"]');
-        if (article && article.parentElement && article.parentElement.closest('[role="article"]')) {
-            return true;
-        }
-
-        return false;
-    };
-
-    const safeSelectors = [
-        '[aria-label="Notifications"]', '[aria-label="Marketplace"]', '[aria-label="Ilmoitukset"]',
-        '[aria-label="Messenger"]', '[aria-label="Stories"]', '[aria-label="Tarinat"]',
-        'div[aria-label="Notifications"]', 'div[aria-label="Marketplace"]', 'div[aria-label="Ilmoitukset"]',
-        '[role="dialog"]:not(:has(div[data-pagelet="MediaViewerPhoto"]))',
-        '[tabindex="-1"]',
-        'div[role="none"][data-visualcompletion="ignore"]',
-        'a[href="/marketplace/?ref=app_tab"]',
-        '[data-pagelet="RightRail"]',
-        '[role="complementary"]',
-        '[aria-label="Luo julkaisu"]',
-        '[aria-label="Create a post"]'
-    ];
-
-    const isSafeElement = (element) => {
-        if (!element || !element.closest) return false;
-        
-        const elText = (element.textContent || '').toLowerCase();
-        const elAria = (element.getAttribute('aria-label') || '').toLowerCase();
-        if (elText.includes('poista kavereista') || elText.includes('meta ai') || elAria.includes('meta ai')) {
-            return false;
-        }
-
-        const isInsideSafe = safeSelectors.some(selector => {
-            try { return element.closest(selector) !== null; } 
-            catch(e) { return false; }
-        });
-        if (isInsideSafe) return true;
-
-        try {
-            if (element.hasAttribute('data-visualcompletion') && element.getAttribute('data-visualcompletion') === 'loading-state') return true;
-            if (element.getAttribute('role') === 'progressbar') return true;
-            if (element.querySelector && (element.querySelector('[data-visualcompletion="loading-state"]') || element.querySelector('[role="progressbar"]'))) {
-                return true;
-            }
-        } catch(e) {}
-
-        return false;
-    };
-
-    // Helper function to safely apply CSS hiding without breaking React DOM
-    const safelyHideFBElement = (element) => {
-        if (!element || hiddenElements.has(element) || isSafeElement(element)) return; 
-        if (isDangerousToHide(element)) return; 
-        
-        element.style.setProperty('display', 'none', 'important');
-        element.style.setProperty('visibility', 'hidden', 'important');
-        element.style.setProperty('opacity', '0', 'important');
-        element.style.setProperty('pointer-events', 'none', 'important');
-        element.style.setProperty('position', 'absolute', 'important');
-        element.style.setProperty('left', '-9999px', 'important');
-        element.style.setProperty('top', '-9999px', 'important');
-        element.style.setProperty('height', '0', 'important');
-        element.style.setProperty('width', '0', 'important');
-        element.style.setProperty('overflow', 'hidden', 'important');
-        
-        if (!element.classList.contains('fb-element-banned')) element.classList.add('fb-element-banned');
-        hiddenElements.add(element);
-    };
-
-
-    const normalizeFBText = (value = '') => {
-        try {
-            return String(value)
-                .replace(/[​-‍﻿]/g, '')
-                .replace(/\s+/g, ' ')
-                .trim()
-                .toLowerCase();
-        } catch (e) {
-            return '';
-        }
-    };
-
-    const bannedPostActionTexts = new Set(['liity', 'join', 'seuraa', 'follow']);
-    const bannedPostActionRegex = /(?:^|[\s·|,:;.!?()\[\]{}\-–—\/])(liity|join|seuraa|follow)(?:$|[\s·|,:;.!?()\[\]{}\-–—\/])/i;
-    const autoExpandActionRegex = /(?:^|)(näytä lisää|see more|show more)(?:$|)/i;
-
-    const elementHasBannedPostActionText = (el) => {
-        try {
-            if (!el) return false;
-            const variants = [
-                normalizeFBText(el.textContent || el.innerText || ''),
-                normalizeFBText((el.getAttribute && el.getAttribute('aria-label')) || ''),
-                normalizeFBText((el.getAttribute && el.getAttribute('title')) || ''),
-                normalizeFBText((el.getAttribute && el.getAttribute('data-tooltip-content')) || '')
-            ].filter(Boolean);
-
-            return variants.some(value => bannedPostActionTexts.has(value) || bannedPostActionRegex.test(value));
-        } catch (e) {
-            return false;
-        }
-    };
-
-    const isAutoExpandButton = (el) => {
-        try {
-            if (!el) return false;
-            const variants = [
-                normalizeFBText(el.textContent || el.innerText || ''),
-                normalizeFBText((el.getAttribute && el.getAttribute('aria-label')) || ''),
-                normalizeFBText((el.getAttribute && el.getAttribute('title')) || '')
-            ].filter(Boolean);
-            return variants.some(value => autoExpandActionRegex.test(value));
-        } catch (e) {
-            return false;
-        }
-    };
-
-    const hardClickElement = (el) => {
-        try {
-            if (!el) return;
-            ['pointerdown', 'mousedown', 'mouseup', 'click'].forEach(type => {
-                try {
-                    el.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
-                } catch (e) {}
-            });
-            try { el.click(); } catch (e) {}
-        } catch (e) {}
-    };
-
-    const hasExplicitBannedPostAction = (root) => {
-        try {
-            if (!root || !root.querySelectorAll) return false;
-
-            const selector = [
-                '[role="button"]',
-                'button',
-                'a',
-                'div[role="button"][tabindex="0"]',
-                'span[dir="auto"]',
-                'span[dir="ltr"]',
-                'div[dir="auto"]',
-                'h2',
-                'h3'
-            ].join(',');
-
-            const candidates = Array.from(root.querySelectorAll(selector));
-            for (let i = 0; i < candidates.length; i++) {
-                const el = candidates[i];
-                if (!el || isInsideComment(el)) continue;
-                if (elementHasBannedPostActionText(el)) return true;
-            }
-        } catch (e) {}
-        return false;
-    };
-
-    // ==========================================
-    // ISOLATED PERSONAL PROFILE SELECTORS
-    // ==========================================
-    const PersonalProfileSelectors = () => {
-        try {
-            // Nuke "Poista kavereista" from any chat/friends list overlay menu
-            document.querySelectorAll('div[role="menuitem"], span[dir="auto"]').forEach(el => {
-                if (el.textContent && el.textContent.includes('Poista kavereista')) {
-                    const wrapper = el.closest('div[role="menuitem"]') || el;
-                    if (!isDangerousToHide(wrapper)) safelyHideFBElement(wrapper);
-                }
-            });
-
-            // Structurally Nuke "Sinulle ehdotettua" / "Lisää kavereita" Ghost Box exclusively by Text mapping
-            const textToFind = ["Lisää kavereita saadaksesi suosituksia", "Kun lisäät kavereita, näet tässä listan ihmisistä, jotka saatat tuntea."];
-            
-            document.querySelectorAll('span[dir="auto"], h2.html-h2, div[dir="auto"]').forEach(el => {
-                if (el.textContent && textToFind.some(t => el.textContent.includes(t))) {
-                    let parent = el.parentElement;
-                    let wrapperToHide = el; // default to hiding just the text if climbing fails
-                    
-                    while (parent && parent !== document.body) {
-                        if (parent.classList.contains('x1exxf4d') || parent.classList.contains('html-div') || parent.classList.contains('x1yztbdb')) {
-                            if (isDangerousToHide(parent)) break;
-                            if (parent.querySelector('[data-pagelet^="FeedUnit"]') || parent.matches('[role="feed"]')) break;
-                            
-                            wrapperToHide = parent;
-                            if (parent.classList.contains('x1exxf4d')) break;
-                        }
-                        parent = parent.parentElement;
-                    }
-                    
-                    if (wrapperToHide && !isDangerousToHide(wrapperToHide)) {
-                        safelyHideFBElement(wrapperToHide);
-                    }
-                }
-            });
-            
-            // Clean up standalone stray icon if text mapping misses it
-            document.querySelectorAll('i[style*="BXcBrMYpzXO.png"][style*="background-position: 0px -84px"]').forEach(el => {
-                if (isSafeElement(el)) return; 
-                if (isDangerousToHide(el)) return;
-                safelyHideFBElement(el);
-            });
-            
-        } catch (e) {}
-    };
-
-// FIXED: Function to delete elements for specific profiles - now with proper URL restriction
-    const filteredProfiles = () => {
-        try {
-            const currentUrl = window.location.href;
-            const url = new URL(currentUrl);
-            const profileIds = [
-                '100000639309471',
-                'jiri.innanen',
-            ];
-
-            // Strictly match only these profile pages
-            const matchesProfile = profileIds.some(profileId => {
-                return (
-                    (url.pathname === '/profile.php' && url.searchParams.get('id') === profileId) ||
-                    (url.pathname === `/${profileId}` || url.pathname === `/${profileId}/`)
-                );
-            });
-            
-            // Only run if we're actually on one of the specified profiles
-            if (!matchesProfile) return; 
-            
-            devLog('Applying selectors for specific profiles');
-            const selectorsToDelete = [
-                '.x1a2a7pz.x1ja2u2z.xh8yej3.x1n2onr6.x10wlt62.x6ikm8r.x1itg65n',
-                '.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > div > .x1jfb8zj.x1qrby5j.x1n2onr6.x7ja8zs.x1t2pt76.x1lytzrv.xedcshv.xarpa2k.x3igimt.x12ejxvf.x1qhmfi1.x1pdmqnj.x9f619.x178xt8z.xm81vs4.xso031l.xy80clv.x1xmf6yo',
-                '.xu06nn8.x1jl3cmp.x2r5gy4.xnpuxes.x1hc1fzr.x879a55.x1q0g3np.xozqiw3.x1qjc9v5.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619 > .xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619',
-                '.xu06nn8.x1jl3cmp.x2r5gy4.xnpuxes.x1hc1fzr.x879a55.x1q0g3np.xozqiw3.x1qjc9v5.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619 > .xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .x1y5dvz6.x16i7wwg.xqdwrps.x1pi30zi.x1swvt13.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619',
-                '.x78zum5 > .xh8yej3.x1n2onr6.xl56j7k.xdt5ytf.x3nfvp2.x9f619.x1a2a7pz.x1lku1pv.x87ps6o.x13rtm0m.x1e5q0jg.x3x9cwd.x1o1ewxj.xggy1nq.x1hl2dhg.x16tdsg8.xkhd6sd.x18d9i69.x4uap5.xexx8yu.x1mh8g0r.xat24cr.x11i5rnm.xdj266r.html-div',
-                '.x78zum5 > .xh8yej3.x1n2onr6.xl56j7k.xdt5ytf.x3nfvp2.x9f619.x1a2a7pz.x1lku1pv.x87ps6o.x13rtm0m.x1e5q0jg.x3x9cwd.x1o1ewxj.xggy1nq.x1hl2dhg.x16tdsg8.xkhd6sd.x18d9i69.x4uap5.xexx8yu.x1mh8g0r.xat24cr.x11i5rnm.xdj266r.html-div > .xquyuld.x10wlt62.x6ikm8r.xh8yej3.x9f619.xt3gfkd.xu5ydu1.xdney7k.x1qpq9i9.x1jx94hy.x1ja2u2z.x1n2onr6.x26u7qi.x178xt8z.xm81vs4.xso031l.xy80clv.xev17xk.x1xmf6yo',
-                '.x1q0g3np.xozqiw3.x6s0dn4.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619 > .xamitd3.xeuugli.x193iq5w.x2lah0s.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .x78zum5',
-                '.x1q0g3np.xozqiw3.x6s0dn4.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619 > .xamitd3.xeuugli.x193iq5w.x2lah0s.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619',
-                '.x1y5dvz6.x16i7wwg.xqdwrps.x1pi30zi.x1swvt13.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .x1q0g3np.xozqiw3.x6s0dn4.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619',
-                '.x2lah0s.xvo6coq.x1ve1bff.x1q0g3np.xozqiw3.x1qjc9v5.xl56j7k.x1n2onr6.x78zum5.x1ja2u2z.x9f619 > .x1y5dvz6.x16i7wwg.xqdwrps.x1pi30zi.x1swvt13.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619',
-                '.x2lah0s.xvo6coq.x1ve1bff.x1q0g3np.xozqiw3.x1qjc9v5.xl56j7k.x1n2onr6.x78zum5.x1ja2u2z.x9f619',
-                '.x7wzq59.x1xzczws.x1ja2u2z.x9f619',
-                'div.xnjli0.x1q8cg2c.xwib8y2.x1y1aw1k.x6s0dn4.x1ja2u2z.x16tdsg8.x1n2onr6.x1gh759c.xnqzcj9.xfvfia3.x1i6fsjq.x2lah0s.x1q0g3np.x78zum5.x1ypdohk.x9f619.xjyslct.x1a2a7pz.x1lku1pv.x87ps6o.x13rtm0m.x1e5q0jg.x3x9cwd.x1o1ewxj.xggy1nq.x1hl2dhg.x13vifvy.x16tdsg8.x1xmf6yo',
-                'div.x78zum5.x12nagc.x1n2onr6.x1s6qhgt:empty',
-                '.x7wzq59 > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(2)',
-                '.x7wzq59 > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(2) > div:nth-child(1) > div:nth-child(1)',
-                'div.x1nhvcw1:nth-child(1)',
-                'div.x1nhvcw1:nth-child(1) > div:nth-child(1)',
-                'div.x1nhvcw1:nth-child(1) > div:nth-child(2)',
-                'div.x1nhvcw1:nth-child(1) > div:nth-child(2) > div:nth-child(1)',
-                'div.x1nhvcw1:nth-child(1) > div:nth-child(2) > div:nth-child(1) > div:nth-child(1)',
-                'div.x1nhvcw1:nth-child(1) > div:nth-child(2) > div:nth-child(1) > div:nth-child(1) > span:nth-child(1)',
-                'div.xifccgj.x4cne27.xbmpl8g.xykv574.xyamay9.x1swvt13.x1pi30zi.x1q0g3np.xozqiw3.x1qjc9v5.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619:nth-of-type(2)',
-                'div.x1yztbdb:nth-child(2)',
-                'div.x1yztbdb:nth-child(2) > div:nth-child(1)',
-                'div.x1yztbdb:nth-child(2) > div:nth-child(1) > div:nth-child(1)',
-                'div.x1yztbdb:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1)',
-                'div.xamitd3:nth-child(1)',
-                'div.xamitd3:nth-child(2)',
-                'div.xamitd3:nth-child(2) > div:nth-child(1)',
-                'div.xamitd3:nth-child(2) > div:nth-child(1) > div:nth-child(1)',
-                'div.xamitd3:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1)',
-                'div.xamitd3:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1)',
-                'div.xamitd3:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1)',
-                'div.xamitd3:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1)',
-                'div.xamitd3:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2)',
-                'div.xamitd3:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > span:nth-child(1)',
-                'div.xamitd3:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > span:nth-child(1) > span:nth-child(1) > span:nth-child(1)',
-                'div.xamitd3:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2)',
-                '.x6d00yu',
-                'mount_0_0_9k > div > div > div > div.x9f619.x1n2onr6.x1ja2u2z > div > div > div.x78zum5.xdt5ytf.x1t2pt76.x1n2onr6.x1ja2u2z.x10cihs4 > div.x78zum5.xdt5ytf.x1t2pt76 > div > div > div.x6s0dn4.x78zum5.xdt5ytf.x193iq5w > div.x9f619.x193iq5w.x1talbiv.x1sltb1f.x3fxtfs.xf7dkkf.xv54qhq.xw7yly9 > div > div.x9f619.x1n2onr6.x1ja2u2z.xeuugli.xs83m0k.xjl7jj.x1xmf6yo.x1xegmmw.x1e56ztr.x13fj5qh.xnp8db0.x1d1medc.x7ep2pv.x1xzczws > div.x7wzq59 > div > div:nth-child(2) > div > div',
-                'div[aria-label="Suodattimet"]',
-                'div[aria-label="Filters"]',
-                'div[aria-label="Suodattimet"][role="button"]',
-                'div[aria-label="Filters"][role="button"]',
-                '.x1i10hfl.xjbqb8w.x1ejq31n.x18oe1m7.x1sy0etr.xstzfhl.x972fbf.x10w94by.x1qhh985.x14e42zd.x1ypdohk.xe8uvvx.xdj266r.x14zmp.xat24cr.x1lziwak.xexx8yu.xyri2b.x18d9i69.x1c1uobl.x16tdsg8.xat24cr.x1mh8g0r.x6s0dn4.x78zum5.xdt5ytf.xjy6m2a.xl56j7k',
-                '.x1ja2u2z.x78zum5.x2lah0s.x1n2onr6.xl56j7k.x6s0dn4.xozqiw3.x1q0g3np.x14ldlfn.x1b1wa69.xws8118.x5fzff1.x972fbf.x10w94by.x1qhh985.x14e42zd.x9f619.xpdmqnj.x1g0dm76.x1qhmfi1.x1r1pt67',
-                'h2:contains("Julkaisut")',
-                'span:contains("Julkaisut")',
-                'div:contains("Suodattimet")',
-                'span:contains("Suodattimet")'
-            ];
-            
-            selectorsToDelete.forEach(selector => {
-                // Handle our custom pseudo-selector for native JS compatibility!
-                if (selector.includes(':contains(')) {
-                    const match = selector.match(/^(.*?):contains\("(.*?)"\)$/);
-                    if (match) {
-                        const tag = match[1].toUpperCase(); 
-                        const text = match[2];
-                        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
-                        let node;
-                        while ((node = walker.nextNode())) {
-                            if (node.nodeValue.includes(text)) {
-                                let parent = node.parentElement;
-                                while (parent && parent !== document.body) {
-                                    if (parent.tagName === tag) {
-                                        if (!isSafeElement(parent) && !isDangerousToHide(parent)) {
-                                            safelyHideFBElement(parent);
-                                        }
-                                        break;
-                                    }
-                                    parent = parent.parentElement;
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    // Standard CSS Selectors
-                    document.querySelectorAll(selector).forEach(element => {
-                        if (isSafeElement(element)) return;
-                        safelyHideFBElement(element);
-                    });
-                }
-            });
-        } catch (e) {
-            console.log('Error deleting selectors for specific profiles: ' + e.message);
-        }
-    };
-
+    // Directly hide specific elements based on their unique selectors - Enhanced for persistence and anti-flashing
     const hideCriticalElements = () => {
         try {
+            devLog('Hiding critical elements with permanent banning and anti-flashing');
             const selectors = [
-                'div:has(> a[href*="meta.ai" i])',
-                'div:has(> a[href^="/friends/"])',
-                'div:has(> a[href*="facebook.com/friends"])',
                 'a[aria-label="Kaverit"]',
                 'div[aria-label="Kaverit"]',
                 'a[href="https://www.facebook.com/friends/"]',
-                'a[href^="/friends/"]',
-                'a[aria-label*="Meta AI" i]',
-                'div[aria-label="Kelat"][role="region"]',
-                'div[aria-label="Reels"][role="region"]',
-                'div.html-div.x1n2onr6.x1ja2u2z.x1jx94hy.xw5cjc7.x1dmpuos.x1vsv7so:has(div[aria-label="Kelat"][role="region"])',
-                'div.html-div.x1n2onr6.x1ja2u2z.x1jx94hy.xw5cjc7.x1dmpuos.x1vsv7so:has(div[aria-label="Reels"][role="region"])',
-                'div[aria-label="Sinulle ehdotettua"][role="region"]',
-                'div[aria-label="Suggested for you"][role="region"]',
-                'div[data-pagelet^="FeedUnit_"]:has(div[aria-label="Kelat"][role="region"])',
-                'div[data-pagelet^="FeedUnit_"]:has(div[aria-label="Reels"][role="region"])',
-                'div[data-pagelet^="FeedUnit_"]:has(div[aria-label="Sinulle ehdotettua"][role="region"])',
-                'div[data-pagelet^="FeedUnit_"]:has(div[aria-label="Suggested for you"][role="region"])',
-                'a[href*="meta.ai" i]',
-                'a[href*="/metaai/" i]',
-                'svg[aria-label*="Meta AI" i]',
-                'span[aria-label*="Meta AI" i]',
-                'input[placeholder*="Meta AI" i]',
-                '[data-testid*="meta_ai" i]',
-                'div.x78zum5.x1q0g3np.x1qughib.xz9dl7a.xpdmqnj.x1120s5i.x1g0dm76:has(div[aria-label="Kelat"][role="region"])',
-                'div.x78zum5.x1q0g3np.x1qughib.xz9dl7a.xpdmqnj.x1120s5i.x1g0dm76:has(div[aria-label="Reels"][role="region"])',
-                'a[href*="/messages/t/36327"]',
-                'li:has(a[href*="/messages/t/36327"])',
-                'div:has(> a[href*="/messages/t/36327"])',
-                'a[href*="/messages/t/100000645744865"]',
-                'li:has(a[href*="/messages/t/100000645744865"])',
-                'div:has(> a[href*="/messages/t/100000645744865"])',
-                'a[href^="https://www.meta.ai/"]',
-                'li:has(a[href^="https://www.meta.ai/"])',
-                'div:has(> a[href^="https://www.meta.ai/"])',
-                'div.x1tz4bnf.x1yqjg3l.x25epmt.xkkygvr.x16qb05n.xi7iut8',
-                'div.x6ikm8r.x10wlt62:has(> div.x78zum5.x1q0g3np.x1qughib.xz9dl7a:has(.fb-element-banned))'
+                'a[href="/friends/"]',
+                'a[aria-label="Meta AI"]',
+                'div[aria-label="Meta AI"]',
+                'a[href="https://www.meta.ai/"]',
+                'a[href="https://meta.ai/"]',
+                'a[href="/Meta AI/"]',
+                'svg[aria-label="Meta AI:n profiilikuva"]',
+                'svg[aria-label*="Meta AI profile"]', 
+                'div.x1cy8zhl.x78zum5.xl56j7k.x1fns5xo:has(> img[width="24"][height="24"][aria-hidden="true"][src^="data:image/svg+xml"][src*="M12%202.5a9.5"])',
+                'a[aria-label="Meta AI"]',
+        	'.x6s0dn4.x1obq294.x5a5i1n:has(.x1gslohp > span:empty)',
+		'li.x1c1uobl.x18d9i69.xyri2b.xexx8yu.x1lziwak.xat24cr.x14z9mp.xdj266r.html-li:nth-of-type(2)',
+		'div.x1cy8zhl.x78zum5.xl56j7k.x1fns5xo:has(> img[width="24"][height="24"][aria-hidden="true"][src^="data:image/svg+xml"][src*="M12 2.5a9.5"])',
+            	'div.x1cy8zhl.x78zum5.xl56j7k.x1fns5xo:has(> img[width="24"][height="24"][aria-hidden="true"][src^="data:image/svg+xml"][src*="M12%202.5a9.5"])',
+                'div[aria-label="Meta AI"]',
+                'span[aria-label="Meta AI"]',
+		'li:has(a[aria-label="Kaverit"][href*="/friends"])',
+		'li:has(a[aria-label="Friends"][href*="/friends"])',
+                'svg[viewBox="0 0 112 112"][width="112"][height="112"].xfx01vb.x1lliihq.x1tzjh5l.x1k90msu.x2h7rmj.x1qfuztq',
+                'div.html-div.xdj266r.x14z9mp.xat24cr.x1lziwak.x6s0dn4.x78zum5.xdt5ytf.xl56j7k.x1p5oq8j.x64bnmy.xwxc41k.x13jy36j',
+                'div.html-div.xdj266r.x14z9mp.xat24cr.x1lziwak.xexx8yu.xyri2b.x18d9i69.x1c1uobl.x8cjs6t.x13fuv20.x178xt8z',
+                'div.x1exxf4d.xpv9jar.x1nb4dca.x1nmn18.x1obq294.x5a5i1n.xde0f50.x15x8krk.x13fuv20.x18b5jzi.x1q0q8m5.x1t7ytsu.x178xt8z.x1lun4ml.xso031l.xpilrb4.xev17xk.x1xmf6yo',
+                // ENHANCED: Meta AI contact specific selectors
+                'a[href*="/messages/t/36327,2227039302/"]',
+                'a[href*="messages/t/36327"]',
+		'div.x1a02dak:nth-child(3) > div:nth-child(1)',
+		'div.xnp8db0:nth-child(4) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(2) > div:nth-child(1)',
+		'div.xnp8db0:nth-child(4) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(1)',
             ];
 
+            let hiddenCount = 0;
             selectors.forEach((selector) => {
                 document.querySelectorAll(selector).forEach((el) => {
-                    if (!isSafeElement(el) && !isDangerousToHide(el)) {
-                        safelyHideFBElement(el);
+                    if (!el.classList.contains('fb-element-banned')) {
+                        el.classList.add('fb-element-banned');
+                        el.style.setProperty('display', 'none', 'important');
+                        el.style.setProperty('visibility', 'hidden', 'important');
+                        el.style.setProperty('opacity', '0', 'important');
+                        el.style.setProperty('pointer-events', 'none', 'important');
+                        el.style.setProperty('position', 'absolute', 'important');
+                        el.style.setProperty('left', '-9999px', 'important');
+                        el.style.setProperty('top', '-9999px', 'important');
+                        el.style.setProperty('height', '0', 'important');
+                        el.style.setProperty('width', '0', 'important');
+                        el.style.setProperty('overflow', 'hidden', 'important');
+                        el.style.setProperty('content-visibility', 'hidden', 'important'); // Anti-flashing
+                        hiddenCount++;
                     }
                 });
             });
-
-            // Instant Text Scrubber for Meta AI & Poista Kavereista
-            document.querySelectorAll('span[dir="auto"], span.x1lliihq, span.html-span').forEach(span => {
-                const text = span.textContent.trim().toLowerCase();
-                if (text === 'meta ai' || text === 'kaverit' || text === 'poista kavereista') {
-                    if (isInsideComment(span)) return; 
-                    const wrapper = span.closest('a') || span.closest('.x1qjc9v5') || span.closest('div[role="menuitem"]') || span.closest('li') || span;
-                    if(wrapper && !isDangerousToHide(wrapper)) {
-                        safelyHideFBElement(wrapper);
-                    }
-                }
-            });
-        } catch (err) {}
+            
+            if (hiddenCount > 0) {
+                devLog(`Hidden ${hiddenCount} critical elements`);
+            }
+        } catch (err) {
+            console.log('Error hiding critical elements: ' + err.message);
+        }
     };
+    
+    // Run immediately
+    hideCriticalElements();
 
-    // ===== ACCOUNT-SCOPED STRICT FILTERS =====
-    // Keep the heavier personal blocklists active only for the Haukkis account.
-    // This lets dad/other accounts use Facebook with less aggressive keyword/FBID filtering,
-    // while Haukkis keeps the full restrictions with no questions asked.
-    const HAUKKIS_ACCOUNT_FBID = '100005050653554';
+function collapseElementHard(el) {
+    if (!el || !el.style) return;
+
+    el.classList.add('fb-element-banned');
+    el.style.setProperty('display', 'none', 'important');
+    el.style.setProperty('visibility', 'hidden', 'important');
+    el.style.setProperty('opacity', '0', 'important');
+    el.style.setProperty('pointer-events', 'none', 'important');
+    el.style.setProperty('position', 'absolute', 'important');
+    el.style.setProperty('left', '-9999px', 'important');
+    el.style.setProperty('top', '-9999px', 'important');
+    el.style.setProperty('width', '0', 'important');
+    el.style.setProperty('min-width', '0', 'important');
+    el.style.setProperty('max-width', '0', 'important');
+    el.style.setProperty('height', '0', 'important');
+    el.style.setProperty('min-height', '0', 'important');
+    el.style.setProperty('max-height', '0', 'important');
+    el.style.setProperty('margin', '0', 'important');
+    el.style.setProperty('padding', '0', 'important');
+    el.style.setProperty('overflow', 'hidden', 'important');
+    el.style.setProperty('content-visibility', 'hidden', 'important');
+}
+
+    // --- ARRAYS AND CONFIGURATION ---
+    const paramsToDelete = ["set", "type"];    // ===== ACCOUNT-SCOPED STRICT FILTERS =====
+    // FBID/person filtering is only active for explicitly supported logged-in accounts.
+    const SUPPORTED_FBID_LIST = [
+        '100005050653554'
+    ];
 
     const getLoggedInFacebookAccountFbid = () => {
         try {
@@ -1021,8 +496,6 @@ if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
             if (cookieMatch && cookieMatch[1]) return cookieMatch[1];
         } catch (e) {}
 
-        // Fallbacks for cases where Facebook exposes the viewer ID in early boot data.
-        // Kept intentionally small so profile/page hydration does not get hammered.
         try {
             const html = document.documentElement ? (document.documentElement.innerHTML || '').slice(0, 250000) : '';
             const patterns = [
@@ -1041,254 +514,24 @@ if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
         return '';
     };
 
-    const isHaukkisStrictModeEnabled = () => {
+    const isStrictAccountEnabled = () => {
         try {
             const accountFbid = getLoggedInFacebookAccountFbid();
-            // If Facebook refuses to tell us who is logged in, fail closed for Haukkis safety.
+
+            // Match the older working behavior:
+            // if Facebook has not exposed the logged-in account ID yet, fail closed.
+            // Once c_user / boot data becomes available, unsupported accounts are disabled normally.
             if (!accountFbid) return true;
-            return accountFbid === HAUKKIS_ACCOUNT_FBID;
+
+            return SUPPORTED_FBID_LIST.includes(accountFbid);
         } catch (e) {
             return true;
         }
     };
 
-    const __fbHaukkisStrictModeEnabled = isHaukkisStrictModeEnabled();
-    devLog('Haukkis strict personal blocks: ' + (__fbHaukkisStrictModeEnabled ? 'enabled' : 'disabled'));
+    let __fbStrictAccountEnabled = false;
 
-    const haukkisOnlyRestrictedWords = [
-        "Alexa Bliss", "Alexa WWE", "5 feet of fury", "five feet of fury", "Tiffany", "Stratton", "Tiffy time", "Stratton", "Artificial Intelligence", "Samantha", "La Leona", "Mariah May", "B-Fab",
-        "Tiffany", "Mandy Rose", "Chelsea Green", "Bayley", "Mercedes", "Sasha Banks", "Sportskeeda", "Vince Russo", "Meltzer", "Shirakawa", "Samantha Irvin", "Brave Software", "AJ Lee's", "Perez",
-        "All Elite Wrestling", "Dynamite", "Rampage", "AEW Collision", "Blackheart", "Flair", "Charlotte", "Charlotte", "Flair", "Becky Lynch", "Giulia", "Michin", "Samantha Irwin", "Serena Deeb",
-        "Mia Yim", "AJ Lee", "Stephanie", "Liv Morgan", "Piper Niven", "Jordynne Grace", "Jordynne", "Carr WWE", "Iyo Shirai", "Iyo Sky", "Leila Grey", "Trish", "Stratus", "AJ Lee", "Izzi WWE", 
-        "Nick Jackson", "NXT Womens", "NXT Women", "NXT Woman", "Sunny", "Maryse", "Jackson", "DeepSeek", "DeepSeek AI", "Rhea Ripley", "Instagram", "Jakara", "Playboy", "Jaida Parker", "Deonna", 
-        "Lash Legend", "Alba Fyre", "Isla Dawn", "CJ Perry", "Lana WWE", "Raquel Rodriguez", "Zelina Vega", "Alicia Fox", "Willow Nightingale", "Kris Statlander", "Kayden Carter", "Katana Chance",
-        "Izzi Dame", "Dame WWE", "Perez", "Indi Hartwell", "Blair Davenport", "Lola Vice", "Valhalla", "Maxxine Dupri", "Karmen Petrovic", "Ava Raine", "Cora Jade", "Jacy Jayne", "Gigi Dolin", 
-	"Io Sky", "Shirai", "Scarlett", "Thea Hail", "Tatum Paxley", "Fallon Henley", "Kelani Jordan", "Electra Lopez", "Wendy Choo", "Yulisa Leon", "Valentina", "Amari Miller", "Young Bucks", 
-	"Torrie Wilson", "Ripley!", "Monroe", "Arianna Grace", "Zelina", "Natalya", "Nattie", "IYO SKY", "Dakota Kai", "Asuka", "Perez", "Kairi Sane", "Satomura", "Candice", "LeRae", "Nia Jax", 
-	"Naomi", "Trish", "Stratus", "Roxanne", "Sarray", "Xia Li", "Shayna", "Baszler", "Ronda", "Rousey", "Velvet Sky", "Carmella", "Dana Brooke", "Mercedes", "Martinez", "Marina", "Shafir", "Stacy", 
-	"Keibler", "Valkyria", "Primera", "Summer Rae", "Layla", "Michelle McCool", "Eve Torres", "Kelly Kelly", "Tatu Toiviainen", "Jessika Carr", "Jessica Karr", "Venice", "Jessica Carr", "Jessika WWE", 
-	"Jessica WWE", "Matt Jackson", "Karr WWE", "Carr WWE", "Melina wrestler", "Jillian", "Mickie", "Kanellis", "Beth Phoenix", "Victoria", "Jazz WWE", "Molly Holly", "Shirai", "Priscilla", "Kelly", 
-	"Red Velvet", "Meta AI", "Gail Kim", "Awesome Kong", "Kara B", "Madison Rayne", "Velvet Sky", "Angelina", "Tessmacher", "Havok", "Su Yung", "Taya Valkyrie", "Bianca Belair", "Skye Blue", "Bordeaux", 
-	"Brooke", "#", "Purrazzo", "Thekla", "Toni Storm", "Britt Baker", "Jamie Hayter", "Anna Jay", "Hikaru", "Sakazaki", "Nyla Rose", "Sakura", "Penelope Ford", "Julia Hart", "Kamifuku", "Elayna", "Blake", 
-	"Monroe", "Juliette", "Juliana", "Julianna",  "Saya Kamitani", "Kamitani", "Katie", "Nikkita", "Nikkita Lyons", "Marie", "Lisa Varon", "Marie Varon", "Irving", "Naomi", "Belts Mone", "Amanda Huber", 
-	"Elayna", "IYO SKY", "Ripley", "Kairi", "Megan Bayne", "Wren Sinclair", "Fallon", "Henley", "Bella Twins", "Kaipio", "Sisältö ei ole käytettävissä tällä hetkellä", "Näytä suositukset", "20. heinäkuu klo", 
-    ];
-
-    const restrictedWords = __fbHaukkisStrictModeEnabled ? haukkisOnlyRestrictedWords : [];
-
-    const regexBlockedWords = [
-    // Classic Regexes (Might cause Meta to go extinct)
-    	/lex bl/i, /AI-/i, /-AI/i, /AI-suck/i, /Ripl/i, /Shira/i, /Steph's place/i, /Stephanie's place/i, /Steph McMahon/i, /Stepan/i, /Stratu/i, /Stratt/i, /Gina Adam/i, /lantaaa/i, /lantaai/i, /Sherilyn/i, /Tiffa/i, 
-	/Tiffy/i, /Dreambooth/i, /Dream booth/i, /Dualipa/i, /Dua Lipa/i, /Meta AI/i, /Tatu Toiviainen/i, /IInspiration/i, /IIconics/i, /cargil/i, /cargirl/i, /cargril/i, /gargril/i, /gargirl/i, /garcirl/i, /watanabe/i, 
-	/barlow/i, /Nikki/i, /Saya Kamitani/i, /Kamitani/i, /Katie/i, /Nikkita/i, /Nikkita Lyons/i, /Lisa Marie/i, /Lisa Marie Varon/i, /Lisa Varon/i, /Marie Varon/i, /Takaichi/i, /Sakurai/i, /Arrivederci/i, /Alice/i,
-	/Alicy/i, /Alici/i, /Arisu Endo/i, /Crowley/i, /Ruby Soho/i, /Monica/i, /Castillo/i, /Matsumoto/i, /Shino Suzuki/i, /AIblow/i, /5uck/i, /Suckin/i, /Sucks/i, /Sucki/i, /Sucky/i, /AIsuck/i, /AI-suck/i, /drool/i, 
-	/RemovingAI/i, /blowjob/i, /bjob/i, /b-job/i, /bj0b/i, /bl0w/i, /blowj0b/i, /dr0ol/i, /dro0l/i, /dr00l/i, /Rhea Ripley/i, /Roxanne/i, /Lauren/i, /Suvi Anniina/i, /Saara Autio/i, /Liv Morgan/i, /Alexa Bliss/i, 
-	/Marie/i, /Juliette/i, /Artificial/i, /Artificial Intelligence/i, /Powered by AI/i, /AI made/i, /AI creation/i, /IYO SKY/i, /AI creative/i, /AI created/i, /Tekoäly/i, /Teko äly/i, /Teko-äly/i, /Teko_äly/i, 
-	/gener/i, /generoiva/i, /generoitu/i, /generated/i, /generative/i, /AI create/i, /generation/i, /seksi/i, /anaali/i, /pillu/i, /pimppi/i, /kyrpä/i, /kulli/i, /sexual/i, /sensuel/i, /seksuaali/i, /Kairi's/i, 
-	/Kairii/i, /Sexxy/i, /Sexy/i, /Sexx/i, /Sexi/i, /Monroe/i, /Girlfriend/i, /Girl's/i, /Women's/i, /Woman's/i, /Lady's/i, /Ladies'/i, /Toni Harsunen/i, /Wikman/i,
-
-
-    // Boundaried regexes (b like a bitch)
-    	/\bSol\b/i, /\bShe\b/i, /\bHer\b/i, /\bHer's\b/i, /\bShe's\b/i, /\bRiho\b/i, /\bCum\b/i, /\bSlut\b/i, /\bTor\b/i, /\bIzzi\b/i, /\bDame\b/i, /\bNox\b/i, /\bLiv\b/i, /\bAlexa\b/i, /\bTay\b/i, /\bMelo\b/i,
-    	/\bConti\b/i, /\bPaige\b/i, /\bShotzi\b/i, /\bTiffy\b/i, /\bStratton\b/i, /\bAEW\b/i, /\bBy AI\b/i, /\bAis\b/i, /\bIvory\b/i, /\bposing\b/i, /\bSasha\b/i, /\bAnal\b/i, /\bBliss\b/i, /\bKara\b/i, /\bGay\b/i, 
-	/\bTransvestite\b/i, /\bTransu\b/i, /\bPride\b/i, /\bLesbian\b/i, /\bLesbo\b/i, /\bHomo\b/i, /\bQueer\b/i, /\bSable\b/i, /\bBella\b/i, /\bNikki\b/i, /\bTegan\b/i, /\bGoddess\b/i, /\bLita\b/i, /\bRusso\b/i, 
-	/\bLGBT\b/i, /\bLGBTQ\b/i, /\bMami\b/i, /\bTrish\b/i, /\bStratus\b/i, /\bGiulia\b/i, /\bMichin\b/i, /\bJayne\b/i, /\bLLM\b/i, /\bMLM\b/i, /\bG1na\b/i, /\bGlna\b/i, /\bG!na\b/i, /\bODB\b/i, /\bChyna\b/i, 
-	/\bSaraya\b/i, /\bBrooke\b/i, /\bCora\b/i, /\bGin4\b/i, /\bG1n4\b/i, /\bTamina\b/i, /\bTessa\b/i, /\bRuca\b/i, /\bRuby\b/i, /\bSoho\b/i, /\bTrans\b/i, /\bposed\b/i, /\bLayla\b/i, /\bLana\b/i, /\bJacy\b/i, 
-	/\bBrie\b/i, /\bYung\b/i, /\bHavok\b/i, /\bJade\b/i, /\bAthena\b/i, /\bFuku\b/i, /\bGina\b/i, /\bSex\b/i, /\bAI\b/i, /\bKairi\b/i, /\bKiana\b/i, /\bGirl\b/i, /\bGirls\b/i, /\bWoman\b/i, /\bWomen\b/i, 
-	/\bWomens\b/i, /\bWomans\b/i, /\bLady\b/i, /\bLadies\b/i, /\bLadys\b/i,
-    ];
-
-    const allowedWords = [
-    //String based allowed words (There's no term "advertisement" in here!!!)
-	"Lähetä", "Viesti", "Lähetä viesti", "Send a message", "Send message", "Send", "message", "Battlefield", "BF", "BF6", "BF1", "BF4", "BF 1942", "BF2", "Battle field", "memes", "masterrace", "#itsevarmuus",
-	"#memes", "meme", "#meme", "Pearl", "Harbor", "Market", "Bro", "Brother", "Metallica", "Sabaton", "Joakim", "James", "Hetfield", "PC", "Build", "Memory", "Ram", "Motherboard", "Mobo", "Cooling", "pcmaster",
-	"AIO", "CPU", "GPU", "Radeon", "GeForce", "GTX", "RTX", "50", "60", "70", "80", "90", "X3D", "50TI", "60TI", "70TI", "80TI", "90TI", "Processor", "Graphics", "Card", "Intel", "AMD", "NVidia", "RGB", "cooler",
-	"#healing", "#heal", "#itsetunto", "😂", "🤣", "😭", "Lisa Su", "Jensen Huang", "Chip", "Android", "Huawei", "Tech", "Patch", "MSI", "Asus", "ROG", "Strix", "TUF", "Suprim", "Gaming", "OSRS", "RS3", "Jagex", 
-	"Old School", "RuneScape",  "Sea Shanty 2", "Sailor's Dream", "Sailing", "Skilling", "Bossing", "Boss", "Mod Ash", "JMod", "Reddit", "Core", "Cores", "3DVCache", "VCache", "Inno3D", "Inno 3D", "Sapphire", "XFX",
-	"Nitro", "Pure", "Asus Prime", "X570", "B550", "B650", "B650E", "X670", "X670E", "B850", "X870", "X870E", "B450", "X470", "B350", "X370", "LGA", "1150", "1151", "1155", "AM4", "AM5", "AM6", "Corsair", "Kingston",
-	"PowerColor", "DDR5", "DDR4", "DDR3", "Computing", "Computer", "AData", "AM3", "AM3+", "AM2", "GSkill", "Memory", "Ram", "Turbo", "Overclock", "Overclocked", "Air cooling", "Radiator", "Pump", "Header", "Water", 
-	"GTA", "Grand Theft Auto", "PlayStation", "PS1", "PS2", "PS3", "PS4", "PS5", "Xbox", "Series", "Pro", "Console", "Sega", "MegaDrive", "Genesis", "Nintendo", "Upgrade", "Room", "Setup", "Christmas", "Wordables",
-	"Wordable", "lifelearnedfeelings", "feel", "feelings", "feeling", "pcmasterrace_official", "pcmasterrace", "pc masterrace", "pc master race", "gaming", "game", "gamer", "Tarina", "Tarinat", "Story", "Stories",
-	"Vice City", "Liberty City", "San Andreas", "North Yankton", "Yankton", "Rockstar", "North", "South", "West", "East", "Johanna", "Jojo", "Lääkäri", "Lääke", "Lääkis", "Koulu", "Oppilaitos", "Sairaanhoitaja",
-	"Tohtori", "Professori", "Yliopisto", "Perho", "Perhon", "Perhonjokilaakso", "Jokilaakso", "Talouskauppa", "Ikiliikku", "KPO", "S-Market", "K-Market", "Tikkari", "Valkeinen", "OP", "Osuuspankki", "Pankki",
-	"Sairaus", "Sairas", "Sairastaa", "Sairastu", "Sairastuin", "Sairastuimme", "Korona", "Koronavirus", "Covid-19", "SARS-COV", "SARS-COV2", "Koronatesti", "Koronatestit", "Testi", "Testata", "Testissä", "Testit",
-	"Veikonkone", "Euromarket", "Taloustalo", "Kipakka", "Rautakauppa", "Kauppa", "Google", "Naamakirja", "Veispuuk", "Veispuukki", "naama kirja", "Lärvikirja", "Lärvi kirja",
-     ]; 
-
-    const restrictedWordsLower = restrictedWords.map(w => w.toLowerCase());
-    const allowedWordsLower = allowedWords.map(w => w.toLowerCase());
-
-    // --- NEW: DYNAMIC WRESTLER BANS FROM WRESTLING.JS ---
-    function applyDynamicWrestlerBans() {
-        if (typeof chrome !== 'undefined' && chrome.storage) {
-            try {
-                chrome.storage.local.get(['wrestling_women_urls'], function(result) {
-                    if (result.wrestling_women_urls && Array.isArray(result.wrestling_women_urls)) {
-                        let addedCount = 0;
-                        
-                        // === IRONCLAD SHIELD ===
-                        // Prevents specific names fetched from SmackDown Hotel from being turned into global FB bans
-                        const localExclusions = ['melina', 'melina-perez', 'aj-lee', 'aj', 'becky-lynch', 'becky', 'jojo'];
-
-                        result.wrestling_women_urls.forEach(url => {
-                            const parts = url.split('/').filter(Boolean);
-                            const slug = parts[parts.length - 1].toLowerCase();
-                            
-                            // Skip if the slug matches our exclusions
-                            if (localExclusions.includes(slug)) return;
-
-                            const name = slug.replace(/-/g, ' ');
-                            
-                            // Escape special characters for regex just in case
-                            const namePattern = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                            
-                            // Prevent duplicates in regexBlockedWords
-                            const isDuplicate = regexBlockedWords.some(rx => rx.source && rx.source.includes(namePattern));
-
-                            if (!isDuplicate) {
-                                if (name.length <= 6 || !name.includes(' ')) {
-                                    // Short or single name: bind to word boundaries to prevent false positives
-                                    regexBlockedWords.push(new RegExp('\\b' + namePattern + '\\b', 'i'));
-                                } else {
-                                    // Longer name: regular string match is safe
-                                    regexBlockedWords.push(new RegExp(namePattern, 'i'));
-                                }
-                                addedCount++;
-                            }
-                        });
-                        if (addedCount > 0) {
-                            devLog(`Dynamically added ${addedCount} wrestler names from shared storage to blocklist.`);
-                            // Instantly force a re-run of filters now that new words are loaded!
-                            runAllFilters(); 
-                        }
-                    }
-                });
-            } catch(e) {}
-        }
-    }
-    // Execute immediately upon initialization
-    applyDynamicWrestlerBans();
-
-    let approvedFBPostIDs = new Set();
-    const hiddenElements = new WeakSet();
-
-    try {
-        const storedApprovals = localStorage.getItem('fb_sanity_approved_posts');
-        if (storedApprovals) approvedFBPostIDs = new Set(JSON.parse(storedApprovals));
-    } catch(e) { devLog('Error loading approved posts from local storage'); }
-
-    // --- NEW BULK APPROVAL SAVING ---
-    const saveApprovedPostIDs = (postIDs) => {
-        if (!postIDs || postIDs.length === 0) return;
-        let added = false;
-        postIDs.forEach(id => {
-            if (!approvedFBPostIDs.has(id)) {
-                approvedFBPostIDs.add(id);
-                added = true;
-            }
-        });
-        if (!added) return;
-        try {
-            if (approvedFBPostIDs.size > 2000) {
-                const arr = Array.from(approvedFBPostIDs).slice(-2000);
-                approvedFBPostIDs = new Set(arr);
-            }
-            localStorage.setItem('fb_sanity_approved_posts', JSON.stringify(Array.from(approvedFBPostIDs)));
-        } catch(e) {}
-    };
-
-    // --- ENHANCED ID EXTRACTION ---
-    // Catches posts, permalinks, videos, groups, photos, fbid, story_fbid, multi_permalinks, v=...
-    const extractPostIdFromUrl = (href) => {
-        try {
-            if (!href) return null;
-            const value = String(href);
-            const match =
-                          value.match(/\/groups\/[^/]+\/(?:posts|permalink)\/([a-zA-Z0-9_]+)/i) ||
-                          value.match(/\/(?:posts|permalink|videos|reels?)\/?([a-zA-Z0-9_]+)/i) ||
-                          value.match(/\/share\/(?:p|r|v)\/([a-zA-Z0-9_]+)/i) ||
-                          value.match(/(?:story_fbid|fbid|multi_permalinks|v)=([a-zA-Z0-9_]+)/i) ||
-                          value.match(/\/photos\/(?:a\.[0-9]+\/)?([0-9]+)/i);
-            return (match && match[1] && match[1].length > 5) ? match[1] : null;
-        } catch (e) { return null; }
-    };
-
-    // --- NEW GLOBAL APPROVED POST CHECKER ---
-    const isCurrentPostApproved = () => {
-        try {
-            const currentURL = window.location.href;
-            const currentID = extractPostIdFromUrl(currentURL);
-            if (currentID && approvedFBPostIDs.has(currentID)) return true;
-            
-            // Fallback: Check if ANY ID extracted from the URL matches (sometimes URLs have multiple parameters)
-            const allMatches = [...currentURL.matchAll(/(?:story_fbid|fbid|multi_permalinks|v)=([a-zA-Z0-9_]+)/g)];
-            for (const m of allMatches) {
-                if (m[1] && approvedFBPostIDs.has(m[1])) return true;
-            }
-        } catch(e) {}
-        return false;
-    };
-
-    // --- EXTRACT ALL IDs FROM A POST ---
-    const getFBPostIDs = (node) => {
-        const ids = new Set();
-        try {
-            // Find all potential links inside the post that might contain an ID (timestamp, photos, videos)
-            const links = Array.from(node.querySelectorAll('a[role="link"], a[href*="/posts/"], a[href*="/permalink/"], a[href*="fbid="], a[href*="/photo/"]'));
-            for (let i = 0; i < links.length; i++) {
-                const href = links[i].getAttribute('href') || '';
-                if (href === '#' || href.includes('comment_id')) continue;
-                const extractedId = extractPostIdFromUrl(href);
-                if (extractedId) ids.add(extractedId);
-            }
-            
-            // Fallback for single-post views where the ID is purely in the main URL
-            if (window.location.pathname.includes('/posts/') || window.location.pathname.includes('/permalink.php') || window.location.search.includes('fbid=')) {
-                const urlId = extractPostIdFromUrl(window.location.href);
-                if (urlId) ids.add(urlId);
-            }
-        } catch {}
-        return Array.from(ids);
-    };
-
-    const extractTextFromPostSafely = (article) => {
-        let texts = [];
-        const authorEl = article.querySelector('h3, h4, a[role="link"] strong, a[role="link"] span');
-        if (authorEl && !isInsideComment(authorEl)) texts.push(authorEl.textContent.trim());
-
-        const messageEl = article.querySelector('[data-ad-comet-preview="message"], [data-ad-preview="message"]');
-        if (messageEl && !isInsideComment(messageEl)) {
-            texts.push(messageEl.textContent.trim());
-        } else {
-            // Reverted to match the stable facebookOld.js logic to prevent query limit issues
-            Array.from(article.querySelectorAll('span[dir="auto"], div[dir="auto"], span.html-span, div.html-div, span.x1vvkbs'))
-                .filter(s => !isInsideComment(s)) 
-                .slice(0, 40)
-                .forEach(s => texts.push(s.textContent.trim()));
-        }
-        return texts.join(' ');
-    };
-
-    const eliminateSuggestedGroups = () => {
-        document.querySelectorAll('[aria-label="Ryhmän ehdotuksien lisävalinnat"], [aria-label="Suggested groups"], [aria-label="Group suggestions"], [aria-label="Ehdotettu sinulle"], [aria-label="Suggested for you"], [aria-label="Recommended for you"], [aria-label="Sinulle ehdotettua"], [aria-label="Sinulle ehdotettu"]').forEach(btn => {
-            if (isSafeElement(btn)) return; 
-            const feedUnit = getOwningFeedPost(btn);
-            if (feedUnit && !isDangerousToHide(feedUnit)) hardBanFeedPost(feedUnit);
-        });
-
-        document.querySelectorAll('span[dir="auto"], span[dir="ltr"], span.html-span, div.html-div, [data-fb-words-text]').forEach(span => {
-            if (isSafeElement(span)) return; 
-            const text = span.textContent ? normalizeSuggestedHeaderText(span.textContent) : '';
-            if (text === 'ehdotetut ryhmät' || text === 'suggested groups' || text === 'ryhmäehdotukset' || elementLooksLikeSuggestedForYouHeader(span)) {
-                const feedUnit = getOwningFeedPost(span);
-                if (feedUnit && !isDangerousToHide(feedUnit)) hardBanFeedPost(feedUnit);
-            }
-        });
-
-        banSuggestedForYouFeedPosts(document);
-    };
-
-    const haukkisOnlyBlockedFbids = [
+    const isolatedFbids = [
         '1211026318928667',
         '537550366276269',
         '623119941052644',
@@ -1451,7 +694,8 @@ if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
 	'100042472892807',
     ];
 
-    const blockedFbids = __fbHaukkisStrictModeEnabled ? haukkisOnlyBlockedFbids : [];
+    let blockedFbids = [];
+
 
     const blockedUrls = [
         /profile\.php\?id=100000639309471&sk=photos/,
@@ -1573,19 +817,14 @@ if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
 	/permalink.php?story_fbid=pfbid02aC6zYmULJUrbWKVB8MuP2c23ThvKkpR8AhktLykJCdGeas6TA3S8Sgd7sVAWHBByl/,
 	/pfbid02aC6zYmULJUrbWKVB8MuP2c23ThvKkpR8AhktLykJCdGeas6TA3S8Sgd7sVAWHBByl/,
         /ask\.fm/,
-        /ask\.fm\/irpp4/,
         /blogspot\.com/,
         /blogspot\.fi/,
-        /irpp4\.blogspot\.com/,
-        /irpp4\.blogspot\.fi/,
         /kick\.com/,
         /horizonmw\.org/,
         /github\.com/,
-        /irpppas\.blogspot\.com/,
-        /irpppas\.blogspot\.fi/,
+	/livmorgan/i, 
+	/wweadmire/i,
         /www\.facebook\.com\/Haukkis\/friends_with_upcoming_birthdays/,
-        /www\.facebook\.com\/toni\.harsunen\.1/,
-        /www\.facebook\.com\/minna\.kaipio\.5/,
         /www\.tiktok\.com/,
         /sportskeeda\.com\/*/,
         /sportskeeda\.com\/*/,
@@ -1593,480 +832,348 @@ if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
         /wwfoldschool\.com\/*/,
         /wwfoldschool\.com/,
         /meta\.ai/i,
-        /github\.com\/best-deepnude-ai-apps/i,
-        /github\.com\/AI-Reviewed\/tools\/blob\/main\/Nude%20AI%20:%205%20Best%20AI%20Nude%20Generators%20-%20AIReviewed\.md/i,
-        /github\.com\/nudify-ai/i,
-        /github\.com\/BrowserWorks/i,
-        /github\.com\/comfyanonymous/i,
-        /github\.com\/Top-AI-Apps/i,
-        /github\.com\/Anthropic/i,
-        /github\.com\/HorizonMW\/HorizonMW-Client/i,
-        /github\.com\/HorizonMW\/[^\/]+/i,
-        /github\.com\/Top-AI-Apps\/Review\/blob\/main\/Top%205%20DeepNude%20AI%3A%20Free%20%26%20Paid%20Apps%20for%20Jan%202025%20-%20topai\.md/i,
         /chromewebstore\.google\.com\/detail\/tor-selain\/eaoamcgoidmhaficdbmcbamiedeklfol/i,
-        /www\.opera\.com/i,
-        /www\.apple\.com/i,
-        /microsoft\.com\/en-us\/edge\//i,
-        /microsoft\.com\/fi-fi\/edge\//i,
-        /brave\.com/i,
-        /aitoolfor\.org/i,
-        /aitoolfor\./i,
-        /aitool4\./i,
-        /aitool4u\./i,
-        /aitool\./i,
-        /remove\.bg/i,
-        /folio\.procreate\./i,
-        /procreate\./i,
-        /folio\.procreate\.com\/deepnude-ai/i,
-        /support\.microsoft\.com\/fi-fi\/microsoft-edge/i,
-        /apps\.microsoft\.com\/detail\/xpdbz4mprknn30/i,
-        /apps\.microsoft\.com\/detail\/xp8cf6s8g2d5t6/i,
-        /apps\.microsoft\.com\/detail\/xpfftq037jwmhs/i,
-        /apps\.microsoft\.com\/detail\/9nzvdkpmr9rd/i,
-        /apps\.microsoft\.com\/detail\/9nrtvfllggtv/i,
-        /researchgate\.net/i,
-        /thefacemerge\.net/i,
-        /faceplusplus\.net/i,
-        /microsoft\.com\/fi-fi\/edge/i,
-        /google\.com\/intl\/fi_fi\/chrome\//i,
-        /play\.google\.com\/store\/apps\/details\?id=com\.microsoft\.emmx/i,
-        /apps\.apple\.com\/us\/app\/microsoft-edge-ai-browser\/id1288723196/i,
+        /opera\./i,
+        /huggingface\./i,
+        /hugging-face\./i,
+        /tenor\./i,
+        /tenor\.com/i,
         /torproject\.org/i,
         /tor\.app/i,
         /mozilla\.org/i,
         /mozilla\.fi/i,
-        /tiktok\.com/i,
-        /browser\./i,
-        /porn\./i,
-        /.\porn/i,
-        /tiktok\./i,
-        /download\.fi/i,
-        /evercast\.us/i,
-        /avclabs\.com/i,
-        /wondershare\.com/i,
-        /wondershare\.net/i,
-        /wondershare\.ai/i,
-        /risingmax\.com/i,
-        /gizmodo\.com/i,
-        /comfy\.org/i,
-        /runcomfy\.com/i,
-        /picsart\.com/i,
-        /capcut\.com/i,
-        /canva\.com/i,
-        /gitlab\.com/i,
-        /github.com/i,
-        /topazlabs\.com/i,
-        /online\.visual-paradigm\.com/i,
-        /skylum\.com/i,
-        /stable-diffusion-art\.com/i,
-        /comfyui\.org/i,
-        /thinkdiffusion\.com/i,
-        /comfyuiweb\.com/i,
-        /horizonmw\.org/i,
-        /pinterest\.com/i,
-        /irc-galleria\.fi/i,
-        /irc-galleria\./i,
-        /lite\.irc-galleria\./i,
-        /irc-galleria\.fi/i,
-        /irc\.fi/i,
-	/commentpicker\.com/i,
-        /smallseotools\.com/i,
-        /ai-apps-directory\/tools\/blob\/main\/Top%209%20Deepnude%20AI%20Apps%20In%202025%3A%20Ethical%20Alternatives%20%26%20Cutting-Edge%20Tools\.md/i,
-        /aitoolfor\.org\/tools\/deepnude-ai/i,
-        /eeebuntu\.org\/apk\/deepnude-latest-version/i,
-        /aitoolfor\.org\/tools\/undress-ai-app-deepnude-nudify-free-undress-ai/i,
-        /merlio\.app\/blog\/free-deepnude-ai-alternatives/i,
-        /gitlab\.com\/ai-image-and-text-processing\/DeepNude-an-Image-to-Image-technology/i,
-        /aitoptools\.com\/tool\/deepnude-by-deepany-ai/i,
-        /gitee\.com\/cwq126\/open-deepnude/i,
-        /gitlab\.com\/ai-image-and-text-processing\/DeepNude-an-Image-to-Image-technology\/-\/tree\/master\/DeepNude_software_itself/i,
-        /facetuneapp\.com\/\?srd=[\w-]+/i,
-        /facetuneapp\.com\/$/i,
-        /facetune\./i,
-        /facetuneapp\./i,
-        /play\.google\.com\/store\/apps\/details\?id=com\.lightricks\.facetune\.free/i,
-        /apps\.apple\.com\/us\/app\/facetune-video-photo-editor\/id1149994032/i,
-        /lunapic\.com/i,
-        /tenor\./i,
-        /tenor\.com/i,
-        /azure\./i,
-        /vidu\./i,
-        /vidyu\./i,
-        /viduy\./i,
-        /videy\./i,
-        /vidio\./i,
-        /vsco\./i,
-        /pixelixe\.com/i,
-        /picresize\.com/i,
-        /replicate\.ai/i,
-        /kuvake\.net/i,
-        /reddit\.com\/r\/comfyui\/?/i,
-        /reddit\.com\/r\/stablediffusion\/?/i,
-        /facebook\.com\/tatu\.toiviainen\//i,
-        /viewverio\.com/i,
-        /irc\.fi/i,
-        /kelleyhoaglandphotography\.com/i,
-        /nude\./i,
-        /naked\./i,
-        /photopea\./i,
-        /123rf\./i,
-        /virtualbox\./i,
-        /oracle\./i,
-        /play.google./i,
-        /formulae\./i,
-        /rem\./i,
-        /remove\./i,
-        /remover\./i,
-        /removing\./i,
-        /arxiv\./i,
-        /osboxes\./i,
-        /vmware\./i,
-        /face25\./i,
-        /face26\./i,
-        /anthropic\./i,
-        /writecream\./i,
-        /waterfox\./i,
-        /pixelmator\./i,
-        /flexclip\./i,
-        /uptodown\./i,
-        /perfectcorp\./i,
-        /idphotodiy\./i,
-        /imagetools\./i,
-        /image-tools\./i,
-        /img-tools\./i,
-        /imgtools\./i,
-        /pictools\./i,
-        /pic-tools\./i,
-        /grok\./i,
-        /grokai\./i,
-        /grok-ai\./i,
-        /yahoo\./i,
-        /pict-tools\./i,
-        /picttools\./i,
-        /phototools\./i,
-        /photools\./i,
-        /photo-tools\./i,
-        /picture-tools\./i,
-        /picturetools\./i,
-        /workintool\./i,
-        /sports\.yahoo\./i,
-        /workintools\./i,
-        /workin-tool\./i,
-        /workin-tools\./i,
-        /workingtool\./i,
-        /workingtools\./i,
-        /working-tool\./i,
-        /working-tools\./i,
-        /videoaihug\./i,
-        /aihugvideo\./i,
-        /fotor\./i,
-        /imyfone\./i,
-        /aihug\./i,
-        /hugai\./i,
-        /ai-hug\./i,
-        /hug-ai\./i,
-        /aihugging\./i,
-        /huggingai\./i,
-        /ai-hugging\./i,
-        /hugging-ai\./i,
-        /ai-videogenerator\./i,
-        /aivideogenerator\./i,
-        /videogeneratorai\./i,
-        /videogenerator-ai\./i,
-        /any-video\./i,
-        /anyvideo\./i,
-        /any-video-convert\./i,
-        /anyvideoconvert\./i,
-        /any-videoconvert\./i,
-        /anyvideo-convert\./i,
-        /any-video-converter\./i,
-        /anyvideoconverter\./i,
-        /any-videoconverter\./i,
-        /anyvideo-converter\./i,
-        /ai‑directories\./i,
-        /aidirectories\./i,
-        /ai‑directory\./i,
-        /aidirectory\./i,
-        /ai‑directorys\./i,
-        /aidirectorys\./i,
-        /aitoolsdirectory\./i,
-        /aitoolsdirectory\./i,
-        /aidirectory\./i, 
-        /onlineaidirectory\./i, 
-        /aidirectoryonline\./i, 
-        /online-aidirectory\./i, 
-        /aidirectory-online\./i, 
-        /onlineaidirectorys\./i, 
-        /aidirectorysonline\./i, 
-        /online-aidirectorys\./i, 
-        /aidirectorys-online\./i, 
-        /ai-directory\./i,
-        /assistingintelligence\./i,
-        /assisting-intelligence\./i,
-        /intelligenceassisting\./i,
-        /intelligence-assisting\./i,
-        /assistintelligence\./i,
-        /assist-intelligence\./i,
-        /intelligenceassist\./i,
-        /intelligence-assist\./i,
-        /aidirectorylist\./i,
-        /aiagentsdirectory\./i,
-        /aiagentsdirectory\./i,
-        /aiphoto\./i,
-        /ai-photo\./i,
-        /photoai\./i,
-        /photo-ai\./i,
-        /aiphotohq\./i,
-        /ai-photohq\./i,
-        /aiphoto-hq\./i,
-        /ai-photo-hq\./i,
-        /axis-intelligence\.com/i,
-        /letsview\.com/i,
-        /trendhunter\./i,
-        /trendhunt\./i,
-        /trend-hunter\./i,
-        /trend-hunt\./i,
-        /dev\./i,
-        /feishu\.cn/i,
-        /n8ked\./i,
-        /imgur\.com.*nude/i,
-        /imgur\.com.*deepn/i,
-        /AlexaBliss/i,
-        /DuaLipa/i,
-        /Dua_Lipa/i,
-        /threads\./i,
-        /instagram\./i,
-        /justaistuff\./i,
-        /aistuff\./i,
-        /claude\./i,
-        /browsing\./i,
-        /browsing\./i,
-        /-browser\./i,
-        /-browsing\./i,
-        /a1art\./i,
-        /bangbros/i,
-        /sportskeeda\.com/i,
-        /deviantart\.com/i,
-        /deepnude\./i,
-        /deepany\./i,
-        /deep-any\./i,
-        /nudify\./i,
-        /venice\./i,
-        /venica\./i,
-        /vanica\./i,
-        /vanice\./i,
-        /edit\./i,
-        /-edit\./i,
-        /editor\./i,
-        /-editor\./i,
-        /editing\./i,
-        /-editing\./i,
-        /upscale\./i,
-        /-upscale\./i,
-        /upscaling\./i,
-        /-upscaling\./i,
-        /uncensor\./i,
-        /uncensoring\./i,
-        /uncensored\./i,
-        /softorbits\./i,
-        /softorbit\./i,
-        /soft-orbits\./i,
-        /soft-orbit\./i,
-        /nightcafe\./i,
-        /kuvake\./i,
-        /ai-\./i,
-        /-ai\./i,
-        /ai\./i,
-        /neural\./i,
-        /nudifyer\./i,
-        /nudifying\./i,
-        /nudifier\./i,
-        /theresanaiforthat\./i,
-        /fixthephoto\./i,
-        /fixthatphoto\./i,
-        /fixthisphoto\./i,
-        /nudifyonline\./i,
-        /nudify-online\./i,
-        /nudifyingonline\./i,
-        /nudifying-online\./i,
-        /onlinenudify\./i,
-        /onlinenudifying\./i,
-        /onlinenudifyier\./i,
-        /onlinenudifier\./i,
-        /online-nudify\./i,
-        /online-nudifying\./i,
-        /online-nudifyier\./i,
-        /online-nudifier\./i,
-        /stablediffusionapi\./i,
-        /stablediffusion\./i,
-        /stable-diffusion\./i,
-        /stable-diffusionapi\./i,
-        /stablediffusion-api\./i,
-        /stable-diffusion-api\./i,
-        /stablediffusionapi\./i,
-        /huggingface\./i,
-        /hugging-face\./i,
-        /huntscreen\./i,
-        /huntscreens\./i,
-        /hunt-screen\./i,
-        /hunt-screens\./i,
-        /screenhunt\./i,
-        /screenshunt\./i,
-        /screen-hunt\./i,
-        /screens-hunt\./i,
-        /trendingaitool\./i,
-        /trendingaitools\./i,
-        /toolsfine\./i,
-        /toolfine\./i,
-        /tools-fine\./i,
-        /tool-fine\./i,
-        /finetools\./i,
-        /finetool\./i,
-        /fine-tools\./i,
-        /fine-tool\./i,
-        /HeyGen\./i,
-        /GenHey\./i,
-        /Hey-Gen\./i,
-        /Gen-Hey\./i,
-        /apkpure\./i,
-        /apk-pure\./i,
-        /alucare\./i,
-        /scribd\./i,
-        /alu-care\./i,
-        /noxilo\./i,
-        /aichef\./i,
-        /ai-chef\./i,
-        /chefai\./i,
-        /chef-ai\./i,
-        /aichief\./i,
-        /ai-chief\./i,
-        /chiefai\./i,
-        /chief-ai\./i,
-        /noxillo\./i,
-        /vadoo\./i,
-        /vidnoz\./i,
-        /theresanaiforthat\./i,
-        /futuretools\./i,
-        /future-tools\./i,
-        /futurepedia\./i,
-        /future-pedia\./i,
-        /aitooldirectory\./i,
-        /aitoolsforme\./i,
-        /aixploria\./i,  
-        /topai\./i, 
-        /top-ai\./i,
-        /aitop\./i, 
-        /ai-top\./i,
-        /toolify\./i,  
-        /allaitool\./i,  
-        /toolsaiapp\./i,  
-        /aitoolhunt\./i,  
-        /openfuture\./i,  
-        /seofai\./i,   
-        /alltheaitools\./i,  
-        /aitools\./i,   
-        /aitoptools\./i,  
-        /allthingsai\./i,  
-        /aidir\./i, 
-        /wegocup\./i,
-        /modcombo\./i,
-        /monica\./i,
-        /aimonica\./i,
-        /ai-monica\./i,
-        /monicaai\./i,
-        /monica-ai\./i,
-        /monicai\./i,
-        /monic-ai\./i,
-        /clothoff\./i,
-        /cloth-off\./i,
-        /offcloth\./i,
-        /off-cloth\./i,
-        /clothyoff\./i,
-        /clothy-off\./i,
-        /offclothy\./i,
-        /off-clothy\./i,
-        /clothesoff\./i,
-        /clothes-off\./i,
-        /offclothes\./i,
-        /off-clothes\./i,
         /cloudbooklet\./i,
         /cyberlink\./i,
         /undressapp\./i,
         /undress-app\./i,
-        /appundress\./i,
-        /app-undress\./i,
-        /reddit\.com\/r\/MachineLearning/i,
-        /reddit\.com\/r\/Grok/i,
-        /solo\./i,
-        /robeoff\./i,
-        /offrobe\./i,
-        /robe-off\./i,
-        /off-robe\./i,
-        /sendfame\./i,
-        /send-fame\./i,
-        /sendingfame\./i,
-        /sending-fame\./i,
-        /sendsfame\./i,
-        /sends-fame\./i,
-        /sentfame\./i,
-        /sent-fame\./i,
-        /famesend\./i,
-        /fame-send\./i,
-        /famesending\./i,
-        /fame-sending\./i,
-        /famesends\./i,
-        /fame-sends\./i,
-        /famesent\./i,
-        /fame-sent\./i,
-        /headgenai\./i,
-        /headgen-ai\./i,
-        /head-genai\./i,
-        /head-gen-ai\./i,
-        /whatisthebigdata\./i,
-        /whatsthebigdata\./i,
-        /mangoanimate\./i,
-        /mangoai\./i,
-        /mango-animate\./i,
-        /mango-anim\./i,
-        /lantaai\./i,
-        /lantai\./i,
-        /lanta-ai\./i,
-        /mango-anims\./i,
-        /coinmarketcap\./i,
-        /imageresizer\./i,
-        /image-resizer\./i,
-        /imageresize\./i,
-        /image-resize\./i,
-        /photoresizer\./i,
-        /photo-resizer\./i,
-        /photoresize\./i,
-        /photo-resize\./i,
-        /mangoanims\./i,
-        /mango-animated\./i,
-        /mango-animations\./i,
-        /mangoanim\./i,
-        /mangoanimated\./i,
-        /mangoanimations\./i,
-        /mango-ai\./i,
-        /insmind\./i,
-        /dreamshoot\./i,
-        /dreamshootai\./i,
-        /faceswapvideo\./i,
-        /faceswapvid\./i,
-        /faceswapvids\./i,
-        /faceswapvideos\./i,
-        /faceswap-video\./i,
-        /faceswap-vid\./i,
-        /faceswap-vids\./i,
-        /faceswap-videos\./i,
+        /sportskeeda\./i,
+        /wwfoldschool\./i,
+        /www\.opera\.com/i,
+        /www\.apple\.com/i,
+        /microsoft\.com\/en-us\/edge\//i,
+        /microsoft\.com\/fi-fi\/edge\//i,
+        /cloudbooklet\./i,
+        /clothoff\./i,
+        /411mania\.com/i,
+        /cultaholic\./i,
+        /whatculture\./i,
+        /ringsideintel\./i,
+        /wrestlinginc\./i,
+        /thesportster\./i,
+        /cagesideseats\./i,
+        /f4wonline\./i,
+        /www\.\f4wonline\./i,
+        /wwfoldschool\./i,
+        /sportskeeda\./i,
+        /medium\./i,
+        /https:\medium\./i,
+        /medium\.com\/@/i,
+        /awfulannouncing\./i,
+        /pwpix\./i,
+        /pwpix\.net/i,
+        /brave\.com/i,
         /saashub\./i,
         /undress\./i,
+        /nudify\./i,
+        /nudifier\./i,
+        /nudifying\./i,
+        /clothoff\./i,
+        /undress\./i,
+        /un-dress\./i,
+        /undressified\./i,
+        /undressifyed\./i,
+        /undressifying\./i,
+        /undressify\./i,
+        /deepnude\./i,
+        /deep-nude\./i,
         /twitter\.com/i,
         /x\.com/i,
     ];
 
+    const allowedUrls = [
+        /is\.fi/,
+        /youtube\.com/,
+        /www\.youtube\.com/,
+        /www\.facebook\.com/,
+        /iltalehti\.fi/,
+        /ks\.fi/,
+        /.\fi/i,
+        /.\com/i,
+    ];
+
+    const excludedRegexPatterns = [
+        /\/(messages|messenger)\b/i,
+        /\/notifications\b/i,
+        /\/marketplace\b/i,
+        /\/ilmoitukset\b/i,
+        /\/stories\b/i,
+        /\/groups\/(317493608736721|342124472533278|2484497081612438|390555733810362|934038190050109)\b/i,
+        /\/(haukkis|tapio\.haukirauma|1267550854|100005050653554|me)\b/i,
+        /id=(100005050653554|100000559239899|1267550854)\b/i
+    ];
+
+    const safeSelectors = [
+        '[aria-label="Notifications"]',
+        '[aria-label="Marketplace"]',
+        '[aria-label="Ilmoitukset"]',
+        '[aria-label="Messenger"]',
+        '[aria-label="Stories"]',
+        '[aria-label="Tarinat"]',
+        'div[aria-label="Notifications"]',
+        'div[aria-label="Marketplace"]',
+        'div[aria-label="Ilmoitukset"]',
+        'div[aria-label="Messenger"]',
+        'div[aria-label="Stories"]',
+        'div[aria-label="Tarinat"]',
+        'span[aria-label="Notifications"]',
+        'span[aria-label="Marketplace"]',
+        'span[aria-label="Ilmoitukset"]',
+        'span[aria-label="Messenger"]',
+        'span[aria-label="Stories"]',
+        'span[aria-label="Tarinat"]',
+        '[role="dialog"]',
+        '[tabindex="-1"]',
+        '[aria-label="Marketplace"]',
+        'div[role="none"][data-visualcompletion="ignore"]',
+        'div.x6s0dn4.x78zum5.x1s65kcs.x1n2onr6',
+        'div.xdj266r.x11i5rnm.xat24cr',
+        'a[href="/marketplace/?ref=app_tab"]',
+        'svg[viewBox="0 0 24 24"]',
+        'span.xdj266r.x11i5rnm.xat24cr'
+    ];
+
+    // Keyword arrays
+    const isolatedRegex = [
+    //Only available for supported accounts
+	/gareta/i, /\bkati\b/i, /juutilainen/i, /harjula/i, /taisto/i,
+    ];
+
+    const globalRegex = [
+    // Classic Regexes (Might cause Meta to push more AI slop onto us)
+    	/lex bl/i, /AI-/i, /-AI/i, /AI-suck/i, /Ripl/i, /Shira/i, /Steph's place/i, /Stephanie's place/i, /Steph McMahon/i, /Stepan/i, /Stratu/i, /Stratt/i, /Gina Adam/i, /lantaaa/i, /lantaai/i, /Sherilyn/i, /Tiffa/i, 
+	/Tiffy/i, /Dreambooth/i, /Dream booth/i, /Dualipa/i, /Dua Lipa/i, /Meta AI/i, /Tatu Toiviainen/i, /IInspiration/i, /IIconics/i, /cargil/i, /cargirl/i, /cargril/i, /gargril/i, /gargirl/i, /garcirl/i, /watanabe/i, 
+	/barlow/i, /Nikki/i, /Saya Kamitani/i, /Kamitani/i, /Katie/i, /Nikkita/i, /Nikkita Lyons/i, /Lisa Marie/i, /Lisa Marie Varon/i, /Lisa Varon/i, /Marie Varon/i, /Takaichi/i, /Sakurai/i, /Arrivederci/i, /Alice/i,
+	/Alicy/i, /Alici/i, /Arisu Endo/i, /Crowley/i, /Ruby Soho/i, /Monica/i, /Castillo/i, /Matsumoto/i, /Shino Suzuki/i, /AIblow/i, /5uck/i, /Suckin/i, /Sucks/i, /Sucki/i, /Sucky/i, /AIsuck/i, /AI-suck/i, /drool/i, 
+	/RemovingAI/i, /blowjob/i, /bjob/i, /b-job/i, /bj0b/i, /bl0w/i, /blowj0b/i, /dr0ol/i, /dro0l/i, /dr00l/i, /Rhea Ripley/i, /Roxanne/i, /Lauren/i, /Suvi Anniina/i, /Saara Autio/i, /Liv Morgan/i, /Alexa Bliss/i, 
+	/\bMarie\b/i, /Juliette/i, /Artificial/i, /Artificial Intelligence/i, /Powered by AI/i, /AI made/i, /AI creation/i, /IYO SKY/i, /AI creative/i, /AI created/i, /Tekoäly/i, /Teko äly/i, /Teko-äly/i, /Teko_äly/i, 
+	/gener/i, /generoiva/i, /generoitu/i, /generated/i, /generative/i, /AI create/i, /generation/i, /seksi/i, /anaali/i, /pillu/i, /pimppi/i, /kyrpä/i, /kulli/i, /sexual/i, /sensuel/i, /seksuaali/i, /Kairi's/i,
+        /Alexa Bliss/i, /Alexa WWE/i, /5 feet of fury/i, /five feet of fury/i, /Tiffy time/i, /Mercedes/i, /Samantha/i, /La Leona/i, /livmorgan/i, /Mariah May/i, /Mandy Rose/i, /Chelsea Green/i, /liv morgan/i, /sexual/i, 
+        /Sportskeeda/i, /Vince Russo/i, /bShirakawa/i, /Samantha Irvin/i, /Brave Software/i, /Nikkita/i, /All Elite Wrestling/i, /Dynamite/i, /Rampage/i, /AEW Collision/i, /Blackheart/i, /Charlotte/i, /Becky Lynch/i,
+        /Samantha Irwin/i, /Serena Deeb/i, /Mia Yim/i, /AJ Lee/i, /Stephanie/i, /Liv Morgan/i, /Piper Niven/i, /Jordynne Grace/i, /Jordynne/i, /Carr WWE/i, /Iyo Shirai/i, /Izzi Dame/i, /Iyo Sky/i, /Playboy/i, /goddess/i, 
+        /Izzi WWE/i, /Nick Jackson/i, /NXT Womens/i, /NXT Women/i, /NXT Woman/i, /Jackson/i, /DeepSeek/i, /DeepSeek AI/i, /Rhea Ripley/i, /Instagram/i, /Jakara/i, /Lash Legend/i, /Alba Fyre/i, /Isla Dawn/i, /CJ Perry/i, 
+	/Lana WWE/i, /Raquel Rodriguez/i, /Zelina Vega/i, /Alicia Fox/i, /Willow Nightingale/i, /Kris Statlander/i, /Kayden Carter/i, /Katana Chance/i, /Izzi Dame/i, /Dame WWE/i, /Indi Hartwell/i, /Blair Davenport/i, 
+	/Lola Vice/i, /\bValhalla\b/i, /Maxxine Dupri/i, /Karmen Petrovic/i, /Ava Raine/i, /Cora Jade/i, /Jacy Jayne/i, /Gigi Dolin/i, /Io Sky/i, /Shirai/i, /Scarlett/i, /Thea Hail/i, /Tatum Paxley/i, /Dakota Kai/i,
+	/Kelani Jordan/i, /Electra Lopez/i, /Wendy Choo/i, /Yulisa Leon/i, /Valentina/i, /Amari Miller/i, /Young Bucks/i, /Torrie Wilson/i, /Ripley!/i, /Monroe/i, /Arianna Grace/i, /Zelina/i, /Natalya/i, /Sexy/i,
+	/Kairi Sane/i, /Satomura/i, /Candice/i, /Nia Jax/i, /\bNaomi\b/i, /Roxanne/i, /Xia Li/i, /Shayna/i, /Baszler/i, /Rousey/i, /Velvet Sky/i, /Carmella/i, /Dana Brooke/i, /Martinez/i, /Marina/i, /goddess/i, 
+	/Sasha Banks/i, /Valkyria/i, /Kara B/i, /Primera/i, /Summer Rae/i, /Michelle McCool/i, /Eve Torres/i, /Kelly Kelly/i, /Tatu Toiviainen/i, /Jessika Carr/i, /Jessica Karr/i, /Venice/i, /Jessica Carr/i, 
+        /Jessica WWE/i, /Matt Jackson/i, /Karr WWE/i, /Melina wrestler/i, /bKanellis/i, /Beth Phoenix/i, /Kaipio/i, /Victoria/i, /Jazz WWE/i, /Molly Holly/i, /Priscilla/i, /Red Velvet/i, /Meta AI/i, /sasha/i, 
+        /Awesome Kong/i, /Madison Rayne/i, /Angelina/i, /Tessmacher/i, /Su Yung/i, /woman/i, /women/i,  /Taya Valkyrie/i, /Bianca Belair/i, /Skye Blue/i, /Bordeaux/i, /Brooke/i, /Purrazzo/i, /Toni Storm/i, 
+        /Jamie Hayter/i, /Anna Jay/i, /Hikaru/i, /Sakazaki/i, /Nyla Rose/i, /Sakura/i, /Penelope Ford/i, /Julia Hart/i, /Kamifuku/i, /Elayna/i, /Juliette/i, /Juliana/i, /Julianna/i, /Henley/i, /Saya Kamitani/i, 
+        /AJ Lee's/i, /Nikkita Lyons/i, /Lisa Varon/i, /Marie Varon/i, /Irving/i, /Belts Mone/i, /Amanda Huber/i, /Megan Bayne/i, /Wren Sinclair/i, /Bella Twins/i, /Britt Baker/i,  /Kairii/i, /Sexxy/i, /Xia Li/i, 
+	/Sexx/i, /Sexi/i, /Monroe/i, /Girlfriend/i, /Girl's/i, /Women's/i, /Woman's/i, /Lady's/i, /Ladies'/i, /Toni Harsunen/i, /Wikman/i, /Jaida Parker/i, /suositukset/i, /ehdotukset/i, /Kamitani/i, /Gail Kim/i,
+	/Artificial Intelligence/i, /20\. heinäkuu klo/i, /Sisältö ei ole käytettävissä tällä hetkellä/i, /kendal.*(grey|gray)/i, /leila.*(grey|gray)/i, /Jessika WWE/i, /Fallon Henley/i,
+
+    // Boundaried regexes (separated for clarity)
+    	/\bSol\b/i, /\bShe\b/i, /\bHer\b/i, /\bHer's\b/i, /\bShe's\b/i, /\bRiho\b/i, /\bCum\b/i, /\bSlut\b/i, /\bTor\b/i, /\bIzzi\b/i, /\bDame\b/i, /\bNox\b/i, /\bLiv\b/i, /\bAlexa\b/i, /\bTay\b/i, /\bMelo\b/i,
+    	/\bConti\b/i, /\bPaige\b/i, /\bShotzi\b/i, /\bTiffy\b/i, /\bStratton\b/i, /\bAEW\b/i, /\bBy AI\b/i, /\bAis\b/i, /\bIvory\b/i, /\bposing\b/i, /\bSasha\b/i, /\bAnal\b/i, /\bBliss\b/i, /\bKara\b/i, /\bGay\b/i, 
+	/\bTransvestite\b/i, /\bTransu\b/i, /\bPride\b/i, /\bLesbian\b/i, /\bLesbo\b/i, /\bHomo\b/i, /\bQueer\b/i, /\bSable\b/i, /\bBella\b/i, /\bNikki\b/i, /\bTegan\b/i, /\bGoddess\b/i, /\bLita\b/i, /\bRusso\b/i, 
+	/\bLGBT\b/i, /\bLGBTQ\b/i, /\bMami\b/i, /\bTrish\b/i, /\bStratus\b/i, /\bGiulia\b/i, /\bMichin\b/i, /\bJayne\b/i, /\bLLM\b/i, /\bMLM\b/i, /\bG1na\b/i, /\bGlna\b/i, /\bG!na\b/i, /\bODB\b/i, /\bChyna\b/i, 
+	/\bSaraya\b/i, /\bBrooke\b/i, /\bCora\b/i, /\bGin4\b/i, /\bG1n4\b/i, /\bTamina\b/i, /\bTessa\b/i, /\bRuca\b/i, /\bRuby\b/i, /\bSoho\b/i, /\bTrans\b/i, /\bposed\b/i, /\bLayla\b/i, /\bLana\b/i, /\bJacy\b/i, 
+	/\bBrie\b/i, /\bYung\b/i, /\bHavok\b/i, /\bJade\b/i, /\bAthena\b/i, /\bFuku\b/i, /\bGina\b/i, /\bSex\b/i, /\bAI\b/i, /\bKairi\b/i, /\bKiana\b/i, /\bGirl\b/i, /\bGirls\b/i, /\bWoman\b/i, /\bWomen\b/i, 
+	/\bWomens\b/i, /\bWomans\b/i, /\bLady\b/i, /\bLadies\b/i, /\bLadys\b/i, /\bMarie\b/i, /\bKairi\b/i, /\bAsuka\b/i, /\bB-Fab\b/i, /\b#\b/i, /\bTiffany\b/i, /\bStratton\b/i, /\bPerez\b/i, /\bPerze\b/i,
+	/\bHavok\b/i, /\bJillian\b/i, /\bMickie\b/i, /\bFlair\b/i, /\bMeltzer\b/i, /\bLayla\b/i, /\bBlake\b/i, /\bRipley\b/i, /\bKatie\b/i, /\bShafir\b/i, /\bStacy\b/i, /\bKeibler\b/i, /\bMaryse\b/i, /\bTrish\b/i,
+	/\bSarray\b/i, /\bXia\b/i, /\bRonda\b/i, /\bNattie\b/i, /\bBayley\b/i, /\bGiulia\b/i, /\bFallon\b/i, /\bMichin\b/i, /\bStratus\b/i, /\bKelly\b/i, /\bKarr\b/i, /\bFallon\b/i, /\bDeonna\b/i, /\bThekla\b/i, 
+	/\bLeRae\b/i,
+    ];
+
+    let regexBlockedWords = [];
+    const refreshAccountScopedFilters = () => {
+        try {
+            __fbStrictAccountEnabled = isStrictAccountEnabled();
+            blockedFbids = __fbStrictAccountEnabled ? isolatedFbids : [];
+            regexBlockedWords = __fbStrictAccountEnabled ? globalRegex.concat(isolatedRegex) : globalRegex;
+        } catch (e) {
+            __fbStrictAccountEnabled = false;
+            blockedFbids = [];
+            regexBlockedWords = globalRegex;
+        }
+    };
+    refreshAccountScopedFilters();
+
+    // ===== SAFE MATCH HELPERS =====
+    // Keeps the old feed approval behavior alive while using the new regex-only blocklists.
+    const testRegexPattern = (pattern, value) => {
+        try {
+            if (!pattern) return false;
+            pattern.lastIndex = 0;
+            return pattern.test(String(value || ''));
+        } catch (e) {
+            return false;
+        }
+    };
+
+    const matchesAnyActiveRegex = (value) => {
+        const text = String(value || '');
+        if (!text) return false;
+        return regexBlockedWords.some((pattern) => testRegexPattern(pattern, text));
+    };
+
+    const matchesAnyBlockedUrl = (value) => {
+        const text = String(value || '');
+        if (!text) return false;
+        return blockedUrls.some((pattern) => testRegexPattern(pattern, text));
+    };
+
+    const matchesAnyBlockedFbid = (value) => {
+        const text = String(value || '');
+        if (!text) return false;
+        return blockedFbids.some((fbid) => {
+            const id = String(fbid || '').trim();
+            return !!id && (
+                text.includes(id) ||
+                text.includes(`id=${id}`) ||
+                text.includes(`fbid=${id}`) ||
+                text.includes(`profile.php?id=${id}`) ||
+                text.includes(`/messages/t/${id}`)
+            );
+        });
+    };
+
+    const hideElementHard = (element, className = 'fb-element-banned') => {
+        if (!element || !element.style) return;
+        try { element.classList.add(className); } catch (e) {}
+        element.style.setProperty('display', 'none', 'important');
+        element.style.setProperty('visibility', 'hidden', 'important');
+        element.style.setProperty('opacity', '0', 'important');
+        element.style.setProperty('pointer-events', 'none', 'important');
+        element.style.setProperty('position', 'absolute', 'important');
+        element.style.setProperty('left', '-9999px', 'important');
+        element.style.setProperty('top', '-9999px', 'important');
+        element.style.setProperty('height', '0', 'important');
+        element.style.setProperty('width', '0', 'important');
+        element.style.setProperty('overflow', 'hidden', 'important');
+    };
+
+
+    const allowedWords = [
+    //String based allowed words (global)
+	"Lähetä", "Viesti", "Lähetä viesti", "Send a message", "Send message", "Send", "message", "Battlefield", "BF", "BF6", "BF1", "BF4", "BF 1942", "BF2", "Battle field", "memes", "masterrace", "#itsevarmuus",
+	"#memes", "meme", "#meme", "Pearl", "Harbor", "Market", "Bro", "Brother", "Metallica", "Sabaton", "Joakim", "James", "Hetfield", "PC", "Build", "Memory", "Ram", "Motherboard", "Mobo", "Cooling", "pcmaster",
+	"AIO", "CPU", "GPU", "Radeon", "GeForce", "GTX", "RTX", "50", "60", "70", "80", "90", "X3D", "50TI", "60TI", "70TI", "80TI", "90TI", "Processor", "Graphics", "Card", "Intel", "AMD", "NVidia", "RGB", "cooler",
+	"#healing", "#heal", "#itsetunto", "😂", "🤣", "😭", "Lisa Su", "Jensen Huang", "Chip", "Android", "Huawei", "Tech", "Patch", "MSI", "Asus", "ROG", "Strix", "TUF", "Suprim", "Gaming", "OSRS", "RS3", "Jagex", 
+	"Old School", "RuneScape",  "Sea Shanty 2", "Sailor's Dream", "Sailing", "Skilling", "Bossing", "Boss", "Mod Ash", "JMod", "Reddit", "Core", "Cores", "3DVCache", "VCache", "Inno3D", "Inno 3D", "Sapphire", "XFX",
+	"Nitro", "Pure", "Asus Prime", "X570", "B550", "B650", "B650E", "X670", "X670E", "B850", "X870", "X870E", "B450", "X470", "B350", "X370", "LGA", "1150", "1151", "1155", "AM4", "AM5", "AM6", "Corsair", "Kingston",
+	"PowerColor", "DDR5", "DDR4", "DDR3", "Computing", "Computer", "AData", "AM3", "AM3+", "AM2", "GSkill", "Memory", "Ram", "Turbo", "Overclock", "Overclocked", "Air cooling", "Radiator", "Pump", "Header", "Water", 
+	"GTA", "Grand Theft Auto", "PlayStation", "PS1", "PS2", "PS3", "PS4", "PS5", "Xbox", "Series", "Pro", "Console", "Sega", "MegaDrive", "Genesis", "Nintendo", "Upgrade", "Room", "Setup", "Christmas", "Wordables",
+	"Wordable", "lifelearnedfeelings", "feel", "feelings", "feeling", "pcmasterrace_official", "pcmasterrace", "pc masterrace", "pc master race", "gaming", "game", "gamer", "Tarina", "Tarinat", "Story", "Stories",
+	"Vice City", "Liberty City", "San Andreas", "North Yankton", "Yankton", "Rockstar", "North", "South", "West", "East", "Johanna", "Jojo", "Lääkäri", "Lääke", "Lääkis", "Koulu", "Oppilaitos", "Sairaanhoitaja",
+	"Tohtori", "Professori", "Yliopisto", "Perho", "Perhon", "Perhonjokilaakso", "Jokilaakso", "Talouskauppa", "Ikiliikku", "KPO", "S-Market", "K-Market", "Tikkari", "Valkeinen", "OP", "Osuuspankki", "Pankki",
+	"Sairaus", "Sairas", "Sairastaa", "Sairastu", "Sairastuin", "Sairastuimme", "Korona", "Koronavirus", "Covid-19", "SARS-COV", "SARS-COV2", "Koronatesti", "Koronatestit", "Testi", "Testata", "Testissä", "Testit",
+	"Veikonkone", "Euromarket", "Taloustalo", "Kipakka", "Rautakauppa", "Kauppa", "Google", "Naamakirja", "Veispuuk", "Veispuukki", "naama kirja", "Lärvikirja", "Lärvi kirja",
+     ]; 
+
+    const restrictedPhrases = [
+        "Ryhmiä Sinulle", "Liity", "Meta AI", "Ihmisiä,", "Joita saatat tuntea", "Ihmisiä, joita saatat tuntea", "Kun lisäät kavereita, näet tässä listan ihmisistä, jotka saatat tuntea.", "Lisää kavereita saadaksesi suosituksia", "Sisältö ei ole käytettävissä tällä hetkellä", "Sinulle ehdotettua",
+    ].map(s => s.toLowerCase());
+
+    // Function to check if current path is excluded
+    const isExcludedPath = (path) => excludedRegexPatterns.some((pattern) => {
+        try {
+            pattern.lastIndex = 0;
+            return pattern.test(String(path || ''));
+        } catch (e) {
+            return false;
+        }
+    });
     
-const paramsToDelete = ['fbclid', 'mibextid', 'set', 'idorvanity'];
+    // Function to check if element matches any safe selector
+    const isSafeElement = (element) => safeSelectors.some(selector => element.closest(selector));
+    
+    // Function to get regex blocked words (maintain function signature)
+    const getRegexBlockedWords = () => regexBlockedWords;
+
+    // Function to get allowed URLs (maintain function signature)
+    const getAllowedUrls = () => allowedUrls;
+
+    // Function to clean the current URL
+    const cleanUrl = () => {
+        try {
+            devLog('Cleaning URL parameters');
+            const url = new URL(window.location.href);
+            let modified = false;
+            
+            paramsToDelete.forEach(param => {
+                if (url.searchParams.has(param)) {
+                    url.searchParams.delete(param);
+                    modified = true;
+                }
+            });
+            
+            if (modified) {
+                window.history.replaceState({}, document.title, url.toString());
+                devLog('URL parameters cleaned');
+            }
+        } catch (e) {
+            console.log('Error cleaning URL: ' + e.message);
+        }
+    };
+
+
+    // ===== REDIRECT / IDENTITY HELPERS =====
+    const normalizeFBText = (value = '') => {
+        try {
+            return String(value || '')
+                .replace(/[\u200B-\u200D\uFEFF]/g, '')
+                .replace(/\s+/g, ' ')
+                .trim()
+                .toLowerCase();
+        } catch (e) {
+            return '';
+        }
+    };
+
+    const safeDecodeFBValue = (value = '') => {
+        try {
+            let out = String(value || '');
+            for (let i = 0; i < 3; i++) {
+                try {
+                    const decoded = decodeURIComponent(out);
+                    if (decoded === out) break;
+                    out = decoded;
+                } catch (e) { break; }
+            }
+            return out
+                .replace(/\\u0025/g, '%')
+                .replace(/\\u0026/g, '&')
+                .replace(/\\u003d/g, '=')
+                .replace(/\\u003f/g, '?')
+                .replace(/\\u002f/g, '/')
+                .replace(/\\\//g, '/')
+                .replace(/&amp;/g, '&')
+                .replace(/&quot;/g, '"')
+                .replace(/&#034;/g, '"')
+                .replace(/&#039;/g, "'");
+        } catch (e) {
+            return String(value || '');
+        }
+    };
+
+    const isSafeWhitelistedPath = (path = window.location.pathname, url = window.location.href) => {
+        try {
+            const p = String(path || '').toLowerCase();
+            const u = String(url || '').toLowerCase();
+            return excludedRegexPatterns.some(regex => {
+                try {
+                    regex.lastIndex = 0;
+                    if (regex.test(p)) return true;
+                    regex.lastIndex = 0;
+                    return regex.test(u);
+                } catch (e) { return false; }
+            });
+        } catch (e) {
+            return false;
+        }
+    };
 
     const isNotificationNavigationUrl = (inputUrl = window.location.href) => {
         try {
@@ -2085,96 +1192,107 @@ const paramsToDelete = ['fbclid', 'mibextid', 'set', 'idorvanity'];
     const getSanitizedPathSearchForMatching = (inputUrl = window.location.href) => {
         try {
             const url = new URL(inputUrl, window.location.origin);
-            url.searchParams.delete('notif_id');
-            url.searchParams.delete('notif_t');
-            if (url.searchParams.get('ref') === 'notif') {
-                url.searchParams.delete('ref');
-            }
-            return decodeURIComponent(url.pathname + url.search).toLowerCase();
+            ['notif_id', 'notif_t', 'ref'].forEach(param => {
+                if (param !== 'ref' || url.searchParams.get('ref') === 'notif') {
+                    url.searchParams.delete(param);
+                }
+            });
+            return normalizeFBText(safeDecodeFBValue(url.pathname + url.search));
         } catch (e) {
             return '';
         }
     };
 
-    const cleanUrl = () => {
+    const matchesBlockedUrlCandidates = (value = '') => {
         try {
-            devLog('Cleaning URL parameters');
-            const url = new URL(window.location.href);
-            const isNotificationNav = isNotificationNavigationUrl(url.href);
-            let modified = false;
-
-            paramsToDelete.forEach(param => {
-                if (param === 'set' && isNotificationNav) return;
-                if (url.searchParams.has(param)) {
-                    url.searchParams.delete(param);
-                    modified = true;
-                }
-            });
-
-            if (url.searchParams.has('notif_id')) {
-                url.searchParams.delete('notif_id');
-                modified = true;
-            }
-            if (url.searchParams.has('notif_t')) {
-                url.searchParams.delete('notif_t');
-                modified = true;
-            }
-            if (url.searchParams.get('ref') === 'notif') {
-                url.searchParams.delete('ref');
-                modified = true;
-            }
-
-            if (modified) {
-                window.history.replaceState({}, document.title, url.toString());
-                devLog('URL parameters cleaned');
-            }
-        } catch (e) {}
+            const decoded = safeDecodeFBValue(value);
+            return matchesAnyBlockedUrl(decoded) || matchesAnyBlockedUrl(String(value || ''));
+        } catch (e) {
+            return matchesAnyBlockedUrl(value);
+        }
     };
 
 
-const getRegexBlockedWords = () => regexBlockedWords;
-
-    // === SPA/comment guardrails + explicit FBID helpers ===
-    let __fbCommentNavigationGraceUntil = 0;
-    let __fbPostNavigationGraceUntil = 0;
-
-    const fbSafeDecode = (value = '') => {
+    // Redirects must only use blockedUrls when the *current Facebook URL itself* is blocked.
+    // External domains inside l.php/u= links, feed descriptions, or post link previews are handled by DOM hiding,
+    // not by redirecting every Facebook route to home.
+    const looksLikeDirectFacebookBlockedUrlPattern = (pattern) => {
         try {
-            let out = String(value || '');
-            for (let i = 0; i < 3; i++) {
-                try {
-                    const decoded = decodeURIComponent(out);
-                    if (decoded === out) break;
-                    out = decoded;
-                } catch (e) { break; }
-            }
-            return out
-                .replace(/\u0025/g, '%')
-                .replace(/\u0026/g, '&')
-                .replace(/\u003d/g, '=')
-                .replace(/\u003f/g, '?')
-                .replace(/\u002f/g, '/')
-                .replace(/\\//g, '/')
-                .replace(/&amp;/g, '&')
-                .replace(/&quot;/g, '"')
-                .replace(/&#034;/g, '"')
-                .replace(/&#039;/g, "'");
+            const src = String(pattern && pattern.source || pattern || '').toLowerCase();
+            return (
+                src.includes('facebook') ||
+                src.includes('profile') ||
+                src.includes('permalink') ||
+                src.includes('story_fbid') ||
+                src.includes('pfbid') ||
+                src.includes('fbid') ||
+                src.includes('posts') ||
+                src.includes('photo') ||
+                src.includes('photos') ||
+                src.includes('video') ||
+                src.includes('watch') ||
+                src.includes('reel') ||
+                src.includes('share') ||
+                src.includes('search') ||
+                src.includes('friends') ||
+                src.includes('notifications') ||
+                src.includes('id=')
+            );
         } catch (e) {
-            return String(value || '');
+            return false;
+        }
+    };
+
+    const matchesDirectFacebookBlockedUrlForRedirect = (inputUrl = window.location.href) => {
+        try {
+            const url = new URL(inputUrl, window.location.origin);
+            if (!/facebook\.com$/i.test(url.hostname) && !/\.facebook\.com$/i.test(url.hostname)) return false;
+
+            // Raw/current URL only. Do NOT decode embedded outbound links here.
+            const rawCandidates = [
+                String(inputUrl || ''),
+                url.href,
+                url.pathname + url.search,
+                url.pathname
+            ];
+
+            return blockedUrls.some((pattern) => {
+                try {
+                    if (!looksLikeDirectFacebookBlockedUrlPattern(pattern)) return false;
+                    return rawCandidates.some(candidate => {
+                        try {
+                            pattern.lastIndex = 0;
+                            return pattern.test(candidate);
+                        } catch (e) {
+                            return false;
+                        }
+                    });
+                } catch (e) {
+                    return false;
+                }
+            });
+        } catch (e) {
+            return false;
         }
     };
 
     const fbValueHasBlockedFbid = (value = '') => {
         try {
-            if (!value) return false;
-            const decoded = fbSafeDecode(value);
-            return blockedFbids.some(fbid => decoded.includes(fbid));
-        } catch (e) { return false; }
+            refreshAccountScopedFilters();
+            if (!value || !blockedFbids.length) return false;
+            const decoded = safeDecodeFBValue(value);
+            return blockedFbids.some(fbid => {
+                const id = String(fbid || '').trim();
+                return !!id && decoded.includes(id);
+            });
+        } catch (e) {
+            return false;
+        }
     };
 
     const fbLooksLikeExplicitIdentityCarrier = (value = '') => {
         try {
-            const decoded = fbSafeDecode(value).toLowerCase();
+            const decoded = safeDecodeFBValue(value).toLowerCase();
             return decoded.includes('hovercard') ||
                    decoded.includes('profile.php?id=') ||
                    decoded.includes('user.php?id=') ||
@@ -2190,30 +1308,130 @@ const getRegexBlockedWords = () => regexBlockedWords;
                    decoded.includes('owner_id') ||
                    decoded.includes('ownerid') ||
                    decoded.includes('user_id') ||
-                   decoded.includes('userid');
-        } catch (e) { return false; }
+                   decoded.includes('userid') ||
+                   decoded.includes('/messages/t/');
+        } catch (e) {
+            return false;
+        }
     };
 
     const fbExplicitIdentityValueHasBlockedFbid = (value = '') => {
         try {
-            if (!value) return false;
             return fbValueHasBlockedFbid(value) && fbLooksLikeExplicitIdentityCarrier(value);
-        } catch (e) { return false; }
+        } catch (e) {
+            return false;
+        }
     };
 
     const fbElementHasBlockedIdentity = (element) => {
         try {
             if (!element || !element.getAttribute) return false;
-            const exactAttrs = ['data-profileid', 'data-profile-id', 'data-pageid', 'data-page-id', 'data-ownerid', 'data-owner-id', 'data-actorid', 'data-actor-id', 'data-entityid', 'data-entity-id', 'data-fbid'];
+            refreshAccountScopedFilters();
+            if (!blockedFbids.length) return false;
+
+            const exactAttrs = [
+                'data-profileid', 'data-profile-id',
+                'data-pageid', 'data-page-id',
+                'data-ownerid', 'data-owner-id',
+                'data-actorid', 'data-actor-id',
+                'data-entityid', 'data-entity-id',
+                'data-fbid'
+            ];
+
             for (let i = 0; i < exactAttrs.length; i++) {
                 const value = element.getAttribute(exactAttrs[i]);
                 if (value && blockedFbids.includes(String(value).trim())) return true;
             }
 
-            const identityAttrs = ['href', 'data-hovercard', 'ajaxify', 'data-lynx-uri', 'data-store', 'data-ft', 'data-testid', 'aria-describedby'];
+            const identityAttrs = [
+                'href', 'data-hovercard', 'ajaxify', 'data-lynx-uri',
+                'data-store', 'data-ft', 'data-testid', 'aria-describedby'
+            ];
+
             for (let i = 0; i < identityAttrs.length; i++) {
-                const value = element.getAttribute(identityAttrs[i]) || element[identityAttrs[i]] || '';
+                const attr = identityAttrs[i];
+                const value = (element.getAttribute(attr) || element[attr] || '');
                 if (fbExplicitIdentityValueHasBlockedFbid(value)) return true;
+            }
+        } catch (e) {}
+        return false;
+    };
+
+    const fbScopedDocumentHasBlockedIdentity = (allowScriptScan = false) => {
+        try {
+            refreshAccountScopedFilters();
+            if (!blockedFbids.length) return false;
+
+            const scopedElements = document.querySelectorAll([
+                '[data-pagelet="ProfileHeader"] [href]',
+                '[data-pagelet="ProfileHeader"] [data-hovercard]',
+                '[data-pagelet="ProfileHeader"] [ajaxify]',
+                '[data-pagelet="ProfileHeader"] [data-profileid]',
+                '[data-pagelet="ProfileHeader"] [data-pageid]',
+                '[data-pagelet="ProfileHeader"] [data-fbid]',
+                '[data-pagelet="PageHeader"] [href]',
+                '[data-pagelet="PageHeader"] [data-hovercard]',
+                '[data-pagelet="PageHeader"] [ajaxify]',
+                '[data-pagelet="PageHeader"] [data-profileid]',
+                '[data-pagelet="PageHeader"] [data-pageid]',
+                '[data-pagelet="PageHeader"] [data-fbid]',
+                'div.x78zum5.xdt5ytf.x12upk82.xod5an3 [href]',
+                'div.x78zum5.xdt5ytf.x12upk82.xod5an3 [data-hovercard]',
+                'div.x78zum5.xdt5ytf.x12upk82.xod5an3 [ajaxify]',
+                'div.x78zum5.xdt5ytf.x12upk82.xod5an3 [data-profileid]',
+                'div.x78zum5.xdt5ytf.x12upk82.xod5an3 [data-fbid]',
+                'meta[property="al:android:url"]',
+                'meta[property="al:ios:url"]',
+                'meta[property="og:url"]',
+                'meta[content*="profile.php?id="]',
+                'meta[content*="page.php?id="]'
+            ].join(','));
+
+            for (let i = 0; i < scopedElements.length; i++) {
+                const el = scopedElements[i];
+                const value = (
+                    el.content ||
+                    el.href ||
+                    el.getAttribute('href') ||
+                    el.getAttribute('data-hovercard') ||
+                    el.getAttribute('ajaxify') ||
+                    el.getAttribute('data-profileid') ||
+                    el.getAttribute('data-pageid') ||
+                    el.getAttribute('data-fbid') ||
+                    el.getAttribute('data-store') ||
+                    ''
+                );
+
+                if (fbValueHasBlockedFbid(value)) return true;
+                if (fbElementHasBlockedIdentity(el)) return true;
+            }
+
+            // Delayed profile/page script scan from the older working file.
+            // This is the part that often exposes numeric FBIDs on vanity/profile routes.
+            if (allowScriptScan && isLikelyProfileOrPageRoute()) {
+                const scripts = document.querySelectorAll('script[type="application/json"], script[data-content-len]');
+                for (let i = 0; i < scripts.length && i < 30; i++) {
+                    const text = scripts[i].textContent || '';
+                    if (!text || text.length > 350000) continue;
+
+                    const decoded = safeDecodeFBValue(text);
+
+                    for (let j = 0; j < blockedFbids.length; j++) {
+                        const fbid = String(blockedFbids[j] || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                        if (!fbid) continue;
+
+                        const pattern = new RegExp(
+                            '(?:profile_id|profileID|profileid|page_id|pageID|pageid|actor_id|actorID|actorid|entity_id|entityID|entityid|user_id|userID|userid|owner_id|ownerID|ownerid|id)[^0-9]{0,80}' +
+                            fbid +
+                            '|' +
+                            fbid +
+                            '[^a-zA-Z0-9]{0,80}(?:profile|page|actor|entity|user|owner)',
+                            'i'
+                        );
+
+                        if (pattern.test(decoded)) return true;
+                    }
+                }
             }
         } catch (e) {}
         return false;
@@ -2224,9 +1442,16 @@ const getRegexBlockedWords = () => regexBlockedWords;
             if (!anchor) return false;
             if (fbElementHasBlockedIdentity(anchor)) return true;
 
-            // Scan only the clicked card/link itself and a tiny amount of explicit identity metadata.
-            // Do NOT scan whole feed/profile wrappers; that was the source of the earlier false redirects.
-            const children = anchor.querySelectorAll ? anchor.querySelectorAll('[data-profileid], [data-profile-id], [data-pageid], [data-page-id], [data-ownerid], [data-owner-id], [data-actorid], [data-actor-id], [data-entityid], [data-entity-id], [data-hovercard], [ajaxify], [data-store], [data-ft], [data-fbid]') : [];
+            const children = anchor.querySelectorAll ? anchor.querySelectorAll([
+                '[data-profileid]', '[data-profile-id]',
+                '[data-pageid]', '[data-page-id]',
+                '[data-ownerid]', '[data-owner-id]',
+                '[data-actorid]', '[data-actor-id]',
+                '[data-entityid]', '[data-entity-id]',
+                '[data-hovercard]', '[ajaxify]', '[data-store]',
+                '[data-ft]', '[data-fbid]'
+            ].join(',')) : [];
+
             for (let i = 0; i < children.length && i < 20; i++) {
                 if (fbElementHasBlockedIdentity(children[i])) return true;
             }
@@ -2234,10 +1459,16 @@ const getRegexBlockedWords = () => regexBlockedWords;
             let parent = anchor.parentElement;
             let depth = 0;
             while (parent && parent !== document.body && depth < 3) {
-                if (parent.matches && parent.matches('[data-profileid], [data-profile-id], [data-pageid], [data-page-id], [data-ownerid], [data-owner-id], [data-actorid], [data-actor-id], [data-entityid], [data-entity-id], [data-hovercard], [ajaxify], [data-fbid]')) {
+                if (parent.matches && parent.matches([
+                    '[data-profileid]', '[data-profile-id]',
+                    '[data-pageid]', '[data-page-id]',
+                    '[data-ownerid]', '[data-owner-id]',
+                    '[data-actorid]', '[data-actor-id]',
+                    '[data-entityid]', '[data-entity-id]',
+                    '[data-hovercard]', '[ajaxify]', '[data-fbid]'
+                ].join(','))) {
                     if (fbElementHasBlockedIdentity(parent)) return true;
                 }
-                // Avoid climbing into entire posts/dialogs/search containers and inheriting unrelated IDs.
                 if (parent.matches && parent.matches('[role="article"], [role="feed"], [role="dialog"], main, [role="main"]')) break;
                 parent = parent.parentElement;
                 depth++;
@@ -2246,161 +1477,15 @@ const getRegexBlockedWords = () => regexBlockedWords;
         return false;
     };
 
-    const isPlainLeftClick = (event) => {
+    const isInsideComment = (element) => {
         try {
-            return event && event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey;
-        } catch (e) { return false; }
-    };
+            if (!element || !element.closest) return false;
+            if (element.closest('[aria-label*="komment" i], [aria-label*="comment" i], [title*="komment" i], [title*="comment" i], [data-testid*="comment" i]')) return true;
 
-    const getBestNavigationAnchor = (target) => {
-        try {
-            if (!target || !target.closest) return null;
+            const article = element.closest('[role="article"]');
+            if (article && article.parentElement && article.parentElement.closest('[role="article"]')) return true;
 
-            const directAnchor = target.closest('a[href]');
-            if (directAnchor) return directAnchor;
-
-            // Facebook search/profile cards sometimes put the real href on a child anchor
-            // while the clicked wrapper is only role="link"/row/option. Use the actual
-            // navigational anchor when it exists so SPA clicks don't hide the target from us.
-            const clickableWrapper = target.closest('[role="link"], [role="option"], li[role="row"], div[role="presentation"], [data-testid*="search" i]');
-            if (clickableWrapper) {
-                if (clickableWrapper.matches && clickableWrapper.matches('a[href]')) return clickableWrapper;
-                const nestedAnchor = clickableWrapper.querySelector && clickableWrapper.querySelector('a[href]');
-                if (nestedAnchor) return nestedAnchor;
-            }
-
-            return target.closest('a, [role="link"]');
-        } catch (e) {
-            return null;
-        }
-    };
-
-    const isLikelyPlainProfileOrPageHref = (inputUrl = '') => {
-        try {
-            if (!inputUrl) return false;
-            const url = new URL(inputUrl, window.location.origin);
-            if (!/facebook\.com$/i.test(url.hostname.replace(/^www\./i, ''))) return false;
-
-            const path = (url.pathname || '/').toLowerCase();
-            if (path === '/' || path === '/home.php') return false;
-            if (isSafeWhitelistedPath(path, url.href)) return false;
-
-            // Keep post/media/comment/search/group/etc. routes under Facebook's normal behavior.
-            // The SPA hard-nav bypass is only for bare profile/page routes, because that is where
-            // Facebook hides vanity->FBID identity until after a full document load.
-            if (/^\/(posts|permalink|photos|photo|videos|watch|reel|share|groups|events|marketplace|messages|messenger|notifications|search|stories|friends|gaming|pages|settings|help)(?:\/|$)/i.test(path)) return false;
-            if (url.searchParams.has('comment_id') || url.searchParams.has('reply_comment_id') || url.searchParams.has('focused_comment_id')) return false;
-            if (/(story_fbid|fbid|multi_permalinks|v)=/i.test(url.search)) return false;
-
-            return path === '/profile.php' || /^\/[a-z0-9_.-]+\/?$/i.test(path);
-        } catch (e) {
-            return false;
-        }
-    };
-
-    const isCommentNavigationUrl = (inputUrl = window.location.href) => {
-        try {
-            const raw = String(inputUrl || '').toLowerCase();
-            const url = new URL(inputUrl, window.location.origin);
-            const combined = (url.search + ' ' + url.hash + ' ' + raw).toLowerCase();
-            return url.searchParams.has('comment_id') ||
-                   url.searchParams.has('reply_comment_id') ||
-                   url.searchParams.has('focused_comment_id') ||
-                   url.searchParams.has('comment_tracking') ||
-                   url.searchParams.has('comment_tracking_token') ||
-                   combined.includes('comment_id=') ||
-                   combined.includes('reply_comment_id=') ||
-                   combined.includes('focused_comment_id=') ||
-                   combined.includes('comment_tracking') ||
-                   combined.includes('comments');
-        } catch (e) {
-            const raw = String(inputUrl || '').toLowerCase();
-            return raw.includes('comment_id') || raw.includes('reply_comment_id') || raw.includes('focused_comment_id') || raw.includes('comment_tracking') || raw.includes('comments');
-        }
-    };
-
-    const markCommentNavigationGrace = () => {
-        __fbCommentNavigationGraceUntil = Date.now() + 12000;
-    };
-
-    const markPostNavigationGrace = () => {
-        __fbPostNavigationGraceUntil = Date.now() + 12000;
-    };
-
-    const isCommentNavigationGraceActive = () => Date.now() < __fbCommentNavigationGraceUntil;
-    const isPostNavigationGraceActive = () => Date.now() < __fbPostNavigationGraceUntil;
-    const isNavigationGraceActive = () => isCommentNavigationGraceActive() || isPostNavigationGraceActive();
-
-    // While Facebook is opening comments/post modals, back off from the heavy scanners.
-    // This keeps comments responsive without weakening hard redirects: direct blocked FBIDs/URLs
-    // are checked before grace in handleRedirects(), and profile/page clicks have no grace.
-    const isFBInteractionLightModeActive = () => {
-        try {
-            if (!isNavigationGraceActive()) return false;
-            const current = window.location.href || '';
-            if (fbUrlHasDirectBlockedFbid(current) || matchesBlockedUrlCandidates(current)) return false;
-            return true;
-        } catch (e) {
-            return isNavigationGraceActive();
-        }
-    };
-
-    const runLightInteractionPass = () => {
-        try {
-            updateFBFeedZeroGlimpseGateClass();
-            manageCSSStyles();
-        } catch (e) {}
-    };
-
-    const isLikelyProfileOrPageRoute = (inputUrl = window.location.href) => {
-        try {
-            const url = new URL(inputUrl, window.location.origin);
-            const path = url.pathname.toLowerCase();
-            if (path === '/' || path === '/home.php') return false;
-            if (/\/(posts|permalink|photos|photo|videos|watch|reel|groups|events|marketplace|messages|messenger|notifications|search|stories)/i.test(path)) return false;
-            return path === '/profile.php' || /^\/[a-z0-9_.-]+\/?$/i.test(path);
-        } catch (e) { return false; }
-    };
-
-    const fbScopedDocumentHasBlockedIdentity = (allowScriptScan = false) => {
-        try {
-            const scopedElements = document.querySelectorAll([
-                '[data-pagelet="ProfileHeader"] [href]',
-                '[data-pagelet="ProfileHeader"] [data-hovercard]',
-                '[data-pagelet="ProfileHeader"] [ajaxify]',
-                '[data-pagelet="ProfileHeader"] [data-profileid]',
-                '[data-pagelet="ProfileHeader"] [data-pageid]',
-                '[data-pagelet="PageHeader"] [href]',
-                '[data-pagelet="PageHeader"] [data-hovercard]',
-                '[data-pagelet="PageHeader"] [ajaxify]',
-                '[data-pagelet="PageHeader"] [data-profileid]',
-                '[data-pagelet="PageHeader"] [data-pageid]',
-                'meta[property="al:android:url"]',
-                'meta[property="al:ios:url"]',
-                'meta[property="og:url"]',
-                'meta[content*="profile.php?id="]',
-                'meta[content*="page.php?id="]'
-            ].join(','));
-            for (let i = 0; i < scopedElements.length; i++) {
-                const el = scopedElements[i];
-                const value = (el.content || el.href || el.getAttribute('href') || el.getAttribute('data-hovercard') || el.getAttribute('ajaxify') || '');
-                if (fbValueHasBlockedFbid(value)) return true;
-                if (fbElementHasBlockedIdentity(el)) return true;
-            }
-
-            if (allowScriptScan && isLikelyProfileOrPageRoute()) {
-                const scripts = document.querySelectorAll('script[type="application/json"], script[data-content-len]');
-                for (let i = 0; i < scripts.length && i < 30; i++) {
-                    const text = scripts[i].textContent || '';
-                    if (!text || text.length > 350000) continue;
-                    const decoded = fbSafeDecode(text);
-                    for (let j = 0; j < blockedFbids.length; j++) {
-                        const fbid = String(blockedFbids[j]).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                        const pattern = new RegExp('(?:profile_id|profileID|profileid|page_id|pageID|pageid|actor_id|actorID|actorid|entity_id|entityID|entityid|user_id|userID|userid|owner_id|ownerID|ownerid|id)[^0-9]{0,80}' + fbid + '|' + fbid + '[^a-zA-Z0-9]{0,80}(?:profile|page|actor|entity|user|owner)', 'i');
-                        if (pattern.test(decoded)) return true;
-                    }
-                }
-            }
+            if (element.closest('ul[role="list"]') && element.closest('[role="dialog"]')) return true;
         } catch (e) {}
         return false;
     };
@@ -2411,9 +1496,295 @@ const getRegexBlockedWords = () => regexBlockedWords;
             const raw = url.href.toLowerCase();
             const path = url.pathname.toLowerCase();
             return /\/(posts|permalink|photos|photo|videos|watch|reel|share)(?:\/|$)/i.test(path) ||
+                   /\/groups\/[^/]+\/(permalink|posts)\/[^/?#]+/i.test(path) ||
                    /(story_fbid|fbid|multi_permalinks|v)=/i.test(url.search) ||
                    raw.includes('/story.php');
-        } catch (e) { return false; }
+        } catch (e) {
+            return false;
+        }
+    };
+
+    // ===== APPROVED BROWSE CACHE =====
+    // Allows comment/permalink/media pages opened from already-approved feed posts.
+    // Still lets direct blocked FBID URLs and direct blocked Facebook URLs override the cache.
+    const APPROVED_BROWSE_CACHE_STORAGE_KEY = 'fbcleaner_approved_browse_cache_v1';
+    const APPROVED_BROWSE_PENDING_NAV_STORAGE_KEY = 'fbcleaner_approved_browse_pending_nav_v1';
+    const APPROVED_BROWSE_CACHE_LIMIT = 1250; // MW2 flawless FFA nuke score. Obviously.
+    const APPROVED_BROWSE_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
+    const APPROVED_BROWSE_PENDING_NAV_TTL_MS = 45 * 1000;
+    let __approvedBrowseCache = null;
+    let __approvedBrowseCacheLoadedAt = 0;
+
+    const markApprovedBrowsePendingNavigation = () => {
+        try {
+            sessionStorage.setItem(APPROVED_BROWSE_PENDING_NAV_STORAGE_KEY, String(Date.now()));
+        } catch (e) {}
+    };
+
+    const hasFreshApprovedBrowsePendingNavigation = () => {
+        try {
+            const ts = Number(sessionStorage.getItem(APPROVED_BROWSE_PENDING_NAV_STORAGE_KEY) || 0);
+            return !!ts && Date.now() - ts <= APPROVED_BROWSE_PENDING_NAV_TTL_MS;
+        } catch (e) {
+            return false;
+        }
+    };
+
+    const clearApprovedBrowsePendingNavigation = () => {
+        try { sessionStorage.removeItem(APPROVED_BROWSE_PENDING_NAV_STORAGE_KEY); } catch (e) {}
+    };
+
+    const getFacebookContentKeys = (inputValue = '') => {
+        const keys = new Set();
+        const add = (prefix, value) => {
+            try {
+                const clean = safeDecodeFBValue(String(value || '')).replace(/[\s"'<>]+$/g, '').trim();
+                if (clean) keys.add(`${prefix}:${clean}`);
+            } catch (e) {}
+        };
+
+        try {
+            const raw = safeDecodeFBValue(String(inputValue || ''));
+            if (!raw) return [];
+
+            let url = null;
+            try { url = new URL(raw, window.location.origin); } catch (e) {}
+
+            if (url) {
+                const path = url.pathname || '';
+
+                const groupMatch = path.match(/\/groups\/[^/]+\/(?:permalink|posts)\/(\d+)/i);
+                if (groupMatch && groupMatch[1]) {
+                    add('group-post', groupMatch[1]);
+                    add('post', groupMatch[1]);
+                }
+
+                const pathPost = path.match(/\/(?:posts|permalink)\/(pfbid[^/?#]+)/i);
+                if (pathPost && pathPost[1]) add('pfbid', pathPost[1]);
+
+                const pathNumericPost = path.match(/\/(?:posts|permalink)\/(\d+)/i);
+                if (pathNumericPost && pathNumericPost[1]) add('post', pathNumericPost[1]);
+
+                const reel = path.match(/\/reel\/(\d+)/i);
+                if (reel && reel[1]) add('reel', reel[1]);
+
+                const videoPath = path.match(/\/videos\/(\d+)/i);
+                if (videoPath && videoPath[1]) add('video', videoPath[1]);
+
+                const params = url.searchParams;
+                const addMultiPermalinkValue = (value) => {
+                    try {
+                        safeDecodeFBValue(String(value || ''))
+                            .split(/[,.]/)
+                            .map(v => v.trim())
+                            .filter(Boolean)
+                            .forEach(v => {
+                                add('multi-permalink', v);
+                                add('story', v);
+                                add('post', v);
+                                add('group-post', v);
+                            });
+                    } catch (e) {}
+                };
+
+                ['story_fbid', 'fbid', 'multi_permalinks', 'v'].forEach((name) => {
+                    const values = params.getAll(name);
+                    if (!values || !values.length) return;
+                    values.forEach((value) => {
+                        if (!value) return;
+                        if (name === 'story_fbid') { add('story', value); add('post', value); }
+                        else if (name === 'fbid') { add('fbid', value); add('post', value); }
+                        else if (name === 'multi_permalinks') { addMultiPermalinkValue(value); }
+                        else if (name === 'v') { add('video', value); }
+                    });
+                });
+            }
+
+            const haystack = raw + ' ' + safeDecodeFBValue(raw);
+            const regexes = [
+                [/\/groups\/[^/"'\s]+\/(?:permalink|posts)\/(\d+)/ig, ['group-post', 'post']],
+                [/[?&]story_fbid=([^&#"'\s]+)/ig, ['story', 'post']],
+                [/[?&]fbid=([^&#"'\s]+)/ig, ['fbid', 'post']],
+                [/[?&]multi_permalinks=([^&#"'\s]+)/ig, ['multi-permalink', 'story', 'post', 'group-post']],
+                [/[?&]v=(\d+)/ig, ['video']],
+                [/\/(pfbid[^/?#"'\s]+)/ig, ['pfbid']],
+                [/\/reel\/(\d+)/ig, ['reel']],
+                [/\/videos\/(\d+)/ig, ['video']]
+            ];
+
+            regexes.forEach(([regex, prefixes]) => {
+                let match;
+                regex.lastIndex = 0;
+                while ((match = regex.exec(haystack)) !== null) {
+                    prefixes.forEach(prefix => add(prefix, match[1]));
+                }
+            });
+        } catch (e) {}
+
+        return Array.from(keys);
+    };
+
+    const loadApprovedBrowseCache = () => {
+        const now = Date.now();
+        if (__approvedBrowseCache && now - __approvedBrowseCacheLoadedAt < 1500) return __approvedBrowseCache;
+
+        const map = new Map();
+        try {
+            const raw = sessionStorage.getItem(APPROVED_BROWSE_CACHE_STORAGE_KEY);
+            const parsed = raw ? JSON.parse(raw) : [];
+            if (Array.isArray(parsed)) {
+                parsed.forEach((entry) => {
+                    if (!entry) return;
+                    const key = String(entry.key || entry[0] || '');
+                    const ts = Number(entry.ts || entry[1] || 0);
+                    if (key && ts && now - ts <= APPROVED_BROWSE_CACHE_TTL_MS) {
+                        const old = map.get(key) || 0;
+                        if (ts > old) map.set(key, ts);
+                    }
+                });
+            }
+        } catch (e) {}
+
+        __approvedBrowseCache = map;
+        __approvedBrowseCacheLoadedAt = now;
+        return map;
+    };
+
+    const saveApprovedBrowseCache = () => {
+        try {
+            const now = Date.now();
+            const map = loadApprovedBrowseCache();
+            const entries = Array.from(map.entries())
+                .filter(([, ts]) => now - ts <= APPROVED_BROWSE_CACHE_TTL_MS)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, APPROVED_BROWSE_CACHE_LIMIT)
+                .map(([key, ts]) => ({ key, ts }));
+
+            __approvedBrowseCache = new Map(entries.map(({ key, ts }) => [key, ts]));
+            __approvedBrowseCacheLoadedAt = now;
+            sessionStorage.setItem(APPROVED_BROWSE_CACHE_STORAGE_KEY, JSON.stringify(entries));
+        } catch (e) {}
+    };
+
+    const rememberApprovedContentKeys = (keys) => {
+        try {
+            if (!keys || !keys.length) return;
+            const now = Date.now();
+            const map = loadApprovedBrowseCache();
+            let changed = false;
+
+            keys.forEach((key) => {
+                key = String(key || '').trim();
+                if (!key) return;
+                if ((map.get(key) || 0) < now) {
+                    map.set(key, now);
+                    changed = true;
+                }
+            });
+
+            if (changed) saveApprovedBrowseCache();
+        } catch (e) {}
+    };
+
+    const rememberApprovedSignalForBrowsing = (signal) => {
+        try {
+            const keys = getFacebookContentKeys(signal);
+            if (keys.length) rememberApprovedContentKeys(keys);
+        } catch (e) {}
+    };
+
+    const rememberApprovedPostForBrowsing = (post) => {
+        try {
+            if (!post || !post.classList || !post.classList.contains('fb-post-approved')) return;
+            if (post.classList.contains('fb-post-banned') || post.classList.contains('fb-element-banned')) return;
+
+            const signals = [];
+            const push = (value) => { if (value) signals.push(String(value)); };
+            push(post.getAttribute && post.getAttribute('data-ft'));
+            push(post.getAttribute && post.getAttribute('data-store'));
+            push(post.getAttribute && post.getAttribute('data-fbcleaner-urlsig'));
+            push(post.getAttribute && post.getAttribute('data-fb-urlsig'));
+
+            const nodes = post.querySelectorAll ? Array.from(post.querySelectorAll('a[href], [data-ft], [data-store], [data-fbcleaner-urlsig], [data-fb-urlsig], [ajaxify], [data-hovercard]')).slice(0, 140) : [];
+            nodes.forEach((node) => {
+                push(node.href || '');
+                push(node.getAttribute('href') || '');
+                push(node.getAttribute('data-ft') || '');
+                push(node.getAttribute('data-store') || '');
+                push(node.getAttribute('data-fbcleaner-urlsig') || '');
+                push(node.getAttribute('data-fb-urlsig') || '');
+                push(node.getAttribute('ajaxify') || '');
+                push(node.getAttribute('data-hovercard') || '');
+            });
+
+            const keys = new Set();
+            signals.forEach((signal) => getFacebookContentKeys(signal).forEach(key => keys.add(key)));
+            rememberApprovedContentKeys(Array.from(keys));
+        } catch (e) {}
+    };
+
+    const currentUrlIsApprovedForBrowsing = (inputUrl = window.location.href) => {
+        try {
+            const keys = getFacebookContentKeys(inputUrl);
+            if (!keys.length) return false;
+            const map = loadApprovedBrowseCache();
+            const now = Date.now();
+
+            const cached = keys.some((key) => {
+                const ts = map.get(key) || 0;
+                return ts && now - ts <= APPROVED_BROWSE_CACHE_TTL_MS;
+            });
+            if (cached) return true;
+
+            // Some FB comment buttons open /groups/<id>/?multi_permalinks=<postid>
+            // through React/modal plumbing where the clicked target does not expose a useful href.
+            // If the click came from an already-approved post moments ago, bless this new
+            // post-like URL once, cache its canonical keys, and then clear the pending pass.
+            if (hasFreshApprovedBrowsePendingNavigation() && isPostLikeContentUrl(inputUrl)) {
+                rememberApprovedContentKeys(keys);
+                clearApprovedBrowsePendingNavigation();
+                return true;
+            }
+
+            return false;
+        } catch (e) {
+            return false;
+        }
+    };
+
+
+    const approveCurrentApprovedBrowseSurface = () => {
+        try {
+            if (!currentUrlIsApprovedForBrowsing(window.location.href)) return false;
+
+            const selectors = [
+                '[role="dialog"] [role="article"]',
+                '[role="article"]',
+                'div[data-pagelet^="FeedUnit_"]',
+                'div[data-pagelet^="TimelineFeedUnit_"]',
+                'div[data-ad-rendering-role="story_message"]',
+                'div[data-ad-preview="message"]',
+                'div[data-ad-comet-preview="message"]',
+                '[data-pagelet="MediaViewer_Sidebar"]',
+                '[data-pagelet="TahoeRightRail"]',
+                '[data-pagelet="MediaViewerPhoto"]',
+                'div.x1iyjqo2.x1vjfegm'
+            ].join(',');
+
+            let approvedCount = 0;
+            document.querySelectorAll(selectors).forEach((el) => {
+                if (!el || !el.classList) return;
+                if (el.classList.contains('fb-post-banned') || el.classList.contains('fb-element-banned')) return;
+                el.classList.add('fb-post-approved', 'fb-approved-browse-surface', 'fb-post-processed');
+                el.classList.remove('fb-post-pending', 'fb-post-scanning', 'fb-post-expanding');
+                approvedCount++;
+            });
+
+            if (approvedCount > 0) devLog(`Approved ${approvedCount} cached browse surface nodes`);
+            return true;
+        } catch (e) {
+            return false;
+        }
     };
 
     let lastVanityUrl = '';
@@ -2421,6 +1792,7 @@ const getRegexBlockedWords = () => regexBlockedWords;
 
     const checkVanityProfileFBID = () => {
         try {
+            refreshAccountScopedFilters();
             if (isRedirecting) return;
 
             const currentUrlFull = window.location.href;
@@ -2445,630 +1817,474 @@ const getRegexBlockedWords = () => regexBlockedWords;
             // including after SPA navigation. The deeper scan is restricted to
             // profile/page routes so comments/posts do not inherit random IDs.
             if (fbValueHasBlockedFbid(currentUrlFull)) {
-                triggerRedirect();
+                triggerRedirect('blocked numeric FBID in current URL');
                 return;
             }
 
+            // If this post/media/permalink was opened from an already-approved feed card,
+            // do not let hydrated sidebar/comment/profile identity soup re-trigger redirects.
+            if (currentUrlIsApprovedForBrowsing(currentUrlFull)) return;
+
             if (fbScopedDocumentHasBlockedIdentity(vanityCheckCount >= 2)) {
-                triggerRedirect();
+                triggerRedirect('blocked numeric FBID in scoped page identity');
                 return;
             }
         } catch(e) {}
     };
 
+    const isLikelyProfileOrPageRoute = (inputUrl = window.location.href) => {
+        try {
+            const url = new URL(inputUrl, window.location.origin);
+            const path = url.pathname.toLowerCase();
+            if (path === '/' || path === '/home.php') return false;
+            if (/\/(posts|permalink|photos|photo|videos|watch|reel|share|groups|events|marketplace|messages|messenger|notifications|search|stories|friends|gaming|settings|help)(?:\/|$)/i.test(path)) return false;
+            if (url.searchParams.has('comment_id') || url.searchParams.has('reply_comment_id') || url.searchParams.has('focused_comment_id')) return false;
+            if (/(story_fbid|fbid|multi_permalinks|v)=/i.test(url.search)) return false;
+            return path === '/profile.php' || /^\/[a-z0-9_.-]+\/?$/i.test(path);
+        } catch (e) {
+            return false;
+        }
+    };
+
+    const urlPathOrTitleHasBlockedTerms = (inputUrl = window.location.href) => {
+        try {
+            const raw = getSanitizedPathSearchForMatching(inputUrl);
+            const spaced = raw.replace(/[\.\,\-\=\!\?\+\_\@\/]+/g, ' ');
+            const compact = raw.replace(/[\.\,\-\=\!\?\+\_\s\@\/]+/g, '');
+            const title = normalizeFBText(document.title || '');
+
+            if (matchesAnyActiveRegex(raw) || matchesAnyActiveRegex(spaced) || matchesAnyActiveRegex(title)) return true;
+
+            // Helps with names like first.last.5 or first-last where the regex is plain /first/i.
+            return regexBlockedWords.some(regex => {
+                try {
+                    regex.lastIndex = 0;
+                    return regex.test(compact);
+                } catch (e) { return false; }
+            });
+        } catch (e) {
+            return false;
+        }
+    };
+
+    const collectScopedText = (root, maxNodes = 120) => {
+        try {
+            if (!root || !root.querySelectorAll) return '';
+            const nodes = Array.from(root.querySelectorAll([
+                'span[dir="auto"]',
+                'div[dir="auto"]',
+                'h1', 'h2', 'h3', 'h4',
+                '[data-ad-comet-preview="message"]',
+                '[data-ad-preview="message"]',
+                '[data-ad-rendering-role="story_message"]',
+                '[aria-label]',
+                '[title]'
+            ].join(','))).slice(0, maxNodes);
+
+            let text = '';
+            for (let i = 0; i < nodes.length; i++) {
+                const node = nodes[i];
+                if (isInsideComment(node)) continue;
+                text += ' ' + (node.textContent || '');
+                text += ' ' + ((node.getAttribute && node.getAttribute('aria-label')) || '');
+                text += ' ' + ((node.getAttribute && node.getAttribute('title')) || '');
+            }
+            return text;
+        } catch (e) {
+            return '';
+        }
+    };
+
+    const currentProfileOrPageHasBlockedIdentityOrTerms = () => {
+        try {
+            // Strictly header/title/url only. Do NOT scan ProfileTimeline/ProfileTilesFeed here,
+            // because normal profile posts can contain banned terms and would otherwise redirect almost every profile.
+            const areas = Array.from(document.querySelectorAll([
+                '[data-pagelet="ProfileHeader"]',
+                '[data-pagelet="PageHeader"]',
+                'div.x78zum5.xdt5ytf.x12upk82.xod5an3'
+            ].join(','))).slice(0, 8);
+
+            for (let i = 0; i < areas.length; i++) {
+                const area = areas[i];
+                const signalParts = [collectScopedText(area, 80)];
+
+                const signalNodes = area.querySelectorAll ? area.querySelectorAll('a[href], [data-hovercard], [ajaxify], [data-profileid], [data-pageid], [data-fbid], [data-store], [aria-label], [title]') : [];
+                for (let j = 0; j < signalNodes.length && j < 80; j++) {
+                    const el = signalNodes[j];
+                    if (fbElementHasBlockedIdentity(el)) return true;
+                    signalParts.push(el.href || '');
+                    signalParts.push(el.getAttribute('href') || '');
+                    signalParts.push(el.getAttribute('data-hovercard') || '');
+                    signalParts.push(el.getAttribute('ajaxify') || '');
+                    signalParts.push(el.getAttribute('data-profileid') || '');
+                    signalParts.push(el.getAttribute('data-pageid') || '');
+                    signalParts.push(el.getAttribute('data-fbid') || '');
+                    signalParts.push(el.getAttribute('data-store') || '');
+                    signalParts.push(el.getAttribute('aria-label') || '');
+                    signalParts.push(el.getAttribute('title') || '');
+                }
+
+                const signal = signalParts.join(' ');
+                if (matchesAnyActiveRegex(signal) || matchesAnyBlockedFbid(signal)) return true;
+                if (matchesDirectFacebookBlockedUrlForRedirect(signal)) return true;
+            }
+
+            // Metadata is okay for profile/page redirect because it represents the current page identity,
+            // not random timeline/feed content.
+            const metas = document.querySelectorAll('meta[property="og:title"], meta[property="og:url"], meta[property="al:android:url"], meta[property="al:ios:url"], meta[name="description"], title');
+            for (let i = 0; i < metas.length; i++) {
+                const el = metas[i];
+                const value = el.content || el.textContent || '';
+                if (matchesAnyActiveRegex(value) || fbExplicitIdentityValueHasBlockedFbid(value)) return true;
+                if (matchesDirectFacebookBlockedUrlForRedirect(value)) return true;
+            }
+        } catch (e) {}
+        return false;
+    };
+
+    const currentMediaOrPostViewHasBlockedCaption = () => {
+        try {
+            if (!isPostLikeContentUrl(window.location.href)) return false;
+
+            /*
+             * Photo/post pages are annoying because the caption often is NOT inside
+             * FeedUnit_/story_message nodes. In the current photo viewer dump, the useful
+             * caption is this standalone wrapper:
+             *
+             *   div.xyinxu5.xyri2b.x1g2khh7.x1c1uobl > span[dir="auto"]
+             *
+             * The previous scanner mostly searched descendants of known pagelets, so this
+             * exact caption node could sit there waving banned words at us like a tiny
+             * goblin with diplomatic immunity. This scanner keeps the old safe behavior,
+             * but adds the actual caption wrappers/selectors from the photo view.
+             */
+            const directCaptionSelectors = [
+                'div.xyinxu5.xyri2b.x1g2khh7.x1c1uobl',
+                'div.xyinxu5.xyri2b.x1g2khh7.x1c1uobl > span[dir="auto"]',
+                'span.x193iq5w.xeuugli.x13faqbe.x1vvkbs.x1xmvt09.x1lliihq.x1s928wv.xhkezso.x1gmr53x.x1cpjm7i.x1fgarty.x1943h6x.xudqn12.x3x7a5m.x6prxxf.xvq8zen.xo1l8bm.xzsf02u[dir="auto"]',
+                '[data-ad-rendering-role="story_message"]',
+                '[data-ad-preview="message"]',
+                '[data-ad-comet-preview="message"]'
+            ].join(',');
+
+            const areaSelectors = [
+                '[data-pagelet="MediaViewer_Sidebar"]',
+                '[data-pagelet="TahoeRightRail"]',
+                '[data-pagelet="MediaViewerPhoto"]',
+                '[data-pagelet^="FeedUnit_"]',
+                '[data-pagelet^="TimelineFeedUnit_"]',
+                'div[role="dialog"]',
+                '[role="article"]',
+                directCaptionSelectors
+            ].join(',');
+
+            const textNodesSelector = [
+                directCaptionSelectors,
+                'span[dir="auto"]',
+                'div[dir="auto"]',
+                'h1', 'h2', 'h3', 'h4',
+                '[data-ad-comet-preview="message"]',
+                '[data-ad-preview="message"]',
+                '[data-ad-rendering-role="story_message"]',
+                '[aria-label]',
+                '[title]',
+                'a[href]',
+                '[data-fbcleaner-urlsig]',
+                '[data-fb-urlsig]'
+            ].join(',');
+
+            const targetAreas = Array.from(document.querySelectorAll(areaSelectors)).slice(0, 40);
+            let textToScan = '';
+
+            const addNodeSignals = (node) => {
+                try {
+                    if (!node || isInsideComment(node)) return;
+
+                    textToScan += ' ' + (node.textContent || '');
+                    textToScan += ' ' + ((node.getAttribute && node.getAttribute('aria-label')) || '');
+                    textToScan += ' ' + ((node.getAttribute && node.getAttribute('title')) || '');
+                    textToScan += ' ' + ((node.getAttribute && node.getAttribute('href')) || '');
+                    textToScan += ' ' + (node.href || '');
+                    textToScan += ' ' + ((node.getAttribute && node.getAttribute('data-fbcleaner-urlsig')) || '');
+                    textToScan += ' ' + ((node.getAttribute && node.getAttribute('data-fb-urlsig')) || '');
+                    textToScan += ' ' + ((node.getAttribute && node.getAttribute('data-hovercard')) || '');
+                    textToScan += ' ' + ((node.getAttribute && node.getAttribute('ajaxify')) || '');
+                    textToScan += ' ' + ((node.getAttribute && node.getAttribute('data-store')) || '');
+                    textToScan += ' ' + ((node.getAttribute && node.getAttribute('data-ft')) || '');
+                } catch (e) {}
+            };
+
+            for (let i = 0; i < targetAreas.length; i++) {
+                const area = targetAreas[i];
+                if (!area || isInsideComment(area)) continue;
+
+                // Include the area itself. This matters for exact caption wrappers.
+                addNodeSignals(area);
+
+                const nodes = Array.from(area.querySelectorAll ? area.querySelectorAll(textNodesSelector) : []).slice(0, 180);
+                for (let j = 0; j < nodes.length; j++) {
+                    addNodeSignals(nodes[j]);
+                }
+            }
+
+            // Fallback for photo URLs where FB doesn't expose stable pagelet wrappers:
+            // scan the right-side visible caption-like text nodes directly, but still let
+            // isInsideComment() reject actual comments/replies.
+            if (!textToScan.trim()) {
+                const looseCaptionNodes = Array.from(document.querySelectorAll(directCaptionSelectors)).slice(0, 25);
+                for (let i = 0; i < looseCaptionNodes.length; i++) {
+                    addNodeSignals(looseCaptionNodes[i]);
+                }
+            }
+
+            const rawSignal = safeDecodeFBValue(textToScan);
+            const normalized = normalizeFBText(rawSignal);
+            if (!normalized) return false;
+
+            // Individual post/photo/video/reel pages should redirect when the caption or
+            // description itself contains blocked terms. Do not apply allowedWords here:
+            // UI words like "Send", "Message", "Reply", etc. would otherwise shield the page.
+            return matchesAnyActiveRegex(normalized);
+        } catch (e) {
+            return false;
+        }
+    };
+
+    // Handle redirects for blocked content
     const handleRedirects = () => {
         try {
+            refreshAccountScopedFilters();
             if (isRedirecting) return;
 
-            const urlObj = new URL(window.location.href);
-            if (urlObj.pathname === '/' || urlObj.pathname === '/home.php') return;
-            if (isSafeWhitelistedPath(urlObj.pathname, urlObj.href)) return;
+            const url = new URL(window.location.href);
+            const isHome = url.pathname === '/' || url.pathname === '/home.php';
+            if (isHome) return;
+            if (lastRedirect === url.href) return;
+            if (isSafeWhitelistedPath(url.pathname, url.href)) return;
 
-            const hrefString = urlObj.href.toLowerCase();
-            let isBlocked = false;
-
-            // Hard redirects that are allowed to bypass all comment/post grace.
-            if (fbValueHasBlockedFbid(urlObj.href) || fbScopedDocumentHasBlockedIdentity(false)) {
-                triggerRedirect();
+            // 1. Hard current-URL redirects only:
+            //    - scoped blocked FBIDs anywhere in the current URL
+            //    - blockedUrls only when the current Facebook URL itself is a directly-blocked FB URL
+            if (fbValueHasBlockedFbid(url.href) || matchesDirectFacebookBlockedUrlForRedirect(url.href)) {
+                triggerRedirect('blocked current URL/direct FB URL');
                 return;
             }
 
-            if (matchesBlockedUrlCandidates(urlObj.href)) {
-                triggerRedirect();
+            // Approved browse cache: if this post/media/permalink/comment page came from an
+            // already-approved feed card, let it breathe. Direct blocked FBIDs/URLs above still win.
+            if (currentUrlIsApprovedForBrowsing(url.href)) {
+                devLog('Allowing approved cached post/media/permalink browsing');
                 return;
             }
 
-            // Comment navigation/post views should not be nuked by title/sidebar/comment text.
-            // Direct FBID and explicit blocked URL checks above still win.
-            if (isNavigationGraceActive() || isCommentNavigationUrl(urlObj.href) || isCurrentPostApproved()) {
+            if (fbScopedDocumentHasBlockedIdentity(false)) {
+                triggerRedirect('blocked scoped identity');
                 return;
             }
 
-            const isContentView = isPostLikeContentUrl(urlObj.href);
-
-            // Generic title/path word redirects are for pages/search/regular routes, not post views.
-            // Post/photo/reel views are handled by the scoped description scan below.
-            if (!isContentView) {
-                const rawPathSearch = getSanitizedPathSearchForMatching(urlObj.href);
-                const spacedPathSearch = rawPathSearch.replace(/[\.\,\-\=\!\?\+\_\@]/g, ' ');
-                const strippedPathSearch = rawPathSearch.replace(/[\.\,\-\=\!\?\+\_\s\@]/g, '');
-
-                isBlocked = restrictedWords.some(word => {
-                    const strippedWord = word.toLowerCase().replace(/[\.\,\-\=\!\?\+\_\s\@]/g, '');
-                    return strippedWord.length > 3 && strippedPathSearch.includes(strippedWord);
-                });
-
-                if (!isBlocked) {
-                    isBlocked = regexBlockedWords.some(regex => regex.test(rawPathSearch) || regex.test(spacedPathSearch));
-                }
-
-                if (!isBlocked) {
-                    const pageTitle = document.title.toLowerCase();
-                    isBlocked = restrictedWords.some(word => pageTitle.includes(word.toLowerCase())) || regexBlockedWords.some(regex => regex.test(pageTitle));
+            // 2. Profile/page route redirects by actual page identity: path/title/header/name/metadata.
+            //    This intentionally does NOT scan normal timeline/feed content.
+            if (isLikelyProfileOrPageRoute(url.href)) {
+                if (urlPathOrTitleHasBlockedTerms(url.href) || currentProfileOrPageHasBlockedIdentityOrTerms()) {
+                    triggerRedirect('blocked profile/page identity/name/url');
+                    return;
                 }
             }
 
-            if (!isBlocked && isContentView) {
-                let textToScan = '';
-                const targetAreas = Array.from(document.querySelectorAll([
-                    '[data-pagelet="MediaViewer_Sidebar"]',
-                    '[data-pagelet="TahoeRightRail"]',
-                    '[data-pagelet="MediaViewerPhoto"]',
-                    '[role="complementary"]',
-                    'div[role="dialog"]',
-                    'div[role="article"]'
-                ].join(','))).slice(0, 8);
-
-                targetAreas.forEach(area => {
-                    if (!area || isInsideComment(area)) return;
-                    const nodes = Array.from(area.querySelectorAll('span[dir="auto"], div[dir="auto"], h1, h2, h3, h4, [data-ad-comet-preview="message"], [data-ad-preview="message"]')).slice(0, 80);
-                    nodes.forEach(node => {
-                        if (!isInsideComment(node)) textToScan += ' ' + (node.textContent || '');
-                    });
-                });
-
-                if (textToScan.trim()) {
-                    const lower = normalizeFBText(textToScan);
-                    if (!allowedWordsLower.some(w => lower.includes(w))) {
-                        if (restrictedWordsLower.some(w => lower.includes(w)) || regexBlockedWords.some(r => r.test(lower))) {
-                            isBlocked = true;
-                        }
-                    }
-                }
+            // 3. Photo/post/video/reel caption/description redirects.
+            //    This is limited to post-like routes and skips comment-ish areas.
+            if (currentMediaOrPostViewHasBlockedCaption()) {
+                triggerRedirect('blocked media/post caption');
+                return;
             }
-
-            if (isBlocked) triggerRedirect();
-        } catch (e) {}
+        } catch (e) {
+            console.log('Error handling redirects: ' + e.message);
+        }
     };
 
+    // Enhanced function to handle deleting images/links with blocked FBIDs and URLs.
+    // Optimized: scans only elements that can actually carry URLs/IDs and caches signatures.
     const deleteBlockedElements = () => {
         try {
-            if (isExcludedPathForDOM(window.location.pathname, window.location.href)) return;
+            refreshAccountScopedFilters();
+            const elements = document.querySelectorAll([
+                'img[src]',
+                'source[srcset]',
+                'a[href]',
+                '[data-fbid]',
+                '[data-profileid]',
+                '[data-pageid]',
+                '[data-hovercard]',
+                '[ajaxify]',
+                '[data-lynx-uri]',
+                '[data-store]',
+                '[data-ft]'
+            ].join(','));
 
-            const elements = document.querySelectorAll('img[src], a[href], div[data-fbid], [data-lynx-uri], [data-store]');
+            let deletedCount = 0;
+
             elements.forEach(element => {
-                if (isSafeElement(element)) return;
-                if (isInsideComment(element)) return;
+                if (!element || isSafeElement(element) || isInsideComment(element)) return;
 
-                const src = element.src || '';
-                const dataFbid = element.getAttribute('data-fbid') || '';
-                const srcSet = element.getAttribute('srcset') || '';
-                const href = element.href || element.getAttribute('href') || '';
-                const parentLink = element.closest('a') ? (element.closest('a').href || element.closest('a').getAttribute('href') || '') : '';
-                const lynxUri = element.getAttribute('data-lynx-uri') || '';
-                const dataStore = element.getAttribute('data-store') || '';
-                const signature = [src, dataFbid, srcSet, href, parentLink, lynxUri, dataStore].join('||');
+                const values = [
+                    element.src || '',
+                    element.getAttribute('srcset') || '',
+                    element.href || '',
+                    element.getAttribute('href') || '',
+                    element.getAttribute('data-fbid') || '',
+                    element.getAttribute('data-profileid') || '',
+                    element.getAttribute('data-pageid') || '',
+                    element.getAttribute('data-hovercard') || '',
+                    element.getAttribute('ajaxify') || '',
+                    element.getAttribute('data-lynx-uri') || '',
+                    element.getAttribute('data-store') || '',
+                    element.getAttribute('data-ft') || ''
+                ];
 
-                if (element.getAttribute('data-fb-urlsig') === signature) return;
-                element.setAttribute('data-fb-urlsig', signature);
-                element.classList.add('fb-sanity-checked');
-
-                const hasBlockedFbid = blockedFbids.some(fbid => src.includes(fbid) || dataFbid.includes(fbid) || srcSet.includes(fbid) || href.includes(fbid) || parentLink.includes(fbid) || lynxUri.includes(fbid) || dataStore.includes(fbid));
-                const hasBlockedUrl = [href, parentLink, lynxUri, dataStore, src, srcSet].some(value => matchesBlockedUrlCandidates(value));
-                const hasBlockedDomainText = postContainsBlockedDomainText(element.closest(getFeedUnitSelectorString()) || element.closest('[role="article"]') || element);
-
-                if (hasBlockedFbid || hasBlockedUrl || hasBlockedDomainText) {
-                    const blockedPost = getOwningFeedPost(element);
-                    if (blockedPost) hardBanFeedPost(blockedPost);
-                    else safelyHideFBElement(element.closest('div') || element);
-                }
-            });
-        } catch (e) {}
-    };
-
-
-
-const FEED_UNIT_SELECTORS = [
-    'div[data-pagelet^="FeedUnit_"]',
-    'div[data-pagelet^="TimelineFeedUnit_"]',
-    'div[data-ad-rendering-role="story_message"]',
-    'div[data-ad-preview="message"]'
-];
-const getFeedUnitSelectorString = () => FEED_UNIT_SELECTORS.join(', ');
-const isFeedUnit = (el) => !!(el && el.matches && FEED_UNIT_SELECTORS.some(sel => el.matches(sel)));
-
-const clearFBHideStyles = (element) => {
-    if (!element || !element.style) return;
-    [
-        'display', 'visibility', 'opacity', 'pointer-events', 'position', 'left', 'top',
-        'height', 'width', 'overflow', 'content-visibility', 'max-height', 'min-height',
-        'margin', 'padding', 'border', 'animation'
-    ].forEach(prop => {
-        try { element.style.removeProperty(prop); } catch (e) {}
-    });
-};
-
-const getCurrentFeedContextKey = () => {
-    try {
-        const url = new URL(window.location.href, window.location.origin);
-        if (isNotificationNavigationUrl(url.href)) {
-            url.searchParams.delete('notif_id');
-            url.searchParams.delete('notif_t');
-            if (url.searchParams.get('ref') === 'notif') url.searchParams.delete('ref');
-        }
-        return url.pathname + '?' + url.searchParams.toString();
-    } catch (e) {
-        return window.location.pathname;
-    }
-};
-
-const getFeedPostIdentity = (post) => {
-    try {
-        const ids = typeof getFBPostIDs === 'function' ? getFBPostIDs(post) : [];
-        if (ids && ids.length > 0) return 'ids:' + ids.join('|');
-        const links = Array.from(post.querySelectorAll('a[href]'))
-            .filter(a => !isInsideComment(a))
-            .map(a => a.getAttribute('href') || '')
-            .filter(Boolean);
-        const link = links.find(href => /\/(posts|permalink|videos|reels?)\//i.test(href) || /(story_fbid|fbid|multi_permalinks|v)=/i.test(href));
-        return link ? 'href:' + link.slice(0, 300) : '';
-    } catch (e) {
-        return '';
-    }
-};
-
-const tagFeedPostContext = (post) => {
-    if (!post || !isFeedUnit(post)) return;
-    post.setAttribute('data-fb-context', getCurrentFeedContextKey());
-    const identity = getFeedPostIdentity(post);
-    if (identity) post.setAttribute('data-fb-post-id', identity);
-};
-
-// Finds the real feed/card wrapper from any inner caption/link/media node.
-// This prevents the fallback word scrubber from only hiding the description text.
-const getOwningFeedPost = (element) => {
-    try {
-        if (!element || !element.closest) return null;
-
-        const feedUnit = element.closest(getFeedUnitSelectorString());
-        if (feedUnit) return feedUnit;
-
-        const article = element.closest('[role="article"]');
-        if (article) {
-            const outerFeedUnit = article.closest(getFeedUnitSelectorString());
-            return outerFeedUnit || article;
-        }
-    } catch (e) {}
-    return null;
-};
-
-const hardBanFeedPost = (post) => {
-    try {
-        if (!post || isDangerousToHide(post)) return;
-        post.classList.remove('fb-post-approved', 'fb-post-pending', 'fb-post-scanning', 'fb-post-expanding');
-        post.removeAttribute('data-fb-pending-since');
-        post.setAttribute('data-fb-feed-stage', 'denied');
-        post.classList.add('fb-post-banned', 'fb-post-processed');
-        if (isFeedUnit(post)) tagFeedPostContext(post);
-        safelyHideFBElement(post);
-    } catch (e) {}
-};
-
-
-// Hard-nuke feed posts whose header/meta line says Facebook recommended them.
-// These are normal FeedUnit/story cards, not always the older aria-label="Suggested for you" regions,
-// so they need to be denied at the feed-card level before approval/reveal.
-const suggestedForYouFeedHeaderTexts = [
-    'sinulle ehdotettua',
-    'sinulle ehdotettu',
-    'ehdotettu sinulle',
-    'suositeltu sinulle',
-    'suggested for you',
-    'recommended for you'
-];
-
-const normalizeSuggestedHeaderText = (value = '') => {
-    try {
-        return normalizeFBText(value)
-            .replace(/\u00a0/g, ' ')
-            .replace(/[·•]/g, ' · ')
-            .replace(/\s+/g, ' ')
-            .trim();
-    } catch (e) {
-        return '';
-    }
-};
-
-const elementLooksLikeSuggestedForYouHeader = (el) => {
-    try {
-        if (!el || isInsideComment(el)) return false;
-
-        const rawValues = [
-            el.getAttribute && el.getAttribute('data-fb-words-text'),
-            el.getAttribute && el.getAttribute('aria-label'),
-            el.getAttribute && el.getAttribute('title'),
-            el.innerText,
-            el.textContent
-        ].filter(Boolean);
-
-        for (let i = 0; i < rawValues.length; i++) {
-            const text = normalizeSuggestedHeaderText(rawValues[i]);
-            if (!text) continue;
-
-            // Exact tiny label: <span>Sinulle ehdotettua</span>
-            if (suggestedForYouFeedHeaderTexts.includes(text)) return true;
-
-            // Combined meta row: "Sinulle ehdotettua · 9 t ·" / "Recommended for you · 2 h ·"
-            if (text.length <= 180 && suggestedForYouFeedHeaderTexts.some(label => {
-                return text === label ||
-                       text.startsWith(label + ' ·') ||
-                       text.startsWith(label + ' -') ||
-                       text.startsWith(label + ' –') ||
-                       text.startsWith(label + ' —') ||
-                       text.startsWith(label + '  ');
-            })) {
-                return true;
-            }
-        }
-    } catch (e) {}
-    return false;
-};
-
-const postHasSuggestedForYouHeader = (post) => {
-    try {
-        if (!post) return false;
-        if (elementLooksLikeSuggestedForYouHeader(post)) return true;
-
-        const candidates = post.querySelectorAll([
-            '[data-fb-words-text]',
-            'span[dir="auto"]',
-            'span[dir="ltr"]',
-            'span.html-span',
-            'div[dir="auto"]',
-            'div.html-div',
-            '[aria-label]',
-            '[title]'
-        ].join(','));
-
-        for (let i = 0; i < candidates.length; i++) {
-            if (elementLooksLikeSuggestedForYouHeader(candidates[i])) return true;
-        }
-    } catch (e) {}
-    return false;
-};
-
-const banSuggestedForYouFeedPosts = (root = document) => {
-    try {
-        if (isExcludedPathForDOM(window.location.pathname, window.location.href)) return;
-
-        const posts = [];
-        if (root && root.nodeType === 1 && isFeedUnit(root)) posts.push(root);
-        if (root && root.querySelectorAll) root.querySelectorAll(getFeedUnitSelectorString()).forEach(post => posts.push(post));
-
-        posts.forEach(post => {
-            if (!post || post.classList.contains('fb-post-banned') || post.classList.contains('fb-element-banned')) return;
-            if (postHasSuggestedForYouHeader(post)) hardBanFeedPost(post);
-        });
-
-        const labelCandidates = root && root.querySelectorAll ? root.querySelectorAll([
-            '[data-fb-words-text]',
-            'span[dir="auto"]',
-            'span[dir="ltr"]',
-            'span.html-span',
-            'div[dir="auto"]',
-            'div.html-div',
-            '[aria-label]',
-            '[title]'
-        ].join(',')) : [];
-
-        labelCandidates.forEach(el => {
-            if (!elementLooksLikeSuggestedForYouHeader(el)) return;
-            const post = getOwningFeedPost(el);
-            if (post) hardBanFeedPost(post);
-        });
-    } catch (e) {}
-};
-
-
-const blockedDomainTextNeedles = (() => {
-    const out = new Set();
-    blockedUrls.forEach(rx => {
-        try {
-            const source = String(rx && rx.source || '');
-            const match = source.match(/([a-z0-9-]+(?:\\\.)+[a-z]{2,}(?:(?:\\\.)+[a-z]{2,})?)/i);
-            if (!match) return;
-            const domain = match[1].replace(/\\\./g, '.').toLowerCase();
-            if (domain) out.add(domain);
-        } catch (e) {}
-    });
-    return Array.from(out);
-})();
-
-const collectBlockedUrlVariants = (value = '') => {
-    const variants = new Set();
-    const pushVariant = (candidate) => {
-        if (!candidate) return;
-        const normalized = String(candidate).trim();
-        if (!normalized) return;
-        variants.add(normalized);
-        try { variants.add(decodeURIComponent(normalized)); } catch (e) {}
-    };
-
-    const crawl = (candidate, depth = 0) => {
-        if (!candidate || depth > 3) return;
-        pushVariant(candidate);
-        try {
-            const url = new URL(candidate, window.location.origin);
-            pushVariant(url.href);
-            pushVariant(url.pathname + url.search + url.hash);
-            ['u', 'url', 'href', 'link', 'redirect', 'redirect_uri', 'next'].forEach(param => {
-                const nested = url.searchParams.get(param);
-                if (nested) crawl(nested, depth + 1);
-            });
-        } catch (e) {}
-    };
-
-    crawl(value, 0);
-    return Array.from(variants);
-};
-
-const matchesBlockedUrlCandidates = (value = '') => {
-    if (!value) return false;
-    const variants = collectBlockedUrlVariants(value);
-    return variants.some(candidate => blockedUrls.some(blockedUrl => blockedUrl.test(candidate)));
-};
-
-const postContainsBlockedDomainText = (root) => {
-    try {
-        if (!root || !blockedDomainTextNeedles.length) return false;
-        const text = normalizeFBText(root.textContent || root.innerText || '');
-        if (!text) return false;
-        return blockedDomainTextNeedles.some(domain => text.includes(domain));
-    } catch (e) {
-        return false;
-    }
-};
-
-const revealApprovedPost = (post) => {
-    if (!post) return;
-    clearFBHideStyles(post);
-    post.classList.remove('fb-post-banned', 'fb-element-banned', 'fb-post-pending', 'fb-post-scanning', 'fb-post-expanding');
-    post.removeAttribute('data-fb-pending-since');
-    post.setAttribute('data-fb-feed-stage', 'approved');
-    post.classList.add('fb-post-approved', 'fb-post-processed');
-    tagFeedPostContext(post);
-};
-
-const resetFeedPostState = (post) => {
-    if (!post || !isFeedUnit(post)) return;
-    clearFBHideStyles(post);
-    post.classList.remove('fb-post-approved', 'fb-post-banned', 'fb-element-banned', 'fb-post-pending', 'fb-post-scanning', 'fb-post-expanding', 'fb-post-processed');
-    post.removeAttribute('data-fb-pending-since');
-    post.removeAttribute('data-fb-feed-stage');
-    post.removeAttribute('data-processed');
-    post.removeAttribute('data-processed-text');
-    tagFeedPostContext(post);
-    try {
-        post.querySelectorAll('.fb-sanity-checked, .fb-words-checked, .fb-search-processed').forEach(el => {
-            el.classList.remove('fb-sanity-checked', 'fb-words-checked', 'fb-search-processed');
-            el.removeAttribute('data-processed-text');
-            el.removeAttribute('data-fb-words-text');
-        });
-        post.querySelectorAll('[data-processed]').forEach(el => el.removeAttribute('data-processed'));
-    } catch (e) {}
-};
-
-const resetReusedFeedUnits = (root = document) => {
-    try {
-        const currentContext = getCurrentFeedContextKey();
-        const candidates = [];
-        if (root && root.nodeType === 1 && isFeedUnit(root)) candidates.push(root);
-        if (root && root.querySelectorAll) root.querySelectorAll(getFeedUnitSelectorString()).forEach(el => candidates.push(el));
-
-        candidates.forEach(post => {
-            const oldContext = post.getAttribute('data-fb-context') || '';
-            const oldIdentity = post.getAttribute('data-fb-post-id') || '';
-            const newIdentity = getFeedPostIdentity(post);
-            const hasState = post.classList.contains('fb-post-processed') || post.classList.contains('fb-post-approved') || post.classList.contains('fb-post-banned') || post.classList.contains('fb-element-banned');
-
-            if (hasState && oldContext && oldContext !== currentContext) {
-                resetFeedPostState(post);
-                return;
-            }
-            if (hasState && oldIdentity && newIdentity && oldIdentity != newIdentity) {
-                resetFeedPostState(post);
-                return;
-            }
-            if (!oldContext) post.setAttribute('data-fb-context', currentContext);
-            if (newIdentity && !oldIdentity) post.setAttribute('data-fb-post-id', newIdentity);
-        });
-    } catch (e) {}
-};
-
-const markPendingFeedUnits = (root = document) => {
-    try {
-        const now = Date.now();
-        const candidates = [];
-        if (root && root.nodeType === 1 && isFeedUnit(root)) candidates.push(root);
-        if (root && root.querySelectorAll) root.querySelectorAll(getFeedUnitSelectorString()).forEach(el => candidates.push(el));
-
-        candidates.forEach(post => {
-            if (!post || !isFeedUnit(post)) return;
-            if (post.classList.contains('fb-post-approved') || post.classList.contains('fb-post-banned') || post.classList.contains('fb-element-banned') || post.classList.contains('fb-post-processed') || post.classList.contains('fb-post-scanning') || post.classList.contains('fb-post-expanding')) {
-                post.classList.remove('fb-post-pending');
-                post.removeAttribute('data-fb-pending-since');
-                return;
-            }
-
-            const since = Number(post.getAttribute('data-fb-pending-since') || '0');
-            if (since && (now - since) > 12000) {
-                post.classList.remove('fb-post-expanding');
-                post.removeAttribute('data-fb-expand-attempts');
-                post.setAttribute('data-fb-pending-since', String(now));
-            }
-
-            if (!post.classList.contains('fb-post-pending')) {
-                post.classList.add('fb-post-pending');
-                post.setAttribute('data-fb-pending-since', String(now));
-            }
-            post.setAttribute('data-fb-feed-stage', 'loading');
-            tagFeedPostContext(post);
-        });
-    } catch (e) {}
-};
-
-const scanAndBanEntirePosts = () => {
-    try {
-        if (isExcludedPathForDOM(window.location.pathname, window.location.href)) return;
-        resetReusedFeedUnits(document);
-        markPendingFeedUnits(document);
-
-        const postSelectors = [
-            'div[data-pagelet^="FeedUnit_"]',
-            'div[data-ad-rendering-role="story_message"]',
-            'div[data-ad-preview="message"]',
-            'div[data-pagelet^="TimelineFeedUnit_"]',
-            'div[data-pagelet="MediaViewerPhoto"]'
-        ];
-
-        postSelectors.forEach(selector => {
-            document.querySelectorAll(selector + ':not(.fb-post-processed):not(.fb-post-scanning)').forEach(post => {
-                if (isInsideComment(post)) {
-                    revealApprovedPost(post);
-                    return;
+                const parentLink = element.closest && element.closest('a[href]');
+                if (parentLink) {
+                    values.push(parentLink.href || '');
+                    values.push(parentLink.getAttribute('href') || '');
                 }
 
-                const postIDs = getFBPostIDs(post);
-                let isAlreadyApproved = false;
-                for (let i = 0; i < postIDs.length; i++) {
-                    if (approvedFBPostIDs.has(postIDs[i])) {
-                        isAlreadyApproved = true;
-                        break;
+                const signature = values.join('||');
+                if (element.getAttribute('data-fbcleaner-urlsig') === signature) return;
+                element.setAttribute('data-fbcleaner-urlsig', signature);
+
+                const signal = safeDecodeFBValue(signature);
+                const hasBlockedFbid = matchesAnyBlockedFbid(signal) || fbElementHasBlockedIdentity(element);
+                const hasBlockedUrl = matchesBlockedUrlCandidates(signal);
+
+                if (hasBlockedFbid || hasBlockedUrl) {
+                    const elementToDelete =
+                        element.closest('[data-pagelet^="FeedUnit_"]') ||
+                        element.closest('[data-pagelet^="TimelineFeedUnit_"]') ||
+                        element.closest('[role="article"]') ||
+                        element.closest('[role="listitem"], li, [role="row"]') ||
+                        element.closest('div') ||
+                        element;
+
+                    if (elementToDelete && !elementToDelete.closest('[role="banner"]') && !elementToDelete.closest('[role="navigation"]')) {
+                        hideElementHard(elementToDelete, 'fb-element-banned');
+                        deletedCount++;
                     }
                 }
+            });
 
-                const hasImmediateJoinAction = hasExplicitBannedPostAction(post);
-                const hasImmediateSuggestedForYouHeader = postHasSuggestedForYouHeader(post);
-                const hasImmediateBlockedDomainText = postContainsBlockedDomainText(post);
-                const hasImmediateBlockedLink = Array.from(post.querySelectorAll('a[href], [data-lynx-uri]')).some(link => {
-                    if (!link || isInsideComment(link)) return false;
-                    const href = link.href || link.getAttribute('href') || '';
-                    const lynx = link.getAttribute && link.getAttribute('data-lynx-uri') || '';
-                    return matchesBlockedUrlCandidates(href) || matchesBlockedUrlCandidates(lynx);
-                });
+            if (deletedCount > 0) {
+                devLog(`Deleted ${deletedCount} blocked elements`);
+            }
+        } catch (e) {
+            console.log('Error deleting blocked elements: ' + e.message);
+        }
+    };
 
-                if (hasImmediateJoinAction || hasImmediateSuggestedForYouHeader || hasImmediateBlockedDomainText || hasImmediateBlockedLink) {
-                    post.classList.remove('fb-post-approved');
-                    tagFeedPostContext(post);
-                    hardBanFeedPost(post);
-                    return;
-                }
+    // ENHANCED: Function to scan and ban entire posts initially to prevent "Show more" issues
+    // UPDATED: Add fb-post-approved class to non-banned posts for immediate visibility
+    const scanAndBanEntirePosts = () => {
+        try {
+            devLog('Scanning entire posts for banned content');
+            const postSelectors = [
+                '[role="article"]',
+                '[role="article"].x1lliihq',
+                '[role="article"] .x1yztbdb',
+                '[role="article"] .x1hc1fzr',
+                'div.x1iyjqo2.x1vjfegm'
+            ];
 
-                if (isAlreadyApproved || isCurrentPostApproved()) {
-                    revealApprovedPost(post);
-                    if (postIDs.length > 0) saveApprovedPostIDs(postIDs);
-                    return;
-                }
+            let bannedCount = 0;
+            postSelectors.forEach(selector => {
+                document.querySelectorAll(selector + ':not(.fb-post-processed)').forEach(post => {
+                    post.classList.add('fb-post-processed');
+                    
+                    // Collect all text content from the post, including expanded areas
+                    const allTextElements = post.querySelectorAll('*');
+                    let fullPostText = '';
+                    allTextElements.forEach(el => {
+                        const text = el.textContent || el.innerText || '';
+                        if (text.trim()) fullPostText += text + ' ';
+                    });
+                    fullPostText = fullPostText.toLowerCase();
 
-                post.classList.remove('fb-post-pending');
-                post.removeAttribute('data-fb-pending-since');
-                post.setAttribute('data-fb-feed-stage', 'scanning');
-                post.classList.add('fb-post-scanning');
-                tagFeedPostContext(post);
-
-                const seeMoreButtons = Array.from(post.querySelectorAll('[role="button"], button, a[role="button"], a, div[role="button"]')).filter(btn => {
-                    if (isInsideComment(btn)) return false;
-                    return isAutoExpandButton(btn);
-                });
-
-                const evaluatePost = () => {
-                    try {
-                        post.classList.add('fb-post-processed');
-                        post.classList.remove('fb-post-pending', 'fb-post-scanning');
-                        post.removeAttribute('data-fb-pending-since');
-                        let isBanned = false;
-
-                        if (hasExplicitBannedPostAction(post) || postHasSuggestedForYouHeader(post)) {
-                            isBanned = true;
-                        }
-
-                        let fullPostText = '';
-                        if (!isBanned) {
-                            fullPostText = extractTextFromPostSafely(post).toLowerCase();
-                            if (restrictedWordsLower.some(word => fullPostText.includes(word))) isBanned = true;
-                            if (!isBanned && regexBlockedWords.some(regex => regex.test(fullPostText))) isBanned = true;
-                            if (!isBanned && postContainsBlockedDomainText(post)) isBanned = true;
-                            if (!isBanned) {
-                                const postLinks = Array.from(post.querySelectorAll('a[href], [data-lynx-uri]')).filter(link => !isInsideComment(link));
-                                for (let i = 0; i < postLinks.length; i++) {
-                                    const href = postLinks[i].href || postLinks[i].getAttribute('href') || '';
-                                    if (blockedFbids.some(fbid => href.includes(fbid) || href.includes('id=' + fbid))) { isBanned = true; break; }
-                                    if (matchesBlockedUrlCandidates(href) || matchesBlockedUrlCandidates(postLinks[i].getAttribute('data-lynx-uri') || '')) { isBanned = true; break; }
-                                }
+                    // Check against all blocking criteria
+                    let isBanned = false;
+                    
+                    // Check active regex blocklists in full post text
+                    if (matchesAnyActiveRegex(fullPostText)) {
+                        isBanned = true;
+                        devLog(`🚫 Post banned by active regex in full content`);
+                    }
+                    
+                    // Check for blocked FBIDs in post attributes or links
+                    if (!isBanned) {
+                        const postLinks = post.querySelectorAll('a[href]');
+                        for (let link of postLinks) {
+                            const href = link.href;
+                            if (matchesAnyBlockedFbid(href)) {
+                                isBanned = true;
+                                devLog(`🚫 Post banned by FBID in links`);
+                                break;
                             }
                         }
-
-                        if (isBanned) {
-                            post.classList.remove('fb-post-approved');
-                            tagFeedPostContext(post);
-                            hardBanFeedPost(post);
-                        } else {
-                            revealApprovedPost(post);
-                            if (postIDs.length > 0) saveApprovedPostIDs(postIDs);
-                        }
-                    } catch (e) {
-                        revealApprovedPost(post);
                     }
-                };
-
-                const expandAttempts = Number(post.getAttribute('data-fb-expand-attempts') || '0');
-                if (seeMoreButtons.length > 0 && expandAttempts < 2) {
-                    post.classList.add('fb-post-expanding');
-                    post.setAttribute('data-fb-expand-attempts', String(expandAttempts + 1));
-                    seeMoreButtons.forEach(btn => hardClickElement(btn));
-                    setTimeout(() => {
-                        post.classList.remove('fb-post-expanding');
-                        evaluatePost();
-                    }, 900);
-                    return;
-                }
-                post.classList.remove('fb-post-expanding');
-                post.classList.remove('fb-post-pending');
-                post.removeAttribute('data-fb-pending-since');
-                post.removeAttribute('data-fb-expand-attempts');
-                evaluatePost();
+                    
+                    // Check for blocked URLs in post
+                    if (!isBanned) {
+                        const postLinks = post.querySelectorAll('a[href]');
+                        for (let link of postLinks) {
+                            if (matchesAnyBlockedUrl(link.href)) {
+                                isBanned = true;
+                                devLog(`🚫 Post banned by URL in post`);
+                                break;
+                            }
+                        }
+                    }
+                    
+                    if (isBanned) {
+                        // Permanently ban the post
+                        post.classList.add('fb-post-banned');
+                        post.style.setProperty('display', 'none', 'important');
+                        post.style.setProperty('visibility', 'hidden', 'important');
+                        post.style.setProperty('opacity', '0', 'important');
+                        post.style.setProperty('pointer-events', 'none', 'important');
+                        post.style.setProperty('position', 'absolute', 'important');
+                        post.style.setProperty('left', '-9999px', 'important');
+                        post.style.setProperty('top', '-9999px', 'important');
+                        post.style.setProperty('height', '0', 'important');
+                        post.style.setProperty('width', '0', 'important');
+                        post.style.setProperty('overflow', 'hidden', 'important');
+                        bannedCount++;
+                    } else {
+                        // Approve the post to ensure it shows
+                        post.classList.add('fb-post-approved');
+                        rememberApprovedPostForBrowsing(post);
+                    }
+                });
             });
-        });
-    } catch (e) {}
-};
+            
+            if (bannedCount > 0) {
+                devLog(`Banned ${bannedCount} entire posts initially`);
+            }
+        } catch (e) {
+            console.log('Error scanning entire posts: ' + e.message);
+        }
+    };
 
+    // IMPORTANT: This function must be separate to ensure reels are removed
     const deleteRestrictedWords = () => {
         try {
-            if (isExcludedPathForDOM(window.location.pathname, window.location.href)) return;
-            if (isNavigationGraceActive() || isCommentNavigationUrl(window.location.href) || isCurrentPostApproved()) return;
-
-            // Reverted these selectors back to the facebookOld.js structure to fix the lazy-load tagging bug
             const selectors = [
-		'div[data-ad-comet-preview="message"]',
-		'div[data-ad-rendering-role="story_message"]',
-		'div[data-ad-preview="message"]',
-                'div.x1l90r2v.x1iorvi4.x1g0dm76.xpdmqnj',
-                'div.xdj266r.x14zmp.xat24cr.x1lziwak.x1vvkbs.x126k92a',
-        	'svg[aria-label="Meta AI:n profiilikuva"]',
-                'svg[aria-label*="Meta AI profile"]', 
-        	'a[aria-label="Meta AI"]',
-        	'div[aria-label="Meta AI"]',
-        	'span[aria-label="Meta AI"]',
+                '[role="article"]',
+                '[role="article"].x1lliihq',
+                '[role="article"] .x1yztbdb',
+                '[role="article"] .x1hc1fzr',
+                'div.x1iyjqo2.x1vjfegm',
+        		'svg[aria-label="Meta AI:n profiilikuva"]',
+        		'svg[aria-label*="Meta AI profile"]', 
+        		'a[aria-label="Meta AI"]',
+        		'div[aria-label="Meta AI"]',
+        		'span[aria-label="Meta AI"]',
                 'div.x78zum5.x1q0g3np.x1qughib.xz9dl7a.xn6708d.x1120s5i.x1ye3gou',
                 'div.x10l6tqk.xwa60dl.x1d8287x.x19991ni.xwji4o3.x1vjfegm.xg01cxk.x47corl',
                 'div.x1iyjqo2.x1vjfegm',
@@ -3079,74 +2295,52 @@ const scanAndBanEntirePosts = () => {
                 'div.xieb3on:nth-child(1) > svg:nth-child(1)',
                 '.x1p5oq8j > div:nth-child(2)',
                 'div.x6s0dn4.x78zum5.x1qughib.x1iorvi4.xjkvuk6',
-        	'a[aria-label*="20. heinäkuu klo 14.53"]',
-                'a[href*="facebook.com/permalink"][aria-label*="20. heinäkuu klo 14.53"]',
-                'span.html-span.x1vvkbs',
-                'div.html-div.x1a02dak'
+        		'a[aria-label*="20. heinäkuu klo 14.53"]',
+        		'a[href*="facebook.com/permalink"][aria-label*="20. heinäkuu klo 14.53"]'
             ];
 
-            document.querySelectorAll(selectors.join(',')).forEach(element => {
-                if (isSafeElement(element)) return; 
-                if (isInsideComment(element)) return;
-                if (element.closest('ul[aria-label]') || element.closest('form[role="search"]')) return;
-
-                const owningFeedPost = getOwningFeedPost(element);
-                if (owningFeedPost && !owningFeedPost.classList.contains('fb-post-processed') && !owningFeedPost.classList.contains('fb-post-approved') && !owningFeedPost.classList.contains('fb-post-banned') && !owningFeedPost.classList.contains('fb-element-banned')) {
-                    // Do not mark the inner node as checked yet. First-feed posts often render text
-                    // while the outer card is still pending/scanning; marking here made them invisible
-                    // to later passes once the card was finally ready.
-                    return;
-                }
-                
-                const elementText = (element.innerText || element.textContent || '').toLowerCase();
-
-                if (elementLooksLikeSuggestedForYouHeader(element)) {
-                    const suggestedPost = owningFeedPost || getOwningFeedPost(element);
-                    if (suggestedPost) {
-                        hardBanFeedPost(suggestedPost);
-                        return;
-                    }
-                }
-
-                const processedText = element.getAttribute('data-fb-words-text') || '';
-                if (element.classList.contains('fb-words-checked') && processedText === elementText) return;
-
-                element.classList.add('fb-words-checked');
-                element.setAttribute('data-fb-words-text', elementText);
-
-                const isRestricted = restrictedWordsLower.some(word => elementText.includes(word));
-                const isRegexBlocked = regexBlockedWords.some(regex => regex.test(elementText));
-                
-                if (isRestricted || isRegexBlocked) {
-                    const currentPath = window.location.pathname.toLowerCase();
-                    const isMediaViewer = element.closest('[data-pagelet="MediaViewerPhoto"]') || currentPath.includes('/photo') || currentPath.includes('/reel/') || currentPath.includes('/posts/') || currentPath.includes('/permalink.php') || currentPath.includes('/videos/');
+            let removedCount = 0;
+            document.querySelectorAll(selectors.join(','))
+                .forEach(element => {
+                    if (isSafeElement(element)) return;
                     
-                    if (isMediaViewer) {
-                        triggerRedirect();
-                        return;
+                    const elementText = (element.innerText || element.textContent || '').toLowerCase();
+                    const isRestricted = false;
+                    const isRegexBlocked = matchesAnyActiveRegex(elementText);
+                    
+                    if (isRestricted || isRegexBlocked) {
+                        const elementToRemove = element.closest('[role="article"]') || element;
+                        // UPDATED: Do not hide approved posts (even if comments have banned content)
+                        if (!elementToRemove.classList.contains('fb-post-approved') && !elementToRemove.classList.contains('fb-post-banned') && !elementToRemove.classList.contains('fb-element-banned')) {
+                            elementToRemove.classList.add('fb-element-banned');
+                            elementToRemove.style.setProperty('display', 'none', 'important');
+                            elementToRemove.style.setProperty('visibility', 'hidden', 'important');
+                            elementToRemove.style.setProperty('opacity', '0', 'important');
+                            elementToRemove.style.setProperty('pointer-events', 'none', 'important');
+                            elementToRemove.style.setProperty('position', 'absolute', 'important');
+                            elementToRemove.style.setProperty('left', '-9999px', 'important');
+                            elementToRemove.style.setProperty('top', '-9999px', 'important');
+                            elementToRemove.style.setProperty('height', '0', 'important');
+                            elementToRemove.style.setProperty('width', '0', 'important');
+                            elementToRemove.style.setProperty('overflow', 'hidden', 'important');
+                            removedCount++;
+                        }
                     }
-
-                    const elementToRemove = owningFeedPost || element.closest('[role="article"]') || element;
-                    if (isDangerousToHide(elementToRemove)) return; 
-
-                    if (!elementToRemove.classList.contains('fb-post-banned') && !elementToRemove.classList.contains('fb-element-banned')) {
-                        hardBanFeedPost(elementToRemove);
-                    }
-                }
-            });
-        } catch (e) {}
+                });
+                
+            if (removedCount > 0) {
+                devLog(`Removed ${removedCount} elements with restricted words`);
+            }
+        } catch (e) {
+            console.log('Error deleting restricted words: ' + e.message);
+        }
     };
 
+    // ENHANCED: Instant search result filtering with comprehensive blocking
     const processSearchResults = () => {
         try {
-            if (window.location.pathname.includes('/search/')) {
-                document.body.classList.add('is-search-page');
-            } else {
-                document.body.classList.remove('is-search-page');
-            }
-            
-            if (!window.location.pathname.includes('/search/')) return;
-            
+            if (!isFBSearchPagePath()) return;
+            devLog('Processing search results with instant filtering');
             const searchSelectors = [
                 'li[role="row"]',
                 'a[aria-describedby]',
@@ -3156,31 +2350,41 @@ const scanAndBanEntirePosts = () => {
                 'a[href*="facebook.com/profile.php"]',
                 'a[href*="facebook.com/"][aria-describedby]'
             ];
-            
-            searchSelectors.forEach(selector => {
-                document.querySelectorAll(selector).forEach(result => {
-                    if (result.closest('[role="banner"]') || result.closest('[role="navigation"]')) return;
-                    if (isSafeElement(result)) return; 
-                    
-                    const textContent = (result.textContent || result.innerText || '').toLowerCase();
-                    const processedText = result.getAttribute('data-processed-text');
-                    
-                    if (result.classList.contains('fb-search-processed') && processedText === textContent) return;
-                    
-                    result.classList.add('fb-search-processed');
-                    result.setAttribute('data-processed-text', textContent);
 
+            let processedCount = 0;
+            searchSelectors.forEach(selector => {
+                document.querySelectorAll(selector + ':not(.fb-search-processed)').forEach(result => {
+                    result.classList.add('fb-search-processed');
+                    
+                    // Extract comprehensive content from search result
+                    const textContent = (result.textContent || result.innerText || '').toLowerCase();
                     const href = result.href || '';
                     const ariaLabel = result.getAttribute('aria-label') || '';
                     const dataHover = result.getAttribute('data-hovercard') || '';
+                    
+                    // Check against all blocking criteria
                     let isBlocked = false;
                     
-                    if (restrictedWordsLower.some(word => textContent.includes(word) || ariaLabel.toLowerCase().includes(word))) isBlocked = true; 
-                    if (!isBlocked && regexBlockedWords.some(regex => regex.test(textContent) || regex.test(ariaLabel) || regex.test(href))) isBlocked = true; 
-                    if (!isBlocked && blockedFbids.some(fbid => href.includes(fbid) || dataHover.includes(fbid) || href.includes('id=' + fbid) || href.includes('profile.php?id=' + fbid))) isBlocked = true; 
-                    if (!isBlocked && matchesBlockedUrlCandidates(href)) isBlocked = true; 
+                    // Check active regex blocklists
+                    if (matchesAnyActiveRegex(textContent + ' ' + ariaLabel + ' ' + href)) {
+                        isBlocked = true;
+                        devLog(`🚫 Search blocked by active regex: "${textContent.substring(0, 30)}..."`);
+                    }
+                    
+                    // Check blocked FBIDs in href or data attributes
+                    if (!isBlocked && matchesAnyBlockedFbid(href + ' ' + dataHover)) {
+                        isBlocked = true;
+                        devLog(`🚫 Search blocked by FBID: "${textContent.substring(0, 30)}..."`);
+                    }
+                    
+                    // Check blocked URLs
+                    if (!isBlocked && matchesAnyBlockedUrl(href)) {
+                        isBlocked = true;
+                        devLog(`🚫 Search blocked by URL pattern: "${textContent.substring(0, 30)}..."`);
+                    }
                     
                     if (isBlocked) {
+                        // Apply instant hiding and permanent banning
                         result.style.setProperty('display', 'none', 'important');
                         result.style.setProperty('visibility', 'hidden', 'important');
                         result.style.setProperty('opacity', '0', 'important');
@@ -3189,157 +2393,251 @@ const scanAndBanEntirePosts = () => {
                         result.style.setProperty('left', '-9999px', 'important');
                         result.style.setProperty('top', '-9999px', 'important');
                         result.classList.add('fb-search-banned');
-                        result.classList.remove('fb-search-approved');
                         
+                        // Also hide parent containers
                         const parentLi = result.closest('li');
                         if (parentLi && parentLi !== result) {
                             parentLi.style.setProperty('display', 'none', 'important');
                             parentLi.style.setProperty('visibility', 'hidden', 'important');
                             parentLi.classList.add('fb-search-banned');
-                            parentLi.classList.remove('fb-search-approved');
                         }
                     } else {
+                        // Approve and show the search result
                         result.classList.add('fb-search-approved');
-                        result.classList.remove('fb-search-banned');
                         result.style.removeProperty('display');
                         result.style.removeProperty('visibility');
                         result.style.removeProperty('opacity');
                         result.style.removeProperty('pointer-events');
                         result.style.removeProperty('position');
                         result.style.removeProperty('left');
-                        result.style.removeProperty('top');
-                        
-                        const parentLi = result.closest('li');
-                        if (parentLi && parentLi !== result) {
-                            parentLi.classList.remove('fb-search-banned');
-                            parentLi.style.removeProperty('display');
-                            parentLi.style.removeProperty('visibility');
-                        }
                     }
+                    
+                    processedCount++;
                 });
             });
-        } catch (e) {}
+            
+            if (processedCount > 0) {
+                devLog(`Processed ${processedCount} search results with instant filtering`);
+            }
+        } catch (e) {
+            console.log('Error processing search results: ' + e.message);
+        }
     };
 
+    // IMPORTANT: This function must be separate to ensure reels are removed from feed
     const deleteRestrictedPhrases = () => {
         try {
-            if (isExcludedPathForDOM(window.location.pathname, window.location.href)) return;
-
+            // Cache restricted phrases in lowercase for faster matching
             const restrictedPhrasesLower = [
-                "liity", "reels", "kelat", "sinulle suositeltua", "suositeltua", "tilaa", "ryhmiä sinulle", "meta ai", "ihmisiä,", "joita saatat tuntea", "ihmisiä, joita saatat tuntea", 
-                "kun lisäät kavereita, näet tässä listan ihmisistä, jotka saatat tuntea.", "lisää kavereita saadaksesi suosituksia", "sisältö ei ole käytettävissä tällä hetkellä", "sinulle ehdotettua", "ehdotettu sinulle", "seuraa"
+                "liity", "reels", "kelat", "sinulle suositeltua", "suositeltua", "tilaa", "ryhmiä sinulle", "Meta AI", "ihmisiä,", "joita saatat tuntea", "ihmisiä, joita saatat tuntea", 
+                "kun lisäät kavereita, näet tässä listan ihmisistä, jotka saatat tuntea.", "lisää kavereita saadaksesi suosituksia", "Sisältö ei ole käytettävissä tällä hetkellä", "Sinulle ehdotettua",
             ];
-            const processedElements = new WeakSet();
+
+            // Use a Set for faster lookups
+            const restrictedPhrasesSet = new Set(restrictedPhrasesLower);
             
-            document.querySelectorAll('div[data-pagelet^="FeedUnit_"]:not([data-processed]), div[data-pagelet^="TimelineFeedUnit_"]:not([data-processed])').forEach((post) => {
-                if (isSafeElement(post)) return; 
+            // Cache processed elements to avoid re-processing
+            const processedElements = new WeakSet();
+
+            let removedPostCount = 0;
+            // Only process new feed articles
+            document.querySelectorAll('[role="feed"] [role="article"]:not([data-processed])').forEach((post) => {
+                // Mark as processed to avoid re-processing
                 post.dataset.processed = "true";
-
-                if (isInsideComment(post)) return;
-
-                let shouldRemove = hasExplicitBannedPostAction(post);
                 
+                // Check for restricted button text first (fastest check)
+                let shouldRemove = false;
+                const buttons = post.querySelectorAll('div[role="button"]');
+                
+                // Use faster forEach loop instead of Array.from.some
+                for (let i = 0; i < buttons.length && !shouldRemove; i++) {
+                    const btnText = buttons[i].innerText?.toLowerCase();
+                    if (btnText === 'liity' || btnText === 'seuraa') {
+                        shouldRemove = true;
+                    }
+                }
+                
+                // If no restricted buttons, check for phrases in key elements only
                 if (!shouldRemove) {
-                    const keyElements = Array.from(post.querySelectorAll('h2, h3, h4, div.x1heor9g, [role="button"], span.html-span, div.html-div')).filter(el => !isInsideComment(el));
+                    // Only check headings and key containers rather than all text
+                    const keyElements = post.querySelectorAll('h2, h3, h4, div.x1heor9g, div[role="button"]');
+                    
                     for (let i = 0; i < keyElements.length && !shouldRemove; i++) {
                         const text = keyElements[i].innerText?.toLowerCase() || '';
-                        for (let j = 0; j < restrictedPhrasesLower.length; j++) {
-                            if (text.includes(restrictedPhrasesLower[j])) { shouldRemove = true; break; }
+                        
+                        // Check for exact restricted phrases
+                        for (let i = 0; i < restrictedPhrasesLower.length; i++) {
+                            if (text.includes(restrictedPhrasesLower[i])) {
+                                shouldRemove = true;
+                                break;
+                            }
                         }
                     }
                 }
                 
                 if (shouldRemove) {
+                    // Hide immediately before removing for better performance
                     if (!post.classList.contains('fb-post-banned') && !post.classList.contains('fb-element-banned')) {
-                        if (post.classList.contains('fb-post-approved') || post.closest('.fb-post-approved')) return; 
-                        post.classList.remove('fb-post-approved'); 
-                        hardBanFeedPost(post);
+                        post.classList.add('fb-element-banned');
+                        post.style.display = 'none';
+                        post.style.visibility = 'hidden';
+                        
+                        // Use a more reliable removal approach
+                        const parent = post.parentNode;
+                        if (parent) parent.removeChild(post);
+                        removedPostCount++;
                     }
                 }
             });
             
-            const headerSelectors = 'h2.html-h2, div.html-h2.xdj266r, span.html-span.x1vvkbs, div.html-div.x1a02dak';
+            // Look for non-article restricted content (like Reels sections)
+            // Use more specific selectors and skip already processed elements
+            const headerSelectors = 'h2.html-h2, div.html-h2.xdj266r';
+            let removedHeaderCount = 0;
             document.querySelectorAll(headerSelectors).forEach(header => {
-                if (processedElements.has(header) || header.closest('header') || header.closest('[role="navigation"]') || header.closest('[role="banner"]')) return;
+                // Skip if already processed or in navigation
+                if (processedElements.has(header) || 
+                    header.closest('header') || 
+                    header.closest('[role="navigation"]') || 
+                    header.closest('[role="banner"]')) {
+                    return;
+                }
+                
+                // Mark as processed
                 processedElements.add(header);
-
-                if (isInsideComment(header)) return;
-
+                
                 const headerText = header.innerText?.toLowerCase() || '';
                 
+                // Check if this is a restricted header
                 let isRestricted = false;
                 for (let i = 0; i < restrictedPhrasesLower.length && !isRestricted; i++) {
-                    if (headerText.includes(restrictedPhrasesLower[i])) isRestricted = true;
+                    if (headerText.includes(restrictedPhrasesLower[i])) {
+                        isRestricted = true;
+                    }
                 }
                 
                 if (isRestricted) {
+                    // Find the parent section/container
                     let container = null;
-                    if (!container) container = header.closest('[data-pagelet^="FeedUnit_"]');
+                    
+                    // Try these containers in order
                     if (!container) container = header.closest('[role="article"]');
-                    if (!container) container = header.closest('div.x1yztbdb');
                     if (!container) container = header.closest('div.x1lliihq');
                     if (!container) container = header.closest('div.x1ye3gou');
                     if (!container) container = header.closest('div.x78zum5:not([role="navigation"])');
                     
-                    if (container && !container.closest('[role="navigation"]') && !container.closest('[role="banner"]') && container.offsetHeight > 40) {
-                        if (isDangerousToHide(container)) return; 
+                    // Only remove if it's a valid container (not navigation and has size)
+                    if (container && 
+                        !container.closest('[role="navigation"]') && 
+                        !container.closest('[role="banner"]') &&
+                        container.offsetHeight > 40) {
                         
-                        if (!isSafeElement(container) && !container.classList.contains('fb-post-banned') && !container.classList.contains('fb-element-banned')) { 
-                            safelyHideFBElement(container);
+                        // Hide first, then remove
+                        if (!container.classList.contains('fb-post-banned') && !container.classList.contains('fb-element-banned')) {
+                            container.classList.add('fb-element-banned');
+                            container.style.display = 'none';
+                            
+                            // Use direct parent removal for better performance
+                            const parent = container.parentNode;
+                            if (parent) parent.removeChild(container);
+                            removedHeaderCount++;
                         }
                     }
                 }
             });
-        } catch (e) {}
+            
+            if (removedPostCount > 0 || removedHeaderCount > 0) {
+                devLog(`Removed ${removedPostCount} posts and ${removedHeaderCount} headers with restricted phrases`);
+            }
+        } catch (e) {
+            console.log('Error deleting restricted phrases: ' + e.message);
+        }
     };
 
+    // More efficient observer implementation
     let __fbPhrasesObserverInstalled = false;
     const observeForRestrictedPhrases = () => {
         try {
             if (!document.body || __fbPhrasesObserverInstalled) return;
             __fbPhrasesObserverInstalled = true;
+
+            devLog('Setting up restricted phrases observer');
             
+            // Use a throttled version of the function for better performance
             let throttleTimeout = null;
             const throttledDeletePhrases = () => {
                 if (!throttleTimeout) {
-                    throttleTimeout = addTimeout(() => { deleteRestrictedPhrases(); throttleTimeout = null; }, 100);
+                    throttleTimeout = addTimeout(() => {
+                        deleteRestrictedPhrases();
+                        throttleTimeout = null;
+                    }, 100); // 100ms throttle
                 }
             };
 
+            // Observe only essential changes
             const observer = trackObserver(new MutationObserver((mutations) => {
-                if (isFBInteractionLightModeActive()) return;
                 let shouldProcess = false;
+                
+                // Check if any mutation is relevant
                 for (let i = 0; i < mutations.length; i++) {
                     const mutation = mutations[i];
-                    if (mutation.target.closest && (mutation.target.closest('[role="feed"]') || mutation.target.getAttribute?.('role') === 'feed')) {
-                        shouldProcess = true; break;
+                    
+                    // Check for feed content
+                    if (mutation.target.closest && 
+                        (mutation.target.closest('[role="feed"]') || 
+                         mutation.target.getAttribute?.('role') === 'feed')) {
+                        shouldProcess = true;
+                        break;
                     }
+                    
+                    // Check for added nodes with relevant content
                     if (mutation.addedNodes && mutation.addedNodes.length) {
                         for (let j = 0; j < mutation.addedNodes.length; j++) {
                             const node = mutation.addedNodes[j];
-                            if (node.nodeType === 1) { 
-                                if (node.querySelector && (node.querySelector('h2.html-h2') || node.querySelector('[role="article"]') || node.querySelector('div.x1lliihq') || node.querySelector('span.html-span'))) {
-                                    shouldProcess = true; break;
+                            if (node.nodeType === 1) { // Element node
+                                if (node.querySelector && (
+                                    node.querySelector('h2.html-h2') || 
+                                    node.querySelector('[role="article"]') ||
+                                    node.querySelector('div.x1lliihq')
+                                )) {
+                                    shouldProcess = true;
+                                    break;
                                 }
                             }
                         }
                         if (shouldProcess) break;
                     }
                 }
-                if (shouldProcess) throttledDeletePhrases();
+                
+                // Only process if relevant mutations were found
+                if (shouldProcess) {
+                    throttledDeletePhrases();
+                }
             }));
 
-            observer.observe(document.body, { childList: true, subtree: true, attributes: false, characterData: false });
-            if (!isFBInteractionLightModeActive()) deleteRestrictedPhrases();
-        } catch (e) {}
+            observer.observe(document.body, { 
+                childList: true, 
+                subtree: true,
+                attributes: false,
+                characterData: false
+            });
+
+            // Run once immediately
+            deleteRestrictedPhrases();
+        } catch (e) {
+            console.log('Error setting up restricted phrases observer: ' + e.message);
+        }
     };
 
+    // More efficient initialization
     if (document.readyState === 'loading') {
         onWindowEvent(window, 'DOMContentLoaded', observeForRestrictedPhrases, false);
     } else {
+        // Use requestIdleCallback for non-blocking initialization if available (tracked to avoid leaks)
         addIdleCallback(observeForRestrictedPhrases);
     }
 
+    // Function to delete "People You May Know" sections
     const deletePeopleYouMayKnow = () => {
         try {
             const selectors = [
@@ -3352,8 +2650,6 @@ const scanAndBanEntirePosts = () => {
                 'a[href="https://www.facebook.com/friends/"]',
                 'a[href="/friends/"]',
                 'div[aria-label="Kaverit"] > span.x1lliihq',
-                'svg[aria-label="Meta AI:n profiilikuva"]',
-                'svg[aria-label*="Meta AI profile"]',
                 'li.x1iyjqo2.xmlsiyf.x1hxoosp.x1l38jg0.x1awlv9s.x1i64zmx.x1gz44f',
                 '.x1us19tq > div:nth-child(1) > div:nth-child(1) > ul:nth-child(1) > li:nth-child(2) > div:nth-child(1) > a:nth-child(1)',
                 'div.x1i10hfl:nth-child(13)',
@@ -3361,7 +2657,9 @@ const scanAndBanEntirePosts = () => {
                 'div.x1i10hfl:nth-child(13) > div:nth-child(2)',
                 'div.x1i10hfl:nth-child(13) > div:nth-child(3)',
                 '.x6s0dn4.x1obq294.x5a5i1n:has(.x1gslohp > span:empty)',
-                'li.x1c1uobl.x18d9i69.xyri2b.xexx8yu.x1lziwak.xat24cr.x14zmp.xdj266r.html-li:nth-of-type(2)',
+                'li.x1c1uobl.x18d9i69.xyri2b.xexx8yu.x1lziwak.xat24cr.x14z9mp.xdj266r.html-li:nth-of-type(2)',
+                'svg[aria-label="Meta AI:n profiilikuva"]',
+                'svg[aria-label*="Meta AI profile"]',
                 'div.x1gefphp.xf7dkkf.x1l90r2v.xv54qhq.xyamay9.x1e56ztr.x78zum5.x9f619.x1olyfxc.x15x8krk.xde0f50.x5a5i1n.x1obq294.x6s0dn4:nth-of-type(6)',
                 '.xjkvuk6.x1iorvi4.x1qughib.x78zum5.x6s0dn4',
                 '.x1vjfegm.x1iyjqo2',
@@ -3371,58 +2669,43 @@ const scanAndBanEntirePosts = () => {
                 '.x1ye3gou.x1120s5i.xn6708d.xz9dl7a.x1qughib.x1q0g3np.x78zum5',
                 '.xbbxn1n.xwxc41k.xxbr6pl.x1p5oq8j.xl56j7k.xdt5ytf.x78zum5.x6s0dn4.x1mh8g0r.xat24cr.x11i5rnm.xdj266r.html-div',
                 '.x1exxf4d.x1y71gwh.x1nb4dca.xu1343h.x1lq5wgf.xgqcy7u.x30kzoy.x9jhf4c.x13fuv20.xu3j5b3.x1q0q8m5.x26u7qi.x178xt8z.xm81vs4.xso031l.xy80clv.xev17xk.x1xmf6yo',
+                /* ENHANCED: All PYMK selectors for instant hiding */
                 '.xquyuld.x10wlt62.x6ikm8r.xh8yej3.x9f619.xt3gfkd.xu5ydu1.xdney7k.x1qpq9i9.x1jx94hy.x1ja2u2z.x1n2onr6',
                 '.x1xmf6yo.xev17xk.xy80clv.xso031l.xm81vs4.x178xt8z.x26u7qi.x1q0q8m5.xu3j5b3.x13fuv20.x9jhf4c.x30kzoy.xgqcy7u.x1lq5wgf.xu1343h.x1nb4dca.x1y71gwh.x1exxf4d',
                 'svg[viewBox="0 0 112 112"][width="112"][height="112"].xfx01vb.x1lliihq.x1tzjh5l.x1k90msu.x2h7rmj.x1qfuztq',
-                'div.html-div.xdj266r.x14zmp.xat24cr.x1lziwak.x6s0dn4.x78zum5.xdt5ytf.xl56j7k.x1p5oq8j.x64bnmy.xwxc41k.x13jy36j',
-                'div.html-div.xdj266r.x14zmp.xat24cr.x1lziwak.xexx8yu.xyri2b.x18d9i69.x1c1uobl.x8cjs6t.x13fuv20.x178xt8z',
+                'div.html-div.xdj266r.x14z9mp.xat24cr.x1lziwak.x6s0dn4.x78zum5.xdt5ytf.xl56j7k.x1p5oq8j.x64bnmy.xwxc41k.x13jy36j',
+                'div.html-div.xdj266r.x14z9mp.xat24cr.x1lziwak.xexx8yu.xyri2b.x18d9i69.x1c1uobl.x8cjs6t.x13fuv20.x178xt8z',
                 'div.x1exxf4d.xpv9jar.x1nb4dca.x1nmn18.x1obq294.x5a5i1n.xde0f50.x15x8krk.x13fuv20.x18b5jzi.x1q0q8m5.x1t7ytsu.x178xt8z.x1lun4ml.xso031l.xpilrb4.xev17xk.x1xmf6yo'
             ];
 
-            selectors.forEach(selector => {
-                if (selector.includes(':contains(')) {
-                    const text = selector.match(/\:contains\("([^"]+)"\)/)?.[1];
-                    if (text) {
-                        const walker = document.createTreeWalker(
-                            document.body,
-                            NodeFilter.SHOW_TEXT,
-                            null,
-                            false
-                        );
-                        let node;
-                        while (node = walker.nextNode()) {
-                            if (node.nodeValue.includes(text)) {
-                                let parent = node.parentElement;
-                                while (parent && parent !== document.body) {
-                                    if (parent.classList.contains('x1yztbdb') ||
-                                        parent.classList.contains('html-div')) {
-                                        if (isSafeElement(parent)) break; 
-                                        if (isDangerousToHide(parent)) break;
-                                        
-                                        if (!parent.classList.contains('fb-element-banned')) {
-                                            safelyHideFBElement(parent);
-                                        }
-                                        break;
-                                    }
-                                    parent = parent.parentElement;
-                                }
-                            }
-                        }
+            let deletedCount = 0;
+            document.querySelectorAll(selectors.join(','))
+                .forEach(element => {
+                    if (!element.classList.contains('fb-element-banned')) {
+                        element.classList.add('fb-element-banned');
+                        element.style.setProperty('display', 'none', 'important');
+                        element.style.setProperty('visibility', 'hidden', 'important');
+                        element.style.setProperty('opacity', '0', 'important');
+                        element.style.setProperty('pointer-events', 'none', 'important');
+                        element.style.setProperty('position', 'absolute', 'important');
+                        element.style.setProperty('left', '-9999px', 'important');
+                        element.style.setProperty('top', '-9999px', 'important');
+                        element.style.setProperty('height', '0', 'important');
+                        element.style.setProperty('width', '0', 'important');
+                        element.style.setProperty('overflow', 'hidden', 'important');
+                        deletedCount++;
                     }
-                } else {
-                    document.querySelectorAll(selector).forEach(element => {
-                        if (isSafeElement(element)) return; 
-                        if (isDangerousToHide(element)) return;
-                        
-                        if (!element.classList.contains('fb-element-banned')) {
-                            safelyHideFBElement(element);
-                        }
-                    });
-                }
-            });
-        } catch (e) {}
+                });
+                
+            if (deletedCount > 0) {
+                devLog(`Deleted ${deletedCount} "People You May Know" elements`);
+            }
+        } catch (e) {
+            console.log('Error deleting People You May Know: ' + e.message);
+        }
     };
 
+    // Delete specific elements
     const deleteElement = () => {
         try {
             const selectors = [
@@ -3433,214 +2716,583 @@ const scanAndBanEntirePosts = () => {
                 'div.xsgj6o6.xw3qccf.x1xmf6yo.x1w6jkce.xusnbm3 div[aria-label="Näytä suosituksia"] .x1ja2u2z.x78zum5.x2lah0s.x1n2onr6.xl56j7k.x6s0dn4.xozqiw3.x1q0g3np.xi112ho.x17zwfj4.x585lrc.x1403ito.x',
                 'div.xsgj6o6.xw3qccf.x1xmf6yo.x1w6jkce.xusnbm3 div[aria-label="Näytä suosituksia"] .x1ey2m1c.xds687c.x17qophe.xg01cxk.x47corl.x10l6tqk.x13vifvy.x1ebt8du.x19991ni.x1dhq9h.x1o1ewxj.x3x9cwd',
                 'div.x1exxf4d.x1y71gwh.x1nb4dca.xu1343h.x1lq5wgf.xgqcy7u.x30kzoy.x9jhf4c.x13fuv20.xu3j5b3.x1q0q8m5.x26u7qi.x178xt8z.xm81vs4.xso031l.xy80clv.xev17xk.x1xmf6yo',
-        	    '[aria-label="Näytä suositukset"]',
-                '[role="button"][aria-label="Näytä suositukset"]',
-                '*:contains("Suositeltu")',
-                '*:contains("Recommended")',
-                'div.x78zum5.xdt5ytf.xyamay9.xv54qhq.x1l90r2v.xf7dkkf',
-                'footer .xi81zsa',
-                '.xh8yej3 > .xh8yej3.x1n2onr6.xl56j7k.xdt5ytf.x3nfvp2.x9f619.x1a2a7pz.x1lku1pv.x87ps6o.x13rtm0m.x1e5q0jg.x3x9cwd.x1o1ewxj.xggy1nq.x1hl2dhg.x16tdsg8.xkhd6sd.x18d9i69.x4uap5.xexx8yu.x1mh8g0r',
-                'h2.html-h2.xdj266r.x14zmp.xat24cr.x1lziwak.xexx8yu.xyri2b.x18d9i69.x1c1uobl.x1vvkbs.x1heor9g.x1qlqyl8.x1pd3egz.x1a2a7pz.x193iq5w.xeuugli'
+        		'[aria-label="Näytä suositukset"]',
+                '[role="button"][aria-label="Näytä suositukset"]'
             ];
 
-            selectors.forEach(selector => {
-                if (selector.includes(':contains(')) {
-                    const text = selector.match(/\:contains\("([^"]+)"\)/)?.[1];
-                    if (text) {
-                        const walker = document.createTreeWalker(
-                            document.body,
-                            NodeFilter.SHOW_TEXT,
-                            null,
-                            false
-                        );
-                        let node;
-                        while (node = walker.nextNode()) {
-                            if (node.nodeValue.includes(text)) {
-                                let parent = node.parentElement;
-                                while (parent && parent !== document.body) {
-                                    if (parent.classList.contains('x1yztbdb') ||
-                                        parent.classList.contains('html-div')) {
-                                        if (isSafeElement(parent)) break; 
-                                        if (isDangerousToHide(parent)) break;
-                                        
-                                        if (!parent.classList.contains('fb-element-banned')) {
-                                            safelyHideFBElement(parent);
-                                        }
-                                        break;
-                                    }
-                                    parent = parent.parentElement;
-                                }
-                            }
-                        }
+            let deletedCount = 0;
+            document.querySelectorAll(selectors.join(','))
+                .forEach(element => {
+                    if (!element.classList.contains('fb-element-banned')) {
+                        element.classList.add('fb-element-banned');
+                        element.style.setProperty('display', 'none', 'important');
+                        element.style.setProperty('visibility', 'hidden', 'important');
+                        element.style.setProperty('opacity', '0', 'important');
+                        element.style.setProperty('pointer-events', 'none', 'important');
+                        element.style.setProperty('position', 'absolute', 'important');
+                        element.style.setProperty('left', '-9999px', 'important');
+                        element.style.setProperty('top', '-9999px', 'important');
+                        element.style.setProperty('height', '0', 'important');
+                        element.style.setProperty('width', '0', 'important');
+                        element.style.setProperty('overflow', 'hidden', 'important');
+                        deletedCount++;
                     }
-                } else {
-                    document.querySelectorAll(selector).forEach(element => {
-                        if (isSafeElement(element)) return; 
-                        if (isDangerousToHide(element)) return;
-                        
-                        if (!element.classList.contains('fb-element-banned')) {
-                            safelyHideFBElement(element);
-                        }
-                    });
-                }
-            });
-        } catch (e) {}
+                });
+                
+            if (deletedCount > 0) {
+                devLog(`Deleted ${deletedCount} specific elements`);
+            }
+        } catch (e) {
+            console.log('Error deleting specific elements: ' + e.message);
+        }
     };
 
+    // FIXED: Helper function with proper URL matching
+    function isSupportedFacebookPage(currentUrl, supportedPages) {
+        try {
+            const url = new URL(currentUrl);
+            
+            return supportedPages.some(pageUrl => {
+                try {
+                    const page = new URL(pageUrl);
+                    // Must be same host
+                    if (url.host !== page.host) return false;
+                    
+                    // Extract the page path (e.g., "/four3four")
+                    const basePath = page.pathname.replace(/\/+$/, '');
+                    const currentPath = url.pathname.replace(/\/+$/, '');
+                    
+                    // Exact match OR subpage match
+                    return currentPath === basePath || currentPath.startsWith(basePath + '/');
+                } catch (e) {
+                    return false;
+                }
+            });
+        } catch (e) {
+            return false;
+        }
+    }
+
+    // ENHANCED: Inject CSS for specific URL prehide to prevent flashes on supported pages
     const injectSpecificUrlPrehideCSS = () => {
         try {
             const currentUrl = window.location.href;
             const supportedUrls = [
                 "https://www.facebook.com/four3four",
                 "https://www.facebook.com/ItsStillRealToUsDammit",
-                "https://www.facebook.com/prowrestlingworld",
-                "https://www.facebook.com/weirdimagesworthseeing"
+                // Add more URLs here!
             ];
-            
-            const isSupported = supportedUrls.some(pageUrl => {
-                try {
-                    const url = new URL(currentUrl);
-                    const page = new URL(pageUrl);
-                    if (url.host !== page.host) return false;
-                    const basePath = page.pathname.replace(/\/+$/, '');
-                    const currentPath = url.pathname.replace(/\/+$/, '');
-                    return currentPath === basePath || currentPath.startsWith(basePath + '/');
-                } catch (e) { return false; }
-            });
-            
-            if (!isSupported) return;
-            
-            let style = document.getElementById('fb-specific-url-prehide-style');
-            if (!style) { 
-                style = document.createElement('style'); 
-                style.id = 'fb-specific-url-prehide-style'; 
-                
-                style.textContent = `
-                .x1120s5i.x1n2onr6.x10wlt62.x6ikm8r.x1lliihq:not(:has([data-visualcompletion="loading-state"])),
-                .x1cnzs8.xjkvuk6.x193iq5w.x2lah0s.xdt5ytf.x78zum5.x9f619.x1ja2u2z.x1n2onr6:not(:has([data-visualcompletion="loading-state"])),
-                .xifccgj.x4cne27.xbmpl8g.xykv574.xyamay9.x1swvt13.x1pi30zi.x1q0g3np.xozqiw3.x1qjc9v5.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619:not(:has([data-visualcompletion="loading-state"])),
-                .x7wzq59 > div > div > div > .x1yztbdb > .xh8yej3.x1n2onr6.xl56j7k.xdt5ytf.x3nfvp2.x9f619.x1a2a7pz.x1lku1pv.x87ps6o.x13rtm0m.x1e5q0jg.x3x9cwd.x1o1ewxj.xggy1nq.x1hl2dhg.x16tdsg8.xkhd6sd.x18d9i69.x4uap5.xexx8yu.x1mh8g0r.xat24cr.x11i5rnm.xdj266r.html-div > .xquyuld.x10wlt62.x6ikm8r.xh8yej3.x9f61:not(:has([data-visualcompletion="loading-state"])),
-                .xi81zsa.xo1l8bm.x1sibtaa.x1nxh6w3.x676frb.x4zkp8e.x1943h6x.x1fgarty.x1cpjm7i.x1gmr53x.xhkezso.x1s928wv.x1lliihq.x1xmvt09.x1vvkbs.x13faqbe.xeuugli.x193iq5w > .xt0psk2:not(:has([data-visualcompletion="loading-state"])),
-                footer > .xi81zsa.xo1l8bm.x1sibtaa.x1nxh6w3.x676frb.x4zkp8e.x1943h6x.x1fgarty.x1cpjm7i.x1gmr53x.xhkezso.x1s928wv.x1lliihq.x1xmvt09.x1vvkbs.x13faqbe.xeuugli.x193iq5w:not(:has([data-visualcompletion="loading-state"])),
-                .x1xzczws.x7ep2pv.x1d1medc.xnp8db0.x1i64zmx.x1e56ztr.x1emribx.x1xmf6yo.xjl7jj.xs83m0k.xeuugli.x1ja2u2z.x1n2onr6.x9f619:not(:has([data-visualcompletion="loading-state"])),
-                .x1yrsyyn.x10b6aqq.x16hj40l.xsyo7zv.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .xifccgj.x4cne27.xdt5ytf.x78zum5 > .x1k70j0n.xzueoph > .xeuug:not(:has([data-visualcompletion="loading-state"])),
-                .x1yrsyyn.x10b6aqq.x16hj40l.xsyo7zv.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .x1k70j0n.xzueoph > .xeuug:not(:has([data-visualcompletion="loading-state"])),
-                .x1yrsyyn.x10b6aqq.x16hj40l.xsyo7zv.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5 > .x1k70j0n.xzueoph:not(:has([data-visualcompletion="loading-state"])),
-                .x1yrsyyn.x10b6aqq.x16hj40l.xsyo7zv.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619:not(:has([data-visualcompletion="loading-state"])),
-                .xifccgj.x4cne27.xbmpl8g.xykv574.x1y1aw1k.xwib8y2.x1ye3gou.xn6708d.x1q0g3np.xozqiw3.x6s0dn4.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619:not(:has([data-visualcompletion="loading-state"])),
-                .x1y1aw1k.x150jy0e.x1e558r4.x193iq5w.x2lah0s.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619:not(:has([data-visualcompletion="loading-state"])),
-                .xquyuld.x10wlt62.x6ikm8r.xh8yej3.x9f619.xt3gfkd.xu5ydu1.xdney7k.x1qpq9i9.x1jx94hy.x1ja2u2z.x1n2onr6.x26u7qi.x178xt8z.xm81vs4.xso031l.xy80clv.xev17xk.x1xmf6yo:not(:has([data-visualcompletion="loading-state"])),
-                .xquyuld.x10wlt62.x6ikm8r.xh8yej3.x9f619.xt3gfkd.xu5ydu1.xdney7k.x1qpq9i9.x1jx94hy.x1ja2u2z.x1n2onr6 > .x193iq5w.x2lah0s.xdt5ytf.x78zum5.x9f619.x1ja2u2z.x1n2onr6 > .x2lwn1j.x1iyjqo2.x:not(:has([data-visualcompletion="loading-state"])),
-                .xquyuld.x10wlt62.x6ikm8r.xh8yej3.x9f619.xt3gfkd.xu5ydu1.xdney7k.x1qpq9i9.x1jx94hy.x1ja2u2z.x1n2onr6 > .x193iq5w.x2lah0s.xdt5ytf.x78zum5.x9f619.x1ja2u2z.x1n2onr6:not(:has([data-visualcompletion="loading-state"])),
-                .x1a2a7pz.x1ja2u2z.xh8yej3.x1n2onr6.x10wlt62.x6ikm8r.x1itg65n:not(:has([data-visualcompletion="loading-state"])),
-                .xu06nn8.x1jl3cmp.x2r5gy4.xnpuxes.x1hc1fzr.x879a55.x1q0g3np.xozqiw3.x1qjc9v5.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619 > .xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619:not(:has([data-visualcompletion="loading-state"])),
-                .x1x99re3.x1jdnuiz.x1r1pt67.x1qhmfi1.x9f619.xm0m39n.x1qhh985.xcfux6l.x972fbf.x10w94by.x1qhh985.x14e42zd.x1ypdohk.xe8uvvx.xdj266r.x14zmp.xat24cr.x1lziwak.xexx8yu.xyri2b.x18d9i69.x1c1uobl.x16tdsg8.xat24cr.x1mh8g0r.x6s0dn4.x78zum5.xdt5ytf.xjy6m2a.xl56j7k:not(:has([data-visualcompletion="loading-state"])),
-                .xu06nn8.x1jl3cmp.x2r5gy4.xnpuxes.x1hc1fzr.xh8yej3.xdsb8wn.x10l6tqk.x5yr21d.x1q0g3np.xozqiw3.x1qjc9v5.xqughib.x2lah0s.x78zum5.x1ja2u2z.x9f619:not(:has([data-visualcompletion="loading-state"])),
-                .xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .x1n2onr6.x10wlt62.x6ikm8r.x1ja2u2z.x9f619:not(:has([data-visualcompletion="loading-state"])),
-                div[aria-label="Photos"]:not(:has([data-visualcompletion="loading-state"])),
-            footer .xi81zsa,
-            footer > .xi81zsa.xo1l8bm.x1sibtaa.x1nxh6w3.x676frb.x4zkp8e.x1943h6x.x1fgarty.x1cpjm7i.x1gmr53x.xhkezso.x1s928wv.x1lliihq.x1xmvt09.x1vvkbs.x13faqbe.xeuugli.x193iq5w:not(:has([data-visualcompletion="loading-state"])),
-                .xieb3on:not(:has([data-visualcompletion="loading-state"])),
-                div.x9f619.x1n2onr6.x1ja2u2z.xeuugli.xs83m0k.xjl7jj.x1xmf6yo.x1xegmmw.x1e56ztr.x13fj5qh.xnp8db0.x1d1medc.x7ep2pv.x1xzczws:not(:has([data-visualcompletion="loading-state"])),
-                div[data-pagelet^="ProfileTilesFeed_"]:has(a[href*="/photos"]),
-                h2:has(a[href*="/photos"]) {
-                    visibility: hidden !important;
-                    display: none !important;
-                    opacity: 0 !important;
-                    pointer-events: none !important;
-                    content-visibility: hidden !important;
-                    position: absolute !important;
-                    left: -9999px !important;
-                    top: -9999px !important;
-                    height: 0 !important;
-                    width: 0 !important;
-                    overflow: hidden !important;
-                }
-                `;
 
+            // Only inject if we're on a supported page
+            if (!isSupportedFacebookPage(currentUrl, supportedUrls)) {
+                return;
+            }
+
+            console.log('Current URL: ' + currentUrl);
+            devLog('Injecting specific URL prehide CSS for supported pages');
+            let style = document.getElementById('fb-specific-url-prehide-style');
+            if (!style) {
+                style = document.createElement('style');
+                style.id = 'fb-specific-url-prehide-style';
+            }
+            style.textContent = `
+            /* PREHIDE CSS: Hide selectors immediately on supported pages to prevent flashes */
+            .x1120s5i.x1n2onr6.x10wlt62.x6ikm8r.x1lliihq,
+            .x1cnzs8.xjkvuk6.x193iq5w.x2lah0s.xdt5ytf.x78zum5.x9f619.x1ja2u2z.x1n2onr6,
+            .xifccgj.x4cne27.xbmpl8g.xykv574.xyamay9.x1swvt13.x1pi30zi.x1q0g3np.xozqiw3.x1qjc9v5.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619,
+            .x7wzq59 > div > div > div > .x1yztbdb > .xh8yej3.x1n2onr6.xl56j7k.xdt5ytf.x3nfvp2.x9f619.x1a2a7pz.x1lku1pv.x87ps6o.x13rtm0m.x1e5q0jg.x3x9cwd.x1o1ewxj.xggy1nq.x1hl2dhg.x16tdsg8.xkhd6sd.x18d9i69.x4uap5.xexx8yu.x1mh8g0r.xat24cr.x11i5rnm.xdj266r.html-div > .xquyuld.x10wlt62.x6ikm8r.xh8yej3.x9f61,
+            .xi81zsa.xo1l8bm.x1sibtaa.x1nxh6w3.x676frb.x4zkp8e.x1943h6x.x1fgarty.x1cpjm7i.x1gmr53x.xhkezso.x1s928wv.x1lliihq.x1xmvt09.x1vvkbs.x13faqbe.xeuugli.x193iq5w > .xt0psk2,
+            footer > .xi81zsa.xo1l8bm.x1sibtaa.x1nxh6w3.x676frb.x4zkp8e.x1943h6x.x1fgarty.x1cpjm7i.x1gmr53x.xhkezso.x1s928wv.x1lliihq.x1xmvt09.x1vvkbs.x13faqbe.xeuugli.x193iq5w,
+            .x1xzczws.x7ep2pv.x1d1medc.xnp8db0.x1i64zmx.x1e56ztr.x1emribx.x1xmf6yo.xjl7jj.xs83m0k.xeuugli.x1ja2u2z.x1n2onr6.x9f619,
+            .x1yrsyyn.x10b6aqq.x16hj40l.xsyo7zv.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .xifccgj.x4cne27.xdt5ytf.x78zum5 > .x1k70j0n.xzueoph > .xeuug,
+            .x1yrsyyn.x10b6aqq.x16hj40l.xsyo7zv.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .x1k70j0n.xzueoph > .xeuug,
+            .x1yrsyyn.x10b6aqq.x16hj40l.xsyo7zv.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5 > .x1k70j0n.xzueoph,
+            .x1yrsyyn.x10b6aqq.x16hj40l.xsyo7zv.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619,
+            .xifccgj.x4cne27.xbmpl8g.xykv574.x1y1aw1k.xwib8y2.x1ye3gou.xn6708d.x1q0g3np.xozqiw3.x6s0dn4.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619,
+            .x1y1aw1k.x150jy0e.x1e558r4.x193iq5w.x2lah0s.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619,
+            .xquyuld.x10wlt62.x6ikm8r.xh8yej3.x9f619.xt3gfkd.xu5ydu1.xdney7k.x1qpq9i9.x1jx94hy.x1ja2u2z.x1n2onr6.x26u7qi.x178xt8z.xm81vs4.xso031l.xy80clv.xev17xk.x1xmf6yo,
+            .xquyuld.x10wlt62.x6ikm8r.xh8yej3.x9f619.xt3gfkd.xu5ydu1.xdney7k.x1qpq9i9.x1jx94hy.x1ja2u2z.x1n2onr6 > .x193iq5w.x2lah0s.xdt5ytf.x78zum5.x9f619.x1ja2u2z.x1n2onr6 > .x2lwn1j.x1iyjqo2.x,
+            .xquyuld.x10wlt62.x6ikm8r.xh8yej3.x9f619.xt3gfkd.xu5ydu1.xdney7k.x1qpq9i9.x1jx94hy.x1ja2u2z.x1n2onr6 > .x193iq5w.x2lah0s.xdt5ytf.x78zum5.x9f619.x1ja2u2z.x1n2onr6,
+            .x1a2a7pz.x1ja2u2z.xh8yej3.x1n2onr6.x10wlt62.x6ikm8r.x1itg65n,
+            .xu06nn8.x1jl3cmp.x2r5gy4.xnpuxes.x1hc1fzr.x879a55.x1q0g3np.xozqiw3.x1qjc9v5.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619 > .xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619,
+            .x1x99re3.x1jdnuiz.x1r1pt67.x1qhmfi1.x9f619.xm0m39n.x1qhh985.xcfux6l.x972fbf.x10w94by.x1qhh985.x14e42zd.x1ypdohk.xe8uvvx.xdj266r.x14z9mp.xat24cr.x1lziwak.xexx8yu.xyri2b.x18d9i69.x1c1uobl.x16tdsg8.xat24cr.x1mh8g0r.x6s0dn4.x78zum5.xdt5ytf.xjy6m2a.xl56j7k,
+            .xu06nn8.x1jl3cmp.x2r5gy4.xnpuxes.x1hc1fzr.xh8yej3.xdsb8wn.x10l6tqk.x5yr21d.x1q0g3np.xozqiw3.x1qjc9v5.x1qughib.x2lah0s.x78zum5.x1ja2u2z.x9f619,
+            .xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .x1n2onr6.x10wlt62.x6ikm8r.x1ja2u2z.x9f619,
+            div[aria-label="Photos"],
+            .xieb3on,
+            div.x9f619.x1n2onr6.x1ja2u2z.xeuugli.xs83m0k.xjl7jj.x1xmf6yo.x1xegmmw.x1e56ztr.x13fj5qh.xnp8db0.x1d1medc.x7ep2pv.x1xzczws,
+            '*:contains("Suositeltu")',
+            '*:contains("Recommended")',
+            'div.x1n2onr6.x1ja2u2z.x1jx94hy.xw5cjc7.x1dmpuos.x1vsv7so.xau1kf4.x9f619.xh8yej3.x6ikm8r.x10wlt62.xquyuld:has(.x1k70j0n.xzueoph)',
+            footer .xi81zsa,
+            .xh8yej3 > .xh8yej3.x1n2onr6.xl56j7k.xdt5ytf.x3nfvp2.x9f619.x1a2a7pz.x1lku1pv.x87ps6o.x13rtm0m.x1e5q0jg.x3x9cwd.x1o1ewxj.xggy1nq.x1hl2dhg.x16tdsg8.xkhd6sd.x18d9i69.x4uap5.xexx8yu.x1mh8g0r,
+            h2.html-h2.xdj266r.x14z9mp.xat24cr.x1lziwak.xexx8yu.xyri2b.x18d9i69.x1c1uobl.x1vvkbs.x1heor9g.x1qlqyl8.x1pd3egz.x1a2a7pz.x193iq5w.xeuugli {
+                visibility: hidden !important;
+                display: none !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
+                content-visibility: hidden !important;
+                position: absolute !important;
+                left: -9999px !important;
+                top: -9999px !important;
+                height: 0 !important;
+                width: 0 !important;
+                overflow: hidden !important;
+            }
+            `;
+            // Safe append (no document.write)
+            if (!style.isConnected) {
                 if (document.head) {
                     document.head.appendChild(style);
+                    devLog('Specific URL prehide CSS injected to head');
                 } else if (document.documentElement) {
                     document.documentElement.appendChild(style);
+                    devLog('Specific URL prehide CSS injected to documentElement');
                 }
+            } else {
+                devLog('Specific URL prehide CSS updated (reuse existing style node)');
             }
-        } catch (err) {}
+        } catch (err) {
+            console.log('Error while injecting specific URL prehide CSS: ' + err.message);
+        }
     };
 
-    const deleteSelectorsForSpecificUrl = () => {
-        try {
-            const currentUrl = window.location.href;
-            const supportedUrls = [
+    // Run specific URL prehide CSS injection immediately
+    injectSpecificUrlPrehideCSS();
+
+// FIXED: Function to delete elements for specific URLs - now with proper URL restriction
+const deleteSelectorsForSpecificUrl = () => {
+    try {
+        const currentUrl = window.location.href;
+        const supportedUrls = [
                 "https://www.facebook.com/four3four",
                 "https://www.facebook.com/ItsStillRealToUsDammit",
                 "https://www.facebook.com/prowrestlingworld",
                 "https://www.facebook.com/weirdimagesworthseeing"
-            ];
-            
-            const isSupported = supportedUrls.some(pageUrl => {
-                try {
-                    const url = new URL(currentUrl);
-                    const page = new URL(pageUrl);
-                    if (url.host !== page.host) return false;
-                    const basePath = page.pathname.replace(/\/+$/, '');
-                    const currentPath = url.pathname.replace(/\/+$/, '');
-                    return currentPath === basePath || currentPath.startsWith(basePath + '/');
-                } catch (e) { return false; }
-            });
-            
-            if (!isSupported) return;
+        ];
 
-            const selectorsToDelete = [
-                '.x1120s5i.x1n2onr6.x10wlt62.x6ikm8r.x1lliihq',
-                'div.x1n2onr6.x1ja2u2z.x1jx94hy.xw5cjc7.x1dmpuos.x1vsv7so.xau1kf4.x9f619.xh8yej3.x6ikm8r.x10wlt62.xquyuld:has(.x1k70j0n.xzueoph)',
-                '.x1cnzs8.xjkvuk6.x193iq5w.x2lah0s.xdt5ytf.x78zum5.x9f619.x1ja2u2z.x1n2onr6',
-                '.xifccgj.x4cne27.xbmpl8g.xykv574.xyamay9.x1swvt13.x1pi30zi.x1q0g3np.xozqiw3.x1qjc9v5.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619',
-                '.x7wzq59 > div > div > div > .x1yztbdb > .xh8yej3.x1n2onr6.xl56j7k.xdt5ytf.x3nfvp2.x9f619.x1a2a7pz.x1lku1pv.x87ps6o.x13rtm0m.x1e5q0jg.x3x9cwd.x1o1ewxj.xggy1nq.x1hl2dhg.x16tdsg8.xkhd6sd.x18d9i69.x4uap5.xexx8yu.x1mh8g0r.xat24cr.x11i5rnm.xdj266r.html-div > .xquyuld.x10wlt62.x6ikm8r.xh8yej3.x9f61',
-                '.xi81zsa.xo1l8bm.x1sibtaa.x1nxh6w3.x676frb.x4zkp8e.x1943h6x.x1fgarty.x1cpjm7i.x1gmr53x.xhkezso.x1s928wv.x1lliihq.x1xmvt09.x1vvkbs.x13faqbe.xeuugli.x193iq5w > .xt0psk2',
-                'footer > .xi81zsa.xo1l8bm.x1sibtaa.x1nxh6w3.x676frb.x4zkp8e.x1943h6x.x1fgarty.x1cpjm7i.x1gmr53x.xhkezso.x1s928wv.x1lliihq.x1xmvt09.x1vvkbs.x13faqbe.xeuugli.x193iq5w',
-                '.x1xzczws.x7ep2pv.x1d1medc.xnp8db0.x1i64zmx.x1e56ztr.x1emribx.x1xmf6yo.xjl7jj.xs83m0k.xeuugli.x1ja2u2z.x1n2onr6.x9f619',
-                '.x1yrsyyn.x10b6aqq.x16hj40l.xsyo7zv.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .xifccgj.x4cne27.xdt5ytf.x78zum5 > .x1k70j0n.xzueoph > .xeuug',
-                '.x1yrsyyn.x10b6aqq.x16hj40l.xsyo7zv.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .x1k70j0n.xzueoph > .xeuug',
-                '.x1yrsyyn.x10b6aqq.x16hj40l.xsyo7zv.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5 > .x1k70j0n.xzueoph',
-                '.x1yrsyyn.x10b6aqq.x16hj40l.xsyo7zv.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619',
-                '.xifccgj.x4cne27.xbmpl8g.xykv574.x1y1aw1k.xwib8y2.x1ye3gou.xn6708d.x1q0g3np.xozqiw3.x6s0dn4.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619',
-                '.x1y1aw1k.x150jy0e.x1e558r4.x193iq5w.x2lah0s.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619',
-                '.xquyuld.x10wlt62.x6ikm8r.xh8yej3.x9f619.xt3gfkd.xu5ydu1.xdney7k.x1qpq9i9.x1jx94hy.x1ja2u2z.x1n2onr6.x26u7qi.x178xt8z.xm81vs4.xso031l.xy80clv.xev17xk.x1xmf6yo',
-                '.xquyuld.x10wlt62.x6ikm8r.xh8yej3.x9f619.xt3gfkd.xu5ydu1.xdney7k.x1qpq9i9.x1jx94hy.x1ja2u2z.x1n2onr6 > .x193iq5w.x2lah0s.xdt5ytf.x78zum5.x9f619.x1ja2u2z.x1n2onr6 > .x2lwn1j.x1iyjqo2.x',
-                '.xquyuld.x10wlt62.x6ikm8r.xh8yej3.x9f619.xt3gfkd.xu5ydu1.xdney7k.x1qpq9i9.x1jx94hy.x1ja2u2z.x1n2onr6 > .x193iq5w.x2lah0s.xdt5ytf.x78zum5.x9f619.x1ja2u2z.x1n2onr6',
-                '.x1a2a7pz.x1ja2u2z.xh8yej3.x1n2onr6.x10wlt62.x6ikm8r.x1itg65n',
-                '.xu06nn8.x1jl3cmp.x2r5gy4.xnpuxes.x1hc1fzr.x879a55.x1q0g3np.xozqiw3.x1qjc9v5.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619 > .xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619',
-                '.x1x99re3.x1jdnuiz.x1r1pt67.x1qhmfi1.x9f619.xm0m39n.x1qhh985.xcfux6l.x972fbf.x10w94by.x1qhh985.x14e42zd.x1ypdohk.xe8uvvx.xdj266r.x14zmp.xat24cr.x1lziwak.xexx8yu.xyri2b.x18d9i69.x1c1uobl.x16tdsg8.xat24cr.x1mh8g0r.x6s0dn4.x78zum5.xdt5ytf.xjy6m2a.xl56j7k',
-                '.xu06nn8.x1jl3cmp.x2r5gy4.xnpuxes.x1hc1fzr.xh8yej3.xdsb8wn.x10l6tqk.x5yr21d.x1q0g3np.xozqiw3.x1qjc9v5.xqughib.x2lah0s.x78zum5.x1ja2u2z.x9f619',
-                '.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .x1n2onr6.x10wlt62.x6ikm8r.x1ja2u2z.x9f619',
-                'div[aria-label="Photos"]',
-                '.xieb3on',
-		        'footer .xi81zsa',
-		        'footer > .xi81zsa.xo1l8bm.x1sibtaa.x1nxh6w3.x676frb.x4zkp8e.x1943h6x.x1fgarty.x1cpjm7i.x1gmr53x.xhkezso.x1s928wv.x1lliihq.x1xmvt09.x1vvkbs.x13faqbe.xeuugli.x193iq5w',
-                'div.x9f619.x1n2onr6.x1ja2u2z.xeuugli.xs83m0k.xjl7jj.x1xmf6yo.x1xegmmw.x1e56ztr.x13fj5qh.xnp8db0.x1d1medc.x7ep2pv.x1xzczws',
-                'div[data-pagelet^="ProfileTilesFeed_"]:has(a[href*="/photos"])',
-                'h2:has(a[href*="/photos"])'
-            ];
+        // FIXED: Only run if we're actually on one of the supported pages
+        if (!isSupportedFacebookPage(currentUrl, supportedUrls)) {
+            return; // Exit early if not on supported page
+        }
 
-            selectorsToDelete.forEach(selector => {
-                if (selector.includes(':has(')) {
-                    const hasMatch = selector.match(/^(.*?):has\((.*?)\)$/);
-                    if (hasMatch) {
-                        document.querySelectorAll(hasMatch[1]).forEach(element => {
-                            if (isSafeElement(element)) return; 
-                            if (element.querySelector(hasMatch[2]) && !element.classList.contains('fb-element-banned')) {
-                                safelyHideFBElement(element);
-                            }
-                        });
-                    }
-                } else {
-                    document.querySelectorAll(selector).forEach(element => {
-                        if (isSafeElement(element)) return; 
-                        safelyHideFBElement(element);
+        devLog('Applying selectors for supported URLs');
+        const selectorsToDelete = [
+            '.x1120s5i.x1n2onr6.x10wlt62.x6ikm8r.x1lliihq',
+            'div.x1n2onr6.x1ja2u2z.x1jx94hy.xw5cjc7.x1dmpuos.x1vsv7so.xau1kf4.x9f619.xh8yej3.x6ikm8r.x10wlt62.xquyuld:has(.x1k70j0n.xzueoph)',
+            '.x1cnzs8.xjkvuk6.x193iq5w.x2lah0s.xdt5ytf.x78zum5.x9f619.x1ja2u2z.x1n2onr6',
+            '.xifccgj.x4cne27.xbmpl8g.xykv574.xyamay9.x1swvt13.x1pi30zi.x1q0g3np.xozqiw3.x1qjc9v5.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619',
+            '.x7wzq59 > div > div > div > .x1yztbdb > .xh8yej3.x1n2onr6.xl56j7k.xdt5ytf.x3nfvp2.x9f619.x1a2a7pz.x1lku1pv.x87ps6o.x13rtm0m.x1e5q0jg.x3x9cwd.x1o1ewxj.xggy1nq.x1hl2dhg.x16tdsg8.xkhd6sd.x18d9i69.x4uap5.xexx8yu.x1mh8g0r.xat24cr.x11i5rnm.xdj266r.html-div > .xquyuld.x10wlt62.x6ikm8r.xh8yej3.x9f61',
+            '.xi81zsa.xo1l8bm.x1sibtaa.x1nxh6w3.x676frb.x4zkp8e.x1943h6x.x1fgarty.x1cpjm7i.x1gmr53x.xhkezso.x1s928wv.x1lliihq.x1xmvt09.x1vvkbs.x13faqbe.xeuugli.x193iq5w > .xt0psk2',
+            'footer > .xi81zsa.xo1l8bm.x1sibtaa.x1nxh6w3.x676frb.x4zkp8e.x1943h6x.x1fgarty.x1cpjm7i.x1gmr53x.xhkezso.x1s928wv.x1lliihq.x1xmvt09.x1vvkbs.x13faqbe.xeuugli.x193iq5w',
+            '.x1xzczws.x7ep2pv.x1d1medc.xnp8db0.x1i64zmx.x1e56ztr.x1emribx.x1xmf6yo.xjl7jj.xs83m0k.xeuugli.x1ja2u2z.x1n2onr6.x9f619',
+            '.x1yrsyyn.x10b6aqq.x16hj40l.xsyo7zv.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .xifccgj.x4cne27.xdt5ytf.x78zum5 > .x1k70j0n.xzueoph > .xeuug',
+            '.x1yrsyyn.x10b6aqq.x16hj40l.xsyo7zv.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .x1k70j0n.xzueoph > .xeuug',
+            '.x1yrsyyn.x10b6aqq.x16hj40l.xsyo7zv.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5 > .x1k70j0n.xzueoph',
+            '.x1yrsyyn.x10b6aqq.x16hj40l.xsyo7zv.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619',
+            '.xifccgj.x4cne27.xbmpl8g.xykv574.x1y1aw1k.xwib8y2.x1ye3gou.xn6708d.x1q0g3np.xozqiw3.x6s0dn4.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619',
+            '.x1y1aw1k.x150jy0e.x1e558r4.x193iq5w.x2lah0s.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619',
+            '.xquyuld.x10wlt62.x6ikm8r.xh8yej3.x9f619.xt3gfkd.xu5ydu1.xdney7k.x1qpq9i9.x1jx94hy.x1ja2u2z.x1n2onr6.x26u7qi.x178xt8z.xm81vs4.xso031l.xy80clv.xev17xk.x1xmf6yo',
+            '.xquyuld.x10wlt62.x6ikm8r.xh8yej3.x9f619.xt3gfkd.xu5ydu1.xdney7k.x1qpq9i9.x1jx94hy.x1ja2u2z.x1n2onr6 > .x193iq5w.x2lah0s.xdt5ytf.x78zum5.x9f619.x1ja2u2z.x1n2onr6 > .x2lwn1j.x1iyjqo2.x',
+            '.xquyuld.x10wlt62.x6ikm8r.xh8yej3.x9f619.xt3gfkd.xu5ydu1.xdney7k.x1qpq9i9.x1jx94hy.x1ja2u2z.x1n2onr6 > .x193iq5w.x2lah0s.xdt5ytf.x78zum5.x9f619.x1ja2u2z.x1n2onr6',
+            '.x1a2a7pz.x1ja2u2z.xh8yej3.x1n2onr6.x10wlt62.x6ikm8r.x1itg65n',
+            '.xu06nn8.x1jl3cmp.x2r5gy4.xnpuxes.x1hc1fzr.x879a55.x1q0g3np.xozqiw3.x1qjc9v5.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619 > .xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619',
+            '.x1x99re3.x1jdnuiz.x1r1pt67.x1qhmfi1.x9f619.xm0m39n.x1qhh985.xcfux6l.x972fbf.x10w94by.x1qhh985.x14e42zd.x1ypdohk.xe8uvvx.xdj266r.x14z9mp.xat24cr.x1lziwak.xexx8yu.xyri2b.x18d9i69.x1c1uobl.x16tdsg8.xat24cr.x1mh8g0r.x6s0dn4.x78zum5.xdt5ytf.xjy6m2a.xl56j7k',
+            '.xu06nn8.x1jl3cmp.x2r5gy4.xnpuxes.x1hc1fzr.xh8yej3.xdsb8wn.x10l6tqk.x5yr21d.x1q0g3np.xozqiw3.x1qjc9v5.x1qughib.x2lah0s.x78zum5.x1ja2u2z.x9f619',
+            '.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .x1n2onr6.x10wlt62.x6ikm8r.x1ja2u2z.x9f619',
+            'div[aria-label="Photos"]',
+            '.xieb3on',
+            'div.x9f619.x1n2onr6.x1ja2u2z.xeuugli.xs83m0k.xjl7jj.x1xmf6yo.x1xegmmw.x1e56ztr.x13fj5qh.xnp8db0.x1d1medc.x7ep2pv.x1xzczws',
+            '*:contains("Suositeltu")',
+            '*:contains("Recommended")',
+            'footer .xi81zsa',
+            'div[style*="border-radius:max(0px, min(var(--card-corner-radius), calc((100vw - 4px - 100%) * 9999))) / var(--card-corner-radius)"]',
+            '.xh8yej3 > .xh8yej3.x1n2onr6.xl56j7k.xdt5ytf.x3nfvp2.x9f619.x1a2a7pz.x1lku1pv.x87ps6o.x13rtm0m.x1e5q0jg.x3x9cwd.x1o1ewxj.xggy1nq.x1hl2dhg.x16tdsg8.xkhd6sd.x18d9i69.x4uap5.xexx8yu.x1mh8g0r',
+		'h2.html-h2.xdj266r.x14z9mp.xat24cr.x1lziwak.xexx8yu.xyri2b.x18d9i69.x1c1uobl.x1vvkbs.x1heor9g.x1qlqyl8.x1pd3egz.x1a2a7pz.x193iq5w.xeuugli',
+        ];
+
+        let deletedCount = 0;
+        selectorsToDelete.forEach(selector => {
+            // Handle :has() manually
+            if (selector.includes(':has(')) {
+                const hasMatch = selector.match(/^(.*?):has\((.*?)\)$/);
+                if (hasMatch) {
+                    const baseSelector = hasMatch[1];
+                    const hasContent = hasMatch[2];
+                    document.querySelectorAll(baseSelector).forEach(element => {
+                        if (element.querySelector(hasContent) && !element.classList.contains('fb-element-banned')) {
+                            element.classList.add('fb-element-banned');
+                            element.style.setProperty('display', 'none', 'important');
+                            element.style.setProperty('visibility', 'hidden', 'important');
+                            element.style.setProperty('opacity', '0', 'important');
+                            element.style.setProperty('pointer-events', 'none', 'important');
+                            element.style.setProperty('position', 'absolute', 'important');
+                            element.style.setProperty('left', '-9999px', 'important');
+                            element.style.setProperty('top', '-9999px', 'important');
+                            element.style.setProperty('height', '0', 'important');
+                            element.style.setProperty('width', '0', 'important');
+                            element.style.setProperty('overflow', 'hidden', 'important');
+                            deletedCount++;
+                        }
                     });
                 }
+            }
+            // Handle :contains() manually
+            else if (selector.includes(':contains(')) {
+                const text = selector.match(/\:contains\("([^"]+)"\)/)?.[1];
+                if (text) {
+                    const walker = document.createTreeWalker(
+                        document.body,
+                        NodeFilter.SHOW_TEXT,
+                        null,
+                        false
+                    );
+                    let node;
+                    while (node = walker.nextNode()) {
+                        if (node.nodeValue.includes(text)) {
+                            let parent = node.parentElement;
+                            while (parent && parent !== document.body) {
+                                if (parent.classList.contains('x1yztbdb') ||
+                                    parent.classList.contains('html-div')) {
+                                    if (!parent.classList.contains('fb-element-banned')) {
+                                        parent.classList.add('fb-element-banned');
+                                        parent.style.setProperty('display', 'none', 'important');
+                                        parent.style.setProperty('visibility', 'hidden', 'important');
+                                        parent.style.setProperty('opacity', '0', 'important');
+                                        parent.style.setProperty('pointer-events', 'none', 'important');
+                                        parent.style.setProperty('position', 'absolute', 'important');
+                                        parent.style.setProperty('left', '-9999px', 'important');
+                                        parent.style.setProperty('top', '-9999px', 'important');
+                                        parent.style.setProperty('height', '0', 'important');
+                                        parent.style.setProperty('width', '0', 'important');
+                                        parent.style.setProperty('overflow', 'hidden', 'important');
+                                        deletedCount++;
+                                    }
+                                    break;
+                                }
+                                parent = parentElement;
+                            }
+                        }
+                    }
+                }
+            } else {
+                // Normal selectors
+                document.querySelectorAll(selector).forEach(element => {
+                    if (!element.classList.contains('fb-element-banned')) {
+                        element.classList.add('fb-element-banned');
+                        element.style.setProperty('display', 'none', 'important');
+                        element.style.setProperty('visibility', 'hidden', 'important');
+                        element.style.setProperty('opacity', '0', 'important');
+                        element.style.setProperty('pointer-events', 'none', 'important');
+                        element.style.setProperty('position', 'absolute', 'important');
+                        element.style.setProperty('left', '-9999px', 'important');
+                        element.style.setProperty('top', '-9999px', 'important');
+                        element.style.setProperty('height', '0', 'important');
+                        element.style.setProperty('width', '0', 'important');
+                        element.style.setProperty('overflow', 'hidden', 'important');
+                        deletedCount++;
+                    }
+                });
+            }
+        });
+
+        if (deletedCount > 0) {
+            devLog(`Deleted ${deletedCount} elements for supported URLs`);
+        }
+    } catch (e) {
+        console.log('Error deleting selectors for specific URLs: ' + e.message);
+    }
+};
+
+    // FIXED: Function to delete elements for specific profiles - now with proper URL restriction
+    const deleteSelectorsForSpecificProfile = () => {
+        try {
+            const currentUrl = window.location.href;
+            const url = new URL(currentUrl);
+            const profileIds = [
+                '100000639309471',
+        	'jiri.innanen'
+                // Add more profile IDs or vanity usernames here
+            ];
+
+            // FIXED: Strictly match only these profile pages
+            const matchesProfile = profileIds.some(profileId => {
+                return (
+                    (url.pathname === '/profile.php' && url.searchParams.get('id') === profileId) ||
+                    (url.pathname === `/${profileId}` || url.pathname === `/${profileId}/`)
+                );
             });
-        } catch (e) {}
+            
+            // FIXED: Only run if we're actually on one of the specified profiles
+            if (!matchesProfile) {
+                return; // Exit early if not on specified profile
+            }
+            
+            devLog('Applying selectors for specific profiles');
+            const selectorsToDelete = [
+                '.x1a2a7pz.x1ja2u2z.xh8yej3.x1n2onr6.x10wlt62.x6ikm8r.x1itg65n',
+                '.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > div > .x1jfb8zj.x1qrby5j.x1n2onr6.x7ja8zs.x1t2pt76.x1lytzrv.xedcshv.xarpa2k.x3igimt.x12ejxvf.x1qhmfi1.x1pdmqnj.x9f619.x178xt8z.xm81vs4.xso031l.xy80clv.x1xmf6yo',
+                '.xu06nn8.x1jl3cmp.x2r5gy4.xnpuxes.x1hc1fzr.x879a55.x1q0g3np.xozqiw3.x1qjc9v5.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619 > .xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619',
+                '.xu06nn8.x1jl3cmp.x2r5gy4.xnpuxes.x1hc1fzr.x879a55.x1q0g3np.xozqiw3.x1qjc9v5.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619 > .xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .x1y5dvz6.x16i7wwg.xqdwrps.x1pi30zi.x1swvt13.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619',
+                '.x78zum5 > .xh8yej3.x1n2onr6.xl56j7k.xdt5ytf.x3nfvp2.x9f619.x1a2a7pz.x1lku1pv.x87ps6o.x13rtm0m.x1e5q0jg.x3x9cwd.x1o1ewxj.xggy1nq.x1hl2dhg.x16tdsg8.xkhd6sd.x18d9i69.x4uap5.xexx8yu.x1mh8g0r.xat24cr.x11i5rnm.xdj266r.html-div',
+                '.x78zum5 > .xh8yej3.x1n2onr6.xl56j7k.xdt5ytf.x3nfvp2.x9f619.x1a2a7pz.x1lku1pv.x87ps6o.x13rtm0m.x1e5q0jg.x3x9cwd.x1o1ewxj.xggy1nq.x1hl2dhg.x16tdsg8.xkhd6sd.x18d9i69.x4uap5.xexx8yu.x1mh8g0r.xat24cr.x11i5rnm.xdj266r.html-div > .xquyuld.x10wlt62.x6ikm8r.xh8yej3.x9f619.xt3gfkd.xu5ydu1.xdney7k.x1qpq9i9.x1jx94hy.x1ja2u2z.x1n2onr6.x26u7qi.x178xt8z.xm81vs4.xso031l.xy80clv.xev17xk.x1xmf6yo',
+                '.x1q0g3np.xozqiw3.x6s0dn4.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619 > .xamitd3.xeuugli.x193iq5w.x2lah0s.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .x78zum5',
+                '.x1q0g3np.xozqiw3.x6s0dn4.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619 > .xamitd3.xeuugli.x193iq5w.x2lah0s.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619',
+                '.x1y5dvz6.x16i7wwg.xqdwrps.x1pi30zi.x1swvt13.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .x1q0g3np.xozqiw3.x6s0dn4.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619',
+                '.x2lah0s.xvo6coq.x1ve1bff.x1q0g3np.xozqiw3.x1qjc9v5.xl56j7k.x1n2onr6.x78zum5.x1ja2u2z.x9f619 > .x1y5dvz6.x16i7wwg.xqdwrps.x1pi30zi.x1swvt13.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619',
+                '.x2lah0s.xvo6coq.x1ve1bff.x1q0g3np.xozqiw3.x1qjc9v5.xl56j7k.x1n2onr6.x78zum5.x1ja2u2z.x9f619',
+                '.x7wzq59.x1xzczws.x1ja2u2z.x9f619',
+                'div.xnjli0.x1q8cg2c.xwib8y2.x1y1aw1k.x6s0dn4.x1ja2u2z.x16tdsg8.x1n2onr6.x1gh759c.xnqzcj9.xfvfia3.x1i6fsjq.x2lah0s.x1q0g3np.x78zum5.x1ypdohk.x9f619.xjyslct.x1a2a7pz.x1lku1pv.x87ps6o.x13rtm0m.x1e5q0jg.x3x9cwd.x1o1ewxj.xggy1nq.x1hl2dhg.x13vifvy.x16tdsg8.x1xmf6yo',
+                'div.x78zum5.x12nagc.x1n2onr6.x1s6qhgt:empty',
+                '.x7wzq59 > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(2)',
+                '.x7wzq59 > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(2) > div:nth-child(1) > div:nth-child(1)',
+                'div.x1nhvcw1:nth-child(1)',
+                'div.x1nhvcw1:nth-child(1) > div:nth-child(1)',
+                'div.x1nhvcw1:nth-child(1) > div:nth-child(2)',
+                'div.x1nhvcw1:nth-child(1) > div:nth-child(2) > div:nth-child(1)',
+                'div.x1nhvcw1:nth-child(1) > div:nth-child(2) > div:nth-child(1) > div:nth-child(1)',
+                'div.x1nhvcw1:nth-child(1) > div:nth-child(2) > div:nth-child(1) > div:nth-child(1) > span:nth-child(1)',
+                'div.xifccgj.x4cne27.xbmpl8g.xykv574.xyamay9.x1swvt13.x1pi30zi.x1q0g3np.xozqiw3.x1qjc9v5.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619:nth-of-type(2)',
+                'div.x1yztbdb:nth-child(2)',
+                'div.x1yztbdb:nth-child(2) > div:nth-child(1)',
+                'div.x1yztbdb:nth-child(2) > div:nth-child(1) > div:nth-child(1)',
+                'div.x1yztbdb:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1)',
+                'div.xamitd3:nth-child(1)',
+                'div.xamitd3:nth-child(2)',
+                'div.xamitd3:nth-child(2) > div:nth-child(1)',
+                'div.xamitd3:nth-child(2) > div:nth-child(1) > div:nth-child(1)',
+                'div.xamitd3:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1)',
+                'div.xamitd3:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1)',
+                'div.xamitd3:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1)',
+                'div.xamitd3:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1)',
+                'div.xamitd3:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2)',
+                'div.xamitd3:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > span:nth-child(1)',
+                'div.xamitd3:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > span:nth-child(1) > span:nth-child(1) > span:nth-child(1)',
+                'div.xamitd3:nth-child(2) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2)',
+                '.x6d00yu',
+                'mount_0_0_9k > div > div > div > div.x9f619.x1n2onr6.x1ja2u2z > div > div > div.x78zum5.xdt5ytf.x1t2pt76.x1n2onr6.x1ja2u2z.x10cihs4 > div.x78zum5.xdt5ytf.x1t2pt76 > div > div > div.x6s0dn4.x78zum5.xdt5ytf.x193iq5w > div.x9f619.x193iq5w.x1talbiv.x1sltb1f.x3fxtfs.xf7dkkf.xv54qhq.xw7yly9 > div > div.x9f619.x1n2onr6.x1ja2u2z.xeuugli.xs83m0k.xjl7jj.x1xmf6yo.x1xegmmw.x1e56ztr.x13fj5qh.xnp8db0.x1d1medc.x7ep2pv.x1xzczws > div.x7wzq59 > div > div:nth-child(2) > div > div',
+                'div[aria-label="Suodattimet"]',
+                'div[aria-label="Filters"]',
+                'div[aria-label="Suodattimet"][role="button"]',
+                'div[aria-label="Filters"][role="button"]',
+                '.x1i10hfl.xjbqb8w.x1ejq31n.x18oe1m7.x1sy0etr.xstzfhl.x972fbf.x10w94by.x1qhh985.x14e42zd.x1ypdohk.xe8uvvx.xdj266r.x14z9mp.xat24cr.x1lziwak.xexx8yu.xyri2b.x18d9i69.x1c1uobl.x16tdsg8.xat24cr.x1mh8g0r.x6s0dn4.x78zum5.xdt5ytf.xjy6m2a.xl56j7k',
+                '.x1ja2u2z.x78zum5.x2lah0s.x1n2onr6.xl56j7k.x6s0dn4.xozqiw3.x1q0g3np.x14ldlfn.x1b1wa69.xws8118.x5fzff1.x972fbf.x10w94by.x1qhh985.x14e42zd.x9f619.xpdmqnj.x1g0dm76.x1qhmfi1.x1r1pt67',
+                'h2:contains("Julkaisut")',
+                'span:contains("Julkaisut")',
+                'div:contains("Suodattimet")',
+                'span:contains("Suodattimet")'
+            ];
+            
+            let deletedCount = 0;
+            selectorsToDelete.forEach(selector => {
+                document.querySelectorAll(selector)
+                    .forEach(element => {
+                        if (!element.classList.contains('fb-element-banned')) {
+                            element.classList.add('fb-element-banned');
+                            element.style.setProperty('display', 'none', 'important');
+                            element.style.setProperty('visibility', 'hidden', 'important');
+                            element.style.setProperty('opacity', '0', 'important');
+                            element.style.setProperty('pointer-events', 'none', 'important');
+                            element.style.setProperty('position', 'absolute', 'important');
+                            element.style.setProperty('left', '-9999px', 'important');
+                            element.style.setProperty('top', '-9999px', 'important');
+                            element.style.setProperty('height', '0', 'important');
+                            element.style.setProperty('width', '0', 'important');
+                            element.style.setProperty('overflow', 'hidden', 'important');
+                            deletedCount++;
+                        }
+                    });
+            });
+            
+            if (deletedCount > 0) {
+                devLog(`Deleted ${deletedCount} elements for specific profiles`);
+            }
+        } catch (e) {
+            console.log('Error deleting selectors for specific profiles: ' + e.message);
+        }
+    };
+
+// Function to delete elements for a personal profile - now with support for multiple URLs
+const deleteSelectorsForPersonalProfile = () => {
+    try {
+        const currentUrl = window.location.href;
+
+        // Allowed URLs: add strings (exact match, trailing slash ignored) or RegExp patterns.
+        const allowedUrls = [
+		'https://www.facebook.com/Haukkis/friends',
+		'https://www.facebook.com/Haukkis/friends_all',
+		'https://www.facebook.com/Haukkis/friends_with_upcoming_birthdays'	
+        ];
+
+        // Normalize URL (ignore hash, handle trailing slash) and test against allowlist
+        const normalizeForCompare = (u) => {
+            try {
+                const url = new URL(u);
+                url.hash = '';
+                return url.toString().replace(/\/+$/, '');
+            } catch {
+                return String(u).replace(/#.*$/, '').replace(/\/+$/, '');
+            }
+        };
+
+        const isAllowed = allowedUrls.some((matcher) => {
+            if (typeof matcher === 'string') {
+                return normalizeForCompare(currentUrl) === normalizeForCompare(matcher);
+            } else if (matcher instanceof RegExp) {
+                return matcher.test(currentUrl.replace(/\/+$/, ''));
+            }
+            return false;
+        });
+
+        if (!isAllowed) {
+            return;
+        }
+
+        devLog('Applying selectors for personal profile');
+
+        const personalProfileSelectors = [
+            'div.xnjli0.x1q8cg2c.xwib8y2.x1y1aw1k.x6s0dn4.x1ja2u2z.x16tdsg8.x1n2onr6.x1gh759c.xnqzcj9.xfvfia3.x1i6fsjq.x2lah0s.x1q0g3np.x78zum5.x1ypdohk.x9f619.xjyslct.x1a2a7pz.x1lku1pv.x87ps6o.x13rtm0m.x1e5q0jg.x3x9cwd.x1o1ewxj.xggy1nq.x1hl2dhg.x13vifvy.x16tdsg8.x1xmf6yo',
+            'div.xnjli0.x1q8cg2c.xwib8y2.x1y1aw1k.x6s0dn4.x1ja2u2z.x16tdsg8.x1n2onr6.x1gh759c.xnqzcj9.xfvfia3.x1i6fsjq.x2lah0s.x1q0g3np.x78zum5.x1ypdohk.x9f619.xjyslct.x1a2a7pz.x1lku1pv.x87ps6o.x13rtm0m.x1e5q0jg.x3x9cwd.x1o1ewxj.xggy1nq.x1hl2dhg.x13vifvy.x16tdsg8.x1xmf6yo',
+            'span:contains("Poista kavereista")',
+            'div[role="menuitem"] span:contains("Poista kavereista")',
+            'i[style*="BXcBrMYpzXO.png"][style*="background-position: 0px -84px"]',
+        ];
+
+        let deletedCount = 0;
+        personalProfileSelectors.forEach(selector => {
+            if (selector.includes(':contains(')) {
+                const text = selector.match(/\:contains\("([^"]+)"\)/)?.[1];
+                if (text) {
+                    const walker = document.createTreeWalker(
+                        document.body,
+                        NodeFilter.SHOW_TEXT,
+                        null,
+                        false
+                    );
+                    let node;
+                    while ((node = walker.nextNode())) {
+                        if (node.nodeValue.includes(text)) {
+                            let parent = node.parentElement;
+                            while (parent && parent !== document.body) {
+                                if (parent.getAttribute('role') === 'menuitem' &&
+                                    parent.textContent.includes('Poista kavereista')) {
+                                    if (!parent.classList.contains('fb-element-banned')) {
+                                        parent.classList.add('fb-element-banned');
+                                        parent.style.setProperty('display', 'none', 'important');
+                                        parent.style.setProperty('visibility', 'hidden', 'important');
+                                        parent.style.setProperty('opacity', '0', 'important');
+                                        parent.style.setProperty('pointer-events', 'none', 'important');
+                                        parent.style.setProperty('position', 'absolute', 'important');
+                                        parent.style.setProperty('left', '-9999px', 'important');
+                                        parent.style.setProperty('top', '-9999px', 'important');
+                                        parent.style.setProperty('height', '0', 'important');
+                                        parent.style.setProperty('width', '0', 'important');
+                                        parent.style.setProperty('overflow', 'hidden', 'important');
+                                        deletedCount++;
+                                    }
+                                    break;
+                                }
+                                parent = parent.parentElement;
+                            }
+                        }
+                    }
+                }
+            } else {
+                document.querySelectorAll(selector).forEach(el => {
+                    if (!el.classList.contains('fb-element-banned')) {
+                        el.classList.add('fb-element-banned');
+                        el.style.setProperty('display', 'none', 'important');
+                        el.style.setProperty('visibility', 'hidden', 'important');
+                        el.style.setProperty('opacity', '0', 'important');
+                        el.style.setProperty('pointer-events', 'none', 'important');
+                        el.style.setProperty('position', 'absolute', 'important');
+                        el.style.setProperty('left', '-9999px', 'important');
+                        el.style.setProperty('top', '-9999px', 'important');
+                        el.style.setProperty('height', '0', 'important');
+                        el.style.setProperty('width', '0', 'important');
+                        el.style.setProperty('overflow', 'hidden', 'important');
+                        deletedCount++;
+                    }
+                });
+            }
+        });
+
+        if (deletedCount > 0) {
+            devLog(`Deleted ${deletedCount} elements for personal profile`);
+        }
+    } catch (e) {
+        console.log('Error deleting selectors for personal profile: ' + e.message);
+    }
+};
+
+    // Intercept navigation to blocked URLs / FBIDs / profile-page terms
+    const isPlainLeftClick = (event) => {
+        try {
+            return event && event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey;
+        } catch (e) {
+            return false;
+        }
+    };
+
+    const getBestNavigationAnchor = (target) => {
+        try {
+            if (!target || !target.closest) return null;
+            const directAnchor = target.closest('a[href]');
+            if (directAnchor) return directAnchor;
+
+            const clickableWrapper = target.closest('[role="link"], [role="option"], li[role="row"], div[role="presentation"], [data-testid*="search" i]');
+            if (clickableWrapper) {
+                if (clickableWrapper.matches && clickableWrapper.matches('a[href]')) return clickableWrapper;
+                const nestedAnchor = clickableWrapper.querySelector && clickableWrapper.querySelector('a[href]');
+                if (nestedAnchor) return nestedAnchor;
+            }
+
+            return target.closest('a, [role="link"]');
+        } catch (e) {
+            return null;
+        }
+    };
+
+    const isCommentNavigationUrl = (inputUrl = window.location.href) => {
+        try {
+            const raw = String(inputUrl || '').toLowerCase();
+            const url = new URL(inputUrl, window.location.origin);
+            const combined = (url.search + ' ' + url.hash + ' ' + raw).toLowerCase();
+            return url.searchParams.has('comment_id') ||
+                   url.searchParams.has('reply_comment_id') ||
+                   url.searchParams.has('focused_comment_id') ||
+                   url.searchParams.has('comment_tracking') ||
+                   combined.includes('comment_id=') ||
+                   combined.includes('reply_comment_id=') ||
+                   combined.includes('focused_comment_id=') ||
+                   combined.includes('comment_tracking') ||
+                   combined.includes('comments');
+        } catch (e) {
+            const raw = String(inputUrl || '').toLowerCase();
+            return raw.includes('comment_id') || raw.includes('reply_comment_id') || raw.includes('focused_comment_id') || raw.includes('comment_tracking') || raw.includes('comments');
+        }
+    };
+
+    const clickedProfileOrPageHasBlockedTerm = (anchor) => {
+        try {
+            const href = anchor.href || anchor.getAttribute('href') || '';
+            if (!isLikelyProfileOrPageRoute(href)) return false;
+
+            const signal = [
+                href,
+                anchor.textContent || '',
+                anchor.getAttribute('aria-label') || '',
+                anchor.getAttribute('title') || '',
+                anchor.getAttribute('data-hovercard') || '',
+                anchor.getAttribute('data-profileid') || '',
+                anchor.getAttribute('data-pageid') || '',
+                anchor.getAttribute('data-fbid') || ''
+            ].join(' ');
+
+            return matchesAnyActiveRegex(signal) || matchesAnyBlockedFbid(signal) || fbClickedTargetHasBlockedIdentity(anchor);
+        } catch (e) {
+            return false;
+        }
     };
 
     let __fbNavInterceptInstalled = false;
@@ -3650,433 +3302,384 @@ const scanAndBanEntirePosts = () => {
             __fbNavInterceptInstalled = true;
 
             const clickHandler = (event) => {
+                const approvedPost = event.target && event.target.closest ? event.target.closest('.fb-post-approved:not(.fb-post-banned):not(.fb-element-banned)') : null;
+                if (approvedPost) {
+                    rememberApprovedPostForBrowsing(approvedPost);
+                    markApprovedBrowsePendingNavigation();
+                }
+
                 const anchor = getBestNavigationAnchor(event.target);
                 if (!anchor) return;
 
-                const href = anchor.href || anchor.getAttribute && anchor.getAttribute('href') || '';
-                if (isNotificationNavigationUrl(href)) return;
-
-                const labelText = normalizeFBText([
-                    anchor.getAttribute && anchor.getAttribute('aria-label') || '',
-                    anchor.getAttribute && anchor.getAttribute('title') || '',
-                    anchor.textContent || ''
-                ].join(' '));
-
-                const isCommentishClick = isCommentNavigationUrl(href) ||
-                    labelText.includes('comment') ||
-                    labelText.includes('komment') ||
-                    !!(anchor.closest && anchor.closest('[aria-label*="comment" i], [aria-label*="komment" i], [title*="comment" i], [title*="komment" i], [data-testid*="comment" i]'));
-
-                if (isCommentishClick) {
-                    markCommentNavigationGrace();
-                    return;
-                }
-
-                if (isPostLikeContentUrl(href)) {
-                    const owningPost = getOwningFeedPost(anchor);
-                    if ((anchor.closest && anchor.closest('.fb-post-approved')) || (owningPost && owningPost.classList && owningPost.classList.contains('fb-post-approved'))) {
-                        markPostNavigationGrace();
-                    }
-                }
-
+                const href = anchor.href || (anchor.getAttribute && anchor.getAttribute('href')) || '';
+                if (approvedPost && href) rememberApprovedSignalForBrowsing(href);
+                if (!href || isNotificationNavigationUrl(href) || isCommentNavigationUrl(href)) return;
                 if (!isPlainLeftClick(event)) return;
 
-                if (fbClickedTargetHasBlockedIdentity(anchor)) {
+                if (fbClickedTargetHasBlockedIdentity(anchor) || matchesDirectFacebookBlockedUrlForRedirect(href) || clickedProfileOrPageHasBlockedTerm(anchor)) {
                     event.preventDefault();
                     event.stopPropagation();
-                    triggerRedirect();
+                    triggerRedirect('blocked clicked navigation');
                     return;
                 }
 
-                if (matchesBlockedUrlCandidates(href)) {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    triggerRedirect();
-                    return;
-                }
-
-                if (isLikelyPlainProfileOrPageHref(href)) {
-                    // Facebook's SPA router can hide vanity profile/page FBIDs until a refresh.
-                    // For bare profile/page clicks, bypass SPA and use a full document navigation.
-                    // Middle-click already works this way; this makes plain left-click self-police too.
-                    event.preventDefault();
-                    event.stopPropagation();
-                    try { window.location.assign(href); } catch (e) { window.location.href = href; }
-                    return;
+                // Bare profile/page SPA routes may hide FBIDs until after hydration.
+                // Force a normal document navigation so handleRedirects can inspect metadata.
+                if (isLikelyProfileOrPageRoute(href)) {
+                    const textSignal = normalizeFBText([href, anchor.textContent || '', anchor.getAttribute('aria-label') || '', anchor.getAttribute('title') || ''].join(' '));
+                    if (matchesAnyActiveRegex(textSignal)) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        triggerRedirect('blocked clicked profile/page term');
+                        return;
+                    }
                 }
             };
+
             const submitHandler = (event) => {
                 const form = event.target;
                 const action = form.action || '';
                 if (isNotificationNavigationUrl(action)) return;
-                if (matchesBlockedUrlCandidates(action) || fbExplicitIdentityValueHasBlockedFbid(action)) {
+                if (matchesDirectFacebookBlockedUrlForRedirect(action) || fbExplicitIdentityValueHasBlockedFbid(action)) {
                     event.preventDefault();
                     event.stopPropagation();
-                    triggerRedirect();
+                    triggerRedirect('blocked form action');
                 }
             };
+
             onWindowEvent(document, 'click', clickHandler, true);
             onWindowEvent(document, 'submit', submitHandler, true);
-        } catch (e) {}
+        } catch (e) {
+            console.log('Error setting up navigation interception: ' + e.message);
+        }
     };
 
-    const nukeGlobalBadElements = () => {
+    let __fbHistoryHooked = false;
+    const hookHistoryAPI = () => {
         try {
-            // Nuke "Poista kavereista" from any chat/friends list overlay menu
-            document.querySelectorAll('div[role="menuitem"], span[dir="auto"]').forEach(el => {
-                if (el.textContent && el.textContent.includes('Poista kavereista')) {
-                    const wrapper = el.closest('div[role="menuitem"]') || el;
-                    if (!isDangerousToHide(wrapper)) safelyHideFBElement(wrapper);
-                }
-            });
+            if (__fbHistoryHooked) return;
+            __fbHistoryHooked = true;
 
-            // Structurally Nuke "Sinulle ehdotettua" / "Lisää kavereita" Ghost Box
-            const ghostSelectors = [
-                'div.x1exxf4d.xpv9jar:has(svg circle[fill="#1876f2"][r="12.08"])',
-                'div.x1exxf4d.xpv9jar:has(svg path[fill="#90c3ff"])',
-                'div.x1exxf4d.xpv9jar.x1nb4dca.x1nmn18.x1obq294.x5a5i1n.xde0f50.x15x8krk.x13fuv20.x18b5jzi.x1q0q8m5.x1t7ytsu.x178xt8z.x1lun4ml.xso031l.xpilrb4.xev17xk.x1xmf6yo',
-                'i[style*="BXcBrMYpzXO.png"][style*="background-position: 0px -84px"]'
-            ];
+            const originalPushState = history.pushState;
+            history.pushState = function() {
+                const rv = originalPushState.apply(this, arguments);
+                setTimeout(runAllFilters, 0);
+                return rv;
+            };
 
-            ghostSelectors.forEach(selector => {
-                if (selector.includes(':has(')) {
-                    const hasMatch = selector.match(/^(.*?):has\((.*?)\)$/);
-                    if (hasMatch) {
-                        document.querySelectorAll(hasMatch[1]).forEach(element => {
-                            if (isSafeElement(element)) return; 
-                            if (isDangerousToHide(element)) return;
-                            if (element.querySelector(hasMatch[2])) {
-                                safelyHideFBElement(element);
-                            }
-                        });
-                    }
-                } else {
-                    document.querySelectorAll(selector).forEach(el => {
-                        if (isSafeElement(el)) return; 
-                        if (isDangerousToHide(el)) return;
-                        safelyHideFBElement(el);
-                    });
-                }
-            });
+            const originalReplaceState = history.replaceState;
+            history.replaceState = function() {
+                const rv = originalReplaceState.apply(this, arguments);
+                setTimeout(runAllFilters, 0);
+                return rv;
+            };
 
-            // Final text fallback for the ghost container
-            const textToFind = ["Lisää kavereita saadaksesi suosituksia", "Kun lisäät kavereita, näet tässä listan ihmisistä, jotka saatat tuntea."];
-            const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
-            let node;
-            while ((node = walker.nextNode())) {
-                if (textToFind.some(t => node.nodeValue.includes(t))) {
-                    let parent = node.parentElement;
-                    while (parent && parent !== document.body) {
-                        if (parent.classList.contains('x1exxf4d') || parent.classList.contains('html-div')) {
-                            if (isSafeElement(parent)) break; 
-                            if (isDangerousToHide(parent)) break;
-                            safelyHideFBElement(parent);
-                            break;
-                        }
-                        parent = parent.parentElement;
-                    }
-                }
-            }
+            onWindowEvent(window, 'popstate', () => setTimeout(runAllFilters, 0), false);
         } catch (e) {}
     };
 
+    // ENHANCED: DOM observer with instant search result processing and full post scanning
     let __fbDomObserverInstalled = false;
     const observeDOMChanges = () => {
         try {
             if (__fbDomObserverInstalled) return;
             __fbDomObserverInstalled = true;
 
-            const throttledRunAllFilters = createThrottle(() => runAllFilters(), 700);
+            devLog('Setting up DOM observer with instant search processing and full post scanning');
+
+            const throttledRunAllFilters = createThrottle(() => runAllFilters(), 140);
 
             const observer = trackObserver(new MutationObserver((mutations) => {
-                if (isFBInteractionLightModeActive()) {
-                    runLightInteractionPass();
-                    return;
-                }
-                if (!isNavigationGraceActive()) handleRedirects();
-
+                // Check for search-related changes first for instant processing
                 let hasSearchChanges = false;
-                let hasFeedChanges = false;
-                let hasRelevantUiChanges = false;
-
-                const flagNode = (node) => {
-                    if (!node) return;
-
-                    resetReusedFeedUnits(node);
-
-                    const nodeIsFeed = !!(node.matches && isFeedUnit(node));
-                    const nodeHasFeed = !!(node.querySelector && node.querySelector(getFeedUnitSelectorString()));
-                    if (nodeIsFeed || nodeHasFeed || (node.closest && node.closest(getFeedUnitSelectorString()))) {
-                        markPendingFeedUnits(node.nodeType === 1 ? node : document);
-                        hasFeedChanges = true;
-                    }
-
-                    const nodeIsSearch = !!(node.matches && (node.matches('li[role="row"]') || node.matches('a[aria-describedby]') || node.matches('div[role="option"]') || node.matches('div[role="presentation"]')));
-                    const nodeHasSearch = !!(node.querySelector && (node.querySelector('li[role="row"]') || node.querySelector('a[aria-describedby]') || node.querySelector('div[role="option"]') || node.querySelector('div[role="presentation"]')));
-                    if (nodeIsSearch || nodeHasSearch) {
-                        hasSearchChanges = true;
-                    }
-
-                    const nodeIsRelevantUi = !!(node.matches && (node.matches('[role="dialog"]') || node.matches('[role="menu"]') || node.matches('div[aria-label="Kelat"][role="region"]') || node.matches('div[aria-label="Reels"][role="region"]') || node.matches('div[aria-label="Sinulle ehdotettua"][role="region"]') || node.matches('div[aria-label="Suggested for you"][role="region"]') || node.matches('[aria-label="Recommended for you"]') || elementLooksLikeSuggestedForYouHeader(node)));
-                    const nodeHasRelevantUi = !!(node.querySelector && (node.querySelector('[role="dialog"]') || node.querySelector('[role="menu"]') || node.querySelector('div[aria-label="Kelat"][role="region"]') || node.querySelector('div[aria-label="Reels"][role="region"]') || node.querySelector('div[aria-label="Sinulle ehdotettua"][role="region"]') || node.querySelector('div[aria-label="Suggested for you"][role="region"]') || node.querySelector('[aria-label="Recommended for you"]') || node.querySelector('[data-fb-words-text]')));
-                    if (nodeIsRelevantUi || nodeHasRelevantUi) {
-                        hasRelevantUiChanges = true;
-                    }
-                };
-
                 mutations.forEach(mutation => {
-                    if (mutation.type === 'childList') {
-                        mutation.addedNodes && mutation.addedNodes.forEach(node => {
-                            if (node.nodeType !== 1) return;
-                            flagNode(node);
-                        });
-                        return;
-                    }
-
-                    if (mutation.type === 'attributes') {
-                        const target = mutation.target;
-                        if (target && target.nodeType === 1) flagNode(target);
-                        return;
-                    }
-
-                    if (mutation.type === 'characterData') {
-                        const parent = mutation.target && mutation.target.parentElement;
-                        if (parent) flagNode(parent);
-                    }
+                    mutation.addedNodes && mutation.addedNodes.forEach(node => {
+                        if (node.nodeType === 1 && node.matches && (
+                            node.matches('li[role="row"]') ||
+                            node.matches('a[aria-describedby]') ||
+                            node.matches('div[role="option"]') ||
+                            node.matches('div[role="presentation"]')
+                        )) {
+                            hasSearchChanges = true;
+                        }
+                    });
                 });
 
-                if (!hasFeedChanges && !hasSearchChanges && !hasRelevantUiChanges) return;
-                if (hasSearchChanges) processSearchResults();
+                // Process search results immediately if detected
+                if (hasSearchChanges) {
+                    processSearchResults();
+                }
+
+                // Then run other filtering functions (throttled)
                 throttledRunAllFilters();
             }));
-
-            observer.observe(document.documentElement, {
-                childList: true,
+            
+            observer.observe(document.documentElement, { 
+                childList: true, 
                 subtree: true,
-                attributes: true,
-                attributeFilter: ['href', 'aria-label', 'title', 'data-lynx-uri', 'data-store'],
+                attributes: false,
                 characterData: false
             });
-        } catch (e) {}
+        } catch (e) {
+            console.log('Error setting up DOM observer: ' + e.message);
+        }
     };
 
-    let __fbHistoryHooked = false;
-    const hookHistoryAPI = () => {
-        if (__fbHistoryHooked) return;
-        __fbHistoryHooked = true;
-        
-        const originalPushState = history.pushState;
-        history.pushState = function() {
-            const rv = originalPushState.apply(this, arguments);
-            window.dispatchEvent(new Event('pushState'));
-            window.dispatchEvent(new Event('locationchange'));
-            return rv;
-        };
-        const originalReplaceState = history.replaceState;
-        history.replaceState = function() {
-            const rv = originalReplaceState.apply(this, arguments);
-            window.dispatchEvent(new Event('replaceState'));
-            window.dispatchEvent(new Event('locationchange'));
-            return rv;
-        };
-        onWindowEvent(window, 'popstate', () => {
-            window.dispatchEvent(new Event('locationchange'));
-        }, false);
+
+    // Targeted friends/contact card cleanup. This does NOT approve/hide feed posts.
+    const scrubBlockedFriendAndContactCards = () => {
+        try {
+            const optionSelector = '[aria-label*="Lisää vaihtoehtoja kaverille"], [aria-label*="More options for friend"], [aria-label*="More options for"]';
+
+            const collectSignals = (element) => {
+                const chunks = [];
+                const push = (value) => { if (value) chunks.push(String(value)); };
+                push(element.textContent || element.innerText || '');
+                push(element.getAttribute && element.getAttribute('aria-label'));
+                push(element.getAttribute && element.getAttribute('title'));
+                push(element.getAttribute && element.getAttribute('data-hovercard'));
+                push(element.getAttribute && element.getAttribute('data-profileid'));
+                push(element.getAttribute && element.getAttribute('data-fbid'));
+                push(element.getAttribute && element.getAttribute('data-store'));
+                if (element.href) push(element.href);
+
+                element.querySelectorAll && element.querySelectorAll('a[href], img[alt], [aria-label], [title], [data-hovercard], [data-profileid], [data-fbid], [data-store]').forEach((child) => {
+                    push(child.href);
+                    push(child.getAttribute('alt'));
+                    push(child.getAttribute('aria-label'));
+                    push(child.getAttribute('title'));
+                    push(child.getAttribute('data-hovercard'));
+                    push(child.getAttribute('data-profileid'));
+                    push(child.getAttribute('data-fbid'));
+                    push(child.getAttribute('data-store'));
+                });
+
+                return chunks.join(' ');
+            };
+
+            const isBlockedSignal = (signal) => {
+                return matchesAnyActiveRegex(signal) || matchesAnyBlockedFbid(signal) || matchesAnyBlockedUrl(signal);
+            };
+
+            const findSingleFriendCardShell = (element) => {
+                let current = element;
+                let best = null;
+                for (let depth = 0; depth < 12 && current && current !== document.body && current !== document.documentElement; depth++) {
+                    if (current.matches && current.matches('div, li, [role="listitem"], [role="row"]')) {
+                        const count = current.querySelectorAll ? current.querySelectorAll(optionSelector).length : 0;
+                        if (count === 1) best = current;
+                        if (count > 1) break;
+                    }
+                    current = current.parentElement;
+                }
+                return best || element.closest('[role="listitem"], li, [role="row"]') || element.closest('div') || element;
+            };
+
+            let hiddenCount = 0;
+
+            // Friends-page cards and their leftover empty shells expose the target name in the options button aria-label.
+            document.querySelectorAll(optionSelector + ':not(.fb-profile-card-processed)').forEach((button) => {
+                button.classList.add('fb-profile-card-processed');
+                const card = findSingleFriendCardShell(button);
+                const signal = collectSignals(card) + ' ' + collectSignals(button);
+                if (isBlockedSignal(signal)) {
+                    hideElementHard(card, 'fb-profile-card-banned');
+                    hiddenCount++;
+                }
+            });
+
+            // Right-rail chat/contact rows usually expose FBIDs through /messages/t/<id> links.
+            document.querySelectorAll('a[href*="/messages/t/"], a[href*="messenger.com/t/"]').forEach((link) => {
+                const row = link.closest('[role="listitem"], li, [role="row"], [role="button"]') || link.closest('div') || link;
+                if (!row || row.classList.contains('fb-profile-card-banned')) return;
+                const signal = collectSignals(row) + ' ' + collectSignals(link);
+                if (isBlockedSignal(signal)) {
+                    hideElementHard(row, 'fb-profile-card-banned');
+                    hiddenCount++;
+                }
+            });
+
+            if (hiddenCount > 0) devLog(`Hidden ${hiddenCount} blocked friend/contact cards`);
+        } catch (e) {
+            console.log('Error scrubbing friend/contact cards: ' + e.message);
+        }
     };
 
-    // CHECK FOR SPA NAVIGATION SILENTLY
-    function checkSPARouting() {
-        if (__lastKnownUrl !== window.location.href) {
-            devLog('SPA URL Change Detected via Polling');
-            __lastKnownUrl = window.location.href;
-            window.dispatchEvent(new Event('locationchange'));
-        }
-    }
 
-    onWindowEvent(window, 'locationchange', () => {
-        devLog('SPA Navigation handled');
-        __lastKnownUrl = window.location.href;
-        isRedirecting = false;
-        updateFBFeedZeroGlimpseGateClass();
-        resetReusedFeedUnits(document);
-        manageCSSStyles();
-        if (isFBInteractionLightModeActive()) {
-            runLightInteractionPass();
-        } else if (!isNavigationGraceActive()) {
-            runAllFilters();
-        }
-        [250, 900, 2200].forEach(delay => addTimeout(() => {
-            try {
-                if (isFBInteractionLightModeActive()) return;
-                if (!isNavigationGraceActive()) handleRedirects();
-                checkVanityProfileFBID();
-            } catch(e) {}
-        }, delay));
-    }, false);
+    const scrubBlockedProfileHeaderBits = () => {
+        try {
+            refreshAccountScopedFilters();
+            const selectors = [
+                '[data-pagelet="ProfileHeader"]',
+                '[data-pagelet="PageHeader"]',
+                'div.x78zum5.xdt5ytf.x12upk82.xod5an3'
+            ];
 
+            let hiddenCount = 0;
+            document.querySelectorAll(selectors.join(',')).forEach(header => {
+                if (!header || header.classList.contains('fb-profile-header-banned')) return;
+                const signal = [
+                    collectScopedText(header, 80),
+                    Array.from(header.querySelectorAll ? header.querySelectorAll('a[href], [aria-label], [title], [data-hovercard], [data-profileid], [data-pageid], [data-fbid], [data-store]') : []).slice(0, 80).map(el => [
+                        el.href || '',
+                        el.getAttribute('href') || '',
+                        el.getAttribute('aria-label') || '',
+                        el.getAttribute('title') || '',
+                        el.getAttribute('data-hovercard') || '',
+                        el.getAttribute('data-profileid') || '',
+                        el.getAttribute('data-pageid') || '',
+                        el.getAttribute('data-fbid') || '',
+                        el.getAttribute('data-store') || ''
+                    ].join(' ')).join(' ')
+                ].join(' ');
+
+                if (matchesAnyActiveRegex(signal) || matchesAnyBlockedFbid(signal) || matchesDirectFacebookBlockedUrlForRedirect(signal)) {
+                    // If we are actually on that profile/page, redirect. If it is just a card/header fragment,
+                    // hide only that fragment.
+                    if (isLikelyProfileOrPageRoute(window.location.href)) {
+                        triggerRedirect('blocked profile/page header');
+                    } else {
+                        hideElementHard(header, 'fb-profile-header-banned');
+                        hiddenCount++;
+                    }
+                }
+            });
+
+            if (hiddenCount > 0) devLog(`Hidden ${hiddenCount} blocked profile/page header fragments`);
+        } catch (e) {
+            console.log('Error scrubbing profile header bits: ' + e.message);
+        }
+    };
+
+
+    // ENHANCED: Run all filtering functions with full post scanning
     const runAllFilters = () => {
         try {
-            updateFBFeedZeroGlimpseGateClass();
-            if (isFBInteractionLightModeActive()) {
-                runLightInteractionPass();
-                return;
-            }
-            if (!isNavigationGraceActive()) handleRedirects(); 
-            checkVanityProfileFBID(); 
-            cleanUrl(); 
-            
-            const isPersonal = manageCSSStyles();
-            
-            if (isPersonal) {
-                PersonalProfileSelectors();
-                
-                // Force reveal any posts that the CSS anti-glimpse might have automatically hidden before the CSS toggle kicked in
-                document.querySelectorAll(getFeedUnitSelectorString() + ', [role="article"]').forEach(el => {
-                    revealApprovedPost(el);
-                });
-                
-                return; // TERMINATES HERE. NOTHING ELSE RUNS ON PERSONAL PROFILES!
-            }
-
-            resetReusedFeedUnits(document);
-            markPendingFeedUnits(document);
-
-            // Normal execution
-            markPendingFeedUnits(document);
-            banSuggestedForYouFeedPosts(document);
-            injectSpecificUrlPrehideCSS();
-            nukeGlobalBadElements();
-            eliminateSuggestedGroups(); 
-            filteredProfiles();
+            updateFBSearchPageClass();
+            refreshAccountScopedFilters();
+            checkVanityProfileFBID();
+            handleRedirects();
+            approveCurrentApprovedBrowseSurface();
+            cleanUrl();
             hideCriticalElements();
-            deletePeopleYouMayKnow(); 
-            processSearchResults(); 
-            deleteRestrictedPhrases(); 
+            deleteBlockedElements();
+            scanAndBanEntirePosts(); // Added full post scanning initially
+            deleteRestrictedWords();
+            processSearchResults(); // Added search result processing
+            scrubBlockedFriendAndContactCards();
+            scrubBlockedProfileHeaderBits();
+            deleteRestrictedPhrases();
+            deletePeopleYouMayKnow();
+            // FIXED: These now check URLs internally before running
             deleteSelectorsForSpecificUrl();
+            deleteSelectorsForSpecificProfile();
+            deleteSelectorsForPersonalProfile();
             deleteElement();
-
-            const currentPath = window.location.pathname.toLowerCase();
-            const currentUrl = window.location.href.toLowerCase();
-
-            if (isExcludedPathForDOM(currentPath, currentUrl)) {
-                document.querySelectorAll(getFeedUnitSelectorString() + ', [role="article"]').forEach(el => {
-                    revealApprovedPost(el);
-                });
-                return; 
-            }
-
-            deleteBlockedElements(); 
-            scanAndBanEntirePosts();
-            deleteRestrictedWords(); 
-        } catch (e) {}
-    };
-
-    const immediateInit = () => {
-        updateFBFeedZeroGlimpseGateClass();
-        if (isFBInteractionLightModeActive()) { runLightInteractionPass(); return; }
-        resetReusedFeedUnits(document);
-        const isPersonal = manageCSSStyles();
-        
-        if (isPersonal) {
-            PersonalProfileSelectors();
-            return; // TERMINATES HERE.
+        } catch (e) {
+            console.log('Error running all filters: ' + e.message);
         }
-        
-        markPendingFeedUnits(document);
-        banSuggestedForYouFeedPosts(document);
-        injectSpecificUrlPrehideCSS();
-        nukeGlobalBadElements(); filteredProfiles();
-        eliminateSuggestedGroups(); hideCriticalElements(); processSearchResults();
-        deleteRestrictedPhrases(); deletePeopleYouMayKnow(); deleteSelectorsForSpecificUrl(); deleteElement(); 
-
-        const currentPath = window.location.pathname.toLowerCase();
-        if (isExcludedPathForDOM(currentPath, window.location.href)) return;
-
-        scanAndBanEntirePosts(); if (!isNavigationGraceActive()) deleteRestrictedWords(); deleteBlockedElements(); 
     };
 
+    // NEW: Immediate initialization function for zero-glimpse hiding
+    const immediateInit = () => {
+        devLog('Running immediate init for zero-glimpse hiding');
+        updateFBSearchPageClass();
+        refreshAccountScopedFilters();
+        checkVanityProfileFBID();
+        handleRedirects();
+        approveCurrentApprovedBrowseSurface();
+        hideCriticalElements();
+        scanAndBanEntirePosts();
+        deleteRestrictedWords();
+        processSearchResults();
+        scrubBlockedFriendAndContactCards();
+        scrubBlockedProfileHeaderBits();
+        deleteRestrictedPhrases();
+        deletePeopleYouMayKnow();
+        // FIXED: These now check URLs internally
+        deleteSelectorsForSpecificUrl();
+        deleteSelectorsForSpecificProfile();
+        deleteSelectorsForPersonalProfile();
+        deleteElement();
+    };
+
+    // Ensure DOM is ready before initializing
     const ensureDOMReady = () => {
-        const armReadyHooks = () => {
+        const installLiveHooks = () => {
             observeDOMChanges();
             observeForRestrictedPhrases();
             interceptNavigation();
             hookHistoryAPI();
-            resetReusedFeedUnits(document);
-            runAllFilters();
         };
 
         if (document.readyState === 'loading') {
-            onWindowEvent(window, 'DOMContentLoaded', armReadyHooks, false);
+            onWindowEvent(window, 'DOMContentLoaded', installLiveHooks, false);
         } else {
-            armReadyHooks();
+            installLiveHooks();
         }
     };
 
+    // Initialize the script
     const init = () => {
-        updateFBFeedZeroGlimpseGateClass();
+        devLog('Initializing Facebook script with instant search hiding and full post scanning');
         ensureDOMReady();
-        if (isFBInteractionLightModeActive()) { runLightInteractionPass(); return; }
-        resetReusedFeedUnits(document); markPendingFeedUnits(document); if (!isNavigationGraceActive()) handleRedirects(); cleanUrl(); 
-        
-        const isPersonal = manageCSSStyles();
-        
-        if (isPersonal) {
-            PersonalProfileSelectors();
-        } else {
-            injectSpecificUrlPrehideCSS();
-            nukeGlobalBadElements();
-            eliminateSuggestedGroups(); hideCriticalElements(); processSearchResults(); deleteRestrictedPhrases(); deletePeopleYouMayKnow(); deleteSelectorsForSpecificUrl();
-            deleteElement(); filteredProfiles();
-            
-            const currentPath = window.location.pathname.toLowerCase();
-            if (!isExcludedPathForDOM(currentPath, window.location.href)) {
-                deleteBlockedElements(); scanAndBanEntirePosts(); if (!isNavigationGraceActive()) deleteRestrictedWords(); 
-            }
-        }
-        
-        onWindowEvent(window, 'pageshow', (event) => { if (event.persisted) runFiltersUnlessLight(); }, false);
-    };
+        checkVanityProfileFBID();
+        handleRedirects();
+        approveCurrentApprovedBrowseSurface();
+        cleanUrl();
+        deleteBlockedElements();
+        scanAndBanEntirePosts(); // Added full post scanning to initialization
+        deleteRestrictedWords();
+        processSearchResults(); // Added search result processing to initialization
+        deleteRestrictedPhrases();
+        deletePeopleYouMayKnow();
+        // FIXED: These now check URLs internally before running
+        deleteSelectorsForSpecificUrl();
+        deleteSelectorsForSpecificProfile();
+        deleteSelectorsForPersonalProfile();
+        deleteElement();
 
-    init();
-    immediateInit();
-
-    const runFiltersUnlessLight = () => {
-        if (isFBInteractionLightModeActive()) { runLightInteractionPass(); return; }
-        runAllFilters();
-    };
-
-    onWindowEvent(window, 'DOMContentLoaded', runFiltersUnlessLight, false);
-    onWindowEvent(window, 'load', runFiltersUnlessLight, false);
-    onWindowEvent(window, 'popstate', runFiltersUnlessLight, false);
-
-    let __fbLastIntervalFilterRun = 0;
-    function scheduleMainInterval() {
-        addInterval(() => {
-            checkSPARouting();
-            if (document.hidden) return;
-            if (isFBInteractionLightModeActive()) {
-                runLightInteractionPass();
-                return;
-            }
-            const now = Date.now();
-            const wantedInterval = isFBFeedZeroGlimpsePath() ? 350 : 900;
-            if (now - __fbLastIntervalFilterRun >= wantedInterval) {
-                __fbLastIntervalFilterRun = now;
+        // ANTI-FLASHING: Add pageshow event to re-hide on navigation (e.g., back/forward cache)
+        onWindowEvent(window, 'pageshow', (event) => {
+            if (event.persisted) {
+                // Page was restored from bfcache, re-run hiding
                 runAllFilters();
             }
-        }, 250);
+        }, false);
+    };
+
+    // Start initialization
+    init();
+
+    // ENHANCED: Run immediate init right after CSS injection for zero-glimpse
+    immediateInit();
+
+    // Attach event listeners for changes (tracked for cleanup)
+    onWindowEvent(window, 'DOMContentLoaded', runAllFilters, false);
+    onWindowEvent(window, 'load', runAllFilters, false);
+    onWindowEvent(window, 'popstate', runAllFilters, false);
+
+    // Main interval scheduler (kept sane; paused when tab hidden)
+    function scheduleMainInterval() {
+        addInterval(() => {
+            if (!document.hidden) {
+                runAllFilters();
+            }
+        }, 180);
     }
 
+    // Start intervals now (foreground), pause/resume on visibility changes
     startIntervals(scheduleMainInterval);
     onWindowEvent(document, 'visibilitychange', () => {
         if (document.hidden) {
             stopIntervals();
         } else {
             startIntervals(scheduleMainInterval);
-            runFiltersUnlessLight();
+            runAllFilters();
         }
     }, false);
 
+    // Teardown on pagehide/beforeunload to avoid leaks
     onWindowEvent(window, 'pagehide', cleanup, false);
     onWindowEvent(window, 'beforeunload', cleanup, false);
 

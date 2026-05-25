@@ -377,14 +377,14 @@
         /penis/i, /kulli/i, /kyrpa/i, /kyrpä/i, /kikkeli/i, /pippeli/i, /persereikä/i, /tekoäly/i, /teko äly/i, /generativ/i, /reveals/i, /reveali/i, /revealing/i, /reveale/i, /stripp/i, /strips/i, /stripz/i, /stripi/i, /striper/i, /stripes/i, /striped/i,
 	/shetakeoff/i, /takeoffher/i, /takesoffher/i, /shetakesoff/i, /takingoff/i, /tookoffher/i, /shetookoff/i, /baring/i, /bares/i, /b4re/i, /bar3/i, /b4r3/i, /b4r1/i, /bar1/i, /b4ri/i, /censor/i, /sencor/i, /zencor/i, /zensor/i, /zenzor/i, /cencor/i, 
 	/cenzor/i, /cens0/i, /c3ns/i, /cen5/i, /c3n5/i, /cen5o/i, /blisswwe/i, /c3n5o/i, /zen5o/i, /z3n5o/i, /s3n5o/i, /sen5o/i, /s3nso/i, /s3nc/i, /ph0t/i, /p1c/i, /picc/i, /im4g/i, /img online/i, /image online/i, /photo online/i, /pic online/i, /onl1/i, 
-	/ungoogl/i, /chromium/i, /chr0m/i, /m1um/i, /fappp/i,/skirt/i, /skirr/i, /skitr/i, /sk1r/i, /5kir/i, /5k1r/i, /5k1r/i, /\bH3r\b/i, /\bsh3\b/i, /\b5he\b/i, /\b5h3\b/i, /v3rc/i, /v3rz/i, /v3rs/i, /v3r5/i, /depn/i, /d3pn/i, /deppn/i, /depenu/i, /depeni/i,
+	/ungoogl/i, /chromium/i, /chr0m/i, /m1um/i, /fappp/i, /skirt/i, /skirr/i, /skitr/i, /sk1r/i, /5kir/i, /5k1r/i, /5k1r/i, /\bH3r\b/i, /\bsh3\b/i, /\b5he\b/i, /\b5h3\b/i, /v3rc/i, /v3rz/i, /v3rs/i, /v3r5/i, /depn/i, /d3pn/i, /deppn/i, /depenu/i, /depeni/i,
 	/deipn/i, /diepn/i, /artifi/i, /artin/i, /iconicto/i, /-tool/i, /d3ppn/i, /d3penu/i, /d3p3nu/i, /dep3nu/i, /depeni/i, /d3peni/i, /d3p3ni/i, /d3p3n1/i, /d3p3n!/i, /dep3n1/i, /dep3n!/i, /d3pen1/i, /d3pen!/i, /p05/i, /po5/i, /p0s/i, /postur/i, /posin/i, 
 	/Anthr/i, /\bAnt\b/i, /Antro/i, /\bS0ft\b/i, /s0ftw/i, /softw/i, /\b50ft\b/i, /w4re/i, /war3/i, /w4r3/i, /p41n/i, /pa1n/i, /p4in/i, /ndif/i, /ndfy/i, /nd1f/i, /nd!f/i, /ndlf/i, /shag/i, /5hag/i, /5h4g/i, /sh4g/i, /f4gg/i, /fagg3/i, /fagger/i, /\bFag\b/i,
 	/wedgi/i, /wedge/i, /wedgy/i, /wedg1/i, /wedg!/i, /w3dg/i, /w33d/i, /we3d/i, /w3ed/i, /w333d/i, /w3333/i, /we333/i, /w3e33/i, /w33e3/i, /w333e/i, /we33e/i, /we3e3/i, /wee3e/i, /w3e3e/i, /weee/i, /w3333/i, /edgin/i, /3dg1n/i, /edgyi/i, /edgy1/i, /3dgy1/i,
 	/vaat.*pois/i, /vaatteet pois/i, /3dgin/i, /edg1n/i, /edg1i/i, /edgi1/i, /3dg1i/i, /3dgi1/i, /edgiy/i, /edgye/i, /bliswwe/i, /\bRinnat\b/i, /\bTissi\b/i, /\bTisu\b/i, /\bTisut\b/i, /rintalii/i, /rinta lii/i, /tissi/i, /r1nta/i, /r1nt4/i, /rint4/i, /l1ivi/i, 
 	/sexi/i, /liiv1/i, /l1iv1/i, /li1v1/i, /l11v1/i, /l11vi/i, /bl15s/i, /bl1s5/i, /bl155/i, /bl1ss/i, /bli55/i, /\bAnus\b/i, /anusaukko/i, /anus-aukko/i, /anus aukko/i, /pers aukko/i, /persaukko/i, /perseaukko/i, /perse aukko/i, /perse-aukko/i, /pers-aukko/i,
 	/bliswwe/i, /li1vi/i, /p3rs aukko/i, /p3r5 aukko/i, /per5 aukko/i, /0nli/i,/p3rs-aukko/i, /p3r5 aukko/i, /per5 aukko/i, /p3rse/i, /pers3/i, /p3rs3/i, /per5e/i, /per53/i, /p3r5e/i, /p3r53/i, /rints/i, /r1nts/i, /r1nt5/i, /rint5/i, /p1p4r/i, /pip4r/i, /p1par/i, 
-	/Stratu/i, /machinelearning/i, /Kairi/i, /sexx/i, /4lexa/i, /al3xa/i, /alex4/i, /4l3xa/i, /al3x4/i, /4l3x4/i, /4lex4/i, /bl15s/i, /bl1s5/i, /bl155/i, /blis5/i, /bli5s/i, /artintel/i,
+	/Stratu/i, /machinelearning/i, /Kairi/i, /sexx/i, /4lexa/i, /al3xa/i, /alex4/i, /4l3xa/i, /al3x4/i, /4l3x4/i, /4lex4/i, /bl15s/i, /bl1s5/i, /bl155/i, /blis5/i, /bli5s/i, /artintel/i, /soulgyn/i, /fapif/i, /fappif/i, /soulkyn/i,
     ]; 
 
     // --- NEW: DYNAMIC WRESTLER BANS FROM WRESTLING.JS ---
@@ -396,7 +396,7 @@
                         let addedCount = 0;
                         
                         // Core exclusions to prevent global bans
-                        const localExclusions = ['melina', 'melina-perez', 'aj-lee', 'aj', 'becky-lynch', 'becky'];
+                        const localExclusions = ['melina', 'aj'];
 
                         result.wrestling_women_urls.forEach(url => {
                             const parts = url.split('/').filter(Boolean);
@@ -644,6 +644,7 @@
         /videy\./i,
         /vidio\./i,
         /vsco\./i,
+        /soulgyn\./i,
         /pixelixe\.com/i,
         /picresize\.com/i,
         /replicate\.ai/i,
@@ -997,6 +998,7 @@
         /mangoanimations\./i,
         /mango-ai\./i,
         /insmind\./i,
+        /.\cat/i,
         /dreamshoot\./i,
         /dreamshootai\./i,
         /faceswapvideo\./i,
@@ -1069,6 +1071,7 @@
         /ai-\./i,
         /-ai\./i,
         /ai\./i,
+        /soulgyn\./i,
         /porn\./i,
         /.\porn/i,
         /softorbits\./i,
@@ -1104,6 +1107,7 @@
         /stablediffusion-api\./i,
         /stable-diffusion-api\./i,
         /stablediffusionapi\./i,
+        /.\cat/i,
         /headgenai\./i,
         /headgen-ai\./i,
         /head-genai\./i,

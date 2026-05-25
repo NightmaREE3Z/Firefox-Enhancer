@@ -205,7 +205,9 @@
         'upsell-button',
 	'#chat-history > infinite-scroller > zs-advanced-upsell > div > div',
         '[data-test-id="upsell-button"]',
-        '[data-test-id="bard-upsell-menu-button"]'
+        '[data-test-id="bard-upsell-menu-button"]',
+	'button[data-test-id="menu-delete-button"]',
+	'button[data-test-id="menu-copy-button"]'
     ];
 
     // NEW: Snapchat Camera selector to expand to fill available space (not full screen)
@@ -637,6 +639,7 @@
         } catch(err) {}
     }
 
+    onEvent(document, 'pointerdown', trackGeminiMenuTrigger, true);
     onEvent(document, 'mousedown', trackGeminiMenuTrigger, true);
     onEvent(document, 'keydown', function(e) {
         if (e.key === 'Enter' || e.key === ' ') trackGeminiMenuTrigger(e);
@@ -747,7 +750,9 @@
                 html.gemini-gem-menu-active .cdk-overlay-container button[data-test-id*="delete"],
                 html.gemini-gem-menu-active .cdk-overlay-container [mat-menu-item][data-test-id*="delete"],
                 html.gemini-gem-menu-active .cdk-overlay-container [aria-label*="Poista" i],
-                html.gemini-gem-menu-active .cdk-overlay-container [aria-label*="Delete" i] {
+                html.gemini-gem-menu-active .cdk-overlay-container [aria-label*="Delete" i],
+                html.gemini-gem-menu-active .cdk-overlay-container button[data-test-id="menu-delete-button"],
+                html.gemini-gem-menu-active .cdk-overlay-container button[data-test-id="menu-copy-button"] {
                     display: none !important;
                     visibility: hidden !important;
                     opacity: 0 !important;

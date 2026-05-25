@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         IGCleaner
-// @date      	 2026-05-05
+// @version      2026-05-05
 // @description  Trying to make my Instagram experience tolerable.
 // @match        *://www.instagram.com/*
 // @match        *://www.instagram.com/?next=%2F/*
