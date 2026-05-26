@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         FBCleaner
-// @version      2026-05-25
+// @version      2026-05-27
 // @description  Makes my Facebook experience less terrible. With reduced algorithmic bullshit.
 // @match        *://*.facebook.com/*
 // @grant        none
@@ -1897,6 +1897,11 @@ function collapseElementHard(el) {
 
     const currentProfileOrPageHasBlockedIdentityOrTerms = () => {
         try {
+            // Excluded/self/family-safe profile routes must never be redirected by broad
+            // profile-header/title/metadata regex checks. Direct blocked FBID/current-URL
+            // checks happen earlier in handleRedirects/checkVanityProfileFBID.
+            if (isSafeWhitelistedPath(window.location.pathname, window.location.href)) return false;
+
             // Strictly header/title/url only. Do NOT scan ProfileTimeline/ProfileTilesFeed here,
             // because normal profile posts can contain banned terms and would otherwise redirect almost every profile.
             const areas = Array.from(document.querySelectorAll([
@@ -3277,6 +3282,12 @@ const deleteSelectorsForPersonalProfile = () => {
         try {
             const href = anchor.href || anchor.getAttribute('href') || '';
             if (!isLikelyProfileOrPageRoute(href)) return false;
+            try {
+                const hrefUrl = new URL(href, window.location.origin);
+                if (isSafeWhitelistedPath(hrefUrl.pathname, hrefUrl.href)) return false;
+            } catch (e) {
+                if (isSafeWhitelistedPath('', href)) return false;
+            }
 
             const signal = [
                 href,
@@ -3314,6 +3325,17 @@ const deleteSelectorsForPersonalProfile = () => {
                 const href = anchor.href || (anchor.getAttribute && anchor.getAttribute('href')) || '';
                 if (approvedPost && href) rememberApprovedSignalForBrowsing(href);
                 if (!href || isNotificationNavigationUrl(href) || isCommentNavigationUrl(href)) return;
+
+                // Let explicitly whitelisted/self/family-safe routes navigate normally.
+                // Without this, broad profile/header regex checks can redirect before the
+                // destination page gets a chance to be recognized as safe.
+                try {
+                    const hrefUrl = new URL(href, window.location.origin);
+                    if (isSafeWhitelistedPath(hrefUrl.pathname, hrefUrl.href)) return;
+                } catch (e) {
+                    if (isSafeWhitelistedPath('', href)) return;
+                }
+
                 if (!isPlainLeftClick(event)) return;
 
                 if (fbClickedTargetHasBlockedIdentity(anchor) || matchesDirectFacebookBlockedUrlForRedirect(href) || clickedProfileOrPageHasBlockedTerm(anchor)) {
@@ -3340,6 +3362,12 @@ const deleteSelectorsForPersonalProfile = () => {
                 const form = event.target;
                 const action = form.action || '';
                 if (isNotificationNavigationUrl(action)) return;
+                try {
+                    const actionUrl = new URL(action, window.location.origin);
+                    if (isSafeWhitelistedPath(actionUrl.pathname, actionUrl.href)) return;
+                } catch (e) {
+                    if (isSafeWhitelistedPath('', action)) return;
+                }
                 if (matchesDirectFacebookBlockedUrlForRedirect(action) || fbExplicitIdentityValueHasBlockedFbid(action)) {
                     event.preventDefault();
                     event.stopPropagation();
@@ -3533,12 +3561,25 @@ const deleteSelectorsForPersonalProfile = () => {
                     ].join(' ')).join(' ')
                 ].join(' ');
 
-                if (matchesAnyActiveRegex(signal) || matchesAnyBlockedFbid(signal) || matchesDirectFacebookBlockedUrlForRedirect(signal)) {
-                    // If we are actually on that profile/page, redirect. If it is just a card/header fragment,
-                    // hide only that fragment.
-                    if (isLikelyProfileOrPageRoute(window.location.href)) {
-                        triggerRedirect('blocked profile/page header');
-                    } else {
+                const isSafeCurrentProfileRoute = isSafeWhitelistedPath(window.location.pathname, window.location.href);
+                const hasBlockedIdentity = matchesAnyBlockedFbid(signal) || matchesDirectFacebookBlockedUrlForRedirect(signal);
+                const hasBlockedTerms = matchesAnyActiveRegex(signal);
+
+                if (hasBlockedIdentity || hasBlockedTerms) {
+                    // Header scrubber is allowed to redirect only on non-whitelisted actual
+                    // profile/page routes. Safe/self/family profiles must not get thrown home
+                    // just because the header/title/meta contains a broad global regex term.
+                    if (isLikelyProfileOrPageRoute(window.location.href) && !isSafeCurrentProfileRoute) {
+                        if (hasBlockedIdentity) {
+                            triggerRedirect('blocked profile/page header identity');
+                            return;
+                        }
+                        if (hasBlockedTerms) {
+                            triggerRedirect('blocked profile/page header terms');
+                            return;
+                        }
+                    } else if (!isSafeCurrentProfileRoute) {
+                        // If it is merely a card/header fragment elsewhere, hide only that fragment.
                         hideElementHard(header, 'fb-profile-header-banned');
                         hiddenCount++;
                     }
