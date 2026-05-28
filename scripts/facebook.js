@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         FBCleaner
-// @version      2026-05-27
+// @version      2026-05-28
 // @description  Makes my Facebook experience less terrible. With reduced algorithmic bullshit.
 // @match        *://*.facebook.com/*
 // @grant        none
@@ -971,7 +971,7 @@ function collapseElementHard(el) {
         /Jamie Hayter/i, /Anna Jay/i, /Hikaru/i, /Sakazaki/i, /Nyla Rose/i, /Sakura/i, /Penelope Ford/i, /Julia Hart/i, /Kamifuku/i, /Elayna/i, /Juliette/i, /Juliana/i, /Julianna/i, /Henley/i, /Saya Kamitani/i, 
         /AJ Lee's/i, /Nikkita Lyons/i, /Lisa Varon/i, /Marie Varon/i, /Irving/i, /Belts Mone/i, /Amanda Huber/i, /Megan Bayne/i, /Wren Sinclair/i, /Bella Twins/i, /Britt Baker/i,  /Kairii/i, /Sexxy/i, /Xia Li/i, 
 	/Sexx/i, /Sexi/i, /Monroe/i, /Girlfriend/i, /Girl's/i, /Women's/i, /Woman's/i, /Lady's/i, /Ladies'/i, /Toni Harsunen/i, /Wikman/i, /Jaida Parker/i, /suositukset/i, /ehdotukset/i, /Kamitani/i, /Gail Kim/i,
-	/Artificial Intelligence/i, /20\. heinäkuu klo/i, /Sisältö ei ole käytettävissä tällä hetkellä/i, /kendal.*(grey|gray)/i, /leila.*(grey|gray)/i, /Jessika WWE/i, /Fallon Henley/i,
+	/Artificial Intelligence/i, /20\. heinäkuu klo/i, /Sisältö ei ole käytettävissä tällä hetkellä/i, /sinulle ehdotettu/i, /kendal.*(grey|gray)/i, /leila.*(grey|gray)/i, /Jessika WWE/i, /Fallon Henley/i,
 
     // Boundaried regexes (separated for clarity)
     	/\bSol\b/i, /\bShe\b/i, /\bHer\b/i, /\bHer's\b/i, /\bShe's\b/i, /\bRiho\b/i, /\bCum\b/i, /\bSlut\b/i, /\bTor\b/i, /\bIzzi\b/i, /\bDame\b/i, /\bNox\b/i, /\bLiv\b/i, /\bAlexa\b/i, /\bTay\b/i, /\bMelo\b/i,
@@ -1073,7 +1073,7 @@ function collapseElementHard(el) {
      ]; 
 
     const restrictedPhrases = [
-        "Ryhmiä Sinulle", "Liity", "Meta AI", "Ihmisiä,", "Joita saatat tuntea", "Ihmisiä, joita saatat tuntea", "Kun lisäät kavereita, näet tässä listan ihmisistä, jotka saatat tuntea.", "Lisää kavereita saadaksesi suosituksia", "Sisältö ei ole käytettävissä tällä hetkellä", "Sinulle ehdotettua",
+        "Ryhmiä Sinulle", "Liity", "Meta AI", "Ihmisiä,", "Joita saatat tuntea", "Ihmisiä, joita saatat tuntea", "Kun lisäät kavereita, näet tässä listan ihmisistä, jotka saatat tuntea.", "Lisää kavereita saadaksesi suosituksia", "Sisältö ei ole käytettävissä tällä hetkellä", "sinulle ehdotettu", "sinulle ehdotettua",
     ].map(s => s.toLowerCase());
 
     // Function to check if current path is excluded
@@ -1867,6 +1867,254 @@ function collapseElementHard(el) {
         }
     };
 
+
+    // ===== SCOPED OPEN SHADOW DOM TEXT HELPERS =====
+    // Purposefully narrow: open Shadow DOM may contribute TEXT to word/phrase scanners,
+    // but never FBID/URL identity signals. Performance version avoids duplicate parent/child
+    // text aggregation and uses capped TreeWalkers instead of broad querySelectorAll('*') crawls.
+    const FB_SHADOW_TEXT_SELECTOR = [
+        'span[dir="auto"]',
+        'div[dir="auto"]',
+        'h1', 'h2', 'h3', 'h4',
+        '[data-ad-comet-preview="message"]',
+        '[data-ad-preview="message"]',
+        '[data-ad-rendering-role="story_message"]',
+        'p',
+        'span',
+        'div'
+    ].join(',');
+
+    const FB_PROFILE_HEADER_PROTECT_SELECTOR = [
+        '[data-pagelet="ProfileHeader"]',
+        '[data-pagelet="PageHeader"]',
+        '[data-pagelet="ProfileActions"]',
+        '[aria-label="Profiilikuvan toiminnot"]',
+        '[aria-label="Profile picture actions"]',
+        '[aria-label="Muokkaa kansikuvaa"]',
+        '[aria-label="Edit cover photo"]',
+        'a[aria-label="Lisää tarinaan"]',
+        'a[aria-label="Add to story"]',
+        'a[aria-label="Muokkaa profiilia"]',
+        'a[aria-label="Edit profile"]'
+    ].join(',');
+
+    const __fbRestrictedWordsChecked = new WeakSet();
+    const __fbRestrictedPhraseHeadersChecked = new WeakSet();
+
+    const shadowTextOptions = (options = {}) => ({
+        maxHostSearchNodes: options.maxHostSearchNodes ?? 160,
+        maxShadowHosts: options.maxShadowHosts ?? 8,
+        maxShadowNodes: options.maxShadowNodes ?? 70,
+        maxTextNodes: options.maxTextNodes ?? 90,
+        maxNestedHosts: options.maxNestedHosts ?? 4,
+        maxChars: options.maxChars ?? 8000,
+        maxDepth: options.maxDepth ?? 1,
+        includeAttributes: options.includeAttributes === true,
+        selector: options.selector || FB_SHADOW_TEXT_SELECTOR
+    });
+
+    const isProfileHeaderProtectedArea = (element) => {
+        try {
+            return !!(
+                element &&
+                element.nodeType === 1 &&
+                (
+                    (element.matches && element.matches(FB_PROFILE_HEADER_PROTECT_SELECTOR)) ||
+                    (element.closest && element.closest(FB_PROFILE_HEADER_PROTECT_SELECTOR)) ||
+                    (element.querySelector && element.querySelector(FB_PROFILE_HEADER_PROTECT_SELECTOR))
+                )
+            );
+        } catch (e) {
+            return false;
+        }
+    };
+
+    const isShadowTextUsableElement = (element) => {
+        try {
+            if (!element || element.nodeType !== 1) return false;
+            if (element.matches && element.matches('script, style, template, noscript, meta, link')) return false;
+            if (element.hidden || (element.getAttribute && element.getAttribute('aria-hidden') === 'true')) return false;
+            if (element.closest && element.closest('[hidden], [aria-hidden="true"], script, style, template, noscript')) return false;
+            if (isInsideComment(element)) return false;
+            return true;
+        } catch (e) {
+            return false;
+        }
+    };
+
+    const collectTextInsideOpenShadowRoot = (shadowRoot, options = {}, depth = 0, seenRoots) => {
+        try {
+            const opts = shadowTextOptions(options);
+            if (!shadowRoot || depth > opts.maxDepth) return '';
+            if (!seenRoots) seenRoots = new WeakSet();
+            try {
+                if (seenRoots.has(shadowRoot)) return '';
+                seenRoots.add(shadowRoot);
+            } catch (e) {}
+
+            let text = '';
+            let textNodes = 0;
+
+            const push = (value) => {
+                if (!value || text.length >= opts.maxChars) return;
+                text += ' ' + String(value).slice(0, Math.max(0, opts.maxChars - text.length));
+            };
+
+            try {
+                const walker = document.createTreeWalker(
+                    shadowRoot,
+                    NodeFilter.SHOW_TEXT,
+                    {
+                        acceptNode(node) {
+                            if (textNodes >= opts.maxTextNodes) return NodeFilter.FILTER_REJECT;
+                            const value = node && node.nodeValue ? node.nodeValue.trim() : '';
+                            if (!value) return NodeFilter.FILTER_REJECT;
+                            const parent = node.parentElement || node.parentNode;
+                            if (!isShadowTextUsableElement(parent)) return NodeFilter.FILTER_REJECT;
+                            return NodeFilter.FILTER_ACCEPT;
+                        }
+                    }
+                );
+                let node;
+                while ((node = walker.nextNode()) && text.length < opts.maxChars && textNodes < opts.maxTextNodes) {
+                    textNodes++;
+                    push(node.nodeValue);
+                }
+            } catch (e) {}
+
+            // Attribute text is opt-in and should only be used in narrow UI/button contexts.
+            if (opts.includeAttributes && shadowRoot.querySelectorAll && text.length < opts.maxChars) {
+                try {
+                    const attrMatches = shadowRoot.querySelectorAll('[aria-label], [title], img[alt]');
+                    for (let i = 0; i < attrMatches.length && i < opts.maxShadowNodes && text.length < opts.maxChars; i++) {
+                        const el = attrMatches[i];
+                        if (!isShadowTextUsableElement(el)) continue;
+                        push((el.getAttribute && el.getAttribute('aria-label')) || '');
+                        push((el.getAttribute && el.getAttribute('title')) || '');
+                        push((el.getAttribute && el.getAttribute('alt')) || '');
+                    }
+                } catch (e) {}
+            }
+
+            // Support nested open shadow roots, but keep it tiny. Facebook pages are already spicy enough.
+            if (depth < opts.maxDepth && shadowRoot.querySelectorAll && text.length < opts.maxChars) {
+                try {
+                    const walker = document.createTreeWalker(shadowRoot, NodeFilter.SHOW_ELEMENT);
+                    let el;
+                    let scanned = 0;
+                    let hosts = 0;
+                    while ((el = walker.nextNode()) && scanned < opts.maxHostSearchNodes && hosts < opts.maxNestedHosts && text.length < opts.maxChars) {
+                        scanned++;
+                        if (el && el.shadowRoot) {
+                            hosts++;
+                            push(collectTextInsideOpenShadowRoot(el.shadowRoot, opts, depth + 1, seenRoots));
+                        }
+                    }
+                } catch (e) {}
+            }
+
+            return text;
+        } catch (e) {
+            return '';
+        }
+    };
+
+    const collectOpenShadowTextScoped = (root, options = {}) => {
+        try {
+            if (!root || root.nodeType !== 1) return '';
+            const opts = shadowTextOptions(options);
+            let text = '';
+            let scanned = 0;
+            let hosts = 0;
+
+            const push = (value) => {
+                if (!value || text.length >= opts.maxChars) return;
+                text += ' ' + String(value).slice(0, Math.max(0, opts.maxChars - text.length));
+            };
+
+            if (root.shadowRoot) {
+                hosts++;
+                push(collectTextInsideOpenShadowRoot(root.shadowRoot, opts));
+            }
+
+            if (hosts >= opts.maxShadowHosts || text.length >= opts.maxChars) return text;
+
+            try {
+                const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+                let el;
+                while ((el = walker.nextNode()) && scanned < opts.maxHostSearchNodes && hosts < opts.maxShadowHosts && text.length < opts.maxChars) {
+                    scanned++;
+                    if (el && el.shadowRoot) {
+                        hosts++;
+                        push(collectTextInsideOpenShadowRoot(el.shadowRoot, opts));
+                    }
+                }
+            } catch (e) {}
+
+            return text;
+        } catch (e) {
+            return '';
+        }
+    };
+
+    const collectLightAndOpenShadowTextScoped = (root, lightText = '', options = {}) => {
+        try {
+            return normalizeFBText(String(lightText || '') + ' ' + collectOpenShadowTextScoped(root, options));
+        } catch (e) {
+            return normalizeFBText(lightText || '');
+        }
+    };
+
+    const querySelectorAllOpenShadowScoped = (root, selector, options = {}) => {
+        const results = [];
+        const seen = new WeakSet();
+        const add = (el) => {
+            try {
+                if (!el || seen.has(el)) return;
+                seen.add(el);
+                results.push(el);
+            } catch (e) {}
+        };
+
+        try {
+            if (!root || !selector) return results;
+            const opts = shadowTextOptions(options);
+            const maxNodes = options.maxNodes ?? 80;
+
+            const scanRoot = (scanRootValue, depth) => {
+                if (!scanRootValue || depth > opts.maxDepth || results.length >= maxNodes) return;
+                try {
+                    if (scanRootValue.nodeType === 1 && scanRootValue.matches && scanRootValue.matches(selector)) add(scanRootValue);
+                } catch (e) {}
+                try {
+                    if (scanRootValue.querySelectorAll) {
+                        const matches = scanRootValue.querySelectorAll(selector);
+                        for (let i = 0; i < matches.length && results.length < maxNodes; i++) add(matches[i]);
+                    }
+                } catch (e) {}
+                try {
+                    const walker = document.createTreeWalker(scanRootValue, NodeFilter.SHOW_ELEMENT);
+                    let el;
+                    let scanned = 0;
+                    let hosts = 0;
+                    while ((el = walker.nextNode()) && scanned < opts.maxHostSearchNodes && hosts < opts.maxShadowHosts && results.length < maxNodes) {
+                        scanned++;
+                        if (el && el.shadowRoot) {
+                            hosts++;
+                            scanRoot(el.shadowRoot, depth + 1);
+                        }
+                    }
+                } catch (e) {}
+                try {
+                    if (scanRootValue.shadowRoot) scanRoot(scanRootValue.shadowRoot, depth + 1);
+                } catch (e) {}
+            };
+
+            scanRoot(root, 0);
+        } catch (e) {}
+        return results;
+    };
+
     const collectScopedText = (root, maxNodes = 120) => {
         try {
             if (!root || !root.querySelectorAll) return '';
@@ -2199,29 +2447,48 @@ function collapseElementHard(el) {
             ];
 
             let bannedCount = 0;
+            const seenPosts = new WeakSet();
             postSelectors.forEach(selector => {
-                document.querySelectorAll(selector + ':not(.fb-post-processed)').forEach(post => {
+                document.querySelectorAll(selector).forEach(candidate => {
+                    const post = (candidate.closest && candidate.closest('[role="article"]')) || candidate;
+                    if (!post || seenPosts.has(post)) return;
+                    seenPosts.add(post);
+                    if (post.classList.contains('fb-post-processed')) return;
+                    if (isProfileHeaderProtectedArea(post)) return;
                     post.classList.add('fb-post-processed');
-                    
-                    // Collect all text content from the post, including expanded areas
-                    const allTextElements = post.querySelectorAll('*');
-                    let fullPostText = '';
-                    allTextElements.forEach(el => {
-                        const text = el.textContent || el.innerText || '';
-                        if (text.trim()) fullPostText += text + ' ';
-                    });
-                    fullPostText = fullPostText.toLowerCase();
+
+                    // Fast path: light DOM text first. Only ask Shadow DOM if the light DOM did not already decide.
+                    const lightText = normalizeFBText(post.innerText || post.textContent || '');
+                    let fullPostText = lightText;
 
                     // Check against all blocking criteria
                     let isBanned = false;
-                    
-                    // Check active regex blocklists in full post text
+
                     if (matchesAnyActiveRegex(fullPostText)) {
                         isBanned = true;
-                        devLog(`🚫 Post banned by active regex in full content`);
+                        devLog(`🚫 Post banned by active regex in light content`);
                     }
-                    
-                    // Check for blocked FBIDs in post attributes or links
+
+                    if (!isBanned) {
+                        const shadowText = collectOpenShadowTextScoped(post, {
+                            maxHostSearchNodes: 160,
+                            maxShadowHosts: 8,
+                            maxTextNodes: 80,
+                            maxShadowNodes: 50,
+                            maxChars: 8000,
+                            maxDepth: 1,
+                            includeAttributes: false
+                        });
+                        if (shadowText) {
+                            fullPostText = normalizeFBText(lightText + ' ' + shadowText);
+                            if (matchesAnyActiveRegex(fullPostText)) {
+                                isBanned = true;
+                                devLog(`🚫 Post banned by active regex in open Shadow DOM text`);
+                            }
+                        }
+                    }
+
+                    // Check for blocked FBIDs in post attributes or links. Still light-DOM only.
                     if (!isBanned) {
                         const postLinks = post.querySelectorAll('a[href]');
                         for (let link of postLinks) {
@@ -2233,8 +2500,8 @@ function collapseElementHard(el) {
                             }
                         }
                     }
-                    
-                    // Check for blocked URLs in post
+
+                    // Check for blocked URLs in post. Still light-DOM only.
                     if (!isBanned) {
                         const postLinks = post.querySelectorAll('a[href]');
                         for (let link of postLinks) {
@@ -2245,9 +2512,8 @@ function collapseElementHard(el) {
                             }
                         }
                     }
-                    
+
                     if (isBanned) {
-                        // Permanently ban the post
                         post.classList.add('fb-post-banned');
                         post.style.setProperty('display', 'none', 'important');
                         post.style.setProperty('visibility', 'hidden', 'important');
@@ -2261,13 +2527,12 @@ function collapseElementHard(el) {
                         post.style.setProperty('overflow', 'hidden', 'important');
                         bannedCount++;
                     } else {
-                        // Approve the post to ensure it shows
                         post.classList.add('fb-post-approved');
                         rememberApprovedPostForBrowsing(post);
                     }
                 });
             });
-            
+
             if (bannedCount > 0) {
                 devLog(`Banned ${bannedCount} entire posts initially`);
             }
@@ -2308,13 +2573,34 @@ function collapseElementHard(el) {
             document.querySelectorAll(selectors.join(','))
                 .forEach(element => {
                     if (isSafeElement(element)) return;
+                    if (isProfileHeaderProtectedArea(element)) return;
+                    if (__fbRestrictedWordsChecked.has(element)) return;
+                    __fbRestrictedWordsChecked.add(element);
+
+                    const elementToRemove = element.closest('[role="article"]') || element;
+                    // Approved/banned posts are intentionally final decisions; do not re-scan them here.
+                    if (elementToRemove.classList.contains('fb-post-approved') || elementToRemove.classList.contains('fb-post-banned') || elementToRemove.classList.contains('fb-element-banned')) return;
                     
-                    const elementText = (element.innerText || element.textContent || '').toLowerCase();
+                    let elementText = normalizeFBText(element.innerText || element.textContent || '');
+                    let isRegexBlocked = matchesAnyActiveRegex(elementText);
+                    if (!isRegexBlocked) {
+                        const shadowText = collectOpenShadowTextScoped(element, {
+                            maxHostSearchNodes: 120,
+                            maxShadowHosts: 6,
+                            maxTextNodes: 60,
+                            maxShadowNodes: 40,
+                            maxChars: 6000,
+                            maxDepth: 1,
+                            includeAttributes: false
+                        });
+                        if (shadowText) {
+                            elementText = normalizeFBText(elementText + ' ' + shadowText);
+                            isRegexBlocked = matchesAnyActiveRegex(elementText);
+                        }
+                    }
                     const isRestricted = false;
-                    const isRegexBlocked = matchesAnyActiveRegex(elementText);
                     
                     if (isRestricted || isRegexBlocked) {
-                        const elementToRemove = element.closest('[role="article"]') || element;
                         // UPDATED: Do not hide approved posts (even if comments have banned content)
                         if (!elementToRemove.classList.contains('fb-post-approved') && !elementToRemove.classList.contains('fb-post-banned') && !elementToRemove.classList.contains('fb-element-banned')) {
                             elementToRemove.classList.add('fb-element-banned');
@@ -2361,8 +2647,20 @@ function collapseElementHard(el) {
                 document.querySelectorAll(selector + ':not(.fb-search-processed)').forEach(result => {
                     result.classList.add('fb-search-processed');
                     
-                    // Extract comprehensive content from search result
-                    const textContent = (result.textContent || result.innerText || '').toLowerCase();
+                    // Extract comprehensive content from search result, including text in open Shadow DOM.
+                    const textContent = collectLightAndOpenShadowTextScoped(
+                        result,
+                        (result.textContent || result.innerText || ''),
+                        {
+                            maxHostSearchNodes: 140,
+                            maxShadowHosts: 8,
+                            maxTextNodes: 80,
+                            maxShadowNodes: 50,
+                            maxChars: 8000,
+                            maxDepth: 1,
+                            includeAttributes: false
+                        }
+                    );
                     const href = result.href || '';
                     const ariaLabel = result.getAttribute('aria-label') || '';
                     const dataHover = result.getAttribute('data-hovercard') || '';
@@ -2435,28 +2733,46 @@ function collapseElementHard(el) {
             // Cache restricted phrases in lowercase for faster matching
             const restrictedPhrasesLower = [
                 "liity", "reels", "kelat", "sinulle suositeltua", "suositeltua", "tilaa", "ryhmiä sinulle", "Meta AI", "ihmisiä,", "joita saatat tuntea", "ihmisiä, joita saatat tuntea", 
-                "kun lisäät kavereita, näet tässä listan ihmisistä, jotka saatat tuntea.", "lisää kavereita saadaksesi suosituksia", "Sisältö ei ole käytettävissä tällä hetkellä", "Sinulle ehdotettua",
+                "kun lisäät kavereita, näet tässä listan ihmisistä, jotka saatat tuntea.", "lisää kavereita saadaksesi suosituksia", "Sisältö ei ole käytettävissä tällä hetkellä", "sinulle ehdotettua",
             ];
 
             // Use a Set for faster lookups
             const restrictedPhrasesSet = new Set(restrictedPhrasesLower);
             
-            // Cache processed elements to avoid re-processing
-            const processedElements = new WeakSet();
+            // Cache processed header elements across runs to avoid re-processing
+            const processedElements = __fbRestrictedPhraseHeadersChecked;
 
             let removedPostCount = 0;
             // Only process new feed articles
             document.querySelectorAll('[role="feed"] [role="article"]:not([data-processed])').forEach((post) => {
+                if (isProfileHeaderProtectedArea(post)) return;
                 // Mark as processed to avoid re-processing
                 post.dataset.processed = "true";
                 
-                // Check for restricted button text first (fastest check)
+                // Check for restricted button text first (fastest check), including buttons inside open Shadow DOM.
                 let shouldRemove = false;
-                const buttons = post.querySelectorAll('div[role="button"]');
+                const buttons = querySelectorAllOpenShadowScoped(post, 'div[role="button"], button[role="button"], button', {
+                    maxNodes: 60,
+                    maxHostSearchNodes: 120,
+                    maxShadowHosts: 6,
+                    maxDepth: 1
+                });
                 
-                // Use faster forEach loop instead of Array.from.some
+                // Use faster for loop instead of Array.from.some
                 for (let i = 0; i < buttons.length && !shouldRemove; i++) {
-                    const btnText = buttons[i].innerText?.toLowerCase();
+                    const btnText = collectLightAndOpenShadowTextScoped(
+                        buttons[i],
+                        (buttons[i].innerText || buttons[i].textContent || ''),
+                        {
+                            maxHostSearchNodes: 50,
+                            maxShadowHosts: 4,
+                            maxTextNodes: 35,
+                            maxShadowNodes: 25,
+                            maxChars: 2200,
+                            maxDepth: 1,
+                            includeAttributes: true
+                        }
+                    );
                     if (btnText === 'liity' || btnText === 'seuraa') {
                         shouldRemove = true;
                     }
@@ -2464,11 +2780,28 @@ function collapseElementHard(el) {
                 
                 // If no restricted buttons, check for phrases in key elements only
                 if (!shouldRemove) {
-                    // Only check headings and key containers rather than all text
-                    const keyElements = post.querySelectorAll('h2, h3, h4, div.x1heor9g, div[role="button"]');
+                    // Only check headings and key containers rather than all text, including open Shadow DOM.
+                    const keyElements = querySelectorAllOpenShadowScoped(post, 'h2, h3, h4, div.x1heor9g, div[role="button"], button', {
+                        maxNodes: 90,
+                        maxHostSearchNodes: 140,
+                        maxShadowHosts: 6,
+                        maxDepth: 1
+                    });
                     
                     for (let i = 0; i < keyElements.length && !shouldRemove; i++) {
-                        const text = keyElements[i].innerText?.toLowerCase() || '';
+                        const text = collectLightAndOpenShadowTextScoped(
+                            keyElements[i],
+                            (keyElements[i].innerText || keyElements[i].textContent || ''),
+                            {
+                                maxHostSearchNodes: 70,
+                                maxShadowHosts: 4,
+                                maxTextNodes: 45,
+                                maxShadowNodes: 35,
+                                maxChars: 3500,
+                                maxDepth: 1,
+                                includeAttributes: false
+                            }
+                        );
                         
                         // Check for exact restricted phrases
                         for (let i = 0; i < restrictedPhrasesLower.length; i++) {
@@ -2504,14 +2837,27 @@ function collapseElementHard(el) {
                 if (processedElements.has(header) || 
                     header.closest('header') || 
                     header.closest('[role="navigation"]') || 
-                    header.closest('[role="banner"]')) {
+                    header.closest('[role="banner"]') ||
+                    isProfileHeaderProtectedArea(header)) {
                     return;
                 }
                 
                 // Mark as processed
                 processedElements.add(header);
                 
-                const headerText = header.innerText?.toLowerCase() || '';
+                const headerText = collectLightAndOpenShadowTextScoped(
+                    header,
+                    (header.innerText || header.textContent || ''),
+                    {
+                        maxHostSearchNodes: 80,
+                        maxShadowHosts: 4,
+                        maxTextNodes: 45,
+                        maxShadowNodes: 35,
+                        maxChars: 3500,
+                        maxDepth: 1,
+                        includeAttributes: false
+                    }
+                );
                 
                 // Check if this is a restricted header
                 let isRestricted = false;
@@ -2575,7 +2921,7 @@ function collapseElementHard(el) {
                     throttleTimeout = addTimeout(() => {
                         deleteRestrictedPhrases();
                         throttleTimeout = null;
-                    }, 100); // 100ms throttle
+                    }, 220); // 220ms throttle, smoother on slower machines
                 }
             };
 
@@ -3415,7 +3761,7 @@ const deleteSelectorsForPersonalProfile = () => {
 
             devLog('Setting up DOM observer with instant search processing and full post scanning');
 
-            const throttledRunAllFilters = createThrottle(() => runAllFilters(), 140);
+            const throttledRunAllFilters = createThrottle(() => runAllFilters(), 200);
 
             const observer = trackObserver(new MutationObserver((mutations) => {
                 // Check for search-related changes first for instant processing
@@ -3637,7 +3983,6 @@ const deleteSelectorsForPersonalProfile = () => {
         scrubBlockedProfileHeaderBits();
         deleteRestrictedPhrases();
         deletePeopleYouMayKnow();
-        // FIXED: These now check URLs internally
         deleteSelectorsForSpecificUrl();
         deleteSelectorsForSpecificProfile();
         deleteSelectorsForPersonalProfile();
@@ -3669,12 +4014,11 @@ const deleteSelectorsForPersonalProfile = () => {
         approveCurrentApprovedBrowseSurface();
         cleanUrl();
         deleteBlockedElements();
-        scanAndBanEntirePosts(); // Added full post scanning to initialization
+        scanAndBanEntirePosts();
         deleteRestrictedWords();
-        processSearchResults(); // Added search result processing to initialization
+        processSearchResults();
         deleteRestrictedPhrases();
         deletePeopleYouMayKnow();
-        // FIXED: These now check URLs internally before running
         deleteSelectorsForSpecificUrl();
         deleteSelectorsForSpecificProfile();
         deleteSelectorsForPersonalProfile();
@@ -3700,13 +4044,13 @@ const deleteSelectorsForPersonalProfile = () => {
     onWindowEvent(window, 'load', runAllFilters, false);
     onWindowEvent(window, 'popstate', runAllFilters, false);
 
-    // Main interval scheduler (kept sane; paused when tab hidden)
+    // Main interval scheduler
     function scheduleMainInterval() {
         addInterval(() => {
             if (!document.hidden) {
                 runAllFilters();
             }
-        }, 180);
+        }, 250);
     }
 
     // Start intervals now (foreground), pause/resume on visibility changes
