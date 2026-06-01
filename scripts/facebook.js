@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         FBCleaner
-// @version      2026-05-28
+// @version      2026-06-01
 // @description  Makes my Facebook experience less terrible. With reduced algorithmic bullshit.
 // @match        *://*.facebook.com/*
 // @grant        none
@@ -109,6 +109,30 @@ if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
                 const s4 = document.getElementById('fb-specific-url-prehide-style');
                 if (s4) s4.remove();
             } catch {}
+            try {
+                const s5 = document.getElementById('fb-safe-noglimpse-bootstrap-v2');
+                if (s5) s5.remove();
+            } catch {}
+            try {
+                const s6 = null;
+                if (s6) s6.remove();
+            } catch {}
+            try {
+                const s7 = document.getElementById('fb-likes-overlay-softgate-style-v5');
+                if (s7) s7.remove();
+            } catch {}
+            try {
+                const s8 = document.getElementById('fb-top-search-dropdown-protect-style-v9');
+                if (s8) s8.remove();
+            } catch {}
+            try {
+                const s9 = document.getElementById('fb-top-search-dropdown-native-guard-v10');
+                if (s9) s9.remove();
+            } catch {}
+            try {
+                const s10 = document.getElementById('fb-top-search-dropdown-native-guard-v11');
+                if (s10) s10.remove();
+            } catch {}
 
             devLog('Cleanup complete.');
         } catch (e) {
@@ -185,13 +209,243 @@ if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
 
     const updateFBSearchPageClass = () => {
         try {
+            const active = isFBSearchPagePath();
+
+            // 25.1.5-style behavior: search hiding class belongs on body only.
+            // Clear it from html so the top-left native search dropdown cannot get caught
+            // by stale body.is-search-page CSS after SPA navigation.
             if (document.documentElement) {
-                document.documentElement.classList.toggle('is-search-page', isFBSearchPagePath());
+                document.documentElement.classList.remove('is-search-page');
+            }
+            if (document.body) {
+                document.body.classList.toggle('is-search-page', active);
             }
         } catch (e) {}
     };
 
     updateFBSearchPageClass();
+
+    // ===== HOME FEED ZERO-GLIMPSE GATE v23 =====
+    // Keep this narrow: home feed only. Profile/timeline pages have their own protections.
+    const isFBHomeFeedSurfaceV23 = () => {
+        try {
+            const path = (location.pathname || '/').toLowerCase();
+            const search = (location.search || '').toLowerCase();
+            const host = (location.hostname || '').toLowerCase();
+            if (!host.includes('facebook.com')) return false;
+            return path === '/' || path === '/home.php' || (path === '/' && search.includes('sk=h_chr'));
+        } catch (e) {
+            return false;
+        }
+    };
+
+    const updateFBHomeFeedGateClassV23 = () => {
+        try {
+            if (!document.documentElement) return;
+            document.documentElement.classList.toggle('fb-home-feed-unit-softgate-v23', isFBHomeFeedSurfaceV23());
+        } catch (e) {}
+    };
+
+    updateFBHomeFeedGateClassV23();
+
+    // ===== SAFE ZERO-GLIMPSE BOOTSTRAP v2 =====
+    // This replaces the too-broad "hide feed until approved" idea.
+    // It does NOT hide the whole feed/page. It only prehides the Friends/Kaverit nav entry
+    // and, on friends-list surfaces, keeps unprocessed profile cards invisible until the scanner approves/bans them.
+    const isFBFriendsSurfacePathV2 = () => {
+        try {
+            const path = (location.pathname || '/').toLowerCase();
+            const href = (location.href || '').toLowerCase();
+            // v21: include every Facebook friend-list surface, not only /friends.
+            // Examples: /Haukkis/friends, /tapio.haukirauma/friends_all/, /friends_mutual/, upcoming birthdays.
+            return (
+                /\/friends(?:\/|$)/i.test(path) ||
+                /\/friends(?:[/?#]|$)/i.test(href) ||
+                /\/friends_all(?:\/|$)/i.test(path) ||
+                /\/friends_mutual(?:\/|$)/i.test(path) ||
+                /\/friends_with_upcoming_birthdays(?:\/|$)/i.test(path) ||
+                /\/friends_all(?:[/?#]|$)/i.test(href) ||
+                /\/friends_mutual(?:[/?#]|$)/i.test(href) ||
+                /\/friends_with_upcoming_birthdays(?:[/?#]|$)/i.test(href)
+            );
+        } catch (e) {
+            return false;
+        }
+    };
+
+    const updateFBFriendsSoftGateV2 = () => {
+        try {
+            if (!document.documentElement) return;
+            document.documentElement.classList.toggle('fb-friends-card-softgate-v2', isFBFriendsSurfacePathV2());
+        } catch (e) {}
+    };
+
+    const injectFBSafeNoGlimpseBootstrapV2 = () => {
+        try {
+            let style = document.getElementById('fb-safe-noglimpse-bootstrap-v2');
+            if (!style) {
+                style = document.createElement('style');
+                style.id = 'fb-safe-noglimpse-bootstrap-v2';
+            }
+
+            style.textContent = `
+                /* Zero-glimpse for the Friends/Kaverit left-nav button, but scoped to actual friend links. */
+                a[aria-label="Kaverit"][href*="/friends"],
+                a[aria-label="Friends"][href*="/friends"],
+                a[href="/friends/"],
+                a[href^="/friends/"],
+                a[href*="facebook.com/friends"],
+                li:has(> div a[aria-label="Kaverit"][href*="/friends"]),
+                li:has(> div a[aria-label="Friends"][href*="/friends"]),
+                li:has(> div a[href^="/friends/"]),
+                div[role="navigation"] [role="listitem"]:has(a[aria-label="Kaverit"][href*="/friends"]),
+                div[role="navigation"] [role="listitem"]:has(a[aria-label="Friends"][href*="/friends"]),
+                div[role="navigation"] [role="listitem"]:has(a[href^="/friends/"]),
+                div[role="navigation"] li:has(a[aria-label="Kaverit"][href*="/friends"]),
+                div[role="navigation"] li:has(a[aria-label="Friends"][href*="/friends"]),
+                div[role="navigation"] li:has(a[href^="/friends/"]) {
+                    display: none !important;
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                    position: absolute !important;
+                    left: -9999px !important;
+                    top: -9999px !important;
+                    width: 0 !important;
+                    min-width: 0 !important;
+                    max-width: 0 !important;
+                    height: 0 !important;
+                    min-height: 0 !important;
+                    max-height: 0 !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    overflow: hidden !important;
+                    content-visibility: hidden !important;
+                }
+
+                /* Friends/profile cards: friends page only.
+                   v22: include the current card shell captured from friends lists:
+                   div.x78zum5.xdt5ytf.x12upk82 -> profile photo link + name link + mutual friends text.
+                   These stay invisible until the scanner marks them approved/banned, preventing blocked-card glimpse. */
+                html.fb-friends-card-softgate-v2 div.x78zum5.xdt5ytf.x12upk82:has(a[role="link"][href*="facebook.com"]):not(.fb-profile-card-approved):not(.fb-profile-card-banned):not(.fb-element-banned),
+                html.fb-friends-card-softgate-v2 div.x78zum5.xdt5ytf.x12upk82:has(a[data-fbcleaner-urlsig*="facebook.com"]):not(.fb-profile-card-approved):not(.fb-profile-card-banned):not(.fb-element-banned) {
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                    transition: none !important;
+                    animation: none !important;
+                }
+
+                html.fb-friends-card-softgate-v2 div.x78zum5.xdt5ytf.x12upk82.fb-profile-card-approved {
+                    visibility: visible !important;
+                    opacity: 1 !important;
+                    pointer-events: auto !important;
+                }
+            `;
+
+            if (!style.isConnected) {
+                (document.head || document.documentElement).appendChild(style);
+            }
+        } catch (e) {}
+    };
+
+    const releaseFBFriendsSoftGateV2Soon = () => {
+        try {
+            addTimeout(() => {
+                try {
+                    // v22: do not fail-open while still on a friends-list surface.
+                    // The scanner should approve safe cards and hard-hide banned cards instead.
+                    if (document.documentElement && !isFBFriendsSurfacePathV2()) {
+                        document.documentElement.classList.remove('fb-friends-card-softgate-v2');
+                    }
+                } catch (e) {}
+            }, 1800);
+        } catch (e) {
+            try {
+                setTimeout(() => {
+                    if (document.documentElement && !isFBFriendsSurfacePathV2()) document.documentElement.classList.remove('fb-friends-card-softgate-v2');
+                }, 1800);
+            } catch (ignored) {}
+        }
+    };
+
+    updateFBFriendsSoftGateV2();
+    injectFBSafeNoGlimpseBootstrapV2();
+    releaseFBFriendsSoftGateV2Soon();
+
+
+
+
+    // ===== LIKES / REACTIONS OVERLAY SOFTGATE v5 =====
+    // Narrow softgate: only compact profile rows inside reaction/likes dialogs are hidden while being scanned.
+    // Safe rows are approved immediately. Banned rows stay hard-hidden. The gate auto-releases to avoid blank overlays.
+    const injectFBLikesOverlaySoftGateCSSV5 = () => {
+        try {
+            let style = document.getElementById('fb-likes-overlay-softgate-style-v5');
+            if (!style) {
+                style = document.createElement('style');
+                style.id = 'fb-likes-overlay-softgate-style-v5';
+            }
+
+            style.textContent = `
+                html.fb-likes-overlay-softgate-v5 [role="dialog"] div[data-visualcompletion="ignore-dynamic"]:has(a[href*="facebook.com/"]):not(.fb-likes-overlay-row-approved):not(.fb-likes-overlay-row-banned):not(.fb-element-banned) {
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                    transition: none !important;
+                    animation: none !important;
+                }
+
+                [role="dialog"] .fb-likes-overlay-row-banned,
+                [role="dialog"] .fb-likes-overlay-row-banned * {
+                    display: none !important;
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                    position: absolute !important;
+                    left: -9999px !important;
+                    top: -9999px !important;
+                    width: 0 !important;
+                    min-width: 0 !important;
+                    max-width: 0 !important;
+                    height: 0 !important;
+                    min-height: 0 !important;
+                    max-height: 0 !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    overflow: hidden !important;
+                    content-visibility: hidden !important;
+                }
+            `;
+
+            if (!style.isConnected) {
+                (document.head || document.documentElement).appendChild(style);
+            }
+        } catch (e) {}
+    };
+
+    const activateFBLikesOverlaySoftGateV5 = () => {
+        try {
+            injectFBLikesOverlaySoftGateCSSV5();
+            if (document.documentElement) {
+                document.documentElement.classList.add('fb-likes-overlay-softgate-v5');
+            }
+
+            const release = () => {
+                try {
+                    if (document.documentElement) {
+                        document.documentElement.classList.remove('fb-likes-overlay-softgate-v5');
+                    }
+                } catch (e) {}
+            };
+
+            addTimeout(release, 700);
+            addTimeout(release, 1400);
+        } catch (e) {}
+    };
+
+    injectFBLikesOverlaySoftGateCSSV5();
+
 
     // ENHANCED: Inject CSS immediately for instant hiding - REMOVED body visibility hidden to prevent white screen
     // UPDATED: Re-added broad default hiding to prevent flashes, only show approved posts
@@ -204,24 +458,26 @@ if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
                 style.id = 'fb-inline-style';
             }
             style.textContent = `
-            /* INSTANT SEARCH HIDING - Hide search results by default until approved */
-            html.is-search-page li[role="row"]:not(.fb-search-approved),
-            html.is-search-page a[aria-describedby]:not(.fb-search-approved),
-            html.is-search-page div[role="option"]:not(.fb-search-approved),
-            html.is-search-page div[data-testid="search-result"]:not(.fb-search-approved),
-            html.is-search-page div[role="presentation"] a:not(.fb-search-approved) {
+            /* INSTANT SEARCH HIDING - real /search/ results only.
+               Keep this scoped under [role="main"] so Facebook's native top-left search dropdown
+               in the banner keeps its own layout and does not need artificial approval/protection. */
+            body.is-search-page [role="main"] li[role="row"]:not(.fb-search-approved),
+            body.is-search-page [role="main"] a[aria-describedby]:not(.fb-search-approved),
+            body.is-search-page [role="main"] div[role="option"]:not(.fb-search-approved),
+            body.is-search-page [role="main"] div[data-testid="search-result"]:not(.fb-search-approved),
+            body.is-search-page [role="main"] div[role="presentation"] a:not(.fb-search-approved) {
                 visibility: hidden !important;
                 opacity: 0 !important;
                 display: none !important;
                 pointer-events: none !important;
             }
             
-            /* Show only approved search results */
-            html.is-search-page li[role="row"].fb-search-approved,
-            html.is-search-page a[aria-describedby].fb-search-approved,
-            html.is-search-page div[role="option"].fb-search-approved,
-            html.is-search-page div[data-testid="search-result"].fb-search-approved,
-            html.is-search-page div[role="presentation"] a.fb-search-approved {
+            /* Show only approved real /search/ page results. */
+            body.is-search-page [role="main"] li[role="row"].fb-search-approved,
+            body.is-search-page [role="main"] a[aria-describedby].fb-search-approved,
+            body.is-search-page [role="main"] div[role="option"].fb-search-approved,
+            body.is-search-page [role="main"] div[data-testid="search-result"].fb-search-approved,
+            body.is-search-page [role="main"] div[role="presentation"] a.fb-search-approved {
                 visibility: visible !important;
                 opacity: 1 !important;
                 display: block !important;
@@ -261,10 +517,11 @@ if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
             div[aria-label="Näytä suosituksia"],
             [aria-label="Näytä suositukset"],
             [role="button"][aria-label="Näytä suositukset"],  
-            a[aria-label="Kaverit"],
-            div[aria-label="Kaverit"],
-            div[aria-label="Kaverit"] > span.x1lliihq,
-            div[aria-label="Kaverit"] span.html-span,
+            /* v19: zero-glimpse hide the Finnish "Remove from friends" menu item.
+               Facebook exposes this dropdown as role="menuitem" with a specific remove-person SVG,
+               so hide by structure/icon before JS text scanning gets a paint chance. */
+            div[role="menuitem"]:has(svg path[d^="M9.248 1a4.248"]),
+            div[role="menuitem"]:has(svg path[d*="18.78 17.72"]),
             a[aria-label="Meta AI"],
             div[aria-label="Meta AI"],
             a[href="/Meta AI/"],
@@ -278,6 +535,11 @@ if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
             a[aria-label="Meta AI"],
             div[aria-label="Meta AI"],
             span[aria-label="Meta AI"],
+            /* v20: Meta AI refresh-time sprite fallback, narrowed to the 36px shortcut row.
+               The same 7Md5shK5dH8.webp sprite is reused by harmless profile-header controls
+               (for example the "Näytä kaikki" friend-strip button at 16px), so do NOT hide the raw sprite globally. */
+            div.html-div[style*="--x-rowGap"]:has(i[data-visualcompletion="css-img"][style*="7Md5shK5dH8.webp"][style*="width:36px"][style*="height:36px"]),
+            div.x9f619.x1ja2u2z.x78zum5.x2lah0s.x1n2onr6.x1qughib.x6s0dn4.xozqiw3.x1q0g3np:has(i[data-visualcompletion="css-img"][style*="7Md5shK5dH8.webp"][style*="width:36px"][style*="height:36px"]),
             /* Meta AI contact links */
             a[href*="/messages/t/36327,2227039302/"],
             a[href*="messages/t/36327"],
@@ -292,7 +554,6 @@ if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
             div.x1i10hfl:nth-child(13) > div:nth-child(2),
             div.x1i10hfl:nth-child(13) > div:nth-child(3),
             .x6s0dn4.x1obq294.x5a5i1n:has(.x1gslohp > span:empty),
-            li.x1c1uobl.x18d9i69.xyri2b.xexx8yu.x1lziwak.xat24cr.x14z9mp.xdj266r.html-li:nth-of-type(2),
             svg[aria-label="Meta AI:n profiilikuva"],
             svg[aria-label*="Meta AI profile"],
             div.x1cy8zhl.x78zum5.xl56j7k.x1fns5xo:has(> img[width="24"][height="24"][aria-hidden="true"][src^="data:image/svg+xml"][src*="M12%202.5a9.5"]),
@@ -325,8 +586,6 @@ if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
                 overflow: hidden !important;
             }
             /* Additional aggressive hiding for persistent elements */
-            a[aria-label="Kaverit"],
-            div[aria-label="Kaverit"],
             a[href="/friends/"],
             a[aria-label="Meta AI"],
             div[aria-label="Meta AI"] {
@@ -360,6 +619,87 @@ if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
                 width: 0 !important;
                 overflow: hidden !important;
             }
+
+            /* v23 home-feed FeedUnit softgate.
+               Facebook can paint the FeedUnit wrapper before [role=article] receives/keeps classes.
+               On the home feed, hide FeedUnit shells until JS approves/bans them. */
+            html.fb-home-feed-unit-softgate-v23 div[data-pagelet^="FeedUnit_"]:not(.fb-feed-unit-approved):not(.fb-post-approved):not(.fb-post-banned):not(.fb-element-banned),
+            html.fb-home-feed-unit-softgate-v23 div[data-pagelet^="TimelineFeedUnit_"]:not(.fb-feed-unit-approved):not(.fb-post-approved):not(.fb-post-banned):not(.fb-element-banned) {
+                visibility: hidden !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
+                content-visibility: hidden !important;
+                transition: none !important;
+                animation: none !important;
+            }
+
+            html.fb-home-feed-unit-softgate-v23 div[data-pagelet^="FeedUnit_"].fb-feed-unit-approved,
+            html.fb-home-feed-unit-softgate-v23 div[data-pagelet^="FeedUnit_"].fb-post-approved,
+            html.fb-home-feed-unit-softgate-v23 div[data-pagelet^="TimelineFeedUnit_"].fb-feed-unit-approved,
+            html.fb-home-feed-unit-softgate-v23 div[data-pagelet^="TimelineFeedUnit_"].fb-post-approved {
+                visibility: visible !important;
+                opacity: 1 !important;
+                pointer-events: auto !important;
+                content-visibility: visible !important;
+            }
+
+            /* v23 immediate structural nukes from captured HTML.
+               Mid-feed Reels: FeedUnit with Reels/Kelat region or /reel/ carousel links.
+               Join/Follow cards: inline small CTA button wrappers from captured Liity/Seuraa snippets. */
+            html.fb-home-feed-unit-softgate-v23 div[data-pagelet^="FeedUnit_"]:has([aria-label="Kelat"][role="region"]),
+            html.fb-home-feed-unit-softgate-v23 div[data-pagelet^="FeedUnit_"]:has([aria-label="Reels"][role="region"]),
+            html.fb-home-feed-unit-softgate-v23 div[data-pagelet^="FeedUnit_"]:has(a[href^="/reel/"]),
+            html.fb-home-feed-unit-softgate-v23 div[data-pagelet^="FeedUnit_"]:has(a[aria-label^="Kela käyttäjältä"]),
+            html.fb-home-feed-unit-softgate-v23 div[data-pagelet^="FeedUnit_"]:has(a[aria-label^="Reel by"]),
+            html.fb-home-feed-unit-softgate-v23 div[data-pagelet^="TimelineFeedUnit_"]:has([aria-label="Kelat"][role="region"]),
+            html.fb-home-feed-unit-softgate-v23 div[data-pagelet^="TimelineFeedUnit_"]:has([aria-label="Reels"][role="region"]),
+            html.fb-home-feed-unit-softgate-v23 div[data-pagelet^="TimelineFeedUnit_"]:has(a[href^="/reel/"]),
+            html.fb-home-feed-unit-softgate-v23 div[data-pagelet^="FeedUnit_"]:has(span.xdwrcjd.xuxw1ft > div[role="button"] > span.x1fey0fg),
+            html.fb-home-feed-unit-softgate-v23 div[data-pagelet^="FeedUnit_"]:has(span.x3nfvp2 > div[role="button"] > span.x1fey0fg),
+            html.fb-home-feed-unit-softgate-v23 div[data-pagelet^="TimelineFeedUnit_"]:has(span.xdwrcjd.xuxw1ft > div[role="button"] > span.x1fey0fg),
+            html.fb-home-feed-unit-softgate-v23 div[data-pagelet^="TimelineFeedUnit_"]:has(span.x3nfvp2 > div[role="button"] > span.x1fey0fg) {
+                display: none !important;
+                visibility: hidden !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
+                position: absolute !important;
+                left: -9999px !important;
+                top: -9999px !important;
+                width: 0 !important;
+                min-width: 0 !important;
+                max-width: 0 !important;
+                height: 0 !important;
+                min-height: 0 !important;
+                max-height: 0 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                overflow: hidden !important;
+                content-visibility: hidden !important;
+                transition: none !important;
+                animation: none !important;
+            }
+
+
+            /* v20 profile header safe island.
+               Facebook reuses "Kaverit", "Näytä suositukset", and the 7Md5 sprite inside legitimate
+               profile headers. Keep the header/name/photo/action area visible while still hiding left-nav Friends/Meta AI. */
+            [data-pagelet="ProfileActions"],
+            [data-pagelet="ProfileActions"] *,
+            h1,
+            h1 *,
+            a[aria-label][href*="/photo/?fbid="],
+            a[aria-label][href*="/photo/?fbid="] *,
+            svg[role="img"][style*="168px"],
+            svg[role="img"][style*="168px"] *,
+            a[href*="/friends_all/"],
+            a[href*="/friends_all/"] *,
+            a[href*="/friends_mutual/"],
+            a[href*="/friends_mutual/"] * {
+                visibility: visible !important;
+                opacity: 1 !important;
+                pointer-events: auto !important;
+                content-visibility: visible !important;
+            }
             `;
             // Safe append (no document.write)
             if (!style.isConnected) {
@@ -378,7 +718,7 @@ if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
             try {
                 const styleTag = document.createElement('style');
                 styleTag.id = 'fb-inline-style-fallback';
-                styleTag.textContent = `a[aria-label="Kaverit"], div[aria-label="Kaverit"], a[href="/friends/"] { display: none !important; }`;
+                styleTag.textContent = `a[aria-label="Kaverit"][href*="/friends"], a[aria-label="Friends"][href*="/friends"], a[href="/friends/"] { display: none !important; }`;
                 (document.head || document.documentElement).appendChild(styleTag);
                 devLog('Fallback CSS injected (safe append)');
             } catch (e) {
@@ -390,14 +730,167 @@ if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
     // Run CSS injection immediately
     injectInlineCSS();
 
+
+
+    // v20: early profile header safe island.
+    // Protects profile/page name, profile picture, friend count, and ProfileActions from early
+    // critical/zero-glimpse hiders. The captured header has no stable outer data-pagelet in every
+    // render, but it reliably contains ProfileActions, h1 title, large 168px profile SVG/image,
+    // friends_all/friends_mutual links, and profile action buttons.
+    const isProbablyProfileHeaderSafeElementV20 = (el) => {
+        try {
+            if (!el || !el.closest) return false;
+            if (el.closest('[data-pagelet="ProfileHeader"], [data-pagelet="PageHeader"], [data-pagelet="ProfileActions"]')) return true;
+            if (el.querySelector && el.querySelector('[data-pagelet="ProfileActions"]')) return true;
+            if (el.closest('h1, h1 *')) return true;
+            if (el.closest('a[aria-label][href*="/photo/?fbid="], a[aria-label][href*="photo/?fbid="], svg[role="img"][style*="168px"], svg[role="img"][style*="height:168px"], image[style*="168px"]')) return true;
+            if (el.closest('a[href*="/friends_all/"], a[href*="/friends_mutual/"], span[aria-label="Korostetut tiedot"], span[aria-label="Featured details"]')) return true;
+            if (el.closest('[role="button"][aria-label="Kaverit"], [role="button"][aria-label="Friends"], [role="button"][aria-label="Lähetä viesti"], [role="button"][aria-label="Message"]')) return true;
+
+            // Ancestor being considered for hiding: if it contains core profile-header signals, treat it as safe.
+            if (el.querySelector) {
+                if (el.querySelector('[data-pagelet="ProfileActions"], h1, svg[role="img"][style*="168px"], a[href*="/friends_all/"], a[href*="/friends_mutual/"]')) return true;
+            }
+        } catch (e) {}
+        return false;
+    };
+
+    // v13: Early cheap guard for Facebook's native top-left search dropdown.
+    // This lives before the full dropdown detector exists, because hideCriticalElements()
+    // runs immediately at document-start. It only checks tiny local structure and viewport.
+    const isProbablyNativeTopSearchDropdownNodeEarlyV13 = (el) => {
+        try {
+            if (!el || !el.closest) return false;
+            const row = el.closest('li[role="row"]');
+            if (!row) return false;
+            const anchor = row.querySelector('a[aria-describedby], a[href*="__epa__=SEARCH_BOX"], a[href*="/search/top/"]');
+            const deleteTarget = row.querySelector('[title*="Poista" i], [aria-label*="Poista" i], [title*="Remove" i], [aria-label*="Remove" i], [title*="Delete" i], [aria-label*="Delete" i], svg[title*="Poista" i], svg[title*="Remove" i], svg[title*="Delete" i]');
+            if (!anchor && !deleteTarget) return false;
+            const rect = row.getBoundingClientRect ? row.getBoundingClientRect() : null;
+            if (!rect || rect.width <= 0 || rect.height <= 0) return false;
+            return rect.top < 700 && rect.left < 980;
+        } catch (e) {
+            return false;
+        }
+    };
+
+
+    // v18: fast Meta AI row scrubber.
+    // Facebook sometimes renders the left-nav Meta AI shortcut as plain text + a CSS image sprite,
+    // without aria-label/href. CSS handles most of the zero-glimpse; this catches late React re-renders.
+    const findMetaAIRowWrapperV18 = (seed) => {
+        try {
+            if (!seed) return null;
+            let node = seed;
+            let best = null;
+            const looksLikeMetaAIText = (value) => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase() === 'meta ai';
+
+            for (let depth = 0; node && node !== document.body && node !== document.documentElement && depth < 9; depth++, node = node.parentElement) {
+                if (!node || !node.querySelector) continue;
+                if (node.matches && node.matches('main, [role="main"], [role="feed"], header, [role="banner"], nav, [role="navigation"]')) break;
+                if (typeof isTopLeftSearchDropdownElement === 'function' && isTopLeftSearchDropdownElement(node)) return null;
+                if (isProbablyProfileHeaderSafeElementV20(node)) return null;
+
+                const text = String(node.textContent || '').replace(/\s+/g, ' ').trim();
+                const hasMetaText = looksLikeMetaAIText(text) || !!Array.from(node.querySelectorAll('span[dir="auto"], span.x1lliihq')).some(span => looksLikeMetaAIText(span.textContent));
+                const hasMetaIcon = !!node.querySelector('i[data-visualcompletion="css-img"][style*="7Md5shK5dH8.webp"][style*="width:36px"][style*="height:36px"]');
+                const isCompactRow = !!(
+                    node.matches && (
+                        node.matches('a, [role="link"], [role="button"], li, [role="listitem"]') ||
+                        (node.classList && node.classList.contains('x9f619') && node.classList.contains('x78zum5')) ||
+                        (node.classList && node.classList.contains('html-div') && String(node.getAttribute('style') || '').includes('--x-rowGap'))
+                    )
+                );
+
+                // Require actual Meta AI text. The sprite alone is not unique; Facebook also uses it in profile headers.
+                if (hasMetaText && (hasMetaIcon || isCompactRow)) {
+                    best = node;
+                    if (hasMetaIcon && isCompactRow) break;
+                }
+            }
+
+            return best;
+        } catch (e) {
+            return null;
+        }
+    };
+
+    const hideMetaAITextRowsV18 = () => {
+        try {
+            const candidates = document.querySelectorAll([
+                'i[data-visualcompletion="css-img"][style*="7Md5shK5dH8.webp"][style*="width:36px"][style*="height:36px"]',
+                'span[dir="auto"]',
+                'span.x1lliihq'
+            ].join(','));
+
+            candidates.forEach((candidate) => {
+                try {
+                    const text = String(candidate.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+                    const isMetaText = text === 'meta ai';
+                    const isMetaIcon = candidate.matches && candidate.matches('i[data-visualcompletion="css-img"][style*="7Md5shK5dH8.webp"][style*="width:36px"][style*="height:36px"]');
+                    if (!isMetaText && !isMetaIcon) return;
+
+                    const wrapper = findMetaAIRowWrapperV18(candidate);
+                    if (!wrapper) return;
+                    if (typeof isTopLeftSearchDropdownElement === 'function' && isTopLeftSearchDropdownElement(wrapper)) return;
+                    if (isProbablyProfileHeaderSafeElementV20(wrapper)) return;
+                    collapseElementHard(wrapper);
+                } catch (e) {}
+            });
+        } catch (e) {}
+    };
+
+    // v19: fast no-glimpse scrubber for the "Poista kavereista" dropdown menu item.
+    // CSS handles the first paint by matching the remove-person SVG; this JS catches
+    // text-only/late React renders and keeps the item hidden during menu updates.
+    const findRemoveFriendMenuItemV19 = (seed) => {
+        try {
+            if (!seed) return null;
+            const text = String(seed.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+            const isRemoveFriendText = text === 'poista kavereista' || text === 'remove from friends';
+            const isRemoveFriendIcon = !!(
+                seed.matches &&
+                seed.matches('svg path[d^="M9.248 1a4.248"], svg path[d*="18.78 17.72"]')
+            );
+            if (!isRemoveFriendText && !isRemoveFriendIcon) return null;
+
+            const menuItem = seed.closest ? seed.closest('div[role="menuitem"], [role="menuitem"]') : null;
+            if (!menuItem) return null;
+            if (typeof isTopLeftSearchDropdownElement === 'function' && isTopLeftSearchDropdownElement(menuItem)) return null;
+            return menuItem;
+        } catch (e) {
+            return null;
+        }
+    };
+
+    const hideRemoveFriendMenuItemsV19 = () => {
+        try {
+            const candidates = document.querySelectorAll([
+                'div[role="menuitem"] span[dir="auto"]',
+                'div[role="menuitem"] span.x1lliihq',
+                'div[role="menuitem"] svg path[d^="M9.248 1a4.248"]',
+                'div[role="menuitem"] svg path[d*="18.78 17.72"]'
+            ].join(','));
+
+            candidates.forEach((candidate) => {
+                try {
+                    const wrapper = findRemoveFriendMenuItemV19(candidate);
+                    if (wrapper) collapseElementHard(wrapper);
+                } catch (e) {}
+            });
+        } catch (e) {}
+    };
+
     // Directly hide specific elements based on their unique selectors - Enhanced for persistence and anti-flashing
     const hideCriticalElements = () => {
         try {
             devLog('Hiding critical elements with permanent banning and anti-flashing');
+            hideMetaAITextRowsV18();
+            hideRemoveFriendMenuItemsV19();
             const selectors = [
-                'a[aria-label="Kaverit"]',
-                'div[aria-label="Kaverit"]',
                 'a[href="https://www.facebook.com/friends/"]',
+                'a[aria-label="Kaverit"][href*="/friends"]',
+                'a[aria-label="Friends"][href*="/friends"]',
                 'a[href="/friends/"]',
                 'a[aria-label="Meta AI"]',
                 'div[aria-label="Meta AI"]',
@@ -409,11 +902,16 @@ if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
                 'div.x1cy8zhl.x78zum5.xl56j7k.x1fns5xo:has(> img[width="24"][height="24"][aria-hidden="true"][src^="data:image/svg+xml"][src*="M12%202.5a9.5"])',
                 'a[aria-label="Meta AI"]',
         	'.x6s0dn4.x1obq294.x5a5i1n:has(.x1gslohp > span:empty)',
-		'li.x1c1uobl.x18d9i69.xyri2b.xexx8yu.x1lziwak.xat24cr.x14z9mp.xdj266r.html-li:nth-of-type(2)',
 		'div.x1cy8zhl.x78zum5.xl56j7k.x1fns5xo:has(> img[width="24"][height="24"][aria-hidden="true"][src^="data:image/svg+xml"][src*="M12 2.5a9.5"])',
             	'div.x1cy8zhl.x78zum5.xl56j7k.x1fns5xo:has(> img[width="24"][height="24"][aria-hidden="true"][src^="data:image/svg+xml"][src*="M12%202.5a9.5"])',
                 'div[aria-label="Meta AI"]',
                 'span[aria-label="Meta AI"]',
+                // v20: Meta AI refresh-time row fallback, narrowed to the 36px shortcut row.
+                'div.html-div[style*="--x-rowGap"]:has(i[data-visualcompletion="css-img"][style*="7Md5shK5dH8.webp"][style*="width:36px"][style*="height:36px"])',
+                'div.x9f619.x1ja2u2z.x78zum5.x2lah0s.x1n2onr6.x1qughib.x6s0dn4.xozqiw3.x1q0g3np:has(i[data-visualcompletion="css-img"][style*="7Md5shK5dH8.webp"][style*="width:36px"][style*="height:36px"])',
+                // v19: hide the "Poista kavereista" menuitem by remove-person SVG structure.
+                'div[role="menuitem"]:has(svg path[d^="M9.248 1a4.248"])',
+                'div[role="menuitem"]:has(svg path[d*="18.78 17.72"])',
 		'li:has(a[aria-label="Kaverit"][href*="/friends"])',
 		'li:has(a[aria-label="Friends"][href*="/friends"])',
                 'svg[viewBox="0 0 112 112"][width="112"][height="112"].xfx01vb.x1lliihq.x1tzjh5l.x1k90msu.x2h7rmj.x1qfuztq',
@@ -431,6 +929,8 @@ if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
             let hiddenCount = 0;
             selectors.forEach((selector) => {
                 document.querySelectorAll(selector).forEach((el) => {
+                    if (isProbablyNativeTopSearchDropdownNodeEarlyV13(el)) return;
+                    if (isProbablyProfileHeaderSafeElementV20(el)) return;
                     if (!el.classList.contains('fb-element-banned')) {
                         el.classList.add('fb-element-banned');
                         el.style.setProperty('display', 'none', 'important');
@@ -482,6 +982,158 @@ function collapseElementHard(el) {
     el.style.setProperty('overflow', 'hidden', 'important');
     el.style.setProperty('content-visibility', 'hidden', 'important');
 }
+
+    // ===== HOME FEED CTA / REELS SCRUBBER v23 =====
+    const FB_RESTRICTED_FEED_CTA_TEXT_V23 = new Set(['liity', 'join', 'seuraa', 'follow']);
+
+    const getFBFeedUnitWrapperV23 = (seed) => {
+        try {
+            if (!seed || !seed.closest) return null;
+            return seed.closest('div[data-pagelet^="FeedUnit_"], div[data-pagelet^="TimelineFeedUnit_"]') ||
+                   seed.closest('[role="feed"] [role="article"]') ||
+                   seed.closest('[role="article"]') ||
+                   null;
+        } catch (e) {
+            return null;
+        }
+    };
+
+    const isProbablyHomeFeedUnitV23 = (el) => {
+        try {
+            if (!el || !el.closest) return false;
+            if (isProfileHeaderProtectedArea && isProfileHeaderProtectedArea(el)) return false;
+            if (isTopLeftSearchDropdownElement && isTopLeftSearchDropdownElement(el)) return false;
+            if (el.closest('[role="banner"], [role="navigation"]')) return false;
+            return !!(el.closest('[role="feed"]') || el.matches?.('div[data-pagelet^="FeedUnit_"], div[data-pagelet^="TimelineFeedUnit_"]'));
+        } catch (e) {
+            return false;
+        }
+    };
+
+    const getCompactLowerTextV23 = (el, fallback = '') => {
+        try {
+            const raw = collectLightAndOpenShadowTextScoped(
+                el,
+                fallback || el?.innerText || el?.textContent || '',
+                {
+                    maxHostSearchNodes: 80,
+                    maxShadowHosts: 4,
+                    maxTextNodes: 55,
+                    maxShadowNodes: 35,
+                    maxChars: 2600,
+                    maxDepth: 1,
+                    includeAttributes: true
+                }
+            );
+            return String(raw || '').replace(/\s+/g, ' ').trim().toLowerCase();
+        } catch (e) {
+            return String(fallback || el?.innerText || el?.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+        }
+    };
+
+    const hasRestrictedFeedCTAOrReelsV23 = (seed) => {
+        try {
+            const unit = getFBFeedUnitWrapperV23(seed) || seed;
+            if (!unit || !isProbablyHomeFeedUnitV23(unit)) return false;
+
+            // Mid-feed Reels carousel from captured HTML: h3 "Reels", aria-label="Kelat" region,
+            // and /reel/ cards inside a FeedUnit.
+            if (unit.querySelector?.('[aria-label="Kelat"][role="region"], [aria-label="Reels"][role="region"], a[href^="/reel/"], a[href*="facebook.com/reel/"], a[aria-label^="Kela käyttäjältä"], a[aria-label^="Reel by"]')) return true;
+
+            const headings = unit.querySelectorAll ? unit.querySelectorAll('h2, h3, h4, [role="heading"]') : [];
+            for (let i = 0; i < headings.length; i++) {
+                const headingText = getCompactLowerTextV23(headings[i]);
+                if (headingText === 'reels' || headingText === 'kelat') return true;
+            }
+
+            // Captured Liity/Join and Seuraa/Follow buttons are small inline CTA div[role=button]
+            // wrappers, often under span.x3nfvp2 or span.xdwrcjd.xuxw1ft.
+            const buttons = querySelectorAllOpenShadowScoped(unit, 'div[role="button"], button[role="button"], button', {
+                maxNodes: 120,
+                maxHostSearchNodes: 180,
+                maxShadowHosts: 6,
+                maxDepth: 1
+            });
+
+            for (let i = 0; i < buttons.length; i++) {
+                const btn = buttons[i];
+                const txt = getCompactLowerTextV23(btn);
+                if (FB_RESTRICTED_FEED_CTA_TEXT_V23.has(txt)) return true;
+
+                // Extra structural path from uploaded snippets: exact inline text span inside the button.
+                const labelSpan = btn.querySelector?.('span.x1fey0fg, span.x193iq5w');
+                if (labelSpan) {
+                    const label = getCompactLowerTextV23(labelSpan);
+                    if (FB_RESTRICTED_FEED_CTA_TEXT_V23.has(label)) return true;
+                }
+            }
+
+            return false;
+        } catch (e) {
+            return false;
+        }
+    };
+
+    const markFBFeedUnitApprovedV23 = (seed) => {
+        try {
+            const unit = getFBFeedUnitWrapperV23(seed) || seed;
+            if (!unit || !unit.classList) return;
+            unit.classList.add('fb-feed-unit-approved', 'fb-post-approved');
+            unit.classList.remove('fb-post-banned', 'fb-element-banned');
+            unit.querySelectorAll?.('[role="article"]').forEach(article => {
+                try { article.classList.add('fb-post-approved'); } catch (e) {}
+            });
+        } catch (e) {}
+    };
+
+    const hideFBFeedUnitHardV23 = (seed, reason = 'restricted feed unit') => {
+        try {
+            const unit = getFBFeedUnitWrapperV23(seed) || seed;
+            if (!unit || !unit.style) return false;
+            unit.classList.remove('fb-feed-unit-approved', 'fb-post-approved');
+            unit.querySelectorAll?.('[role="article"]').forEach(article => {
+                try { article.classList.remove('fb-post-approved'); } catch (e) {}
+            });
+            hideElementHard(unit, 'fb-post-banned');
+            devLog(`🚫 Feed unit hidden by v23: ${reason}`);
+            return true;
+        } catch (e) {
+            return false;
+        }
+    };
+
+    const scrubRestrictedFeedUnitsV23 = () => {
+        try {
+            updateFBHomeFeedGateClassV23();
+            if (!isFBHomeFeedSurfaceV23()) return;
+
+            const selectors = [
+                'div[data-pagelet^="FeedUnit_"]',
+                'div[data-pagelet^="TimelineFeedUnit_"]',
+                '[role="feed"] [role="article"]'
+            ];
+
+            const seen = new WeakSet();
+            let hidden = 0;
+            selectors.forEach(selector => {
+                try {
+                    document.querySelectorAll(selector).forEach(candidate => {
+                        const unit = getFBFeedUnitWrapperV23(candidate) || candidate;
+                        if (!unit || seen.has(unit)) return;
+                        seen.add(unit);
+                        if (unit.classList?.contains('fb-post-banned') || unit.classList?.contains('fb-element-banned')) return;
+                        if (hasRestrictedFeedCTAOrReelsV23(unit)) {
+                            if (hideFBFeedUnitHardV23(unit, 'Liity/Join, Seuraa/Follow, or mid-feed Reels')) hidden++;
+                        }
+                    });
+                } catch (e) {}
+            });
+
+            if (hidden > 0) devLog(`v23 scrubbed ${hidden} restricted home-feed unit(s)`);
+        } catch (e) {
+            console.log('Error scrubbing restricted feed units v23: ' + e.message);
+        }
+    };
 
     // --- ARRAYS AND CONFIGURATION ---
     const paramsToDelete = ["set", "type"];    // ===== ACCOUNT-SCOPED STRICT FILTERS =====
@@ -912,7 +1564,50 @@ function collapseElementHard(el) {
         /id=(100005050653554|100000559239899|1267550854)\b/i
     ];
 
+    // ===== NATIVE TOP-LEFT SEARCH SAFE ISLAND v16 =====
+    // Built from the captured Facebook dropdown HTML:
+    // - search box / form
+    // - recent-search grid/list
+    // - li[role="row"] cards with /search/top/?q=...&__epa__=SEARCH_BOX
+    // - page/profile recent rows with delete buttons titled "Poista ... historiasta"
+    // The key rule: this surface is Facebook-owned UI. Scanners must skip it; real /search/ pages still filter normally.
+    const fbNativeTopSearchSafeSelectorsV16 = [
+        'input[placeholder*="Hae Facebookista" i]',
+        'input[placeholder*="Search Facebook" i]',
+        '[role="searchbox"]',
+        '[role="combobox"]',
+        '[role="banner"] form[role="search"]',
+        '[role="banner"] div[role="search"]',
+        'form[role="search"]:has(input[placeholder*="Hae Facebookista" i])',
+        'form[role="search"]:has(input[placeholder*="Search Facebook" i])',
+        'div[role="search"]:has(input[placeholder*="Hae Facebookista" i])',
+        'div[role="search"]:has(input[placeholder*="Search Facebook" i])',
+        'ul[role="grid"][aria-label*="ehdotettu haku" i]',
+        'ul[role="grid"][aria-label*="suggested search" i]',
+        'ul:has(> li[role="row"] a[href*="__epa__=SEARCH_BOX"])',
+        'ul:has(> li[role="row"] a[href*="/search/top/"])',
+        'ul:has(> li[role="row"] [title*="historiasta" i])',
+        'ul:has(> li[role="row"] [aria-label*="historiasta" i])',
+        'ul:has(> li[role="row"] [title*="history" i])',
+        'ul:has(> li[role="row"] [aria-label*="history" i])',
+        'li[role="row"]:has(a[href*="__epa__=SEARCH_BOX"])',
+        'li[role="row"]:has(a[href*="/search/top/"])',
+        'li[role="row"]:has([title*="historiasta" i])',
+        'li[role="row"]:has([aria-label*="historiasta" i])',
+        'li[role="row"]:has([title*="history" i])',
+        'li[role="row"]:has([aria-label*="history" i])',
+        'li[role="row"]:has(a[aria-describedby][role="none"][tabindex="-1"])',
+        'body:not(.is-search-page) li[role="row"]:has(a[aria-describedby][role="none"])',
+        'body:not(.is-search-page) a[aria-describedby][role="none"][tabindex="-1"]',
+        'a[href*="category_key=SEARCH"]',
+        'a[href*="log_filter=search"]',
+        'a[href*="entry_point=edit_search_history"]',
+        'a[data-fbcleaner-urlsig*="category_key=SEARCH"]',
+        'a[data-fbcleaner-urlsig*="log_filter=search"]'
+    ];
+
     const safeSelectors = [
+        ...fbNativeTopSearchSafeSelectorsV16,
         '[aria-label="Notifications"]',
         '[aria-label="Marketplace"]',
         '[aria-label="Ilmoitukset"]',
@@ -1041,6 +1736,9 @@ function collapseElementHard(el) {
 
     const hideElementHard = (element, className = 'fb-element-banned') => {
         if (!element || !element.style) return;
+        try {
+            if (typeof isTopLeftSearchDropdownElement === 'function' && isTopLeftSearchDropdownElement(element)) return;
+        } catch (e) {}
         try { element.classList.add(className); } catch (e) {}
         element.style.setProperty('display', 'none', 'important');
         element.style.setProperty('visibility', 'hidden', 'important');
@@ -1086,8 +1784,340 @@ function collapseElementHard(el) {
         }
     });
     
-    // Function to check if element matches any safe selector
-    const isSafeElement = (element) => safeSelectors.some(selector => element.closest(selector));
+    // Function to check if element matches any safe selector.
+    // v16: the native top-left Facebook search dropdown/search form is a hard safe island.
+    // No scanners, no row repair, no layout cleanup, no hard-hide classes. Real /search/ pages still filter normally.
+    const matchesClosestSelectorSafe = (element, selectors) => {
+        try {
+            if (!element || !element.closest || !Array.isArray(selectors)) return false;
+            return selectors.some(selector => {
+                try { return !!element.closest(selector); }
+                catch (e) { return false; }
+            });
+        } catch (e) {
+            return false;
+        }
+    };
+
+    const isFBNativeTopSearchSafeIslandV16 = (element) => {
+        try {
+            if (!element || !element.closest) return false;
+
+            // Never let this helper immunize real search result pages or feed content.
+            if (isFBSearchPagePath && isFBSearchPagePath()) return false;
+            if (element.closest('[role="main"]') && !element.closest('[role="banner"]')) return false;
+
+            if (matchesClosestSelectorSafe(element, fbNativeTopSearchSafeSelectorsV16)) return true;
+
+            const row = element.closest('li[role="row"]');
+            if (row) {
+                const hasSearchBoxHref = !!row.querySelector('a[href*="__epa__=SEARCH_BOX"], a[href*="/search/top/"]');
+                const hasHistoryDelete = !!row.querySelector('[title*="historiasta" i], [aria-label*="historiasta" i], [title*="history" i], [aria-label*="history" i], [title*="Remove" i], [aria-label*="Remove" i], [title*="Delete" i], [aria-label*="Delete" i]');
+                const looksLikeNativeRow = !!row.querySelector('a[aria-describedby][role="none"][tabindex="-1"]');
+                if (hasSearchBoxHref || hasHistoryDelete || looksLikeNativeRow) return true;
+            }
+
+            return false;
+        } catch (e) {
+            return false;
+        }
+    };
+
+    const isSafeElement = (element) => {
+        try {
+            if (isFBNativeTopSearchSafeIslandV16(element)) return true;
+            if (typeof isTopLeftSearchDropdownElement === 'function' && isTopLeftSearchDropdownElement(element)) return true;
+        } catch (e) {}
+        try {
+            return matchesClosestSelectorSafe(element, safeSelectors);
+        } catch (e) {
+            return false;
+        }
+    };
+
+    // ===== TOP-LEFT SEARCH DROPDOWN SURFACE DETECTION =====
+    // v12: cheap, hands-off detection. This helper is called by broad scanners every 250ms,
+    // so it must NOT walk large subtrees or read innerText on random page elements.
+    // It only answers: "is this node part of Facebook's native top-left search surface?"
+    const fbTopSearchDropdownDeleteSelector = [
+        '[title*="Poista" i]',
+        '[aria-label*="Poista" i]',
+        '[title*="Remove" i]',
+        '[aria-label*="Remove" i]',
+        '[title*="Delete" i]',
+        '[aria-label*="Delete" i]',
+        'svg[title*="Poista" i]',
+        'svg[title*="Remove" i]',
+        'svg[title*="Delete" i]'
+    ].join(',');
+
+    const fbTopLeftSearchDropdownRectOkay = (el) => {
+        try {
+            if (!el || !el.getBoundingClientRect) return false;
+            const rect = el.getBoundingClientRect();
+            if (!rect || rect.width <= 0 || rect.height <= 0) return false;
+            // Native FB search dropdown lives in the upper-left-ish header/portal area.
+            return rect.top < 700 && rect.left < 980;
+        } catch (e) {
+            return false;
+        }
+    };
+
+    const fbElementLooksLikeNativeSearchRow = (row) => {
+        try {
+            if (!row || !row.matches || !row.matches('li[role="row"]')) return false;
+            const anchor = row.querySelector(':scope > a[aria-describedby], :scope > a[href], a[href*="__epa__=SEARCH_BOX"], a[href*="/search/top/"]');
+            if (!anchor) return false;
+
+            const href = String(anchor.getAttribute('href') || anchor.href || '');
+            return !!(
+                row.querySelector(fbTopSearchDropdownDeleteSelector) ||
+                /__epa__=SEARCH_BOX/i.test(href) ||
+                /\/search\/top\/?\?q=/i.test(href) ||
+                /\/profile\.php\?/i.test(href) ||
+                /^\/[A-Za-z0-9._-]+(?:[/?#]|$)/i.test(href) ||
+                /facebook\.com\/[A-Za-z0-9._-]+/i.test(href)
+            );
+        } catch (e) {
+            return false;
+        }
+    };
+
+    const getFBTopSearchDropdownContainer = (element) => {
+        try {
+            if (!element || !element.closest) return null;
+
+            // Never classify normal /search/ results or feed content as the native top-left dropdown.
+            if (element.closest('[role="main"]') && !element.closest('[role="banner"]')) return null;
+
+            // Cheapest and most stable case: inside the Facebook header search surface.
+            const bannerSearch = element.closest('[role="banner"] form[role="search"], [role="banner"] div[role="search"]');
+            if (bannerSearch) return bannerSearch;
+
+            const directSearch = element.closest('form[role="search"], div[role="search"]');
+            if (directSearch && fbTopLeftSearchDropdownRectOkay(directSearch)) return directSearch;
+
+            // Portal-ish dropdown rows: protect only if the row/list is physically in the top-left area.
+            const row = element.closest('li[role="row"]');
+            if (row && fbElementLooksLikeNativeSearchRow(row)) {
+                const list = row.closest('ul') || row;
+                if (fbTopLeftSearchDropdownRectOkay(row) || fbTopLeftSearchDropdownRectOkay(list)) return list;
+            }
+
+            // Search input itself, if Facebook changes wrappers again.
+            const input = element.closest('input[placeholder*="Hae Facebookista" i], input[placeholder*="Search Facebook" i], [role="searchbox"], [role="combobox"]');
+            if (input && fbTopLeftSearchDropdownRectOkay(input)) return input.closest('form, div') || input;
+
+            return null;
+        } catch (e) {
+            return null;
+        }
+    };
+
+    const isTopLeftSearchDropdownElement = (element) => isFBNativeTopSearchSafeIslandV16(element) || !!getFBTopSearchDropdownContainer(element);
+
+    // ===== FACEBOOK NATIVE TOP-LEFT SEARCH SAFE ISLAND v16 =====
+    // This intentionally copies the stable 25.1.5 philosophy instead of trying to micro-manage the dropdown:
+    // - filter real /search/ result pages;
+    // - do not scan, approve, restyle, repair, or hard-hide the native header search dropdown;
+    // - keep scanners/CSS alive; only treat the native dropdown itself as a safe Facebook-owned surface.
+    let __fbNativeTopSearchActiveUntilV15 = 0;
+
+    const markFBNativeTopSearchActiveV15 = () => {
+        try {
+            __fbNativeTopSearchActiveUntilV15 = Math.max(__fbNativeTopSearchActiveUntilV15, performance.now() + 3000);
+            refreshFBNativeTopSearchHandoffV15();
+            addTimeout(refreshFBNativeTopSearchHandoffV15, 400);
+            addTimeout(refreshFBNativeTopSearchHandoffV15, 1200);
+            addTimeout(refreshFBNativeTopSearchHandoffV15, 3200);
+        } catch (e) {}
+    };
+
+    const fbNativeTopSearchDropdownExistsV15 = () => {
+        try {
+            if (isFBSearchPagePath()) return false;
+            return !!document.querySelector([
+                'ul[role="grid"][aria-label*="ehdotettu haku" i]',
+                'ul[role="grid"][aria-label*="suggested search" i]',
+                'li[role="row"]:has(a[href*="__epa__=SEARCH_BOX"])',
+                'li[role="row"]:has(a[href*="/search/top/"])',
+                'li[role="row"]:has([title*="historiasta" i])',
+                'li[role="row"]:has([aria-label*="historiasta" i])',
+                'li[role="row"]:has([title*="history" i])',
+                'li[role="row"]:has([aria-label*="history" i])'
+            ].join(','));
+        } catch (e) {
+            return false;
+        }
+    };
+
+    const activeElementIsNativeTopSearchV15 = () => {
+        try {
+            const el = document.activeElement;
+            if (!el || !el.closest) return false;
+            return !!(
+                el.closest('input[placeholder*="Hae Facebookista" i], input[placeholder*="Search Facebook" i], [role="searchbox"], [role="combobox"]') ||
+                el.closest('[role="banner"] form[role="search"], [role="banner"] div[role="search"]') ||
+                isTopLeftSearchDropdownElement(el)
+            );
+        } catch (e) {
+            return false;
+        }
+    };
+
+    const isFBNativeTopSearchActiveV15 = () => {
+        try {
+            if (isFBSearchPagePath()) return false;
+            if (performance.now() < __fbNativeTopSearchActiveUntilV15) return true;
+            if (activeElementIsNativeTopSearchV15()) return true;
+            if (fbNativeTopSearchDropdownExistsV15()) return true;
+        } catch (e) {}
+        return false;
+    };
+
+    const setFBInlineStylePausedForNativeSearchV15 = (_active) => {
+        // v16: scanners and CSS stay alive.
+        // If a previous v14 run left fb-inline-style disabled with media="not all", restore it.
+        try {
+            const style = document.getElementById('fb-inline-style');
+            if (!style) return;
+            if (style.hasAttribute('data-fbcleaner-v15-original-media')) {
+                const original = style.getAttribute('data-fbcleaner-v15-original-media') || '';
+                if (original) style.setAttribute('media', original);
+                else style.removeAttribute('media');
+                style.removeAttribute('data-fbcleaner-v15-original-media');
+            }
+            if (style.getAttribute('media') === 'not all') style.removeAttribute('media');
+            style.removeAttribute('data-fbcleaner-v14-original-media');
+        } catch (e) {}
+    };
+
+    const refreshFBNativeTopSearchHandoffV15 = () => {
+        try {
+            const active = isFBNativeTopSearchActiveV15();
+            if (document.documentElement) {
+                document.documentElement.classList.toggle('fb-native-top-search-handoff-v15', active);
+            }
+            setFBInlineStylePausedForNativeSearchV15(active);
+            return active;
+        } catch (e) {
+            return false;
+        }
+    };
+
+    const installFBNativeTopSearchHandoffV15 = () => {
+        try {
+            // Remove stale active dropdown styles from v9-v11. v15 does not inject any row styling.
+            [
+                'fb-top-search-dropdown-protect-style-v9',
+                'fb-top-search-dropdown-native-guard-v10',
+                'fb-top-search-dropdown-native-guard-v11'
+            ].forEach((id) => {
+                try { const style = document.getElementById(id); if (style) style.remove(); } catch (e) {}
+            });
+
+            if (document.documentElement) {
+                document.documentElement.classList.remove(
+                    'fb-top-search-dropdown-active-v9',
+                    'fb-top-search-dropdown-active-v10',
+                    'fb-top-search-dropdown-active-v11'
+                );
+            }
+
+            const removeFBCleanerHardHideFromNativeDropdownNodeV15 = (el) => {
+                try {
+                    if (!el || !el.classList || !el.style) return;
+                    el.classList.remove(
+                        'fb-element-banned',
+                        'fb-post-banned',
+                        'fb-search-banned',
+                        'fb-search-dropdown-row-banned',
+                        'fb-search-dropdown-row-banned-v9',
+                        'fb-post-approved',
+                        'fb-search-approved',
+                        'fb-search-processed',
+                        'fb-post-processed'
+                    );
+                    [
+                        'display',
+                        'visibility',
+                        'opacity',
+                        'pointer-events',
+                        'position',
+                        'left',
+                        'top',
+                        'width',
+                        'min-width',
+                        'max-width',
+                        'height',
+                        'min-height',
+                        'max-height',
+                        'margin',
+                        'padding',
+                        'overflow',
+                        'content-visibility'
+                    ].forEach(prop => {
+                        try { el.style.removeProperty(prop); } catch (e) {}
+                    });
+                    el.removeAttribute('data-processed-text');
+                } catch (e) {}
+            };
+
+            const repairFBTopSearchDropdownOnceV15 = () => {
+                try {
+                    const candidates = document.querySelectorAll([
+                        'li[role="row"]',
+                        'li[role="row"] *',
+                        'a[aria-describedby]',
+                        'a[href*="__epa__=SEARCH_BOX"]',
+                        'a[href*="/search/top/"]'
+                    ].join(','));
+
+                    candidates.forEach((el) => {
+                        try {
+                            if (!isTopLeftSearchDropdownElement(el)) return;
+                            const row = el.closest && el.closest('li[role="row"]');
+                            if (row) removeFBCleanerHardHideFromNativeDropdownNodeV15(row);
+                            removeFBCleanerHardHideFromNativeDropdownNodeV15(el);
+                        } catch (e) {}
+                    });
+                } catch (e) {}
+            };
+
+            const schedulePassiveNativeDropdownRepairV15 = () => {
+                // v16: intentionally no-op.
+                // The old v15 repair walked every dropdown descendant and removed inline width/height/display,
+                // which broke Facebook's native row layout into avatars/black squares. Protection now happens by
+                // exempting the native search surface from scanners before they touch it.
+                try { refreshFBNativeTopSearchHandoffV15(); } catch (e) {}
+            };
+
+            const maybeNativeSearchInteractionV15 = (event) => {
+                try {
+                    const target = event && event.target;
+                    if (!target || !target.closest) return;
+                    if (
+                        target.closest('input[placeholder*="Hae Facebookista" i], input[placeholder*="Search Facebook" i], [role="searchbox"], [role="combobox"]') ||
+                        target.closest('[role="banner"] form[role="search"], [role="banner"] div[role="search"]') ||
+                        isTopLeftSearchDropdownElement(target)
+                    ) {
+                        markFBNativeTopSearchActiveV15();
+                    }
+                } catch (e) {}
+            };
+
+            onWindowEvent(document, 'focusin', maybeNativeSearchInteractionV15, true);
+            onWindowEvent(document, 'pointerdown', maybeNativeSearchInteractionV15, true);
+            onWindowEvent(document, 'click', maybeNativeSearchInteractionV15, true);
+            onWindowEvent(document, 'input', maybeNativeSearchInteractionV15, true);
+            onWindowEvent(document, 'keydown', maybeNativeSearchInteractionV15, true);
+            onWindowEvent(document, 'focusout', () => addTimeout(refreshFBNativeTopSearchHandoffV15, 250), true);
+            onWindowEvent(document, 'keyup', () => addTimeout(refreshFBNativeTopSearchHandoffV15, 250), true);
+            refreshFBNativeTopSearchHandoffV15();
+        } catch (e) {
+            console.log('[FBCleaner] Native search dropdown v15 handoff error: ' + e.message);
+        }
+    };
     
     // Function to get regex blocked words (maintain function signature)
     const getRegexBlockedWords = () => regexBlockedWords;
@@ -1888,6 +2918,15 @@ function collapseElementHard(el) {
         '[data-pagelet="ProfileHeader"]',
         '[data-pagelet="PageHeader"]',
         '[data-pagelet="ProfileActions"]',
+        'h1',
+        'svg[role="img"][style*="168px"]',
+        'a[aria-label][href*="/photo/?fbid="]',
+        'a[href*="/friends_all/"]',
+        'a[href*="/friends_mutual/"]',
+        '[role="button"][aria-label="Kaverit"]',
+        '[role="button"][aria-label="Friends"]',
+        '[role="button"][aria-label="Lähetä viesti"]',
+        '[role="button"][aria-label="Message"]',
         '[aria-label="Profiilikuvan toiminnot"]',
         '[aria-label="Profile picture actions"]',
         '[aria-label="Muokkaa kansikuvaa"]',
@@ -2378,7 +3417,7 @@ function collapseElementHard(el) {
             let deletedCount = 0;
 
             elements.forEach(element => {
-                if (!element || isSafeElement(element) || isInsideComment(element)) return;
+                if (!element || isSafeElement(element) || isTopLeftSearchDropdownElement(element) || isInsideComment(element)) return;
 
                 const values = [
                     element.src || '',
@@ -2439,6 +3478,9 @@ function collapseElementHard(el) {
         try {
             devLog('Scanning entire posts for banned content');
             const postSelectors = [
+                'div[data-pagelet^="FeedUnit_"]',
+                'div[data-pagelet^="TimelineFeedUnit_"]',
+                '[role="feed"] [role="article"]',
                 '[role="article"]',
                 '[role="article"].x1lliihq',
                 '[role="article"] .x1yztbdb',
@@ -2450,11 +3492,12 @@ function collapseElementHard(el) {
             const seenPosts = new WeakSet();
             postSelectors.forEach(selector => {
                 document.querySelectorAll(selector).forEach(candidate => {
-                    const post = (candidate.closest && candidate.closest('[role="article"]')) || candidate;
+                    const post = getFBFeedUnitWrapperV23(candidate) || (candidate.closest && candidate.closest('[role="article"]')) || candidate;
                     if (!post || seenPosts.has(post)) return;
                     seenPosts.add(post);
                     if (post.classList.contains('fb-post-processed')) return;
                     if (isProfileHeaderProtectedArea(post)) return;
+                    if (isTopLeftSearchDropdownElement(post)) return;
                     post.classList.add('fb-post-processed');
 
                     // Fast path: light DOM text first. Only ask Shadow DOM if the light DOM did not already decide.
@@ -2464,7 +3507,12 @@ function collapseElementHard(el) {
                     // Check against all blocking criteria
                     let isBanned = false;
 
-                    if (matchesAnyActiveRegex(fullPostText)) {
+                    if (hasRestrictedFeedCTAOrReelsV23(post)) {
+                        isBanned = true;
+                        devLog(`🚫 Post banned by v23 home-feed CTA/Reels structure`);
+                    }
+
+                    if (!isBanned && matchesAnyActiveRegex(fullPostText)) {
                         isBanned = true;
                         devLog(`🚫 Post banned by active regex in light content`);
                     }
@@ -2514,6 +3562,10 @@ function collapseElementHard(el) {
                     }
 
                     if (isBanned) {
+                        post.classList.remove('fb-feed-unit-approved', 'fb-post-approved');
+                        post.querySelectorAll?.('[role="article"]').forEach(article => {
+                            try { article.classList.remove('fb-post-approved'); } catch (e) {}
+                        });
                         post.classList.add('fb-post-banned');
                         post.style.setProperty('display', 'none', 'important');
                         post.style.setProperty('visibility', 'hidden', 'important');
@@ -2527,7 +3579,8 @@ function collapseElementHard(el) {
                         post.style.setProperty('overflow', 'hidden', 'important');
                         bannedCount++;
                     } else {
-                        post.classList.add('fb-post-approved');
+                        post.classList.add('fb-post-approved', 'fb-feed-unit-approved');
+                        markFBFeedUnitApprovedV23(post);
                         rememberApprovedPostForBrowsing(post);
                     }
                 });
@@ -2572,7 +3625,7 @@ function collapseElementHard(el) {
             let removedCount = 0;
             document.querySelectorAll(selectors.join(','))
                 .forEach(element => {
-                    if (isSafeElement(element)) return;
+                    if (isSafeElement(element) || isTopLeftSearchDropdownElement(element)) return;
                     if (isProfileHeaderProtectedArea(element)) return;
                     if (__fbRestrictedWordsChecked.has(element)) return;
                     __fbRestrictedWordsChecked.add(element);
@@ -2630,8 +3683,10 @@ function collapseElementHard(el) {
     // ENHANCED: Instant search result filtering with comprehensive blocking
     const processSearchResults = () => {
         try {
+            updateFBSearchPageClass();
+
             if (!isFBSearchPagePath()) return;
-            devLog('Processing search results with instant filtering');
+
             const searchSelectors = [
                 'li[role="row"]',
                 'a[aria-describedby]',
@@ -2642,52 +3697,34 @@ function collapseElementHard(el) {
                 'a[href*="facebook.com/"][aria-describedby]'
             ];
 
-            let processedCount = 0;
             searchSelectors.forEach(selector => {
-                document.querySelectorAll(selector + ':not(.fb-search-processed)').forEach(result => {
+                document.querySelectorAll(selector).forEach(result => {
+                    // 25.1.5 behavior: do not process top/header/nav search UI.
+                    // This is the key part for the native recent-search dropdown.
+                    if (result.closest('[role="banner"]') || result.closest('[role="navigation"]') || isTopLeftSearchDropdownElement(result)) return;
+                    if (isSafeElement(result)) return;
+
+                    const textContent = (result.textContent || result.innerText || '').toLowerCase();
+                    const processedText = result.getAttribute('data-processed-text');
+
+                    if (result.classList.contains('fb-search-processed') && processedText === textContent) return;
+
                     result.classList.add('fb-search-processed');
-                    
-                    // Extract comprehensive content from search result, including text in open Shadow DOM.
-                    const textContent = collectLightAndOpenShadowTextScoped(
-                        result,
-                        (result.textContent || result.innerText || ''),
-                        {
-                            maxHostSearchNodes: 140,
-                            maxShadowHosts: 8,
-                            maxTextNodes: 80,
-                            maxShadowNodes: 50,
-                            maxChars: 8000,
-                            maxDepth: 1,
-                            includeAttributes: false
-                        }
-                    );
+                    result.setAttribute('data-processed-text', textContent);
+
                     const href = result.href || '';
                     const ariaLabel = result.getAttribute('aria-label') || '';
                     const dataHover = result.getAttribute('data-hovercard') || '';
-                    
-                    // Check against all blocking criteria
+                    const signal = `${textContent} ${ariaLabel} ${href} ${dataHover}`;
+
                     let isBlocked = false;
-                    
-                    // Check active regex blocklists
-                    if (matchesAnyActiveRegex(textContent + ' ' + ariaLabel + ' ' + href)) {
-                        isBlocked = true;
-                        devLog(`🚫 Search blocked by active regex: "${textContent.substring(0, 30)}..."`);
-                    }
-                    
-                    // Check blocked FBIDs in href or data attributes
-                    if (!isBlocked && matchesAnyBlockedFbid(href + ' ' + dataHover)) {
-                        isBlocked = true;
-                        devLog(`🚫 Search blocked by FBID: "${textContent.substring(0, 30)}..."`);
-                    }
-                    
-                    // Check blocked URLs
-                    if (!isBlocked && matchesAnyBlockedUrl(href)) {
-                        isBlocked = true;
-                        devLog(`🚫 Search blocked by URL pattern: "${textContent.substring(0, 30)}..."`);
-                    }
-                    
+
+                    if (matchesAnyActiveRegex(signal)) isBlocked = true;
+                    if (!isBlocked && matchesAnyBlockedFbid(`${href} ${dataHover}`)) isBlocked = true;
+                    if (!isBlocked && matchesAnyBlockedUrl(href)) isBlocked = true;
+                    if (!isBlocked && matchesBlockedUrlCandidates(href)) isBlocked = true;
+
                     if (isBlocked) {
-                        // Apply instant hiding and permanent banning
                         result.style.setProperty('display', 'none', 'important');
                         result.style.setProperty('visibility', 'hidden', 'important');
                         result.style.setProperty('opacity', '0', 'important');
@@ -2696,32 +3733,36 @@ function collapseElementHard(el) {
                         result.style.setProperty('left', '-9999px', 'important');
                         result.style.setProperty('top', '-9999px', 'important');
                         result.classList.add('fb-search-banned');
-                        
-                        // Also hide parent containers
+                        result.classList.remove('fb-search-approved');
+
                         const parentLi = result.closest('li');
                         if (parentLi && parentLi !== result) {
                             parentLi.style.setProperty('display', 'none', 'important');
                             parentLi.style.setProperty('visibility', 'hidden', 'important');
                             parentLi.classList.add('fb-search-banned');
+                            parentLi.classList.remove('fb-search-approved');
                         }
                     } else {
-                        // Approve and show the search result
                         result.classList.add('fb-search-approved');
+                        result.classList.remove('fb-search-banned');
                         result.style.removeProperty('display');
                         result.style.removeProperty('visibility');
                         result.style.removeProperty('opacity');
                         result.style.removeProperty('pointer-events');
                         result.style.removeProperty('position');
                         result.style.removeProperty('left');
+                        result.style.removeProperty('top');
+
+                        const parentLi = result.closest('li');
+                        if (parentLi && parentLi !== result) {
+                            parentLi.classList.add('fb-search-approved');
+                            parentLi.classList.remove('fb-search-banned');
+                            parentLi.style.removeProperty('display');
+                            parentLi.style.removeProperty('visibility');
+                        }
                     }
-                    
-                    processedCount++;
                 });
             });
-            
-            if (processedCount > 0) {
-                devLog(`Processed ${processedCount} search results with instant filtering`);
-            }
         } catch (e) {
             console.log('Error processing search results: ' + e.message);
         }
@@ -2773,7 +3814,8 @@ function collapseElementHard(el) {
                             includeAttributes: true
                         }
                     );
-                    if (btnText === 'liity' || btnText === 'seuraa') {
+                    const normalizedBtnText = String(btnText || '').replace(/\s+/g, ' ').trim().toLowerCase();
+                    if (FB_RESTRICTED_FEED_CTA_TEXT_V23.has(normalizedBtnText)) {
                         shouldRemove = true;
                     }
                 }
@@ -2813,16 +3855,21 @@ function collapseElementHard(el) {
                     }
                 }
                 
+                if (!shouldRemove && hasRestrictedFeedCTAOrReelsV23(post)) {
+                    shouldRemove = true;
+                }
+
                 if (shouldRemove) {
-                    // Hide immediately before removing for better performance
-                    if (!post.classList.contains('fb-post-banned') && !post.classList.contains('fb-element-banned')) {
-                        post.classList.add('fb-element-banned');
-                        post.style.display = 'none';
-                        post.style.visibility = 'hidden';
+                    // Hide/remove the whole FeedUnit wrapper when possible so blank shells do not remain.
+                    const targetPost = getFBFeedUnitWrapperV23(post) || post;
+                    if (!targetPost.classList.contains('fb-post-banned') && !targetPost.classList.contains('fb-element-banned')) {
+                        targetPost.classList.remove('fb-feed-unit-approved', 'fb-post-approved');
+                        targetPost.classList.add('fb-element-banned');
+                        targetPost.style.display = 'none';
+                        targetPost.style.visibility = 'hidden';
                         
-                        // Use a more reliable removal approach
-                        const parent = post.parentNode;
-                        if (parent) parent.removeChild(post);
+                        const parent = targetPost.parentNode;
+                        if (parent) parent.removeChild(targetPost);
                         removedPostCount++;
                     }
                 }
@@ -2830,7 +3877,7 @@ function collapseElementHard(el) {
             
             // Look for non-article restricted content (like Reels sections)
             // Use more specific selectors and skip already processed elements
-            const headerSelectors = 'h2.html-h2, div.html-h2.xdj266r';
+            const headerSelectors = 'h2.html-h2, h3.html-h3, h2, h3, div.html-h2.xdj266r, [aria-label="Kelat"][role="region"], [aria-label="Reels"][role="region"]';
             let removedHeaderCount = 0;
             document.querySelectorAll(headerSelectors).forEach(header => {
                 // Skip if already processed or in navigation
@@ -2872,6 +3919,7 @@ function collapseElementHard(el) {
                     let container = null;
                     
                     // Try these containers in order
+                    if (!container) container = getFBFeedUnitWrapperV23(header);
                     if (!container) container = header.closest('[role="article"]');
                     if (!container) container = header.closest('div.x1lliihq');
                     if (!container) container = header.closest('div.x1ye3gou');
@@ -2927,6 +3975,7 @@ function collapseElementHard(el) {
 
             // Observe only essential changes
             const observer = trackObserver(new MutationObserver((mutations) => {
+                if (typeof refreshFBNativeTopSearchHandoffV15 === 'function') refreshFBNativeTopSearchHandoffV15();
                 let shouldProcess = false;
                 
                 // Check if any mutation is relevant
@@ -2962,6 +4011,7 @@ function collapseElementHard(el) {
                 
                 // Only process if relevant mutations were found
                 if (shouldProcess) {
+                    scrubRestrictedFeedUnitsV23();
                     throttledDeletePhrases();
                 }
             }));
@@ -2996,9 +4046,9 @@ function collapseElementHard(el) {
                 'div[aria-label="Ihmisiä, jotka saatat tuntea"]',
                 'a[href="https://www.facebook.com/friends/suggestions/"]',
                 'div[aria-label="Näytä suosituksia"]',
-                'a[aria-label="Kaverit"]',
-                'div[aria-label="Kaverit"]',
                 'a[href="https://www.facebook.com/friends/"]',
+                'a[aria-label="Kaverit"][href*="/friends"]',
+                'a[aria-label="Friends"][href*="/friends"]',
                 'a[href="/friends/"]',
                 'div[aria-label="Kaverit"] > span.x1lliihq',
                 'li.x1iyjqo2.xmlsiyf.x1hxoosp.x1l38jg0.x1awlv9s.x1i64zmx.x1gz44f',
@@ -3008,7 +4058,6 @@ function collapseElementHard(el) {
                 'div.x1i10hfl:nth-child(13) > div:nth-child(2)',
                 'div.x1i10hfl:nth-child(13) > div:nth-child(3)',
                 '.x6s0dn4.x1obq294.x5a5i1n:has(.x1gslohp > span:empty)',
-                'li.x1c1uobl.x18d9i69.xyri2b.xexx8yu.x1lziwak.xat24cr.x14z9mp.xdj266r.html-li:nth-of-type(2)',
                 'svg[aria-label="Meta AI:n profiilikuva"]',
                 'svg[aria-label*="Meta AI profile"]',
                 'div.x1gefphp.xf7dkkf.x1l90r2v.xv54qhq.xyamay9.x1e56ztr.x78zum5.x9f619.x1olyfxc.x15x8krk.xde0f50.x5a5i1n.x1obq294.x6s0dn4:nth-of-type(6)',
@@ -3032,6 +4081,7 @@ function collapseElementHard(el) {
             let deletedCount = 0;
             document.querySelectorAll(selectors.join(','))
                 .forEach(element => {
+                    if (isTopLeftSearchDropdownElement(element)) return;
                     if (!element.classList.contains('fb-element-banned')) {
                         element.classList.add('fb-element-banned');
                         element.style.setProperty('display', 'none', 'important');
@@ -3131,15 +4181,19 @@ function collapseElementHard(el) {
             const supportedUrls = [
                 "https://www.facebook.com/four3four",
                 "https://www.facebook.com/ItsStillRealToUsDammit",
-                // Add more URLs here!
+                "https://www.facebook.com/prowrestlingworld",
+                "https://www.facebook.com/weirdimagesworthseeing"
             ];
 
-            // Only inject if we're on a supported page
+            // Only inject on supported heavy pages; remove the sheet after SPA navigation away.
             if (!isSupportedFacebookPage(currentUrl, supportedUrls)) {
+                try {
+                    const oldStyle = document.getElementById('fb-specific-url-prehide-style');
+                    if (oldStyle) oldStyle.remove();
+                } catch (e) {}
                 return;
             }
 
-            console.log('Current URL: ' + currentUrl);
             devLog('Injecting specific URL prehide CSS for supported pages');
             let style = document.getElementById('fb-specific-url-prehide-style');
             if (!style) {
@@ -3213,147 +4267,151 @@ function collapseElementHard(el) {
 
 // FIXED: Function to delete elements for specific URLs - now with proper URL restriction
 const deleteSelectorsForSpecificUrl = () => {
-    try {
-        const currentUrl = window.location.href;
-        const supportedUrls = [
+        try {
+            const currentUrl = window.location.href;
+            const supportedUrls = [
                 "https://www.facebook.com/four3four",
                 "https://www.facebook.com/ItsStillRealToUsDammit",
                 "https://www.facebook.com/prowrestlingworld",
                 "https://www.facebook.com/weirdimagesworthseeing"
-        ];
+            ];
+            
+            const isSupported = supportedUrls.some(pageUrl => {
+                try {
+                    const url = new URL(currentUrl);
+                    const page = new URL(pageUrl);
+                    if (url.host !== page.host) return false;
+                    const basePath = page.pathname.replace(/\/+$/, '');
+                    const currentPath = url.pathname.replace(/\/+$/, '');
+                    return currentPath === basePath || currentPath.startsWith(basePath + '/');
+                } catch (e) { return false; }
+            });
+            
+            if (!isSupported) return;
 
-        // FIXED: Only run if we're actually on one of the supported pages
-        if (!isSupportedFacebookPage(currentUrl, supportedUrls)) {
-            return; // Exit early if not on supported page
-        }
+            // 25.1.5-style safe hiding, kept local so no other redirect/block functions are touched.
+            const isSpecificUrlDangerousToHide = (el) => {
+                if (!el) return true;
+                if (el === document.body || el === document.documentElement) return true;
 
-        devLog('Applying selectors for supported URLs');
-        const selectorsToDelete = [
-            '.x1120s5i.x1n2onr6.x10wlt62.x6ikm8r.x1lliihq',
-            'div.x1n2onr6.x1ja2u2z.x1jx94hy.xw5cjc7.x1dmpuos.x1vsv7so.xau1kf4.x9f619.xh8yej3.x6ikm8r.x10wlt62.xquyuld:has(.x1k70j0n.xzueoph)',
-            '.x1cnzs8.xjkvuk6.x193iq5w.x2lah0s.xdt5ytf.x78zum5.x9f619.x1ja2u2z.x1n2onr6',
-            '.xifccgj.x4cne27.xbmpl8g.xykv574.xyamay9.x1swvt13.x1pi30zi.x1q0g3np.xozqiw3.x1qjc9v5.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619',
-            '.x7wzq59 > div > div > div > .x1yztbdb > .xh8yej3.x1n2onr6.xl56j7k.xdt5ytf.x3nfvp2.x9f619.x1a2a7pz.x1lku1pv.x87ps6o.x13rtm0m.x1e5q0jg.x3x9cwd.x1o1ewxj.xggy1nq.x1hl2dhg.x16tdsg8.xkhd6sd.x18d9i69.x4uap5.xexx8yu.x1mh8g0r.xat24cr.x11i5rnm.xdj266r.html-div > .xquyuld.x10wlt62.x6ikm8r.xh8yej3.x9f61',
-            '.xi81zsa.xo1l8bm.x1sibtaa.x1nxh6w3.x676frb.x4zkp8e.x1943h6x.x1fgarty.x1cpjm7i.x1gmr53x.xhkezso.x1s928wv.x1lliihq.x1xmvt09.x1vvkbs.x13faqbe.xeuugli.x193iq5w > .xt0psk2',
-            'footer > .xi81zsa.xo1l8bm.x1sibtaa.x1nxh6w3.x676frb.x4zkp8e.x1943h6x.x1fgarty.x1cpjm7i.x1gmr53x.xhkezso.x1s928wv.x1lliihq.x1xmvt09.x1vvkbs.x13faqbe.xeuugli.x193iq5w',
-            '.x1xzczws.x7ep2pv.x1d1medc.xnp8db0.x1i64zmx.x1e56ztr.x1emribx.x1xmf6yo.xjl7jj.xs83m0k.xeuugli.x1ja2u2z.x1n2onr6.x9f619',
-            '.x1yrsyyn.x10b6aqq.x16hj40l.xsyo7zv.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .xifccgj.x4cne27.xdt5ytf.x78zum5 > .x1k70j0n.xzueoph > .xeuug',
-            '.x1yrsyyn.x10b6aqq.x16hj40l.xsyo7zv.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .x1k70j0n.xzueoph > .xeuug',
-            '.x1yrsyyn.x10b6aqq.x16hj40l.xsyo7zv.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5 > .x1k70j0n.xzueoph',
-            '.x1yrsyyn.x10b6aqq.x16hj40l.xsyo7zv.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619',
-            '.xifccgj.x4cne27.xbmpl8g.xykv574.x1y1aw1k.xwib8y2.x1ye3gou.xn6708d.x1q0g3np.xozqiw3.x6s0dn4.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619',
-            '.x1y1aw1k.x150jy0e.x1e558r4.x193iq5w.x2lah0s.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619',
-            '.xquyuld.x10wlt62.x6ikm8r.xh8yej3.x9f619.xt3gfkd.xu5ydu1.xdney7k.x1qpq9i9.x1jx94hy.x1ja2u2z.x1n2onr6.x26u7qi.x178xt8z.xm81vs4.xso031l.xy80clv.xev17xk.x1xmf6yo',
-            '.xquyuld.x10wlt62.x6ikm8r.xh8yej3.x9f619.xt3gfkd.xu5ydu1.xdney7k.x1qpq9i9.x1jx94hy.x1ja2u2z.x1n2onr6 > .x193iq5w.x2lah0s.xdt5ytf.x78zum5.x9f619.x1ja2u2z.x1n2onr6 > .x2lwn1j.x1iyjqo2.x',
-            '.xquyuld.x10wlt62.x6ikm8r.xh8yej3.x9f619.xt3gfkd.xu5ydu1.xdney7k.x1qpq9i9.x1jx94hy.x1ja2u2z.x1n2onr6 > .x193iq5w.x2lah0s.xdt5ytf.x78zum5.x9f619.x1ja2u2z.x1n2onr6',
-            '.x1a2a7pz.x1ja2u2z.xh8yej3.x1n2onr6.x10wlt62.x6ikm8r.x1itg65n',
-            '.xu06nn8.x1jl3cmp.x2r5gy4.xnpuxes.x1hc1fzr.x879a55.x1q0g3np.xozqiw3.x1qjc9v5.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619 > .xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619',
-            '.x1x99re3.x1jdnuiz.x1r1pt67.x1qhmfi1.x9f619.xm0m39n.x1qhh985.xcfux6l.x972fbf.x10w94by.x1qhh985.x14e42zd.x1ypdohk.xe8uvvx.xdj266r.x14z9mp.xat24cr.x1lziwak.xexx8yu.xyri2b.x18d9i69.x1c1uobl.x16tdsg8.xat24cr.x1mh8g0r.x6s0dn4.x78zum5.xdt5ytf.xjy6m2a.xl56j7k',
-            '.xu06nn8.x1jl3cmp.x2r5gy4.xnpuxes.x1hc1fzr.xh8yej3.xdsb8wn.x10l6tqk.x5yr21d.x1q0g3np.xozqiw3.x1qjc9v5.x1qughib.x2lah0s.x78zum5.x1ja2u2z.x9f619',
-            '.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .x1n2onr6.x10wlt62.x6ikm8r.x1ja2u2z.x9f619',
-            'div[aria-label="Photos"]',
-            '.xieb3on',
-            'div.x9f619.x1n2onr6.x1ja2u2z.xeuugli.xs83m0k.xjl7jj.x1xmf6yo.x1xegmmw.x1e56ztr.x13fj5qh.xnp8db0.x1d1medc.x7ep2pv.x1xzczws',
-            '*:contains("Suositeltu")',
-            '*:contains("Recommended")',
-            'footer .xi81zsa',
-            'div[style*="border-radius:max(0px, min(var(--card-corner-radius), calc((100vw - 4px - 100%) * 9999))) / var(--card-corner-radius)"]',
-            '.xh8yej3 > .xh8yej3.x1n2onr6.xl56j7k.xdt5ytf.x3nfvp2.x9f619.x1a2a7pz.x1lku1pv.x87ps6o.x13rtm0m.x1e5q0jg.x3x9cwd.x1o1ewxj.xggy1nq.x1hl2dhg.x16tdsg8.xkhd6sd.x18d9i69.x4uap5.xexx8yu.x1mh8g0r',
-		'h2.html-h2.xdj266r.x14z9mp.xat24cr.x1lziwak.xexx8yu.xyri2b.x18d9i69.x1c1uobl.x1vvkbs.x1heor9g.x1qlqyl8.x1pd3egz.x1a2a7pz.x193iq5w.xeuugli',
-        ];
+                try {
+                    if (el.matches && el.matches('header, nav, [role="banner"], [role="navigation"]')) return true;
+                    if (el.matches && el.matches('main, [role="main"], [role="feed"], #mount_0_0_fb, #globalContainer, #content')) return true;
 
-        let deletedCount = 0;
-        selectorsToDelete.forEach(selector => {
-            // Handle :has() manually
-            if (selector.includes(':has(')) {
-                const hasMatch = selector.match(/^(.*?):has\((.*?)\)$/);
-                if (hasMatch) {
-                    const baseSelector = hasMatch[1];
-                    const hasContent = hasMatch[2];
-                    document.querySelectorAll(baseSelector).forEach(element => {
-                        if (element.querySelector(hasContent) && !element.classList.contains('fb-element-banned')) {
-                            element.classList.add('fb-element-banned');
-                            element.style.setProperty('display', 'none', 'important');
-                            element.style.setProperty('visibility', 'hidden', 'important');
-                            element.style.setProperty('opacity', '0', 'important');
-                            element.style.setProperty('pointer-events', 'none', 'important');
-                            element.style.setProperty('position', 'absolute', 'important');
-                            element.style.setProperty('left', '-9999px', 'important');
-                            element.style.setProperty('top', '-9999px', 'important');
-                            element.style.setProperty('height', '0', 'important');
-                            element.style.setProperty('width', '0', 'important');
-                            element.style.setProperty('overflow', 'hidden', 'important');
-                            deletedCount++;
-                        }
+                    if (el.querySelector && el.querySelector('main, [role="main"], [role="feed"], [data-pagelet="ProfileTimeline"]')) return true;
+
+                    if (el.querySelector && (el.querySelector('div[aria-label="Luo julkaisu"]') || el.querySelector('div[aria-label="Create a post"]'))) return true;
+
+                    const txt = el.textContent || '';
+                    if (txt.includes('Mitä mietit') || txt.includes("What's on your mind")) return true;
+                } catch (e) {}
+
+                return false;
+            };
+
+            const isSpecificUrlSafeElement = (element) => {
+                if (!element || !element.closest) return false;
+
+                try {
+                    const elText = (element.textContent || '').toLowerCase();
+                    const elAria = (element.getAttribute('aria-label') || '').toLowerCase();
+
+                    // Keep the old exception behavior: Meta AI / unfriend-like targets must still be hideable.
+                    if (elText.includes('poista kavereista') || elText.includes('meta ai') || elAria.includes('meta ai')) {
+                        return false;
+                    }
+
+                    if (Array.isArray(safeSelectors)) {
+                        const isInsideSafe = safeSelectors.some(selector => {
+                            try { return element.closest(selector) !== null; }
+                            catch (e) { return false; }
+                        });
+                        if (isInsideSafe) return true;
+                    }
+
+                    // This is the important 25.1.5-style skeleton protection.
+                    if (element.hasAttribute('data-visualcompletion') && element.getAttribute('data-visualcompletion') === 'loading-state') return true;
+                    if (element.getAttribute('role') === 'progressbar') return true;
+                    if (element.querySelector && (element.querySelector('[data-visualcompletion="loading-state"]') || element.querySelector('[role="progressbar"]'))) return true;
+                } catch (e) {}
+
+                return false;
+            };
+
+            const safelyHideSpecificUrlElement = (element) => {
+                if (!element) return;
+                if (isSpecificUrlSafeElement(element)) return;
+                if (isSpecificUrlDangerousToHide(element)) return;
+
+                element.style.setProperty('display', 'none', 'important');
+                element.style.setProperty('visibility', 'hidden', 'important');
+                element.style.setProperty('opacity', '0', 'important');
+                element.style.setProperty('pointer-events', 'none', 'important');
+                element.style.setProperty('position', 'absolute', 'important');
+                element.style.setProperty('left', '-9999px', 'important');
+                element.style.setProperty('top', '-9999px', 'important');
+                element.style.setProperty('height', '0', 'important');
+                element.style.setProperty('width', '0', 'important');
+                element.style.setProperty('overflow', 'hidden', 'important');
+
+                try {
+                    if (!element.classList.contains('fb-element-banned')) element.classList.add('fb-element-banned');
+                } catch (e) {}
+            };
+
+
+            const selectorsToDelete = [
+                '.x1120s5i.x1n2onr6.x10wlt62.x6ikm8r.x1lliihq',
+                'div.x1n2onr6.x1ja2u2z.x1jx94hy.xw5cjc7.x1dmpuos.x1vsv7so.xau1kf4.x9f619.xh8yej3.x6ikm8r.x10wlt62.xquyuld:has(.x1k70j0n.xzueoph)',
+                '.x1cnzs8.xjkvuk6.x193iq5w.x2lah0s.xdt5ytf.x78zum5.x9f619.x1ja2u2z.x1n2onr6',
+                '.xifccgj.x4cne27.xbmpl8g.xykv574.xyamay9.x1swvt13.x1pi30zi.x1q0g3np.xozqiw3.x1qjc9v5.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619',
+                '.x7wzq59 > div > div > div > .x1yztbdb > .xh8yej3.x1n2onr6.xl56j7k.xdt5ytf.x3nfvp2.x9f619.x1a2a7pz.x1lku1pv.x87ps6o.x13rtm0m.x1e5q0jg.x3x9cwd.x1o1ewxj.xggy1nq.x1hl2dhg.x16tdsg8.xkhd6sd.x18d9i69.x4uap5.xexx8yu.x1mh8g0r.xat24cr.x11i5rnm.xdj266r.html-div > .xquyuld.x10wlt62.x6ikm8r.xh8yej3.x9f61',
+                '.xi81zsa.xo1l8bm.x1sibtaa.x1nxh6w3.x676frb.x4zkp8e.x1943h6x.x1fgarty.x1cpjm7i.x1gmr53x.xhkezso.x1s928wv.x1lliihq.x1xmvt09.x1vvkbs.x13faqbe.xeuugli.x193iq5w > .xt0psk2',
+                'footer > .xi81zsa.xo1l8bm.x1sibtaa.x1nxh6w3.x676frb.x4zkp8e.x1943h6x.x1fgarty.x1cpjm7i.x1gmr53x.xhkezso.x1s928wv.x1lliihq.x1xmvt09.x1vvkbs.x13faqbe.xeuugli.x193iq5w',
+                '.x1xzczws.x7ep2pv.x1d1medc.xnp8db0.x1i64zmx.x1e56ztr.x1emribx.x1xmf6yo.xjl7jj.xs83m0k.xeuugli.x1ja2u2z.x1n2onr6.x9f619',
+                '.x1yrsyyn.x10b6aqq.x16hj40l.xsyo7zv.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .xifccgj.x4cne27.xdt5ytf.x78zum5 > .x1k70j0n.xzueoph > .xeuug',
+                '.x1yrsyyn.x10b6aqq.x16hj40l.xsyo7zv.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .x1k70j0n.xzueoph > .xeuug',
+                '.x1yrsyyn.x10b6aqq.x16hj40l.xsyo7zv.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5 > .x1k70j0n.xzueoph',
+                '.x1yrsyyn.x10b6aqq.x16hj40l.xsyo7zv.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619',
+                '.xifccgj.x4cne27.xbmpl8g.xykv574.x1y1aw1k.xwib8y2.x1ye3gou.xn6708d.x1q0g3np.xozqiw3.x6s0dn4.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619',
+                '.x1y1aw1k.x150jy0e.x1e558r4.x193iq5w.x2lah0s.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619',
+                '.xquyuld.x10wlt62.x6ikm8r.xh8yej3.x9f619.xt3gfkd.xu5ydu1.xdney7k.x1qpq9i9.x1jx94hy.x1ja2u2z.x1n2onr6.x26u7qi.x178xt8z.xm81vs4.xso031l.xy80clv.xev17xk.x1xmf6yo',
+                '.xquyuld.x10wlt62.x6ikm8r.xh8yej3.x9f619.xt3gfkd.xu5ydu1.xdney7k.x1qpq9i9.x1jx94hy.x1ja2u2z.x1n2onr6 > .x193iq5w.x2lah0s.xdt5ytf.x78zum5.x9f619.x1ja2u2z.x1n2onr6 > .x2lwn1j.x1iyjqo2.x',
+                '.xquyuld.x10wlt62.x6ikm8r.xh8yej3.x9f619.xt3gfkd.xu5ydu1.xdney7k.x1qpq9i9.x1jx94hy.x1ja2u2z.x1n2onr6 > .x193iq5w.x2lah0s.xdt5ytf.x78zum5.x9f619.x1ja2u2z.x1n2onr6',
+                '.x1a2a7pz.x1ja2u2z.xh8yej3.x1n2onr6.x10wlt62.x6ikm8r.x1itg65n',
+                '.xu06nn8.x1jl3cmp.x2r5gy4.xnpuxes.x1hc1fzr.x879a55.x1q0g3np.xozqiw3.x1qjc9v5.x1qughib.x1n2onr6.x2lah0s.x78zum5.x1ja2u2z.x9f619 > .xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619',
+                '.x1x99re3.x1jdnuiz.x1r1pt67.x1qhmfi1.x9f619.xm0m39n.x1qhh985.xcfux6l.x972fbf.x10w94by.x1qhh985.x14e42zd.x1ypdohk.xe8uvvx.xdj266r.x14zmp.xat24cr.x1lziwak.xexx8yu.xyri2b.x18d9i69.x1c1uobl.x16tdsg8.xat24cr.x1mh8g0r.x6s0dn4.x78zum5.xdt5ytf.xjy6m2a.xl56j7k',
+                '.xu06nn8.x1jl3cmp.x2r5gy4.xnpuxes.x1hc1fzr.xh8yej3.xdsb8wn.x10l6tqk.x5yr21d.x1q0g3np.xozqiw3.x1qjc9v5.xqughib.x2lah0s.x78zum5.x1ja2u2z.x9f619',
+                '.xs83m0k.x1iyjqo2.x1r8uery.xeuugli.x193iq5w.xdt5ytf.x78zum5.x1ja2u2z.x1n2onr6.x9f619 > .x1n2onr6.x10wlt62.x6ikm8r.x1ja2u2z.x9f619',
+                'div[aria-label="Photos"]',
+                '.xieb3on',
+		        'footer .xi81zsa',
+		        'footer > .xi81zsa.xo1l8bm.x1sibtaa.x1nxh6w3.x676frb.x4zkp8e.x1943h6x.x1fgarty.x1cpjm7i.x1gmr53x.xhkezso.x1s928wv.x1lliihq.x1xmvt09.x1vvkbs.x13faqbe.xeuugli.x193iq5w',
+                'div.x9f619.x1n2onr6.x1ja2u2z.xeuugli.xs83m0k.xjl7jj.x1xmf6yo.x1xegmmw.x1e56ztr.x13fj5qh.xnp8db0.x1d1medc.x7ep2pv.x1xzczws',
+                'div[data-pagelet^="ProfileTilesFeed_"]:has(a[href*="/photos"])',
+                'h2:has(a[href*="/photos"])'
+            ];
+
+            selectorsToDelete.forEach(selector => {
+                if (selector.includes(':has(')) {
+                    const hasMatch = selector.match(/^(.*?):has\((.*?)\)$/);
+                    if (hasMatch) {
+                        document.querySelectorAll(hasMatch[1]).forEach(element => {
+                            if (isSpecificUrlSafeElement(element)) return; 
+                            if (element.querySelector(hasMatch[2]) && !element.classList.contains('fb-element-banned')) {
+                                safelyHideSpecificUrlElement(element);
+                            }
+                        });
+                    }
+                } else {
+                    document.querySelectorAll(selector).forEach(element => {
+                        if (isSpecificUrlSafeElement(element)) return; 
+                        safelyHideSpecificUrlElement(element);
                     });
                 }
-            }
-            // Handle :contains() manually
-            else if (selector.includes(':contains(')) {
-                const text = selector.match(/\:contains\("([^"]+)"\)/)?.[1];
-                if (text) {
-                    const walker = document.createTreeWalker(
-                        document.body,
-                        NodeFilter.SHOW_TEXT,
-                        null,
-                        false
-                    );
-                    let node;
-                    while (node = walker.nextNode()) {
-                        if (node.nodeValue.includes(text)) {
-                            let parent = node.parentElement;
-                            while (parent && parent !== document.body) {
-                                if (parent.classList.contains('x1yztbdb') ||
-                                    parent.classList.contains('html-div')) {
-                                    if (!parent.classList.contains('fb-element-banned')) {
-                                        parent.classList.add('fb-element-banned');
-                                        parent.style.setProperty('display', 'none', 'important');
-                                        parent.style.setProperty('visibility', 'hidden', 'important');
-                                        parent.style.setProperty('opacity', '0', 'important');
-                                        parent.style.setProperty('pointer-events', 'none', 'important');
-                                        parent.style.setProperty('position', 'absolute', 'important');
-                                        parent.style.setProperty('left', '-9999px', 'important');
-                                        parent.style.setProperty('top', '-9999px', 'important');
-                                        parent.style.setProperty('height', '0', 'important');
-                                        parent.style.setProperty('width', '0', 'important');
-                                        parent.style.setProperty('overflow', 'hidden', 'important');
-                                        deletedCount++;
-                                    }
-                                    break;
-                                }
-                                parent = parentElement;
-                            }
-                        }
-                    }
-                }
-            } else {
-                // Normal selectors
-                document.querySelectorAll(selector).forEach(element => {
-                    if (!element.classList.contains('fb-element-banned')) {
-                        element.classList.add('fb-element-banned');
-                        element.style.setProperty('display', 'none', 'important');
-                        element.style.setProperty('visibility', 'hidden', 'important');
-                        element.style.setProperty('opacity', '0', 'important');
-                        element.style.setProperty('pointer-events', 'none', 'important');
-                        element.style.setProperty('position', 'absolute', 'important');
-                        element.style.setProperty('left', '-9999px', 'important');
-                        element.style.setProperty('top', '-9999px', 'important');
-                        element.style.setProperty('height', '0', 'important');
-                        element.style.setProperty('width', '0', 'important');
-                        element.style.setProperty('overflow', 'hidden', 'important');
-                        deletedCount++;
-                    }
-                });
-            }
-        });
-
-        if (deletedCount > 0) {
-            devLog(`Deleted ${deletedCount} elements for supported URLs`);
-        }
-    } catch (e) {
-        console.log('Error deleting selectors for specific URLs: ' + e.message);
-    }
-};
+            });
+        } catch (e) {}
+    };
 
     // FIXED: Function to delete elements for specific profiles - now with proper URL restriction
     const deleteSelectorsForSpecificProfile = () => {
@@ -3435,24 +4493,32 @@ const deleteSelectorsForSpecificUrl = () => {
             ];
             
             let deletedCount = 0;
+            const hideProfileSpecificElement = (element) => {
+                if (!element || element.classList.contains('fb-element-banned')) return;
+                if (isSafeElement(element) || isTopLeftSearchDropdownElement(element)) return;
+                if (isProfileHeaderProtectedArea(element)) return;
+                if (typeof isDangerousToHide === 'function' && isDangerousToHide(element)) return;
+                collapseElementHard(element);
+                deletedCount++;
+            };
+
             selectorsToDelete.forEach(selector => {
-                document.querySelectorAll(selector)
-                    .forEach(element => {
-                        if (!element.classList.contains('fb-element-banned')) {
-                            element.classList.add('fb-element-banned');
-                            element.style.setProperty('display', 'none', 'important');
-                            element.style.setProperty('visibility', 'hidden', 'important');
-                            element.style.setProperty('opacity', '0', 'important');
-                            element.style.setProperty('pointer-events', 'none', 'important');
-                            element.style.setProperty('position', 'absolute', 'important');
-                            element.style.setProperty('left', '-9999px', 'important');
-                            element.style.setProperty('top', '-9999px', 'important');
-                            element.style.setProperty('height', '0', 'important');
-                            element.style.setProperty('width', '0', 'important');
-                            element.style.setProperty('overflow', 'hidden', 'important');
-                            deletedCount++;
-                        }
-                    });
+                try {
+                    const containsMatch = selector.match(/^(.*?):contains\("(.*?)"\)$/);
+                    if (containsMatch) {
+                        const tag = containsMatch[1].trim().toLowerCase();
+                        const needle = containsMatch[2];
+                        const candidates = Array.from(document.querySelectorAll(tag)).slice(0, 120);
+                        candidates.forEach(element => {
+                            if ((element.textContent || '').includes(needle)) hideProfileSpecificElement(element);
+                        });
+                        return;
+                    }
+
+                    document.querySelectorAll(selector).forEach(hideProfileSpecificElement);
+                } catch (e) {
+                    // Selector drift is normal on Facebook. Skip broken selectors instead of aborting the whole pass.
+                }
             });
             
             if (deletedCount > 0) {
@@ -3764,9 +4830,19 @@ const deleteSelectorsForPersonalProfile = () => {
             const throttledRunAllFilters = createThrottle(() => runAllFilters(), 200);
 
             const observer = trackObserver(new MutationObserver((mutations) => {
-                // Check for search-related changes first for instant processing
+                if (typeof refreshFBNativeTopSearchHandoffV15 === 'function') refreshFBNativeTopSearchHandoffV15();
+
+                // Check for search/feed-related changes first for instant processing
                 let hasSearchChanges = false;
+                let hasHomeFeedUnitChanges = false;
                 mutations.forEach(mutation => {
+                    if (mutation.target && mutation.target.closest && (
+                        mutation.target.closest('div[data-pagelet^="FeedUnit_"], div[data-pagelet^="TimelineFeedUnit_"], [role="feed"], [role="feed"] [role="article"]') ||
+                        mutation.target.getAttribute?.('role') === 'feed'
+                    )) {
+                        hasHomeFeedUnitChanges = true;
+                    }
+
                     mutation.addedNodes && mutation.addedNodes.forEach(node => {
                         if (node.nodeType === 1 && node.matches && (
                             node.matches('li[role="row"]') ||
@@ -3776,12 +4852,26 @@ const deleteSelectorsForPersonalProfile = () => {
                         )) {
                             hasSearchChanges = true;
                         }
+
+                        if (node.nodeType === 1 && (
+                            (node.matches && node.matches('div[data-pagelet^="FeedUnit_"], div[data-pagelet^="TimelineFeedUnit_"], [role="feed"] [role="article"], [role="article"]')) ||
+                            (node.querySelector && node.querySelector('div[data-pagelet^="FeedUnit_"], div[data-pagelet^="TimelineFeedUnit_"], [role="feed"] [role="article"], [role="article"], [aria-label="Kelat"][role="region"], [aria-label="Reels"][role="region"], a[href^="/reel/"]'))
+                        )) {
+                            hasHomeFeedUnitChanges = true;
+                        }
                     });
                 });
 
                 // Process search results immediately if detected
                 if (hasSearchChanges) {
                     processSearchResults();
+                }
+
+                // Home feed FeedUnits are softgated; approve/ban them without waiting for the 650ms heavy cadence.
+                if (hasHomeFeedUnitChanges) {
+                    updateFBHomeFeedGateClassV23();
+                    scrubRestrictedFeedUnitsV23();
+                    scanAndBanEntirePosts();
                 }
 
                 // Then run other filtering functions (throttled)
@@ -3803,30 +4893,69 @@ const deleteSelectorsForPersonalProfile = () => {
     // Targeted friends/contact card cleanup. This does NOT approve/hide feed posts.
     const scrubBlockedFriendAndContactCards = () => {
         try {
+            refreshAccountScopedFilters();
+
             const optionSelector = '[aria-label*="Lisää vaihtoehtoja kaverille"], [aria-label*="More options for friend"], [aria-label*="More options for"]';
+            // v22: Current friends-list cards may be x78zum5/xdt5ytf/x12upk82 without xod5an3.
+            // Keep this selector tight to profile-link cards; safety checks below prevent profile-header/main wrappers from being used as cards.
+            const modernProfileCardSelector = 'div.x78zum5.xdt5ytf.x12upk82:has(a[role="link"][href*="facebook.com"], a[data-fbcleaner-urlsig*="facebook.com"])';
 
             const collectSignals = (element) => {
                 const chunks = [];
-                const push = (value) => { if (value) chunks.push(String(value)); };
-                push(element.textContent || element.innerText || '');
-                push(element.getAttribute && element.getAttribute('aria-label'));
-                push(element.getAttribute && element.getAttribute('title'));
-                push(element.getAttribute && element.getAttribute('data-hovercard'));
-                push(element.getAttribute && element.getAttribute('data-profileid'));
-                push(element.getAttribute && element.getAttribute('data-fbid'));
-                push(element.getAttribute && element.getAttribute('data-store'));
-                if (element.href) push(element.href);
+                const push = (value) => {
+                    if (value !== null && value !== undefined && value !== '') chunks.push(String(value));
+                };
 
-                element.querySelectorAll && element.querySelectorAll('a[href], img[alt], [aria-label], [title], [data-hovercard], [data-profileid], [data-fbid], [data-store]').forEach((child) => {
-                    push(child.href);
-                    push(child.getAttribute('alt'));
-                    push(child.getAttribute('aria-label'));
-                    push(child.getAttribute('title'));
-                    push(child.getAttribute('data-hovercard'));
-                    push(child.getAttribute('data-profileid'));
-                    push(child.getAttribute('data-fbid'));
-                    push(child.getAttribute('data-store'));
-                });
+                if (!element) return '';
+
+                push(element.textContent || element.innerText || '');
+                if (element.getAttribute) {
+                    [
+                        'aria-label', 'title', 'alt', 'href', 'src',
+                        'data-hovercard', 'data-hovercard-prefer-more-content-show',
+                        'data-profileid', 'data-profile-id',
+                        'data-pageid', 'data-page-id',
+                        'data-fbid', 'data-userid', 'data-ownerid',
+                        'data-store', 'data-ft',
+                        'data-fbcleaner-urlsig'
+                    ].forEach(attr => push(element.getAttribute(attr)));
+                }
+                if (element.href) push(element.href);
+                if (element.src) push(element.src);
+
+                if (element.querySelectorAll) {
+                    element.querySelectorAll([
+                        'a[href]',
+                        'img[src]',
+                        'img[alt]',
+                        '[aria-label]',
+                        '[title]',
+                        '[data-hovercard]',
+                        '[data-profileid]',
+                        '[data-profile-id]',
+                        '[data-pageid]',
+                        '[data-page-id]',
+                        '[data-fbid]',
+                        '[data-userid]',
+                        '[data-ownerid]',
+                        '[data-store]',
+                        '[data-ft]',
+                        '[data-fbcleaner-urlsig]'
+                    ].join(',')).forEach((child) => {
+                        push(child.textContent || '');
+                        push(child.href);
+                        push(child.src);
+                        [
+                            'href', 'src', 'alt', 'aria-label', 'title',
+                            'data-hovercard', 'data-hovercard-prefer-more-content-show',
+                            'data-profileid', 'data-profile-id',
+                            'data-pageid', 'data-page-id',
+                            'data-fbid', 'data-userid', 'data-ownerid',
+                            'data-store', 'data-ft',
+                            'data-fbcleaner-urlsig'
+                        ].forEach(attr => push(child.getAttribute && child.getAttribute(attr)));
+                    });
+                }
 
                 return chunks.join(' ');
             };
@@ -3835,7 +4964,82 @@ const deleteSelectorsForPersonalProfile = () => {
                 return matchesAnyActiveRegex(signal) || matchesAnyBlockedFbid(signal) || matchesAnyBlockedUrl(signal);
             };
 
+            // v21: Friends list pages are not just /Haukkis/friends*.
+            // Facebook renders /<profile>/friends_all, /friends_mutual, etc. with slightly different card shells,
+            // so we detect the surface by URL and scan profile links/cards generically.
+            const isAnyFriendsListSurfaceV21 = () => {
+                try {
+                    const path = (location.pathname || '/').toLowerCase();
+                    const href = (location.href || '').toLowerCase();
+                    return (
+                        /\/friends(?:\/|$)/i.test(path) ||
+                        /\/friends_all(?:\/|$)/i.test(path) ||
+                        /\/friends_mutual(?:\/|$)/i.test(path) ||
+                        /\/friends_with_upcoming_birthdays(?:\/|$)/i.test(path) ||
+                        /\/friends(?:[/?#]|$)/i.test(href) ||
+                        /\/friends_all(?:[/?#]|$)/i.test(href) ||
+                        /\/friends_mutual(?:[/?#]|$)/i.test(href) ||
+                        /\/friends_with_upcoming_birthdays(?:[/?#]|$)/i.test(href)
+                    );
+                } catch (e) { return false; }
+            };
+
+            const isUnsafeToUseAsFriendCardV21 = (element) => {
+                try {
+                    if (!element || element === document.body || element === document.documentElement) return true;
+                    if (typeof isTopLeftSearchDropdownElement === 'function' && isTopLeftSearchDropdownElement(element)) return true;
+                    if (typeof isProbablyProfileHeaderSafeElementV20 === 'function' && isProbablyProfileHeaderSafeElementV20(element)) return true;
+                    if (element.matches && element.matches('main, [role="main"], [role="feed"], header, [role="banner"], nav, [role="navigation"], [data-pagelet="ProfileHeader"], [data-pagelet="ProfileActions"]')) return true;
+                    if (element.querySelector && element.querySelector('[data-pagelet="ProfileActions"], h1, [role="feed"], [role="main"]')) return true;
+                } catch (e) {}
+                return false;
+            };
+
+            const profileHrefLooksLikeFriendListPersonV21 = (href = '') => {
+                try {
+                    const raw = String(href || '');
+                    if (!raw) return false;
+                    const url = new URL(raw, location.origin);
+                    if (!/facebook\.com$/i.test(url.hostname) && !/\.facebook\.com$/i.test(url.hostname)) return false;
+                    const p = (url.pathname || '').toLowerCase();
+                    if (!p || p === '/' || p === '/home.php') return false;
+                    if (/\/(friends|friends_all|friends_mutual|friends_with_upcoming_birthdays|groups|pages|marketplace|messages|messenger|notifications|search|photo|photos|videos|watch|reel|stories|events|gaming|settings|help)(?:\/|$)/i.test(p)) return false;
+                    return true;
+                } catch (e) { return false; }
+            };
+
+            const findFriendListCardShellV21 = (element) => {
+                try {
+                    if (!element) return null;
+
+                    const modernCard = element.closest && element.closest(modernProfileCardSelector);
+                    if (modernCard && !isUnsafeToUseAsFriendCardV21(modernCard)) return modernCard;
+
+                    const explicitCard = element.closest && element.closest('[role="listitem"], li, [role="row"]');
+                    if (explicitCard && !isUnsafeToUseAsFriendCardV21(explicitCard)) return explicitCard;
+
+                    let current = element;
+                    let best = null;
+                    for (let depth = 0; depth < 12 && current && current !== document.body && current !== document.documentElement; depth++) {
+                        if (isUnsafeToUseAsFriendCardV21(current)) break;
+                        if (current.matches && current.matches('div, li, [role="listitem"], [role="row"]')) {
+                            const profileLinks = current.querySelectorAll ? Array.from(current.querySelectorAll('a[href]')).filter(a => profileHrefLooksLikeFriendListPersonV21(a.getAttribute('href') || a.href || '')).length : 0;
+                            const optionCount = current.querySelectorAll ? current.querySelectorAll(optionSelector).length : 0;
+                            if ((profileLinks >= 1 && profileLinks <= 3) || optionCount === 1) best = current;
+                            if (profileLinks > 6 || optionCount > 1) break;
+                        }
+                        current = current.parentElement;
+                    }
+                    return best || null;
+                } catch (e) { return null; }
+            };
+
             const findSingleFriendCardShell = (element) => {
+                if (!element) return null;
+
+                const modernCard = element.closest && element.closest(modernProfileCardSelector);
+                if (modernCard) return modernCard;
+
                 let current = element;
                 let best = null;
                 for (let depth = 0; depth < 12 && current && current !== document.body && current !== document.documentElement; depth++) {
@@ -3850,17 +5054,78 @@ const deleteSelectorsForPersonalProfile = () => {
             };
 
             let hiddenCount = 0;
+            let approvedCount = 0;
+
+            // Modern friends/profile cards, including x78zum5/xdt5ytf/x12upk82 and x12upk82/xod5an3 structures.
+            document.querySelectorAll(modernProfileCardSelector + ':not(.fb-profile-card-processed)').forEach((card) => {
+                card.classList.add('fb-profile-card-processed');
+
+                // Do not let the broader v22 selector grab profile headers, main wrappers, or large friend grids.
+                if (isUnsafeToUseAsFriendCardV21(card)) {
+                    card.classList.add('fb-profile-card-approved');
+                    approvedCount++;
+                    return;
+                }
+
+                const profileLinkCount = card.querySelectorAll
+                    ? Array.from(card.querySelectorAll('a[href]')).filter(a => profileHrefLooksLikeFriendListPersonV21(a.getAttribute('href') || a.href || '')).length
+                    : 0;
+                if (profileLinkCount > 4) {
+                    card.classList.add('fb-profile-card-approved');
+                    approvedCount++;
+                    return;
+                }
+
+                const signal = collectSignals(card);
+                if (isBlockedSignal(signal)) {
+                    hideElementHard(card, 'fb-profile-card-banned');
+                    hiddenCount++;
+                } else {
+                    card.classList.add('fb-profile-card-approved');
+                    approvedCount++;
+                }
+            });
 
             // Friends-page cards and their leftover empty shells expose the target name in the options button aria-label.
             document.querySelectorAll(optionSelector + ':not(.fb-profile-card-processed)').forEach((button) => {
                 button.classList.add('fb-profile-card-processed');
                 const card = findSingleFriendCardShell(button);
+                if (!card || card.classList.contains('fb-profile-card-banned')) return;
+
                 const signal = collectSignals(card) + ' ' + collectSignals(button);
                 if (isBlockedSignal(signal)) {
                     hideElementHard(card, 'fb-profile-card-banned');
                     hiddenCount++;
+                } else {
+                    card.classList.add('fb-profile-card-approved');
+                    approvedCount++;
                 }
             });
+
+            // v21: Any Facebook friend-list page, not just the logged-in user's own friends page.
+            // This catches blocked people by FBID, vanity URL, aria-label/name, profile-picture alt/aria, and URL signals.
+            if (isAnyFriendsListSurfaceV21()) {
+                document.querySelectorAll('a[href][aria-label], a[href*="profile.php?id="], a[href*="facebook.com/"]').forEach((link) => {
+                    try {
+                        if (!link || link.classList.contains('fb-profile-card-processed')) return;
+                        if (!profileHrefLooksLikeFriendListPersonV21(link.getAttribute('href') || link.href || '')) return;
+
+                        const card = findFriendListCardShellV21(link);
+                        if (!card || card.classList.contains('fb-profile-card-banned')) return;
+                        if (card.classList.contains('fb-profile-card-processed')) return;
+                        card.classList.add('fb-profile-card-processed');
+
+                        const signal = collectSignals(card) + ' ' + collectSignals(link);
+                        if (isBlockedSignal(signal)) {
+                            hideElementHard(card, 'fb-profile-card-banned');
+                            hiddenCount++;
+                        } else {
+                            card.classList.add('fb-profile-card-approved');
+                            approvedCount++;
+                        }
+                    } catch (e) {}
+                });
+            }
 
             // Right-rail chat/contact rows usually expose FBIDs through /messages/t/<id> links.
             document.querySelectorAll('a[href*="/messages/t/"], a[href*="messenger.com/t/"]').forEach((link) => {
@@ -3873,11 +5138,323 @@ const deleteSelectorsForPersonalProfile = () => {
                 }
             });
 
-            if (hiddenCount > 0) devLog(`Hidden ${hiddenCount} blocked friend/contact cards`);
+            if (hiddenCount > 0) devLog(`Hidden ${hiddenCount} blocked friend/contact/profile cards`);
+            if (approvedCount > 0) devLog(`Approved ${approvedCount} friend/contact/profile cards`);
         } catch (e) {
             console.log('Error scrubbing friend/contact cards: ' + e.message);
         }
     };
+
+
+    // ===== LIKES / REACTIONS OVERLAY IDENTITY SCRUBBER v1 =====
+    // Handles the reaction/likes overlay list rows that contain profile links,
+    // profile-picture aria-labels, svg labels, image hrefs and "Viesti/Message" buttons.
+    const scrubBlockedLikesOverlayRows = () => {
+        try {
+            refreshAccountScopedFilters();
+
+            const pushAttrs = (el, chunks) => {
+                if (!el || !el.getAttribute) return;
+
+                [
+                    'href', 'src', 'alt', 'aria-label', 'title',
+                    'id', 'aria-describedby',
+                    'data-hovercard', 'data-hovercard-prefer-more-content-show',
+                    'data-profileid', 'data-profile-id',
+                    'data-pageid', 'data-page-id',
+                    'data-fbid', 'data-userid', 'data-ownerid',
+                    'data-store', 'data-ft',
+                    'data-fbcleaner-urlsig'
+                ].forEach(attr => {
+                    try {
+                        const value = el.getAttribute(attr);
+                        if (value) chunks.push(value);
+                    } catch (e) {}
+                });
+
+                try {
+                    const xlink = el.getAttribute('xlink:href');
+                    if (xlink) chunks.push(xlink);
+                } catch (e) {}
+
+                try {
+                    if (el.href) chunks.push(el.href);
+                    if (el.src) chunks.push(el.src);
+                } catch (e) {}
+            };
+
+            const collectSignals = (row) => {
+                const chunks = [];
+                try { chunks.push(row.textContent || row.innerText || ''); } catch (e) {}
+                pushAttrs(row, chunks);
+
+                try {
+                    row.querySelectorAll([
+                        'a[href]',
+                        'img[src]',
+                        'image',
+                        'svg[aria-label]',
+                        'svg[title]',
+                        '[aria-label]',
+                        '[aria-describedby]',
+                        '[title]',
+                        '[id]',
+                        '[data-hovercard]',
+                        '[data-profileid]',
+                        '[data-profile-id]',
+                        '[data-pageid]',
+                        '[data-page-id]',
+                        '[data-fbid]',
+                        '[data-userid]',
+                        '[data-ownerid]',
+                        '[data-store]',
+                        '[data-ft]',
+                        '[data-fbcleaner-urlsig]'
+                    ].join(',')).forEach((el) => {
+                        try { chunks.push(el.textContent || ''); } catch (e) {}
+                        pushAttrs(el, chunks);
+                    });
+                } catch (e) {}
+
+                return chunks.join(' ');
+            };
+
+            const isBlockedSignal = (signal) => {
+                const raw = String(signal || '');
+                const normalized = normalizeFBText(raw);
+                return matchesAnyActiveRegex(normalized) || matchesAnyBlockedFbid(raw) || matchesAnyBlockedUrl(raw);
+            };
+
+            const isLikelyProfileLink = (link) => {
+                try {
+                    if (!link || !link.href) return false;
+                    const href = String(link.href);
+                    if (!/facebook\.com\//i.test(href)) return false;
+                    if (/\/(reactions|ufi|plugins|share|sharer|photo|photos|groups|events|watch|marketplace|messages|notifications)\b/i.test(href)) return false;
+                    if (/\/profile\.php\?id=\d+/i.test(href)) return true;
+                    if (/facebook\.com\/[A-Za-z0-9._-]+/i.test(href)) return true;
+                    return false;
+                } catch (e) {
+                    return false;
+                }
+            };
+
+            const isLikesOverlayDialog = (dialog) => {
+                try {
+                    if (!dialog || !dialog.isConnected) return false;
+                    const rect = dialog.getBoundingClientRect();
+                    if (rect.width < 220 || rect.height < 100) return false;
+
+                    const text = (dialog.innerText || dialog.textContent || '').toLowerCase();
+                    const hasProfileLink = !!dialog.querySelector('a[href*="facebook.com/"]');
+                    const hasLikeOverlaySignals =
+                        text.includes('viesti') ||
+                        text.includes('message') ||
+                        !!dialog.querySelector('[aria-label="Viesti"], [aria-label="Message"], svg[aria-label], image, img[src]');
+
+                    return hasProfileLink && hasLikeOverlaySignals;
+                } catch (e) {
+                    return false;
+                }
+            };
+
+            const findLikesOverlayRow = (link, dialog) => {
+                try {
+                    const dynamicRow = link.closest('div[data-visualcompletion="ignore-dynamic"]');
+                    if (dynamicRow && dynamicRow !== dialog) return dynamicRow;
+
+                    let current = link;
+                    let best = null;
+
+                    for (let depth = 0; depth < 16 && current && current !== dialog && current !== document.body && current !== document.documentElement; depth++) {
+                        if (current.nodeType === 1 && current.matches && current.matches('div, li, [role="row"], [role="listitem"]')) {
+                            const rect = current.getBoundingClientRect();
+                            const profileLinks = current.querySelectorAll
+                                ? Array.from(current.querySelectorAll('a[href*="facebook.com/"]')).filter(isLikelyProfileLink).length
+                                : 0;
+                            const text = (current.innerText || current.textContent || '').toLowerCase();
+                            const hasMessageButton =
+                                text.includes('viesti') ||
+                                text.includes('message') ||
+                                !!(current.querySelector && current.querySelector('[aria-label="Viesti"], [aria-label="Message"]'));
+
+                            if (rect.width >= 220 && rect.height >= 26 && rect.height <= 230 && profileLinks >= 1) {
+                                best = current;
+                                if (hasMessageButton || current.matches('div[data-visualcompletion="ignore-dynamic"]')) break;
+                            }
+                        }
+                        current = current.parentElement;
+                    }
+
+                    return best || link.closest('[role="row"], [role="listitem"], li') || link.closest('div') || link;
+                } catch (e) {
+                    return link;
+                }
+            };
+
+            const dialogs = Array.from(document.querySelectorAll('[role="dialog"]')).filter(isLikesOverlayDialog);
+            if (!dialogs.length) return;
+
+            let hidden = 0;
+            let approved = 0;
+
+            dialogs.forEach((dialog) => {
+                const profileLinks = Array.from(dialog.querySelectorAll('a[href*="facebook.com/"]')).filter(isLikelyProfileLink);
+
+                profileLinks.forEach((link) => {
+                    const row = findLikesOverlayRow(link, dialog);
+                    if (!row || row.classList.contains('fb-likes-overlay-row-banned') || row.classList.contains('fb-element-banned')) return;
+
+                    const signal = collectSignals(row) + ' ' + collectSignals(link);
+                    if (isBlockedSignal(signal)) {
+                        row.classList.remove('fb-likes-overlay-row-approved');
+                        hideElementHard(row, 'fb-likes-overlay-row-banned');
+                        hidden++;
+                    } else {
+                        row.classList.add('fb-likes-overlay-row-approved');
+                        approved++;
+                    }
+                });
+            });
+
+            if (hidden > 0) devLog(`Hidden ${hidden} blocked likes/reactions overlay row(s)`);
+            if (approved > 0) devLog(`Approved ${approved} likes/reactions overlay row(s)`);
+        } catch (e) {
+            console.log('Error scrubbing likes/reactions overlay rows: ' + e.message);
+        }
+    };
+
+
+
+
+
+    // Fast, narrow observer for reaction/likes overlays.
+    // It activates the short softgate, scans immediately, then releases safe rows.
+    const likesOverlayFastObserverV5 = trackObserver(new MutationObserver((mutations) => {
+        try {
+            let shouldScan = false;
+
+            for (const mutation of mutations) {
+                for (const node of mutation.addedNodes || []) {
+                    if (!node || node.nodeType !== 1) continue;
+
+                    if (
+                        (node.matches && (
+                            node.matches('[role="dialog"]') ||
+                            node.matches('div[data-visualcompletion="ignore-dynamic"]')
+                        )) ||
+                        (node.querySelector && (
+                            node.querySelector('[role="dialog"]') ||
+                            node.querySelector('div[data-visualcompletion="ignore-dynamic"] a[href*="facebook.com/"]')
+                        ))
+                    ) {
+                        shouldScan = true;
+                        break;
+                    }
+                }
+                if (shouldScan) break;
+            }
+
+            if (shouldScan) {
+                activateFBLikesOverlaySoftGateV5();
+                scrubBlockedLikesOverlayRows();
+                addTimeout(scrubBlockedLikesOverlayRows, 30);
+                addTimeout(scrubBlockedLikesOverlayRows, 90);
+                addTimeout(scrubBlockedLikesOverlayRows, 180);
+                addTimeout(scrubBlockedLikesOverlayRows, 360);
+            }
+        } catch (e) {}
+    }));
+
+    try {
+        likesOverlayFastObserverV5.observe(document.documentElement || document.body, { childList: true, subtree: true });
+    } catch (e) {}
+
+
+    // ===== TOP FEED LATE AUDITOR v2 =====
+    // Fixes the case where the top post was approved before Facebook hydrated all text/media bits.
+    // This does NOT hide the whole feed. It only re-checks the first visible feed units, including approved ones.
+    const auditTopFeedPostsForLateBlockedSignals = () => {
+        try {
+            refreshAccountScopedFilters();
+
+            const selectors = [
+                'div[data-pagelet^="FeedUnit_"]',
+                'div[data-pagelet^="TimelineFeedUnit_"]',
+                '[role="feed"] [role="article"]',
+                '[role="article"]'
+            ];
+
+            const seen = new Set();
+            const posts = [];
+            selectors.forEach(selector => {
+                try {
+                    document.querySelectorAll(selector).forEach(el => {
+                        if (!el || seen.has(el)) return;
+                        seen.add(el);
+                        posts.push(el);
+                    });
+                } catch (e) {}
+            });
+
+            let hidden = 0;
+            posts.slice(0, 8).forEach(post => {
+                if (!post || post.classList.contains('fb-post-banned') || post.classList.contains('fb-element-banned')) return;
+                if (isSafeElement(post) || isProfileHeaderProtectedArea(post)) return;
+
+                const text = collectLightAndOpenShadowTextScoped(
+                    post,
+                    post.textContent || post.innerText || '',
+                    {
+                        maxHostSearchNodes: 140,
+                        maxShadowHosts: 8,
+                        maxTextNodes: 80,
+                        maxShadowNodes: 50,
+                        maxChars: 9000,
+                        maxDepth: 1,
+                        includeAttributes: true
+                    }
+                );
+
+                const attrSignals = Array.from(post.querySelectorAll ? post.querySelectorAll('a[href], img[src], img[alt], [aria-label], [title], [data-hovercard], [data-profileid], [data-pageid], [data-fbid], [data-store], [data-fbcleaner-urlsig]') : [])
+                    .slice(0, 120)
+                    .map(el => [
+                        el.href || '',
+                        el.src || '',
+                        el.getAttribute('href') || '',
+                        el.getAttribute('src') || '',
+                        el.getAttribute('alt') || '',
+                        el.getAttribute('aria-label') || '',
+                        el.getAttribute('title') || '',
+                        el.getAttribute('data-hovercard') || '',
+                        el.getAttribute('data-profileid') || '',
+                        el.getAttribute('data-pageid') || '',
+                        el.getAttribute('data-fbid') || '',
+                        el.getAttribute('data-store') || '',
+                        el.getAttribute('data-fbcleaner-urlsig') || ''
+                    ].join(' '))
+                    .join(' ');
+
+                const signal = normalizeFBText(text + ' ' + attrSignals);
+                const blocked = hasRestrictedFeedCTAOrReelsV23(post) || matchesAnyActiveRegex(signal) || matchesAnyBlockedFbid(signal) || matchesAnyBlockedUrl(signal);
+
+                if (blocked) {
+                    try { post.classList.remove('fb-post-approved'); } catch (e) {}
+                    hideElementHard(post, 'fb-post-banned');
+                    hidden++;
+                } else if (!post.classList.contains('fb-post-approved')) {
+                    post.classList.add('fb-post-approved', 'fb-feed-unit-approved');
+                    markFBFeedUnitApprovedV23(post);
+                    rememberApprovedPostForBrowsing(post);
+                }
+            });
+
+            if (hidden > 0) devLog(`Late-audited and hidden ${hidden} hydrated top feed post(s)`);
+        } catch (e) {
+            console.log('Error auditing top feed posts: ' + e.message);
+        }
+    };
+
 
 
     const scrubBlockedProfileHeaderBits = () => {
@@ -3939,29 +5516,147 @@ const deleteSelectorsForPersonalProfile = () => {
     };
 
 
+
+    // ===== PERFORMANCE ROUTER / CADENCE CONTROLS v17 =====
+    // Keep the safety scanners alive, but stop the heaviest page-specific passes from
+    // re-querying half of Facebook every 250ms on accounts/pages that do not need them.
+    const FB_SPECIFIC_URL_SURFACES_V17 = [
+        "https://www.facebook.com/four3four",
+        "https://www.facebook.com/ItsStillRealToUsDammit",
+        "https://www.facebook.com/prowrestlingworld",
+        "https://www.facebook.com/weirdimagesworthseeing"
+    ];
+
+    const FB_SPECIFIC_PROFILE_IDS_V17 = [
+        '100000639309471',
+        'jiri.innanen'
+    ];
+
+    const FB_PERSONAL_PROFILE_URLS_V17 = [
+        'https://www.facebook.com/Haukkis/friends',
+        'https://www.facebook.com/Haukkis/friends_all',
+        'https://www.facebook.com/Haukkis/friends_with_upcoming_birthdays'
+    ];
+
+    const __fbPerfV17 = {
+        routeKey: '',
+        last: Object.create(null),
+        lastPrehideRouteKey: ''
+    };
+
+    const getFBRouteKeyV17 = () => {
+        try { return `${location.pathname || '/'}${location.search || ''}`; }
+        catch (e) { return ''; }
+    };
+
+    const shouldRunCadencedV17 = (key, ms, force = false) => {
+        try {
+            const now = (performance && performance.now) ? performance.now() : Date.now();
+            const routeKey = getFBRouteKeyV17();
+            const scopedKey = `${key}::${routeKey}`;
+            const last = __fbPerfV17.last[scopedKey] || 0;
+            if (force || !last || (now - last) >= ms) {
+                __fbPerfV17.last[scopedKey] = now;
+                return true;
+            }
+        } catch (e) {
+            return true;
+        }
+        return false;
+    };
+
+    const isCurrentSpecificUrlSurfaceV17 = () => {
+        try { return isSupportedFacebookPage(window.location.href, FB_SPECIFIC_URL_SURFACES_V17); }
+        catch (e) { return false; }
+    };
+
+    const isCurrentSpecificProfileSurfaceV17 = () => {
+        try {
+            const url = new URL(window.location.href);
+            return FB_SPECIFIC_PROFILE_IDS_V17.some(profileId => (
+                (url.pathname === '/profile.php' && url.searchParams.get('id') === profileId) ||
+                (url.pathname === `/${profileId}` || url.pathname === `/${profileId}/`)
+            ));
+        } catch (e) { return false; }
+    };
+
+    const isCurrentPersonalProfileSurfaceV17 = () => {
+        try { return isSupportedFacebookPage(window.location.href, FB_PERSONAL_PROFILE_URLS_V17); }
+        catch (e) { return false; }
+    };
+
+    const refreshSpecificUrlPrehideOptimizedV17 = (force = false) => {
+        try {
+            const routeKey = getFBRouteKeyV17();
+            if (!force && __fbPerfV17.lastPrehideRouteKey === routeKey) return;
+            __fbPerfV17.lastPrehideRouteKey = routeKey;
+            injectSpecificUrlPrehideCSS();
+        } catch (e) {}
+    };
+
+    const runSpecificSurfaceFiltersOptimizedV17 = (force = false) => {
+        try {
+            refreshSpecificUrlPrehideOptimizedV17(force);
+
+            const specificUrlSurface = isCurrentSpecificUrlSurfaceV17();
+            const specificProfileSurface = isCurrentSpecificProfileSurfaceV17();
+            const personalProfileSurface = isCurrentPersonalProfileSurfaceV17();
+            if (!specificUrlSurface && !specificProfileSurface && !personalProfileSurface) return;
+
+            // These selector packs are the expensive ones. Run immediately on route changes/init,
+            // then at a calmer cadence while the user stays on that same heavy page.
+            if (!shouldRunCadencedV17('specificSurfaces', 900, force)) return;
+
+            if (specificUrlSurface) deleteSelectorsForSpecificUrl();
+            if (specificProfileSurface) deleteSelectorsForSpecificProfile();
+            if (personalProfileSurface) deleteSelectorsForPersonalProfile();
+        } catch (e) {
+            console.log('Error running optimized specific surface filters: ' + e.message);
+        }
+    };
+
+    const runGeneralHeavyFiltersOptimizedV17 = (force = false) => {
+        try {
+            // Main feed safety remains active, but the DOM-wide text/URL crawlers no longer run 4x/sec.
+            // CSS prehide still keeps unapproved feed cards hidden between scans.
+            if (!shouldRunCadencedV17('generalHeavy', 650, force)) return;
+
+            updateFBHomeFeedGateClassV23();
+            scrubRestrictedFeedUnitsV23();
+            deleteBlockedElements();
+            scanAndBanEntirePosts();
+            deleteRestrictedWords();
+            scrubBlockedFriendAndContactCards();
+            scrubBlockedLikesOverlayRows();
+            auditTopFeedPostsForLateBlockedSignals();
+            scrubBlockedProfileHeaderBits();
+            deleteRestrictedPhrases();
+            deletePeopleYouMayKnow();
+            deleteElement();
+        } catch (e) {
+            console.log('Error running optimized heavy filters: ' + e.message);
+        }
+    };
+
     // ENHANCED: Run all filtering functions with full post scanning
     const runAllFilters = () => {
         try {
             updateFBSearchPageClass();
+            updateFBHomeFeedGateClassV23();
+            if (typeof refreshFBNativeTopSearchHandoffV15 === 'function') refreshFBNativeTopSearchHandoffV15();
             refreshAccountScopedFilters();
             checkVanityProfileFBID();
             handleRedirects();
             approveCurrentApprovedBrowseSurface();
             cleanUrl();
+
+            // Fast critical pass: small/important stuff still runs every tick.
             hideCriticalElements();
-            deleteBlockedElements();
-            scanAndBanEntirePosts(); // Added full post scanning initially
-            deleteRestrictedWords();
-            processSearchResults(); // Added search result processing
-            scrubBlockedFriendAndContactCards();
-            scrubBlockedProfileHeaderBits();
-            deleteRestrictedPhrases();
-            deletePeopleYouMayKnow();
-            // FIXED: These now check URLs internally before running
-            deleteSelectorsForSpecificUrl();
-            deleteSelectorsForSpecificProfile();
-            deleteSelectorsForPersonalProfile();
-            deleteElement();
+            processSearchResults();
+
+            // Heavy passes are still active, just cadenced instead of brute-forced every 250ms.
+            runGeneralHeavyFiltersOptimizedV17(false);
+            runSpecificSurfaceFiltersOptimizedV17(false);
         } catch (e) {
             console.log('Error running all filters: ' + e.message);
         }
@@ -3971,22 +5666,18 @@ const deleteSelectorsForPersonalProfile = () => {
     const immediateInit = () => {
         devLog('Running immediate init for zero-glimpse hiding');
         updateFBSearchPageClass();
+        updateFBHomeFeedGateClassV23();
+        if (typeof refreshFBNativeTopSearchHandoffV15 === 'function') refreshFBNativeTopSearchHandoffV15();
+        updateFBFriendsSoftGateV2();
         refreshAccountScopedFilters();
         checkVanityProfileFBID();
         handleRedirects();
         approveCurrentApprovedBrowseSurface();
         hideCriticalElements();
-        scanAndBanEntirePosts();
-        deleteRestrictedWords();
         processSearchResults();
-        scrubBlockedFriendAndContactCards();
-        scrubBlockedProfileHeaderBits();
-        deleteRestrictedPhrases();
-        deletePeopleYouMayKnow();
-        deleteSelectorsForSpecificUrl();
-        deleteSelectorsForSpecificProfile();
-        deleteSelectorsForPersonalProfile();
-        deleteElement();
+        scrubRestrictedFeedUnitsV23();
+        runGeneralHeavyFiltersOptimizedV17(false);
+        runSpecificSurfaceFiltersOptimizedV17(false);
     };
 
     // Ensure DOM is ready before initializing
@@ -4008,21 +5699,17 @@ const deleteSelectorsForPersonalProfile = () => {
     // Initialize the script
     const init = () => {
         devLog('Initializing Facebook script with instant search hiding and full post scanning');
+        if (typeof installFBNativeTopSearchHandoffV15 === 'function') installFBNativeTopSearchHandoffV15();
         ensureDOMReady();
         checkVanityProfileFBID();
         handleRedirects();
         approveCurrentApprovedBrowseSurface();
         cleanUrl();
-        deleteBlockedElements();
-        scanAndBanEntirePosts();
-        deleteRestrictedWords();
+        updateFBHomeFeedGateClassV23();
         processSearchResults();
-        deleteRestrictedPhrases();
-        deletePeopleYouMayKnow();
-        deleteSelectorsForSpecificUrl();
-        deleteSelectorsForSpecificProfile();
-        deleteSelectorsForPersonalProfile();
-        deleteElement();
+        scrubRestrictedFeedUnitsV23();
+        runGeneralHeavyFiltersOptimizedV17(true);
+        runSpecificSurfaceFiltersOptimizedV17(true);
 
         // ANTI-FLASHING: Add pageshow event to re-hide on navigation (e.g., back/forward cache)
         onWindowEvent(window, 'pageshow', (event) => {
@@ -4050,7 +5737,7 @@ const deleteSelectorsForPersonalProfile = () => {
             if (!document.hidden) {
                 runAllFilters();
             }
-        }, 250);
+        }, 350);
     }
 
     // Start intervals now (foreground), pause/resume on visibility changes
@@ -4067,5 +5754,9 @@ const deleteSelectorsForPersonalProfile = () => {
     // Teardown on pagehide/beforeunload to avoid leaks
     onWindowEvent(window, 'pagehide', cleanup, false);
     onWindowEvent(window, 'beforeunload', cleanup, false);
+
+    // ===== FACEBOOK TOP-LEFT SEARCH DROPDOWN HANDOFF v15 =====
+    // Already installed before init so the native dropdown can stay Facebook-owned.
+    refreshFBNativeTopSearchHandoffV15();
 
 })();

@@ -97,20 +97,7 @@
                 [aria-label="Meta AI"],
                 [aria-label*="Myös Metalta"],
                 [title*="Myös Metalta"],
-                [aria-label*="Also from Meta"],
-                [title*="Also from Meta"],
-                /* Collapse the whole Instagram left-rail tile, not just the SVG.
-                   The older rule hid the icon itself, leaving a brief empty nav slot until JS caught up. */
-                nav div.x9f619.x3nfvp2:has(svg[aria-label*="Myös Metalta"]),
-                [role="navigation"] div.x9f619.x3nfvp2:has(svg[aria-label*="Myös Metalta"]),
-                div.x9f619.x3nfvp2.xr9ek0c:has(svg[aria-label*="Myös Metalta"]),
-                div.x9f619.x3nfvp2:has(svg[aria-label*="Myös Metalta"]),
-                nav div.x9f619.x3nfvp2:has(svg[aria-label*="Also from Meta"]),
-                [role="navigation"] div.x9f619.x3nfvp2:has(svg[aria-label*="Also from Meta"]),
-                div.x9f619.x3nfvp2.xr9ek0c:has(svg[aria-label*="Also from Meta"]),
-                div.x9f619.x3nfvp2:has(svg[aria-label*="Also from Meta"]),
-                svg[aria-label*="Myös Metalta"],
-                svg[aria-label*="Also from Meta"] {
+                svg[aria-label*="Myös Metalta"] {
                     display: none !important;
                     visibility: hidden !important;
                     opacity: 0 !important;
@@ -749,10 +736,7 @@ function isElementProtected(element) {
     'a.x1i10hfl.xjbqb8w.x1ejq31n.x18oe1m7.x1sy0etr.xstzfhl.x972fbf.x10w94by.x1qhh985.x14e42zd.x9f619.x1ypdohk.xt0psk2.xe8uvvx.xdj266r.x14z9mp.xat24cr.x1lziwak.xexx8yu.xyri2b.x18d9i69.x1c1uobl.x16t',
     'a.x1i10hfl[href*="blocked"]','a.x1i10hfl[href*="estetty"]','a.x1i10hfl[href*="Rajoitetut tilit"]','a.x1i10hfl[href*="Restricted accounts"]','a.x1i10hfl[href*="Piiloitetut sanat"]','a.x1i10hfl[href*="Hidden Words"]','a.x1i10hfl[href*="hide_story_and_live"]',
     'div > span.html-span > div.x1n2onr6 > a.x1i10hfl._a6hd[href*="blocked"]','div > span.html-span > div.x1n2onr6 > a.x1i10hfl._a6hd[href*="estetty"]','div > span.html-span > div.x1n2onr6 > a.x1i10hfl._a6hd[href*="Rajoitetut tilit"]','div > span.html-span > div.x1n2onr6 > a.x1i10hfl._a6hd[href*="Restricted accounts"]','div > span.html-span > div.x1n2onr6 > a.x1i10hfl._a6hd[href*="Piiloitetut sanat"]','div > span.html-span > div.x1n2onr6 > a.x1i10hfl._a6hd[href*="hide_story_and_live"]',
-    '[aria-label*="Myös Metalta"]','[title*="Myös Metalta"]','[aria-label*="Also from Meta"]','[title*="Also from Meta"]',
-    'nav div.x9f619.x3nfvp2:has(svg[aria-label*="Myös Metalta"])','[role="navigation"] div.x9f619.x3nfvp2:has(svg[aria-label*="Myös Metalta"])','div.x9f619.x3nfvp2.xr9ek0c:has(svg[aria-label*="Myös Metalta"])','div.x9f619.x3nfvp2:has(svg[aria-label*="Myös Metalta"])',
-    'nav div.x9f619.x3nfvp2:has(svg[aria-label*="Also from Meta"])','[role="navigation"] div.x9f619.x3nfvp2:has(svg[aria-label*="Also from Meta"])','div.x9f619.x3nfvp2.xr9ek0c:has(svg[aria-label*="Also from Meta"])','div.x9f619.x3nfvp2:has(svg[aria-label*="Also from Meta"])',
-    'svg[aria-label*="Myös Metalta"]','svg[aria-label*="Also from Meta"]',
+    '[aria-label*="Myös Metalta"]','[title*="Myös Metalta"]','svg[aria-label*="Myös Metalta"]',
     '[role="navigation"] a[href^="/explore"]','nav[aria-label*="Primary"] a[href^="/explore"]','nav a[href="/explore/"]','nav a[href="/explore/?next=%2F"]','nav a[role="link"][href^="/explore"]',
     'section:has(> div > a._a6hd[href*="?next=%2F"])',
     'a._a6hd[href*="?next=%2F"] ~ div[style*="--x-height: 230px"]',
@@ -828,12 +812,6 @@ function isElementProtected(element) {
         'nav div[role="button"][tabindex][aria-label="Tutki"]',
     '[role="navigation"] div[role="button"][tabindex][aria-label="Tutki"]',
         'nav div[role="button"][tabindex][aria-label="Myös Metalta"]',
-        'nav div.x9f619.x3nfvp2:has(svg[aria-label*="Myös Metalta"])',
-        '[role="navigation"] div.x9f619.x3nfvp2:has(svg[aria-label*="Myös Metalta"])',
-        'div.x9f619.x3nfvp2.xr9ek0c:has(svg[aria-label*="Myös Metalta"])',
-        'nav div.x9f619.x3nfvp2:has(svg[aria-label*="Also from Meta"])',
-        '[role="navigation"] div.x9f619.x3nfvp2:has(svg[aria-label*="Also from Meta"])',
-        'div.x9f619.x3nfvp2.xr9ek0c:has(svg[aria-label*="Also from Meta"])',
         'a.x1i10hfl[href*="ai"]',
         'a.x1i10hfl[href*="Myös Metalta"]',
         'nav a.x1i10hfl[href*="threads"]',
@@ -1652,15 +1630,8 @@ ${p}, ${p} * {
     }
 
     function hideMyosMetaltaElements() {
-        const metaSvgs = document.querySelectorAll('svg[aria-label*="Myös Metalta"], svg[aria-label*="Also from Meta"]');
+        const metaSvgs = document.querySelectorAll('svg[aria-label*="Myös Metalta"]');
         metaSvgs.forEach(svg => {
-            try {
-                const directTile = svg.closest('div.x9f619.x3nfvp2.xr9ek0c') || svg.closest('div.x9f619.x3nfvp2');
-                if (directTile && !isElementProtected(directTile)) {
-                    collapseElement(directTile);
-                    return;
-                }
-            } catch {}
             let container = svg;
             let level = 0;
             while (container && level < 10) {
@@ -1671,13 +1642,13 @@ ${p}, ${p} * {
                 if (container.classList.contains('x9f619') && 
                     container.classList.contains('x3nfvp2') && 
                     container.classList.contains('xr9ek0c') &&
-                    (container.textContent.includes('Myös Metalta') || container.textContent.includes('Also from Meta'))) {
+                    container.textContent.includes('Myös Metalta')) {
 
                     collapseElement(container);
                     break;
                 }
 
-                if ((container.textContent.includes('Myös Metalta') || container.textContent.includes('Also from Meta'))) {
+                if (container.textContent.includes('Myös Metalta')) {
                     const rect = container.getBoundingClientRect ? container.getBoundingClientRect() : null;
                     const area = rect ? rect.width * rect.height : 0;
                     if (area > 80 && area < 60000 &&
@@ -1694,7 +1665,7 @@ ${p}, ${p} * {
         allDivs.forEach(div => {
             if (!div.textContent) return;
             const txt = div.textContent.trim();
-            if (txt !== 'Myös Metalta' && txt !== 'Also from Meta') return;
+            if (txt !== 'Myös Metalta') return;
 
             const strict = div.closest('div.x9f619.x3nfvp2.xr9ek0c');
             if (strict) {

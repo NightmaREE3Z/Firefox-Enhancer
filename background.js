@@ -190,10 +190,10 @@ const urlsToBlock = [
 // Blocked TLDs for auto-closure
 const blockedTLDs = [
     '.ai', '.art', '.makeup', '.off', '.club', '.id', '.it', '.best', '.cc', '.cn', '.click', '.exposed',
-    '.you', '.to', '.top', '.me', '.us', '.ru', '.vip', '.online', '.hot', '.her', '.sex', '.xxx', '.nsfw',
+    '.you','.top', '.me', '.us', '.ru', '.vip', '.online', '.hot', '.her', '.sex', '.xxx', '.nsfw', '.fyi', 
     '.porn', '.show', '.work', '.fit', '.tool', '.tools', '.system', '.systems', '.surf', '.review', '.asia',
-    '.tokyo', '.monster', '.info', '.机构', '.xn--nqv7f', '.one', '.ee', '.in', '.gf', '.fox', '.fun', '.fyi', 
-    '.fr', '.life', '.now', '.today', '.world', '.xyz', '.zone', '.nude', '.cat'
+    '.tokyo', '.monster', '.info', '.机构', '.xn--nqv7f', '.one', '.ee', '.in', '.gf', '.fox', '.fun', '.fr', 
+    '.life', '.now', '.today', '.world', '.xyz', '.zone', '.nude', '.cat', '.bot', '.moe',
 ];
 
 // Dynamically convert TLDs into Match Patterns and inject into urlsToBlock
