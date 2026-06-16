@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         IGCleaner
-// @version      2026-06-13-v43
-// @description  Trying to make my Instagram experience tolerable. v43: harder Search nav kill + edit-profile AI/suggestions no-glimpse.
+// @version      2026-06-16
+// @description  Trying to make my Instagram experience tolerable.
 // @match        *://www.instagram.com/*
 // @match        *://www.instagram.com/?next=%2F/*
 // @match        *://www.instagram.com/accounts/onetap/?next=%2F/*
@@ -34,8 +34,8 @@
 
 
     // ===== No-glimpse nav trash kill: exact-link, feed-safe =====
-    // Exact /reels/ only. Search/Haku and Explore/Tutki nav buttons are both hidden,
-    // but scoped to the navigation rail so the search input/bar and feed media are not collateral damage.
+    // Exact /reels/ and /explore/ only. No a[href*="reel"] nonsense; feed media often uses /reel/<id>/.
+    // Parent selectors are tightly shaped to: span.html-span > div.x1n2onr6 > a._a6hd.
     function injectMinimalNoGlimpseNavCSS() {
         try {
             const id = 'metamangler-minimal-nav-kill';
@@ -75,15 +75,15 @@
                     transition: none !important;
                 }
 
-                /* Explore / Tutki nav button: icon/text-scoped so feed media is not caught. */
-                span.html-span:has(> div.x1n2onr6 > a._a6hd[href="/explore/"]:has(svg[aria-label="Tutki"], svg[aria-label="Explore"])),
-                span.html-span:has(> div.x1n2onr6 > a[role="link"][href="/explore/"]:has(svg[aria-label="Tutki"], svg[aria-label="Explore"])),
-                div.x1n2onr6:has(> a._a6hd[href="/explore/"]:has(svg[aria-label="Tutki"], svg[aria-label="Explore"])),
-                div.x1n2onr6:has(> a[role="link"][href="/explore/"]:has(svg[aria-label="Tutki"], svg[aria-label="Explore"])),
-                a._a6hd[href="/explore/"]:has(svg[aria-label="Tutki"], svg[aria-label="Explore"]),
-                a[role="link"][href="/explore/"]:has(svg[aria-label="Tutki"], svg[aria-label="Explore"]),
-                a[href="/explore/"]:has(svg[aria-label="Tutki"], svg[aria-label="Explore"]),
-                a[href="/explore"]:has(svg[aria-label="Tutki"], svg[aria-label="Explore"]),
+                /* Explore / Tutki nav button: exact /explore/ and the icon/button label */
+                span.html-span:has(> div.x1n2onr6 > a._a6hd[href="/explore/"]),
+                span.html-span:has(> div.x1n2onr6 > a[role="link"][href="/explore/"]),
+                div.x1n2onr6:has(> a._a6hd[href="/explore/"]),
+                div.x1n2onr6:has(> a[role="link"][href="/explore/"]),
+                a._a6hd[href="/explore/"],
+                a[role="link"][href="/explore/"],
+                a[href="/explore/"],
+                a[href="/explore"],
                 div[role="button"][aria-label="Tutki"],
                 div[role="button"][aria-label="Explore"],
                 svg[aria-label="Tutki"],
@@ -108,80 +108,7 @@
                     transition: none !important;
                 }
 
-                /* Search / Haku nav button: IG merged this with /explore/, so hide the nav control too.
-                   This is navigation-rail scoped only; it does not touch the actual search input/bar. */
-                nav span.html-span:has(> div.x1n2onr6 > a._a6hd[href^="/explore"]:has(svg[aria-label="Haku"], svg[aria-label="Search"])),
-                nav span.html-span:has(> div.x1n2onr6 > a[role="link"][href^="/explore"]:has(svg[aria-label="Haku"], svg[aria-label="Search"])),
-                [role="navigation"] span.html-span:has(> div.x1n2onr6 > a._a6hd[href^="/explore"]:has(svg[aria-label="Haku"], svg[aria-label="Search"])),
-                [role="navigation"] span.html-span:has(> div.x1n2onr6 > a[role="link"][href^="/explore"]:has(svg[aria-label="Haku"], svg[aria-label="Search"])),
-                nav div.x1n2onr6:has(> a._a6hd[href^="/explore"]:has(svg[aria-label="Haku"], svg[aria-label="Search"])),
-                nav div.x1n2onr6:has(> a[role="link"][href^="/explore"]:has(svg[aria-label="Haku"], svg[aria-label="Search"])),
-                [role="navigation"] div.x1n2onr6:has(> a._a6hd[href^="/explore"]:has(svg[aria-label="Haku"], svg[aria-label="Search"])),
-                [role="navigation"] div.x1n2onr6:has(> a[role="link"][href^="/explore"]:has(svg[aria-label="Haku"], svg[aria-label="Search"])),
-                nav a._a6hd[href^="/explore"]:has(svg[aria-label="Haku"], svg[aria-label="Search"]),
-                nav a[role="link"][href^="/explore"]:has(svg[aria-label="Haku"], svg[aria-label="Search"]),
-                [role="navigation"] a._a6hd[href^="/explore"]:has(svg[aria-label="Haku"], svg[aria-label="Search"]),
-                [role="navigation"] a[role="link"][href^="/explore"]:has(svg[aria-label="Haku"], svg[aria-label="Search"]),
-                nav div.x9f619.x3nfvp2:has(svg[aria-label="Haku"]),
-                nav div.x9f619.x3nfvp2:has(svg[aria-label="Search"]),
-                [role="navigation"] div.x9f619.x3nfvp2:has(svg[aria-label="Haku"]),
-                [role="navigation"] div.x9f619.x3nfvp2:has(svg[aria-label="Search"]),
-                nav svg[aria-label="Haku"],
-                nav svg[aria-label="Search"],
-                [role="navigation"] svg[aria-label="Haku"],
-                [role="navigation"] svg[aria-label="Search"] {
-                    display: none !important;
-                    visibility: hidden !important;
-                    opacity: 0 !important;
-                    pointer-events: none !important;
-                    width: 0 !important;
-                    min-width: 0 !important;
-                    max-width: 0 !important;
-                    height: 0 !important;
-                    min-height: 0 !important;
-                    max-height: 0 !important;
-                    margin: 0 !important;
-                    padding: 0 !important;
-                    overflow: hidden !important;
-                    position: absolute !important;
-                    left: -10000px !important;
-                    top: -10000px !important;
-                    transform: none !important;
-                    transition: none !important;
-                }
 
-                /* v43 harder Search/Haku nav kill.
-                   Some IG layouts render the left-rail Search button outside <nav>/<role=navigation>,
-                   while the real search fields contain inputs/forms. Hide the button shell, not the search box. */
-                span.html-span:has(svg[aria-label="Haku"]):not(:has(input)):not(:has(form)),
-                span.html-span:has(svg[aria-label="Search"]):not(:has(input)):not(:has(form)),
-                div.x9f619.x3nfvp2.x1obq294:has(svg[aria-label="Haku"]):not(:has(input)):not(:has(form)),
-                div.x9f619.x3nfvp2.x1obq294:has(svg[aria-label="Search"]):not(:has(input)):not(:has(form)),
-                div.x1n2onr6:has(> a._a6hd[href^="/explore"]:has(svg[aria-label="Haku"], svg[aria-label="Search"])):not(:has(input)):not(:has(form)),
-                a._a6hd[href^="/explore"]:has(svg[aria-label="Haku"], svg[aria-label="Search"]):not(:has(input)):not(:has(form)),
-                a[role="link"][href^="/explore"]:has(svg[aria-label="Haku"], svg[aria-label="Search"]):not(:has(input)):not(:has(form)),
-                div[role="button"]:has(svg[aria-label="Haku"]):not(:has(input)):not(:has(form)),
-                div[role="button"]:has(svg[aria-label="Search"]):not(:has(input)):not(:has(form)) {
-                    display: none !important;
-                    visibility: hidden !important;
-                    opacity: 0 !important;
-                    pointer-events: none !important;
-                    width: 0 !important;
-                    min-width: 0 !important;
-                    max-width: 0 !important;
-                    height: 0 !important;
-                    min-height: 0 !important;
-                    max-height: 0 !important;
-                    margin: 0 !important;
-                    padding: 0 !important;
-                    overflow: hidden !important;
-                    position: absolute !important;
-                    left: -10000px !important;
-                    top: -10000px !important;
-                    transform: none !important;
-                    transition: none !important;
-                    content-visibility: hidden !important;
-                }
 
                 /* v43 accounts/edit no-glimpse: hide only the two red-boxed profile edit rows. */
                 html.metamangler-account-edit-v43 main div.x1yztbdb:has(input[role="switch"][aria-label="Tekoälysisällöntuottaja"]),
@@ -208,8 +135,7 @@
                     transition: none !important;
                     animation: none !important;
                 }
-
-                /* Sidebar-safe no-glimpse kill for only the actual Suggested-for-you people module.
+/* Sidebar-safe no-glimpse kill for only the actual Suggested-for-you people module.
                    Do NOT hide broad ancestors that merely contain /explore/people/, because that nukes the usable right sidebar. */
                 html.metamangler-feed-gate main div.x78zum5.xdt5ytf.xdj266r.x14z9mp.xod5an3.x162z183.x1j7kr1c.xvbhtw8:has(a[href^="/explore/people"]) {
                     display: none !important;
@@ -233,7 +159,7 @@
                     animation: none !important;
                 }
 
-                /* Myös Metalta / Meta AI. This is not feed-media related, so broader aria/title matching is safe enough. */
+                                /* Myös Metalta / Meta AI. This is not feed-media related, so broader aria/title matching is safe enough. */
                 a[href="/ai/"],
                 a[href="/meta-ai/"],
                 a[aria-label*="Meta AI"],
@@ -546,8 +472,8 @@ const instagramAccountsToHide = [
 
     const instagramBannedPaths = [
         ...instagramAccountsToHide,
-        'instagram.com/reels',
         'instagram.com/explore',
+        'instagram.com/reels',
         'instagram.com/accounts/blocked_accounts',
         'accounts/settings/v2/hidden_words',
         'accounts/restricted_accounts',
@@ -696,258 +622,6 @@ function findPostWrapper(node) {
     return bestCandidate;
 }
 
-const IG_SUGGESTED_LABELS_V40 = new Set(['sinulle ehdotettu', 'sinulle ehdotettua', 'suggested for you']);
-
-function isIGSuggestedLabelTextV40(value) {
-    try { return IG_SUGGESTED_LABELS_V40.has(String(value || '').replace(/\s+/g, ' ').trim().toLowerCase()); }
-    catch { return false; }
-}
-
-function findIGSuggestedPeopleModuleV41(labelElement) {
-    try {
-        let candidate = labelElement.closest('div.html-div') || labelElement.parentElement;
-        for (let lvl = 0; candidate && lvl < 10; lvl++, candidate = candidate.parentElement) {
-            if (candidate.matches?.('main, section[role="main"], div[role="main"], body, html, nav, footer')) break;
-            if (candidate.querySelector?.('article')) break;
-            if (isElementProtected(candidate)) continue;
-
-            const txt = String(candidate.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
-            const hasSuggestedLabel = txt.includes('sinulle ehdotettua') || txt.includes('sinulle ehdotettu') || txt.includes('suggested for you');
-            if (!hasSuggestedLabel) continue;
-
-            const hasPeopleLink = !!candidate.querySelector?.('a[href^="/explore/people"]');
-            const hasPeopleRows = !!candidate.querySelector?.('button, [role="button"], img[alt*="profiilikuva" i], img[alt*="profile picture" i], img[alt*="profile" i]');
-            const isKnownPeopleModule = candidate.matches?.('div.x78zum5.xdt5ytf.xdj266r.x14z9mp.xod5an3.x162z183.x1j7kr1c.xvbhtw8');
-            if (!hasPeopleLink || (!hasPeopleRows && !isKnownPeopleModule)) continue;
-
-            const rect = candidate.getBoundingClientRect ? candidate.getBoundingClientRect() : null;
-            const area = rect ? rect.width * rect.height : 0;
-            if (!rect || (area > 80 && area < 500000)) return candidate;
-        }
-    } catch {}
-    return null;
-}
-
-function hideIGSuggestedContainerFromLabelV40(labelElement) {
-    try {
-        if (!labelElement || labelElement.nodeType !== 1) return false;
-        if (isInPostOverlay(labelElement)) return false;
-
-        const article = labelElement.closest('article');
-        if (article) {
-            article.setAttribute('data-banned-scan', 'banned');
-            article.setAttribute('data-feed-scan-done', '1');
-            safelyHideFeedArticle(article);
-            return true;
-        }
-
-        // Sidebar/account-strip case: collapse the exact Suggested module, never the whole right rail.
-        const peopleModule = findIGSuggestedPeopleModuleV41(labelElement);
-        if (peopleModule && !isElementProtected(peopleModule)) {
-            collapseElement(peopleModule);
-            return true;
-        }
-
-        // Feed/card fallback for recommended units that are not real <article> nodes.
-        // Avoid this path for /explore/people account strips; those are handled above surgically.
-        let hasPeopleLinkNearby = false;
-        let nearby = labelElement.closest('div.html-div') || labelElement.parentElement;
-        for (let lvl = 0; nearby && lvl < 8; lvl++, nearby = nearby.parentElement) {
-            if (nearby.matches?.('main, section[role="main"], div[role="main"], body, html, nav, footer')) break;
-            if (nearby.querySelector?.('a[href^="/explore/people"]')) { hasPeopleLinkNearby = true; break; }
-        }
-
-        if (!hasPeopleLinkNearby) {
-            const wrapper = findPostWrapper(labelElement);
-            if (wrapper &&
-                !isElementProtected(wrapper) &&
-                !wrapper.matches('main, section[role="main"], div[role="main"], body, html, nav, footer') &&
-                !wrapper.querySelector('article')) {
-                collapseElement(wrapper);
-                return true;
-            }
-        }
-
-        let candidate = labelElement.closest('div.html-div') || labelElement.parentElement;
-        for (let lvl = 0; candidate && lvl < 8; lvl++, candidate = candidate.parentElement) {
-            if (candidate.matches?.('main, section[role="main"], div[role="main"], body, html, nav, footer')) break;
-            if (candidate.querySelector?.('article')) break;
-            if (candidate.querySelector?.('a[href^="/explore/people"]')) break;
-            if (isElementProtected(candidate)) continue;
-            const txt = String(candidate.textContent || '').toLowerCase();
-            const hasSuggestedShell = txt.includes('sinulle ehdotettua') || txt.includes('sinulle ehdotettu') || txt.includes('suggested for you');
-            if (!hasSuggestedShell) continue;
-            const rect = candidate.getBoundingClientRect ? candidate.getBoundingClientRect() : null;
-            const area = rect ? rect.width * rect.height : 0;
-            if (!rect || (area > 60 && area < 300000)) {
-                collapseElement(candidate);
-                return true;
-            }
-        }
-
-        return false;
-    } catch { return false; }
-}
-
-function hideAllIGSuggestedLabelsV40(root = document) {
-    try {
-        const scanRoot = root && root.querySelectorAll ? root : document;
-        const nodes = [];
-        if (scanRoot.nodeType === 1 && isIGSuggestedLabelTextV40(scanRoot.textContent)) nodes.push(scanRoot);
-        scanRoot.querySelectorAll?.('span, div, h2, h3').forEach(el => {
-            if (isIGSuggestedLabelTextV40(el.textContent)) nodes.push(el);
-        });
-        for (let i = 0; i < nodes.length && i < 120; i++) hideIGSuggestedContainerFromLabelV40(nodes[i]);
-    } catch {}
-}
-
-function isIGSearchInputShellV43(element) {
-    try {
-        if (!element || element.nodeType !== 1) return false;
-        if (element.closest?.('form[role="search"], [role="search"], [role="listbox"]')) return true;
-        let node = element;
-        for (let lvl = 0; node && lvl < 5; lvl++, node = node.parentElement) {
-            if (node.querySelector?.('input[type="search"], input[type="text"], input[placeholder*="Haku"], input[placeholder*="Hae"], input[placeholder*="Search"]')) return true;
-        }
-    } catch {}
-    return false;
-}
-
-function getIGSearchNavHideTargetV43(element) {
-    try {
-        if (!element || element.nodeType !== 1 || !element.closest) return null;
-        if (isIGSearchInputShellV43(element)) return null;
-        const hasSearchIcon = element.matches?.('svg[aria-label="Haku"], svg[aria-label="Search"]') ||
-            !!element.querySelector?.('svg[aria-label="Haku"], svg[aria-label="Search"]');
-        if (!hasSearchIcon) return null;
-
-        const hasExploreIcon = element.matches?.('svg[aria-label="Tutki"], svg[aria-label="Explore"]') ||
-            !!element.querySelector?.('svg[aria-label="Tutki"], svg[aria-label="Explore"]');
-        if (hasExploreIcon) return null;
-
-        let shell =
-            element.closest('a._a6hd[href^="/explore"], a[role="link"][href^="/explore"], div[role="button"], span.html-span, div.x1n2onr6, div.x9f619.x3nfvp2.x1obq294') ||
-            element.closest('div.x9f619.x3nfvp2') ||
-            element.parentElement;
-
-        if (!shell || isIGSearchInputShellV43(shell)) return null;
-        if (shell.matches?.('main, section[role="main"], div[role="main"], body, html, footer')) return null;
-        if (shell.querySelector?.('input, textarea, form[role="search"], [role="listbox"]')) return null;
-
-        // Prefer the real left-rail tile wrapper if available.
-        const railTile = shell.closest?.('div.x9f619.x3nfvp2.x1obq294');
-        if (railTile && !isIGSearchInputShellV43(railTile) && !railTile.querySelector?.('input, textarea, form[role="search"], [role="listbox"]')) {
-            shell = railTile;
-        }
-
-        const rect = shell.getBoundingClientRect ? shell.getBoundingClientRect() : null;
-        if (rect && (rect.width > 420 || rect.height > 180)) return null;
-
-        return shell;
-    } catch {
-        return null;
-    }
-}
-
-function hideIGSearchNavButtonV43(root = document) {
-    try {
-        const scanRoot = root && root.querySelectorAll ? root : document;
-        const nodes = [];
-        if (scanRoot.nodeType === 1 && (scanRoot.matches?.('svg[aria-label="Haku"], svg[aria-label="Search"]') || scanRoot.querySelector?.('svg[aria-label="Haku"], svg[aria-label="Search"]'))) {
-            nodes.push(scanRoot);
-        }
-        scanRoot.querySelectorAll?.('svg[aria-label="Haku"], svg[aria-label="Search"], a[href^="/explore"], div[role="button"]').forEach(el => nodes.push(el));
-
-        const targets = new Set();
-        for (let i = 0; i < nodes.length && i < 80; i++) {
-            const target = getIGSearchNavHideTargetV43(nodes[i]);
-            if (target) targets.add(target);
-        }
-
-        targets.forEach(target => {
-            try {
-                collapseElement(target);
-            } catch {}
-        });
-    } catch {}
-}
-
-function isIGAccountEditTargetTextV43(value) {
-    try {
-        const t = String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
-        return t === 'tekoälysisällöntuottaja' ||
-               t === 'näytä tiliehdotuksia profiileissa' ||
-               t.includes('lisää tämä tunniste profiiliisi, jos sisällössäsi käytetään usein tekoälyä') ||
-               t.includes('valitse, näkevätkö ihmiset ehdotuksia samankaltaisista tileistä profiilissasi');
-    } catch { return false; }
-}
-
-function findIGAccountEditRowV43(element) {
-    try {
-        if (!element || element.nodeType !== 1) return null;
-
-        let candidate = element.closest?.('div.x1yztbdb') || element.closest?.('div.html-div') || element.parentElement;
-        for (let lvl = 0; candidate && lvl < 10; lvl++, candidate = candidate.parentElement) {
-            if (candidate.matches?.('main, section[role="main"], div[role="main"], body, html, nav, footer')) break;
-            if (candidate.querySelector?.('textarea#pepBio')) break;
-
-            const hasAiSwitch = !!candidate.querySelector?.('input[role="switch"][aria-label="Tekoälysisällöntuottaja"], input[role="switch"][aria-label*="Tekoäly" i]');
-            const hasSuggestSwitch = !!candidate.querySelector?.('input[role="switch"][aria-label="Näytä tiliehdotuksia profiileissa"], input[role="switch"][aria-label*="tiliehdotuksia" i]');
-            const txt = String(candidate.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
-
-            const looksAi = hasAiSwitch || txt.includes('tekoälysisällöntuottaja') || txt.includes('sisällössäsi käytetään usein tekoälyä');
-            const looksSuggest = hasSuggestSwitch || txt.includes('näytä tiliehdotuksia profiileissa') || txt.includes('ehdotuksia samankaltaisista tileistä');
-
-            if (!looksAi && !looksSuggest) continue;
-
-            const rect = candidate.getBoundingClientRect ? candidate.getBoundingClientRect() : null;
-            const area = rect ? rect.width * rect.height : 0;
-            if (!rect || (area > 100 && area < 250000)) return candidate;
-        }
-    } catch {}
-    return null;
-}
-
-function hideIGAccountEditSectionsV43(root = document) {
-    try {
-        updateMetaManglerAccountEditClassV43();
-        if (!isMetaManglerAccountEditPathV43()) return;
-
-        const scanRoot = root && root.querySelectorAll ? root : document;
-        const nodes = [];
-        if (scanRoot.nodeType === 1) {
-            if (isIGAccountEditTargetTextV43(scanRoot.textContent || '') ||
-                scanRoot.matches?.('input[role="switch"][aria-label="Tekoälysisällöntuottaja"], input[role="switch"][aria-label*="Tekoäly" i], input[role="switch"][aria-label="Näytä tiliehdotuksia profiileissa"], input[role="switch"][aria-label*="tiliehdotuksia" i]')) {
-                nodes.push(scanRoot);
-            }
-        }
-
-        scanRoot.querySelectorAll?.([
-            'input[role="switch"][aria-label="Tekoälysisällöntuottaja"]',
-            'input[role="switch"][aria-label*="Tekoäly" i]',
-            'input[role="switch"][aria-label="Näytä tiliehdotuksia profiileissa"]',
-            'input[role="switch"][aria-label*="tiliehdotuksia" i]',
-            'span',
-            'div'
-        ].join(',')).forEach(el => {
-            try {
-                if (el.matches?.('input[role="switch"]') || isIGAccountEditTargetTextV43(el.textContent || '')) nodes.push(el);
-            } catch {}
-        });
-
-        const targets = new Set();
-        for (let i = 0; i < nodes.length && i < 120; i++) {
-            const row = findIGAccountEditRowV43(nodes[i]);
-            if (row) targets.add(row);
-        }
-
-        targets.forEach(row => {
-            try { collapseElement(row); } catch {}
-        });
-    } catch {}
-}
-
-
 function getPostIDFromArticle(article) {
     try {
         const postLink = article.querySelector('a[href*="/p/"], a[href*="/reel/"], a[href*="/tv/"]');
@@ -1075,25 +749,11 @@ function getPostIDFromArticle(article) {
     'section:has(div[role="button"][tabindex="0"]:has(> span.html-span))',
 ];
 
-function isIGSearchNavControl(element) {
-    try {
-        if (!element || element.nodeType !== 1 || !element.closest) return false;
-        if (!element.closest('nav, [role="navigation"]')) return false;
-        const shell = element.closest('a[href^="/explore"], div[role="button"], span.html-span, div.x1n2onr6, div.x9f619.x3nfvp2') || element;
-        const local = (shell.getAttribute?.('aria-label') || '') + ' ' + (shell.getAttribute?.('title') || '') + ' ' + String(shell.textContent || '').slice(0, 120);
-        const hasSearchIcon = !!shell.querySelector?.('svg[aria-label="Haku"], svg[aria-label="Search"]') || shell.matches?.('svg[aria-label="Haku"], svg[aria-label="Search"]');
-        const looksSearch = /(^|\s)(haku|hae|search)(\s|$)/i.test(local) || hasSearchIcon;
-        const looksExplore = !!shell.querySelector?.('svg[aria-label="Tutki"], svg[aria-label="Explore"]') || /(^|\s)(tutki|explore)(\s|$)/i.test(local);
-        return looksSearch && !looksExplore;
-    } catch { return false; }
-}
-
 function isElementProtected(element) {
     if (!element || element.nodeType !== 1) return false;
     
     if (element.tagName === 'FOOTER' || element.tagName === 'NAV' || element.tagName === 'MAIN' || element.tagName === 'BODY') return true;
     if (element.getAttribute('role') === 'feed' || element.getAttribute('role') === 'main' || element.getAttribute('role') === 'listbox') return true;
-    // v42: Search/Haku nav is intentionally hidden now, so do not protect the nav button here.
     
     // === SEARCH SIDEBAR PROTECTION ===
     if (element.tagName === 'INPUT' || element.tagName === 'FORM') return true;
@@ -1126,12 +786,6 @@ function isElementProtected(element) {
     '.x1xgvd2v > div:nth-child(2) > div:nth-child(3) > span:nth-child(1) > a:nth-child(1) > div:nth-child(1)',
     'nav svg[aria-label="Tutki"]',
     '[role="navigation"] svg[aria-label="Tutki"]',
-    'nav svg[aria-label="Haku"]',
-    '[role="navigation"] svg[aria-label="Haku"]',
-    'nav svg[aria-label="Search"]',
-    '[role="navigation"] svg[aria-label="Search"]',
-    'nav a[href^="/explore"]:has(svg[aria-label="Haku"], svg[aria-label="Search"])',
-    '[role="navigation"] a[href^="/explore"]:has(svg[aria-label="Haku"], svg[aria-label="Search"])',
     'div[class^="x9f619 xjbqb8w x78zum5 x168nmei x13lgxp2 x5pf9jr xo71vjh"][style*="height: 250px;"]',
     'h4.x1lliihq.x1plvlek.xryxfnj.x1n2onr6.x1ji0vk5.x18bv5gf.x193iq5w.xeuugli.x1fj9vlw.x13faqbe.x1vvkbs.x1s928wv.xhkezso.x1gmr53x.x1cpjm7i.x1fgarty.x1943h6x.x1i0vuye.xvs91rp.x1s688f.x173jzuc.x10wh',
     'a.x1i10hfl.xjbqb8w.x1ejq31n.xd10rxx.x1sy0etr.x17r0tee.x972fbf.xcfux6l.x1qhh985.xm0m39n.x9f619.x1ypdohk.xt0psk2.xe8uvvx.xdj266r.x14z9mp.xat24cr.x1lziwak.xexx8yu.x4uap5.x18d9i69.xkhd6sd.x16tds',
@@ -1140,8 +794,8 @@ function isElementProtected(element) {
     '[role="navigation"] div[role="button"][tabindex][aria-label="Threads"]',
     'nav div[role="button"][tabindex][aria-label="Tutki"]',
     '[role="navigation"] div[role="button"][tabindex][aria-label="Tutki"]',
-    'nav div > span.html-span > div.x1n2onr6 > a.x1i10hfl._a6hd[href="/explore/"]:has(svg[aria-label="Tutki"], svg[aria-label="Explore"])',
-    '[role="navigation"] div > span.html-span > div.x1n2onr6 > a.x1i10hfl._a6hd[href="/explore/"]:has(svg[aria-label="Tutki"], svg[aria-label="Explore"])',
+    'nav div > span.html-span > div.x1n2onr6 > a.x1i10hfl._a6hd[href="/explore/"]',
+    '[role="navigation"] div > span.html-span > div.x1n2onr6 > a.x1i10hfl._a6hd[href="/explore/"]',
     'span[aria-describedby*="_R_bmt5bb9klrj5ipd5aq_"]',
     'span[aria-describedby*="_R_rmt5bb9klrj5ipd5aq_"]',
     'div.x1azxncr span[aria-describedby*="_R_bmt5bb9klrj5ipd5aq_"]',
@@ -1170,7 +824,7 @@ function isElementProtected(element) {
     'nav div.x9f619.x3nfvp2:has(svg[aria-label*="Myös Metalta"])','[role="navigation"] div.x9f619.x3nfvp2:has(svg[aria-label*="Myös Metalta"])','div.x9f619.x3nfvp2.xr9ek0c:has(svg[aria-label*="Myös Metalta"])','div.x9f619.x3nfvp2:has(svg[aria-label*="Myös Metalta"])',
     'nav div.x9f619.x3nfvp2:has(svg[aria-label*="Also from Meta"])','[role="navigation"] div.x9f619.x3nfvp2:has(svg[aria-label*="Also from Meta"])','div.x9f619.x3nfvp2.xr9ek0c:has(svg[aria-label*="Also from Meta"])','div.x9f619.x3nfvp2:has(svg[aria-label*="Also from Meta"])',
     'svg[aria-label*="Myös Metalta"]','svg[aria-label*="Also from Meta"]',
-    '[role="navigation"] a[href^="/explore"]:has(svg[aria-label="Tutki"], svg[aria-label="Explore"]), nav[aria-label*="Primary"] a[href^="/explore"]:has(svg[aria-label="Tutki"], svg[aria-label="Explore"]), nav a[href="/explore/"]:has(svg[aria-label="Tutki"], svg[aria-label="Explore"]), nav a[href="/explore/?next=%2F"]:has(svg[aria-label="Tutki"], svg[aria-label="Explore"]), nav a[role="link"][href^="/explore"]:has(svg[aria-label="Tutki"], svg[aria-label="Explore"])',
+    '[role="navigation"] a[href^="/explore"]','nav[aria-label*="Primary"] a[href^="/explore"]','nav a[href="/explore/"]','nav a[href="/explore/?next=%2F"]','nav a[role="link"][href^="/explore"]',
     'section:has(> div > a._a6hd[href*="?next=%2F"])',
     'a._a6hd[href*="?next=%2F"] ~ div[style*="--x-height: 230px"]',
     'section:has(> div > a._a6hd[href*="?next=%2F"]) div[style*="--x-height: 230px"]',
@@ -1227,12 +881,6 @@ function isElementProtected(element) {
     '[role="navigation"] div[role="button"][tabindex][aria-label="Threads"]',
         'nav div[role="button"][tabindex][aria-label="Tutki"]',
     '[role="navigation"] div[role="button"][tabindex][aria-label="Tutki"]',
-        'nav div[role="button"][tabindex][aria-label="Haku"]',
-    '[role="navigation"] div[role="button"][tabindex][aria-label="Haku"]',
-        'nav div[role="button"][tabindex][aria-label="Search"]',
-    '[role="navigation"] div[role="button"][tabindex][aria-label="Search"]',
-        'nav a[href^="/explore"]:has(svg[aria-label="Haku"], svg[aria-label="Search"])',
-    '[role="navigation"] a[href^="/explore"]:has(svg[aria-label="Haku"], svg[aria-label="Search"])',
         'nav div[role="button"][tabindex][aria-label="Reels"]',
         'div[class*="x1nhvcw1"][class*="xqjyukv"][class*="xdt5ytf"]',
         'span[aria-describedby*="_R_bmt5bb9klrj5ipd5aq_"]',
@@ -1261,8 +909,8 @@ function isElementProtected(element) {
         'a.x1i10hfl[href*="Myös Metalta"]',
         'nav a.x1i10hfl[href*="threads"]',
     '[role="navigation"] a.x1i10hfl[href*="threads"]',
-        'nav div > span.html-span > div.x1n2onr6 > a.x1i10hfl._a6hd[href="/explore/"]:has(svg[aria-label="Tutki"], svg[aria-label="Explore"])',
-    '[role="navigation"] div > span.html-span > div.x1n2onr6 > a.x1i10hfl._a6hd[href="/explore/"]:has(svg[aria-label="Tutki"], svg[aria-label="Explore"])',
+        'nav div > span.html-span > div.x1n2onr6 > a.x1i10hfl._a6hd[href="/explore/"]',
+    '[role="navigation"] div > span.html-span > div.x1n2onr6 > a.x1i10hfl._a6hd[href="/explore/"]',
         'nav div > span.html-span > div.x1n2onr6 > a.x1i10hfl._a6hd[href="/reels/"]',
         '[role="navigation"] div > span.html-span > div.x1n2onr6 > a.x1i10hfl._a6hd[href="/reels/"]',
         'a.x1i10hfl[href*="blocked"]',
@@ -1534,7 +1182,6 @@ function isElementProtected(element) {
     function articleHasBannedCaption(article) {
         try {
             const texts = collectCaptionTextsFromArticle(article);
-            if (texts.some(t => isIGSuggestedLabelTextV40(t))) return true;
             const combinedText = texts.join(' ');
             for (const t of texts) {
                 const low = t.toLowerCase();
@@ -2263,6 +1910,187 @@ ${p}, ${p} * {
         });
     }
 
+const IG_SUGGESTED_LABELS_V40 = new Set(['sinulle ehdotettu', 'sinulle ehdotettua', 'suggested for you']);
+
+function isIGSuggestedLabelTextV40(value) {
+    try { return IG_SUGGESTED_LABELS_V40.has(String(value || '').replace(/\s+/g, ' ').trim().toLowerCase()); }
+    catch { return false; }
+}
+
+function findIGSuggestedPeopleModuleV41(labelElement) {
+    try {
+        let candidate = labelElement.closest('div.html-div') || labelElement.parentElement;
+        for (let lvl = 0; candidate && lvl < 10; lvl++, candidate = candidate.parentElement) {
+            if (candidate.matches?.('main, section[role="main"], div[role="main"], body, html, nav, footer')) break;
+            if (candidate.querySelector?.('article')) break;
+            if (isElementProtected(candidate)) continue;
+
+            const txt = String(candidate.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+            const hasSuggestedLabel = txt.includes('sinulle ehdotettua') || txt.includes('sinulle ehdotettu') || txt.includes('suggested for you');
+            if (!hasSuggestedLabel) continue;
+
+            const hasPeopleLink = !!candidate.querySelector?.('a[href^="/explore/people"]');
+            const hasPeopleRows = !!candidate.querySelector?.('button, [role="button"], img[alt*="profiilikuva" i], img[alt*="profile picture" i], img[alt*="profile" i]');
+            const isKnownPeopleModule = candidate.matches?.('div.x78zum5.xdt5ytf.xdj266r.x14z9mp.xod5an3.x162z183.x1j7kr1c.xvbhtw8');
+            if (!hasPeopleLink || (!hasPeopleRows && !isKnownPeopleModule)) continue;
+
+            const rect = candidate.getBoundingClientRect ? candidate.getBoundingClientRect() : null;
+            const area = rect ? rect.width * rect.height : 0;
+            if (!rect || (area > 80 && area < 500000)) return candidate;
+        }
+    } catch {}
+    return null;
+}
+
+function hideIGSuggestedContainerFromLabelV40(labelElement) {
+    try {
+        if (!labelElement || labelElement.nodeType !== 1) return false;
+        if (isInPostOverlay(labelElement)) return false;
+
+        const article = labelElement.closest('article');
+        if (article) {
+            article.setAttribute('data-banned-scan', 'banned');
+            article.setAttribute('data-feed-scan-done', '1');
+            safelyHideFeedArticle(article);
+            return true;
+        }
+
+        // Sidebar/account-strip case: collapse the exact Suggested module, never the whole right rail.
+        const peopleModule = findIGSuggestedPeopleModuleV41(labelElement);
+        if (peopleModule && !isElementProtected(peopleModule)) {
+            collapseElement(peopleModule);
+            return true;
+        }
+
+        // Feed/card fallback for recommended units that are not real <article> nodes.
+        // Avoid this path for /explore/people account strips; those are handled above surgically.
+        let hasPeopleLinkNearby = false;
+        let nearby = labelElement.closest('div.html-div') || labelElement.parentElement;
+        for (let lvl = 0; nearby && lvl < 8; lvl++, nearby = nearby.parentElement) {
+            if (nearby.matches?.('main, section[role="main"], div[role="main"], body, html, nav, footer')) break;
+            if (nearby.querySelector?.('a[href^="/explore/people"]')) { hasPeopleLinkNearby = true; break; }
+        }
+
+        if (!hasPeopleLinkNearby) {
+            const wrapper = findPostWrapper(labelElement);
+            if (wrapper &&
+                !isElementProtected(wrapper) &&
+                !wrapper.matches('main, section[role="main"], div[role="main"], body, html, nav, footer') &&
+                !wrapper.querySelector('article')) {
+                collapseElement(wrapper);
+                return true;
+            }
+        }
+
+        let candidate = labelElement.closest('div.html-div') || labelElement.parentElement;
+        for (let lvl = 0; candidate && lvl < 8; lvl++, candidate = candidate.parentElement) {
+            if (candidate.matches?.('main, section[role="main"], div[role="main"], body, html, nav, footer')) break;
+            if (candidate.querySelector?.('article')) break;
+            if (candidate.querySelector?.('a[href^="/explore/people"]')) break;
+            if (isElementProtected(candidate)) continue;
+            const txt = String(candidate.textContent || '').toLowerCase();
+            const hasSuggestedShell = txt.includes('sinulle ehdotettua') || txt.includes('sinulle ehdotettu') || txt.includes('suggested for you');
+            if (!hasSuggestedShell) continue;
+            const rect = candidate.getBoundingClientRect ? candidate.getBoundingClientRect() : null;
+            const area = rect ? rect.width * rect.height : 0;
+            if (!rect || (area > 60 && area < 300000)) {
+                collapseElement(candidate);
+                return true;
+            }
+        }
+
+        return false;
+    } catch { return false; }
+}
+
+function hideAllIGSuggestedLabelsV40(root = document) {
+    try {
+        const scanRoot = root && root.querySelectorAll ? root : document;
+        const nodes = [];
+        if (scanRoot.nodeType === 1 && isIGSuggestedLabelTextV40(scanRoot.textContent)) nodes.push(scanRoot);
+        scanRoot.querySelectorAll?.('span, div, h2, h3').forEach(el => {
+            if (isIGSuggestedLabelTextV40(el.textContent)) nodes.push(el);
+        });
+        for (let i = 0; i < nodes.length && i < 120; i++) hideIGSuggestedContainerFromLabelV40(nodes[i]);
+    } catch {}
+}
+
+function isIGAccountEditTargetTextV43(value) {
+    try {
+        const t = String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
+        return t === 'tekoälysisällöntuottaja' ||
+               t === 'näytä tiliehdotuksia profiileissa' ||
+               t.includes('lisää tämä tunniste profiiliisi, jos sisällössäsi käytetään usein tekoälyä') ||
+               t.includes('valitse, näkevätkö ihmiset ehdotuksia samankaltaisista tileistä profiilissasi');
+    } catch { return false; }
+}
+
+function findIGAccountEditRowV43(element) {
+    try {
+        if (!element || element.nodeType !== 1) return null;
+
+        let candidate = element.closest?.('div.x1yztbdb') || element.closest?.('div.html-div') || element.parentElement;
+        for (let lvl = 0; candidate && lvl < 10; lvl++, candidate = candidate.parentElement) {
+            if (candidate.matches?.('main, section[role="main"], div[role="main"], body, html, nav, footer')) break;
+            if (candidate.querySelector?.('textarea#pepBio')) break;
+
+            const hasAiSwitch = !!candidate.querySelector?.('input[role="switch"][aria-label="Tekoälysisällöntuottaja"], input[role="switch"][aria-label*="Tekoäly" i]');
+            const hasSuggestSwitch = !!candidate.querySelector?.('input[role="switch"][aria-label="Näytä tiliehdotuksia profiileissa"], input[role="switch"][aria-label*="tiliehdotuksia" i]');
+            const txt = String(candidate.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+
+            const looksAi = hasAiSwitch || txt.includes('tekoälysisällöntuottaja') || txt.includes('sisällössäsi käytetään usein tekoälyä');
+            const looksSuggest = hasSuggestSwitch || txt.includes('näytä tiliehdotuksia profiileissa') || txt.includes('ehdotuksia samankaltaisista tileistä');
+
+            if (!looksAi && !looksSuggest) continue;
+
+            const rect = candidate.getBoundingClientRect ? candidate.getBoundingClientRect() : null;
+            const area = rect ? rect.width * rect.height : 0;
+            if (!rect || (area > 100 && area < 250000)) return candidate;
+        }
+    } catch {}
+    return null;
+}
+
+function hideIGAccountEditSectionsV43(root = document) {
+    try {
+        updateMetaManglerAccountEditClassV43();
+        if (!isMetaManglerAccountEditPathV43()) return;
+
+        const scanRoot = root && root.querySelectorAll ? root : document;
+        const nodes = [];
+        if (scanRoot.nodeType === 1) {
+            if (isIGAccountEditTargetTextV43(scanRoot.textContent || '') ||
+                scanRoot.matches?.('input[role="switch"][aria-label="Tekoälysisällöntuottaja"], input[role="switch"][aria-label*="Tekoäly" i], input[role="switch"][aria-label="Näytä tiliehdotuksia profiileissa"], input[role="switch"][aria-label*="tiliehdotuksia" i]')) {
+                nodes.push(scanRoot);
+            }
+        }
+
+        scanRoot.querySelectorAll?.([
+            'input[role="switch"][aria-label="Tekoälysisällöntuottaja"]',
+            'input[role="switch"][aria-label*="Tekoäly" i]',
+            'input[role="switch"][aria-label="Näytä tiliehdotuksia profiileissa"]',
+            'input[role="switch"][aria-label*="tiliehdotuksia" i]',
+            'span',
+            'div'
+        ].join(',')).forEach(el => {
+            try {
+                if (el.matches?.('input[role="switch"]') || isIGAccountEditTargetTextV43(el.textContent || '')) nodes.push(el);
+            } catch {}
+        });
+
+        const targets = new Set();
+        for (let i = 0; i < nodes.length && i < 120; i++) {
+            const row = findIGAccountEditRowV43(nodes[i]);
+            if (row) targets.add(row);
+        }
+
+        targets.forEach(row => {
+            try { collapseElement(row); } catch {}
+        });
+    } catch {}
+}
+
+
     function hideSinulleEhdotettuaBlock() {
         try {
             const spans = document.querySelectorAll('span');
@@ -2384,7 +2212,7 @@ overflow: visible !important;
 }
 `;
 
-        const safeSuffix = `:not(:has(nav)):not(:has(footer)):not(:has(svg[aria-label="Haku"])):not(:has(svg[aria-label="Search"])):not(:has(svg[aria-label="Lisää"])):not(:has(svg[aria-label="Asetukset"])):not(:has(svg[aria-label="More"])):not(:has(a[href*="about.instagram.com"])):not(:has(article)):not(:has(a[href*="instagram.com/direct"]))`;
+        const safeSuffix = `:not(:has(nav)):not(:has(footer)):not(:has(svg[aria-label="Lisää"])):not(:has(svg[aria-label="Asetukset"])):not(:has(svg[aria-label="More"])):not(:has(a[href*="about.instagram.com"])):not(:has(article)):not(:has(a[href*="instagram.com/direct"]))`;
         const overlayGuardedSelectors = selectorsToHide.map(s => `html:not(.ig-overlay-open) ${s}${safeSuffix}`).join(',\n');
 
         style.textContent = `
@@ -2496,7 +2324,7 @@ injectInlineCSS();
     const hideCriticalElements = () => {
         selectorsToHide.forEach((selector) => {
             document.querySelectorAll(selector).forEach((el) => {
-                if (isInPostOverlay(el) || isElementProtected(el)) return;
+                if (isInPostOverlay(el)) return;
                 if (!hiddenElements.has(el)) {
                     el.style.setProperty('visibility', 'hidden', 'important');
                     el.style.setProperty('display', 'none', 'important');
@@ -2550,16 +2378,10 @@ injectInlineCSS();
             [role="navigation"] div[role="button"][tabindex][aria-label="Tutki"],
             nav svg[aria-label="Tutki"],
             [role="navigation"] svg[aria-label="Tutki"],
-            nav svg[aria-label="Haku"],
-            [role="navigation"] svg[aria-label="Haku"],
-            nav svg[aria-label="Search"],
-            [role="navigation"] svg[aria-label="Search"],
-            nav a[href^="/explore"]:has(svg[aria-label="Haku"], svg[aria-label="Search"]),
-            [role="navigation"] a[href^="/explore"]:has(svg[aria-label="Haku"], svg[aria-label="Search"]),
-            nav div > span.html-span > div.x1n2onr6 > a.x1i10hfl._a6hd[href="/explore/"]:has(svg[aria-label="Tutki"], svg[aria-label="Explore"]),
-            [role="navigation"] div > span.html-span > div.x1n2onr6 > a.x1i10hfl._a6hd[href="/explore/"]:has(svg[aria-label="Tutki"], svg[aria-label="Explore"]),
-            nav a[href="/explore/"]:has(svg[aria-label="Tutki"], svg[aria-label="Explore"]),
-            [role="navigation"] a[href="/explore/"]:has(svg[aria-label="Tutki"], svg[aria-label="Explore"]),
+            nav div > span.html-span > div.x1n2onr6 > a.x1i10hfl._a6hd[href="/explore/"],
+            [role="navigation"] div > span.html-span > div.x1n2onr6 > a.x1i10hfl._a6hd[href="/explore/"],
+            nav a[href="/explore/"],
+            [role="navigation"] a[href="/explore/"],
 	    nav span:has(a[href*="help.instagram.com/347751748650214"]),
             nav div[role="button"][tabindex][aria-label="Threads"],
             [role="navigation"] div[role="button"][tabindex][aria-label="Threads"],
@@ -3012,8 +2834,7 @@ injectInlineCSS();
 
             if (allowedWordsLower.some(word => txt.includes(word))) return;
             
-            if (nukeTargets.includes(exactTrimmed) || isIGSuggestedLabelTextV40(exactTrimmed)) {
-                if (hideIGSuggestedContainerFromLabelV40(node.parentElement)) return;
+            if (nukeTargets.includes(exactTrimmed)) {
                 const wrapper = findPostWrapper(node.parentElement);
                 if (wrapper && !isElementProtected(wrapper) && !wrapper.matches('main, section[role="main"], div[role="main"], body, html, nav')) {
                     collapseElement(wrapper);
@@ -3154,9 +2975,8 @@ injectInlineCSS();
                     }
                     const txt = (el.textContent || '').trim().toLowerCase();
                     
-                    if (nukeTargets.includes(txt) || isIGSuggestedLabelTextV40(txt)) {
+                    if (nukeTargets.includes(txt)) {
                         el.style.setProperty('opacity', '0', 'important');
-                        if (hideIGSuggestedContainerFromLabelV40(el)) continue;
                         const wrapper = findPostWrapper(el);
                         if (wrapper && !isElementProtected(wrapper) && !wrapper.matches('main, section[role="main"], div[role="main"], body, html, nav')) {
                             collapseElement(wrapper);
@@ -3217,23 +3037,21 @@ injectInlineCSS();
         if (!hasAddedElement) return;
 
         injectMinimalNoGlimpseNavCSS();
-        hideIGSearchNavButtonV43();
         hideIGAccountEditSectionsV43();
+        try {
+            for (const mutation of mutationsList) {
+                mutation.addedNodes && mutation.addedNodes.forEach(node => {
+                    if (node && node.nodeType === 1) {
+                        hideAllIGSuggestedLabelsV40(node);
+                        hideIGAccountEditSectionsV43(node);
+                    }
+                });
+            }
+        } catch {}
         hideProfileThreadsTags();
         updateOverlayState();
         makeOverlayLikesClickable(); 
         fastSynchronousHider(mutationsList); 
-        for (const mutation of mutationsList) {
-            try {
-                mutation.addedNodes && mutation.addedNodes.forEach(node => {
-                    if (node && node.nodeType === 1) {
-                        hideAllIGSuggestedLabelsV40(node);
-                        hideIGSearchNavButtonV43(node);
-                        hideIGAccountEditSectionsV43(node);
-                    }
-                });
-            } catch {}
-        }
         if (observerScheduled) return;
         observerScheduled = true;
         addTimeout(() => {
@@ -3261,8 +3079,7 @@ injectInlineCSS();
                 hideMyosMetaltaElements();
                 hideSettingsPageElements();
                 hideSinulleEhdotettuaBlock();
-        hideAllIGSuggestedLabelsV40();
-                hideIGSearchNavButtonV43();
+                hideAllIGSuggestedLabelsV40();
                 hideIGAccountEditSectionsV43();
                 hideUnwantedUIButtons();
                 if (isSearchSurfacePresent()) {
@@ -3294,7 +3111,6 @@ injectInlineCSS();
         updateMetaManglerFeedGateClass();
         updateMetaManglerAccountEditClassV43();
         injectMinimalNoGlimpseNavCSS();
-        hideIGSearchNavButtonV43();
         hideIGAccountEditSectionsV43();
         hideProfileThreadsTags();
         handleRedirectionsAndContentHiding();
@@ -3317,8 +3133,7 @@ injectInlineCSS();
             hideMyosMetaltaElements();
             hideSettingsPageElements();
             hideSinulleEhdotettuaBlock();
-        hideAllIGSuggestedLabelsV40();
-            hideIGSearchNavButtonV43();
+            hideAllIGSuggestedLabelsV40();
             hideIGAccountEditSectionsV43();
             hideUnwantedUIButtons();
             if (isSearchSurfacePresent()) {
@@ -3343,7 +3158,6 @@ injectInlineCSS();
             makeOverlayLikesClickable(); 
             if (!isReelsPage() && !document.hidden) {
                 hideUnwantedUIButtons();
-                hideIGSearchNavButtonV43();
                 hideIGAccountEditSectionsV43();
                 hideProfileThreadsTags();
                 if (isSearchSurfacePresent()) hideInstagramSearchResults();
@@ -3407,8 +3221,7 @@ injectInlineCSS();
             hideMyosMetaltaElements();
             hideSettingsPageElements();
             hideSinulleEhdotettuaBlock();
-        hideAllIGSuggestedLabelsV40();
-            hideIGSearchNavButtonV43();
+            hideAllIGSuggestedLabelsV40();
             hideIGAccountEditSectionsV43();
             hideUnwantedUIButtons();
             if (isSearchSurfacePresent()) hideInstagramSearchResults();

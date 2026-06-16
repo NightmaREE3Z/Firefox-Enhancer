@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         FBCleaner
-// @version      2026-06-13-v39
-// @description  Makes my Facebook experience less terrible. v39: no-function-change performance/memory smoothing pass.
+// @version      2026-06-17
+// @description  Makes my Facebook experience less terrible.
 // @match        *://*.facebook.com/*
 // @grant        none
 // @run-at       document-start
@@ -233,6 +233,10 @@ if (DEBUG) {
             try {
                 const s10 = document.getElementById('fb-top-search-dropdown-native-guard-v11');
                 if (s10) s10.remove();
+            } catch {}
+            try {
+                const s11 = document.getElementById('fb-video-overlay-smooth-style-v42');
+                if (s11) s11.remove();
             } catch {}
 
             devLog('Cleanup complete.');
@@ -3400,6 +3404,59 @@ function collapseElementHard(el) {
         }
     };
 
+
+    // ===== v40: native Stories overlay light-lane =====
+    // URL-only by design: the light-lane must only activate on /stories and sub-URLs.
+    // Earlier DOM/aria detection was too broad because Facebook can keep Stories widgets
+    // mounted on normal pages, which made heavy profile/contact scrubbers bail out there.
+    const isFBStoriesPathV40 = (inputUrl = window.location.href) => {
+        try {
+            const url = new URL(inputUrl, window.location.origin);
+            const path = String(url.pathname || '').toLowerCase().replace(/\/+$/, '');
+            return path === '/stories' || path.startsWith('/stories/');
+        } catch (e) {
+            const raw = String(inputUrl || '').toLowerCase();
+            try {
+                const match = raw.match(/facebook\.com(\/[^?#]*)/i);
+                const path = match && match[1] ? match[1].replace(/\/+$/, '') : '';
+                return path === '/stories' || path.startsWith('/stories/');
+            } catch (ignored) {
+                return raw.includes('facebook.com/stories/');
+            }
+        }
+    };
+
+    const isFBStoriesNativeSurfaceV40 = (inputUrl = window.location.href) => {
+        try { return isFBStoriesPathV40(inputUrl); } catch (e) { return false; }
+    };
+
+    const updateFBStoriesNativeClassV40 = () => {
+        try {
+            const active = isFBStoriesNativeSurfaceV40(window.location.href);
+            if (document.documentElement) {
+                document.documentElement.classList.toggle('fb-stories-native-surface-v40', active);
+            }
+            return active;
+        } catch (e) {
+            return false;
+        }
+    };
+
+    const runFBStoriesNativeMaintenanceV40 = () => {
+        try {
+            if (!updateFBStoriesNativeClassV40()) return false;
+
+            // Keep only the cheap/native-safe pieces alive. This preserves nav hiding and native handoffs,
+            // but avoids scanning/crawling the whole animated Stories overlay every interval/mutation.
+            try { refreshFBNativeTopSearchHandoffV15(); } catch (e) {}
+            try { runFBNativeTransientMenuMaintenanceV38(); } catch (e) {}
+            hideCriticalNavOnlyV35();
+            return true;
+        } catch (e) {
+            return false;
+        }
+    };
+
     const isNotificationNavigationUrl = (inputUrl = window.location.href) => {
         try {
             const url = new URL(inputUrl, window.location.origin);
@@ -5434,10 +5491,12 @@ function collapseElementHard(el) {
             // Use a throttled version of the function for better performance
             let throttleTimeout = null;
             const throttledDeletePhrases = () => {
+                if (runFBStoriesNativeMaintenanceV40()) return;
+                if (typeof runFBNativeInteractiveLightLaneV42 === 'function' && runFBNativeInteractiveLightLaneV42()) return;
                 if (updateFBCommentOverlayClassV35()) return;
                 if (!throttleTimeout) {
                     throttleTimeout = addTimeout(() => {
-                        if (!updateFBCommentOverlayClassV35()) deleteRestrictedPhrases();
+                        if (!runFBStoriesNativeMaintenanceV40() && !(typeof runFBNativeInteractiveLightLaneV42 === 'function' && runFBNativeInteractiveLightLaneV42()) && !updateFBCommentOverlayClassV35()) deleteRestrictedPhrases();
                         throttleTimeout = null;
                     }, 320); // v38: slower/coalesced phrase pass for smoother menus on mid-range PCs
                 }
@@ -5445,6 +5504,8 @@ function collapseElementHard(el) {
 
             // Observe only essential changes
             const observer = trackObserver(new MutationObserver((mutations) => {
+                if (runFBStoriesNativeMaintenanceV40()) return;
+                if (typeof runFBNativeInteractiveLightLaneV42 === 'function' && runFBNativeInteractiveLightLaneV42()) return;
                 if (typeof refreshFBNativeTopSearchHandoffV15 === 'function') refreshFBNativeTopSearchHandoffV15();
                 if (updateFBCommentOverlayClassV35()) return;
                 let shouldProcess = false;
@@ -5494,8 +5555,8 @@ function collapseElementHard(el) {
                 characterData: false
             });
 
-            // Run once immediately
-            deleteRestrictedPhrases();
+            // Run once immediately, unless Facebook is on a native Stories surface.
+            if (!runFBStoriesNativeMaintenanceV40()) deleteRestrictedPhrases();
         } catch (e) {
             console.log('Error setting up restricted phrases observer: ' + e.message);
         }
@@ -6640,7 +6701,10 @@ const deleteSelectorsForPersonalProfile = () => {
             __fbRunAllFiltersQueuedV39 = true;
             addTimeout(() => {
                 __fbRunAllFiltersQueuedV39 = false;
-                try { runAllFilters(); } catch (e) {}
+                try {
+                    if (runFBNativeInteractiveLightLaneV42()) return;
+                    runAllFilters();
+                } catch (e) {}
             }, 0);
         } catch (e) {
             try { runAllFilters(); } catch (ignored) {}
@@ -6802,6 +6866,11 @@ const deleteSelectorsForPersonalProfile = () => {
             };
 
             const observer = trackObserver(new MutationObserver((mutations) => {
+                // v40: Stories are Facebook-native/animated. Keep the overlay smooth by not
+                // waking full feed/search crawlers for every progress/DOM tick.
+                if (runFBStoriesNativeMaintenanceV40()) return;
+                if (runFBNativeInteractiveLightLaneV42()) return;
+
                 // v39: same notification/menu fast paths as before, but without building throwaway
                 // arrays for every mutation batch. Less garbage collection, same decisions.
                 if (mutationBatchOnlyMatchesV39(mutations, isNotificationPanelElementV25)) {
@@ -7443,6 +7512,237 @@ const deleteSelectorsForPersonalProfile = () => {
     } catch (e) {}
 
 
+
+
+
+    // ===== v42: native interaction light-lane + video play overlay smoother =====
+    // Goal: keep Facebook's own animated/native surfaces responsive (reactions, likes,
+    // notifications, messages, media dialogs) without removing any existing blockers/lists.
+    // Heavy feed/search/profile crawlers still run normally when those overlays are closed.
+    const FB_NATIVE_LIGHTLANE_V42 = {
+        lastLightMaintenance: 0,
+        lastLikesScrub: 0,
+        lastVideoSync: 0,
+        videoCssInjected: false
+    };
+
+    const fbNowV42 = () => {
+        try { return (performance && performance.now) ? performance.now() : Date.now(); }
+        catch (e) { return Date.now(); }
+    };
+
+    const injectFBVideoOverlaySmoothCSSV42 = () => {
+        try {
+            if (FB_NATIVE_LIGHTLANE_V42.videoCssInjected && document.getElementById('fb-video-overlay-smooth-style-v42')) return;
+            let style = document.getElementById('fb-video-overlay-smooth-style-v42');
+            if (!style) {
+                style = document.createElement('style');
+                style.id = 'fb-video-overlay-smooth-style-v42';
+            }
+
+            style.textContent = `
+                /* v42: Facebook can leave the 72px play sprite mounted after playback starts.
+                   Hide only nodes JS marks while their nearby <video> is actively playing. */
+                .fb-video-play-overlay-hidden-v42,
+                .fb-video-play-overlay-hidden-v42 *,
+                [role="dialog"] .fb-video-play-overlay-hidden-v42,
+                [role="dialog"] .fb-video-play-overlay-hidden-v42 *,
+                [role="article"] .fb-video-play-overlay-hidden-v42,
+                [role="article"] .fb-video-play-overlay-hidden-v42 *,
+                [data-pagelet^="FeedUnit_"] .fb-video-play-overlay-hidden-v42,
+                [data-pagelet^="FeedUnit_"] .fb-video-play-overlay-hidden-v42 *,
+                [data-pagelet^="TimelineFeedUnit_"] .fb-video-play-overlay-hidden-v42,
+                [data-pagelet^="TimelineFeedUnit_"] .fb-video-play-overlay-hidden-v42 * {
+                    display: none !important;
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                    content-visibility: hidden !important;
+                    transition: none !important;
+                    animation: none !important;
+                }
+            `;
+
+            if (!style.isConnected) (document.head || document.documentElement).appendChild(style);
+            FB_NATIVE_LIGHTLANE_V42.videoCssInjected = true;
+        } catch (e) {}
+    };
+
+    const isFBVideoActuallyPlayingV42 = (video) => {
+        try {
+            return !!(video && !video.paused && !video.ended && video.readyState >= 2);
+        } catch (e) {
+            return false;
+        }
+    };
+
+    const getFBVideoSurfaceV42 = (video) => {
+        try {
+            if (!video || !video.closest) return null;
+            return video.closest('[role="dialog"], [role="article"], div[data-pagelet^="FeedUnit_"], div[data-pagelet^="TimelineFeedUnit_"], [data-pagelet="MediaViewerPhoto"], [data-pagelet="TahoeRightRail"]') || video.parentElement;
+        } catch (e) {
+            return null;
+        }
+    };
+
+    const syncFBVideoPlayOverlayV42 = (root = document, force = false) => {
+        try {
+            const now = fbNowV42();
+            if (!force && (now - FB_NATIVE_LIGHTLANE_V42.lastVideoSync) < 160) return;
+            FB_NATIVE_LIGHTLANE_V42.lastVideoSync = now;
+            injectFBVideoOverlaySmoothCSSV42();
+
+            const scanRoot = (root && root.querySelectorAll) ? root : document;
+            const videos = [];
+            if (scanRoot.nodeType === 1 && scanRoot.matches?.('video')) videos.push(scanRoot);
+            scanRoot.querySelectorAll?.('video').forEach(video => videos.push(video));
+            if (!videos.length) return;
+
+            videos.slice(0, 8).forEach(video => {
+                try {
+                    const surface = getFBVideoSurfaceV42(video);
+                    if (!surface || !surface.querySelectorAll) return;
+                    const playing = isFBVideoActuallyPlayingV42(video);
+                    const buttons = surface.querySelectorAll([
+                        '[role="button"][aria-label="Toista video"]',
+                        '[role="button"][aria-label="Play video"]',
+                        '[role="button"][aria-label*="Toista video" i]',
+                        '[role="button"][aria-label*="Play video" i]'
+                    ].join(','));
+
+                    buttons.forEach(button => {
+                        try {
+                            const wrapper = (button.parentElement && button.parentElement.tagName === 'I') ? button.parentElement : button;
+                            if (playing) {
+                                button.classList.add('fb-video-play-overlay-hidden-v42');
+                                wrapper.classList.add('fb-video-play-overlay-hidden-v42');
+                            } else {
+                                button.classList.remove('fb-video-play-overlay-hidden-v42');
+                                wrapper.classList.remove('fb-video-play-overlay-hidden-v42');
+                            }
+                        } catch (e) {}
+                    });
+                } catch (e) {}
+            });
+        } catch (e) {}
+    };
+
+    const isFBLikesOrReactionDialogV42 = (dialog) => {
+        try {
+            if (!dialog || !dialog.querySelector) return false;
+            const text = String(dialog.innerText || dialog.textContent || '').slice(0, 2200).toLowerCase();
+            const hasProfileLinks = !!dialog.querySelector('a[href*="facebook.com/"]');
+            const hasReactionSignals =
+                text.includes('tykkä') || text.includes('like') || text.includes('reaction') || text.includes('reaktio') ||
+                !!dialog.querySelector('[aria-label="Viesti"], [aria-label="Message"], [aria-label*="reaction" i], [aria-label*="like" i], [aria-label*="tykkä" i]');
+            return hasProfileLinks && hasReactionSignals;
+        } catch (e) {
+            return false;
+        }
+    };
+
+    const isFBMessengerDialogV42 = (dialog) => {
+        try {
+            if (!dialog || !dialog.querySelector) return false;
+            const aria = String(dialog.getAttribute?.('aria-label') || '');
+            const text = String(dialog.textContent || '').slice(0, 2000);
+            const combo = `${aria} ${text}`.toLowerCase();
+            return combo.includes('messenger') || combo.includes('keskustelu') || combo.includes('chat') ||
+                   combo.includes('viesti') || combo.includes('message') ||
+                   !!dialog.querySelector('[aria-label="Messenger"], [aria-label*="Messenger" i], [aria-label="Viesti"], [aria-label="Message"], [role="textbox"]');
+        } catch (e) {
+            return false;
+        }
+    };
+
+    const isFBMediaDialogV42 = (dialog) => {
+        try {
+            if (!dialog || !dialog.querySelector) return false;
+            return !!dialog.querySelector('video, [role="button"][aria-label="Toista video"], [role="button"][aria-label="Play video"], [data-pagelet="MediaViewerPhoto"], [data-pagelet="TahoeRightRail"]');
+        } catch (e) {
+            return false;
+        }
+    };
+
+    const isFBNativeInteractionDialogV42 = (dialog) => {
+        try {
+            if (!dialog || !dialog.isConnected) return false;
+            if (isNotificationPanelElementV25(dialog)) return true;
+            if (isFBActiveCommentOverlayV35(dialog)) return true;
+            if (isFBLikesOrReactionDialogV42(dialog)) return true;
+            if (isFBMessengerDialogV42(dialog)) return true;
+            if (isFBMediaDialogV42(dialog)) return true;
+
+            const rect = dialog.getBoundingClientRect ? dialog.getBoundingClientRect() : null;
+            if (rect && rect.width >= 260 && rect.height >= 140) {
+                const text = String(dialog.textContent || '').slice(0, 1600).toLowerCase();
+                if (text.includes('notifications') || text.includes('ilmoitukset') || text.includes('share') || text.includes('jaa')) return true;
+            }
+        } catch (e) {}
+        return false;
+    };
+
+    const isFBNativeInteractiveSurfaceOpenV42 = () => {
+        try {
+            if (isFBStoriesNativeSurfaceV40(window.location.href)) return true;
+            if (document.documentElement && document.documentElement.classList.contains('fb-comment-overlay-active-v35')) return true;
+            if (document.querySelector('[role="menu"], [role="listbox"], [role="tooltip"]')) return true;
+            const dialogs = document.querySelectorAll('[role="dialog"]');
+            for (let i = 0; i < dialogs.length; i++) {
+                if (isFBNativeInteractionDialogV42(dialogs[i])) return true;
+            }
+        } catch (e) {}
+        return false;
+    };
+
+    const updateFBNativeInteractiveClassV42 = () => {
+        try {
+            const active = isFBNativeInteractiveSurfaceOpenV42();
+            if (document.documentElement) document.documentElement.classList.toggle('fb-native-interaction-lightlane-v42', active);
+            return active;
+        } catch (e) {
+            return false;
+        }
+    };
+
+    const runFBNativeInteractiveLightLaneV42 = (force = false) => {
+        try {
+            if (runFBStoriesNativeMaintenanceV40()) return true;
+            if (!updateFBNativeInteractiveClassV42()) return false;
+
+            const now = fbNowV42();
+            const doFullLight = force || (now - FB_NATIVE_LIGHTLANE_V42.lastLightMaintenance) >= 180;
+            if (doFullLight) {
+                FB_NATIVE_LIGHTLANE_V42.lastLightMaintenance = now;
+                try { if (typeof refreshFBNativeTopSearchHandoffV15 === 'function') refreshFBNativeTopSearchHandoffV15(); } catch (e) {}
+                try { protectNotificationSurfacesV25(document); } catch (e) {}
+                try { hideCriticalNavOnlyV35(); } catch (e) {}
+                try { runFBNativeTransientMenuMaintenanceV38(); } catch (e) {}
+            }
+
+            syncFBVideoPlayOverlayV42(document, force);
+
+            // Keep the likes/reactions profile-row scrubber alive, but do not run the entire feed/search stack.
+            if (force || (now - FB_NATIVE_LIGHTLANE_V42.lastLikesScrub) >= 260) {
+                FB_NATIVE_LIGHTLANE_V42.lastLikesScrub = now;
+                try {
+                    if (isFBCosmeticElementHidingAllowedV37()) activateFBLikesOverlaySoftGateV5();
+                    scrubBlockedLikesOverlayRows();
+                } catch (e) {}
+            }
+            return true;
+        } catch (e) {
+            return false;
+        }
+    };
+
+    try {
+        injectFBVideoOverlaySmoothCSSV42();
+        onWindowEvent(document, 'play', (event) => syncFBVideoPlayOverlayV42(event.target || document, true), true);
+        onWindowEvent(document, 'pause', (event) => syncFBVideoPlayOverlayV42(event.target || document, true), true);
+        onWindowEvent(document, 'ended', (event) => syncFBVideoPlayOverlayV42(event.target || document, true), true);
+    } catch (e) {}
+
     // ===== TOP FEED LATE AUDITOR v2 =====
     // Fixes the case where the top post was approved before Facebook hydrated all text/media bits.
     // This does NOT hide the whole feed. It only re-checks the first visible feed units, including approved ones.
@@ -7693,6 +7993,7 @@ const deleteSelectorsForPersonalProfile = () => {
     const runGeneralHeavyFiltersOptimizedV17 = (force = false) => {
         try {
             protectNotificationSurfacesV25(document);
+            if (runFBNativeInteractiveLightLaneV42()) return;
             if (updateFBCommentOverlayClassV35()) {
                 hideCriticalNavOnlyV35();
                 return;
@@ -7791,6 +8092,8 @@ const deleteSelectorsForPersonalProfile = () => {
             updateFBSearchPageClass();
             updateFBHomeFeedGateClassV23();
             updateFBCommentImmunityClassesV33();
+            if (runFBStoriesNativeMaintenanceV40()) return;
+            if (runFBNativeInteractiveLightLaneV42()) return;
             const commentOverlayActiveV35 = updateFBCommentOverlayClassV35();
             if (typeof refreshFBNativeTopSearchHandoffV15 === 'function') refreshFBNativeTopSearchHandoffV15();
             if (isFBNativeTransientMenuOpenV38()) {
@@ -7837,6 +8140,8 @@ const deleteSelectorsForPersonalProfile = () => {
         updateFBSearchPageClass();
         updateFBHomeFeedGateClassV23();
         updateFBCommentImmunityClassesV33();
+        if (runFBStoriesNativeMaintenanceV40()) return;
+        if (runFBNativeInteractiveLightLaneV42()) return;
         const commentOverlayActiveV35 = updateFBCommentOverlayClassV35();
         if (typeof refreshFBNativeTopSearchHandoffV15 === 'function') refreshFBNativeTopSearchHandoffV15();
         updateSpecificUrlNoGlimpseClassV26();
@@ -7891,6 +8196,8 @@ const deleteSelectorsForPersonalProfile = () => {
         installFBReelsLinkPatchV26();
         protectFBReelsCurrentLocationV26();
         ensureDOMReady();
+        if (runFBStoriesNativeMaintenanceV40()) return;
+        if (runFBNativeInteractiveLightLaneV42()) return;
         protectNotificationSurfacesV25(document);
         const commentOverlayActiveV35 = updateFBCommentOverlayClassV35();
         if (commentOverlayActiveV35) {
@@ -7939,7 +8246,11 @@ const deleteSelectorsForPersonalProfile = () => {
     function scheduleMainInterval() {
         addInterval(() => {
             if (!document.hidden) {
-                if (updateFBCommentOverlayClassV35()) {
+                if (runFBStoriesNativeMaintenanceV40()) {
+                    // Native Stories overlay: cheap maintenance only.
+                } else if (runFBNativeInteractiveLightLaneV42()) {
+                    // Native menus/dialogs/video overlays: cheap maintenance only.
+                } else if (updateFBCommentOverlayClassV35()) {
                     hideCriticalNavOnlyV35();
                 } else if (isFBNativeTransientMenuOpenV38()) {
                     runFBNativeTransientMenuMaintenanceV38();

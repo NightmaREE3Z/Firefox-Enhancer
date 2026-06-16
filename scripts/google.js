@@ -39,6 +39,48 @@
         try { sessionStorage.removeItem(SS_KEY); } catch (e) {}
     }
 
+    function getCurrentGoogleSearchText() {
+        try {
+            const url = new URL(window.location.href);
+            const q = url.searchParams.get('q');
+            if (q && q.trim()) return q.trim();
+        } catch (e) {}
+
+        try {
+            const active = document.activeElement;
+            if (active && active.tagName === 'INPUT') {
+                const value = active.value || '';
+                if (value.trim()) return value.trim();
+            }
+        } catch (e) {}
+
+        try {
+            const input = document.querySelector('input[name="q"]');
+            const value = input && input.value ? input.value : '';
+            if (value.trim()) return value.trim();
+        } catch (e) {}
+
+        return '';
+    }
+
+    function sendBraveFoxRedirectLog(source, blockedWord, attemptedSearch, context) {
+        try {
+            if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.sendMessage) return;
+            chrome.runtime.sendMessage({
+                type: 'BRAVEFOX_REDIRECT_LOG',
+                source: source || 'Google',
+                blockedWord: String(blockedWord || '').trim(),
+                attemptedSearch: String(attemptedSearch || '').trim(),
+                context: String(context || '').trim(),
+                pageUrl: window.location.href,
+                referrer: document.referrer || '',
+                timestamp: new Date().toISOString()
+            }, () => {
+                try { void chrome.runtime.lastError; } catch (e) {}
+            });
+        } catch (e) {}
+    }
+
     function devLog(message, ...rest) {
         if (!DEBUG) return;
         try { console.log('[GOOGLE.JS]', message, ...rest); } catch (e) {}
@@ -53,14 +95,17 @@
         try {
             console.log('[GOOGLE.JS] *** logRedirect CALLED ***', triggerContext, triggerTerm);
         } catch (e) {}
+        const attemptedSearch = getCurrentGoogleSearchText();
         lastRedirectInfo = {
             context: triggerContext || '',
             term: String(triggerTerm || ''),
+            attemptedSearch: attemptedSearch,
             url: window.location.href,
             timestamp: new Date().toISOString(),
             match: lastMatchDetails || null
         };
         persistRedirect(lastRedirectInfo);
+        sendBraveFoxRedirectLog('Google', triggerTerm, attemptedSearch, triggerContext);
         devLog('REDIRECT by:', triggerTerm, 'context:', triggerContext, 'url:', window.location.href, 'match:', lastMatchDetails);
     }
 
