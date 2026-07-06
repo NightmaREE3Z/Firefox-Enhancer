@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         IGCleaner
-// @version      2026-06-16
+// @version      2026-07-06
 // @description  Trying to make my Instagram experience tolerable.
 // @match        *://www.instagram.com/*
 // @match        *://www.instagram.com/?next=%2F/*
@@ -338,6 +338,171 @@
     function onEvent(target, type, handler, options) {
         target.addEventListener(type, handler, options);
         __eventCleanups.add(() => target.removeEventListener(type, handler, options));
+    }
+
+
+    // ===== v44: homepage own-avatar story shortcut =====
+    // Instagram changed the right-rail avatar to open the profile instead of the active story.
+    // Keep the visible href honest for middle-click/open-in-new-tab, and also intercept an
+    // ordinary left click because Instagram's React handler may otherwise ignore a rewritten href.
+    // This reuses the existing mutation observer; no extra page-wide observer is installed.
+    const IG_SELF_STORY_SHORTCUT_V44 = Object.freeze({
+        handle: 'nightmaree3z',
+        profilePath: '/nightmaree3z/',
+        storyPath: '/stories/nightmaree3z/'
+    });
+    const IG_SELF_STORY_MARKER_V44 = 'data-metamangler-self-story-v44';
+
+    function normalizeIGShortcutTextV44(value = '') {
+        try {
+            return String(value || '')
+                .replace(/[\u200B-\u200D\uFEFF]/g, '')
+                .replace(/\s+/g, ' ')
+                .trim()
+                .toLowerCase();
+        } catch { return ''; }
+    }
+
+    function isIGHomepageV44() {
+        try {
+            return location.hostname === 'www.instagram.com' && (location.pathname === '/' || location.pathname === '');
+        } catch { return false; }
+    }
+
+    function getIGShortcutPathV44(anchor) {
+        try {
+            return new URL(anchor.getAttribute('href') || anchor.href || '', location.origin).pathname;
+        } catch { return ''; }
+    }
+
+    function getBestIGSelfStoryHrefV44() {
+        const fallback = new URL(IG_SELF_STORY_SHORTCUT_V44.storyPath, location.origin).href;
+        try {
+            // Prefer the concrete active-story URL from Instagram's own story tray when one exists.
+            // Skip the shortcut anchor itself so its generic fallback does not win this search.
+            const selector = [
+                `a[href^="/stories/${IG_SELF_STORY_SHORTCUT_V44.handle}/"]`,
+                `a[href^="https://www.instagram.com/stories/${IG_SELF_STORY_SHORTCUT_V44.handle}/"]`
+            ].join(',');
+            const links = document.querySelectorAll(selector);
+            for (let i = 0; i < links.length; i++) {
+                const link = links[i];
+                if (!link || link.hasAttribute(IG_SELF_STORY_MARKER_V44)) continue;
+                const url = new URL(link.getAttribute('href') || link.href || '', location.origin);
+                const match = url.pathname.match(new RegExp(`^/stories/${IG_SELF_STORY_SHORTCUT_V44.handle}/([^/]+)/?$`, 'i'));
+                if (match && match[1]) return url.href;
+            }
+        } catch {}
+        return fallback;
+    }
+
+    function isIGRightRailSelfProfileAnchorV44(anchor) {
+        try {
+            if (!anchor || anchor.nodeType !== 1 || anchor.tagName !== 'A') return false;
+            if (!isIGHomepageV44()) return false;
+
+            const path = getIGShortcutPathV44(anchor).replace(/\/+$/, '/');
+            const profilePath = IG_SELF_STORY_SHORTCUT_V44.profilePath.replace(/\/+$/, '/');
+            const storyPath = IG_SELF_STORY_SHORTCUT_V44.storyPath.replace(/\/+$/, '/');
+            if (path !== profilePath && path !== storyPath && !anchor.hasAttribute(IG_SELF_STORY_MARKER_V44)) return false;
+
+            const img = anchor.querySelector('img[alt]');
+            if (!img) return false;
+            const alt = normalizeIGShortcutTextV44(img.getAttribute('alt'));
+            const handle = IG_SELF_STORY_SHORTCUT_V44.handle.toLowerCase();
+            const looksLikeOwnAvatar = alt.includes(handle) &&
+                (alt.includes('profiilikuva') || alt.includes('profile picture') || alt.includes('profile photo'));
+            if (!looksLikeOwnAvatar) return false;
+
+            let sawHandle = false;
+            let sawSwitch = false;
+            let node = anchor;
+            for (let depth = 0; node && depth < 8; depth++, node = node.parentElement) {
+                const local = normalizeIGShortcutTextV44(node.textContent || '');
+                if (local.includes(handle)) sawHandle = true;
+                if (/\b(vaihda|switch)\b/i.test(local)) sawSwitch = true;
+                if (node.tagName === 'MAIN' || node.tagName === 'BODY') break;
+            }
+
+            const inlineWidth = parseFloat(anchor.style.width || '0');
+            const inlineHeight = parseFloat(anchor.style.height || '0');
+            let compactAvatar = inlineWidth >= 36 && inlineWidth <= 64 && inlineHeight >= 36 && inlineHeight <= 64;
+            if (!compactAvatar && anchor.getBoundingClientRect) {
+                const rect = anchor.getBoundingClientRect();
+                compactAvatar = rect.width >= 36 && rect.width <= 64 && rect.height >= 36 && rect.height <= 64;
+            }
+
+            // The Switch/Vaihda label is the strongest right-rail signal. The captured 44x44
+            // geometry is the fallback, while excluding the tiny left-nav and huge profile avatar.
+            return (sawHandle && sawSwitch) || compactAvatar;
+        } catch { return false; }
+    }
+
+    function restoreIGSelfStoryShortcutV44() {
+        try {
+            document.querySelectorAll(`a[${IG_SELF_STORY_MARKER_V44}]`).forEach(anchor => {
+                try {
+                    anchor.setAttribute('href', IG_SELF_STORY_SHORTCUT_V44.profilePath);
+                    anchor.removeAttribute(IG_SELF_STORY_MARKER_V44);
+                } catch {}
+            });
+        } catch {}
+    }
+
+    function patchIGSelfStoryShortcutV44(root = document) {
+        try {
+            if (!isIGHomepageV44()) {
+                restoreIGSelfStoryShortcutV44();
+                return 0;
+            }
+
+            const candidates = [];
+            const add = (anchor) => {
+                if (anchor && !candidates.includes(anchor)) candidates.push(anchor);
+            };
+            const selector = [
+                `a[role="link"][href="${IG_SELF_STORY_SHORTCUT_V44.profilePath}"]`,
+                `a[role="link"][href="${IG_SELF_STORY_SHORTCUT_V44.profilePath.replace(/\/$/, '')}"]`,
+                `a[${IG_SELF_STORY_MARKER_V44}]`
+            ].join(',');
+
+            if (root && root.nodeType === 1 && root.matches?.(selector)) add(root);
+            root?.querySelectorAll?.(selector).forEach(add);
+            if (root !== document) document.querySelectorAll(selector).forEach(add);
+
+            const targetHref = getBestIGSelfStoryHrefV44();
+            let patched = 0;
+            for (let i = 0; i < candidates.length; i++) {
+                const anchor = candidates[i];
+                if (!isIGRightRailSelfProfileAnchorV44(anchor)) continue;
+                anchor.setAttribute(IG_SELF_STORY_MARKER_V44, 'true');
+                anchor.setAttribute('href', targetHref);
+                patched++;
+            }
+            return patched;
+        } catch { return 0; }
+    }
+
+    function handleIGSelfStoryShortcutClickV44(event) {
+        try {
+            if (!isIGHomepageV44() || !event || event.defaultPrevented) return;
+            const target = event.target;
+            const anchor = target && target.closest ? target.closest('a[href]') : null;
+            if (!isIGRightRailSelfProfileAnchorV44(anchor)) return;
+
+            const targetHref = getBestIGSelfStoryHrefV44();
+            anchor.setAttribute(IG_SELF_STORY_MARKER_V44, 'true');
+            anchor.setAttribute('href', targetHref);
+
+            // Let modified clicks use the rewritten href normally. For a plain left click,
+            // bypass Instagram's stale profile-route handler and perform a reliable navigation.
+            if (event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
+                event.preventDefault();
+                event.stopPropagation();
+                event.stopImmediatePropagation?.();
+                location.assign(targetHref);
+            }
+        } catch {}
     }
     function cleanup() {
         if (__cleanupRan) return;
@@ -3042,6 +3207,7 @@ injectInlineCSS();
             for (const mutation of mutationsList) {
                 mutation.addedNodes && mutation.addedNodes.forEach(node => {
                     if (node && node.nodeType === 1) {
+                        patchIGSelfStoryShortcutV44(node);
                         hideAllIGSuggestedLabelsV40(node);
                         hideIGAccountEditSectionsV43(node);
                     }
@@ -3111,6 +3277,7 @@ injectInlineCSS();
         updateMetaManglerFeedGateClass();
         updateMetaManglerAccountEditClassV43();
         injectMinimalNoGlimpseNavCSS();
+        patchIGSelfStoryShortcutV44();
         hideIGAccountEditSectionsV43();
         hideProfileThreadsTags();
         handleRedirectionsAndContentHiding();
@@ -3154,6 +3321,7 @@ injectInlineCSS();
             updateMetaManglerFeedGateClass();
             updateMetaManglerAccountEditClassV43();
             checkSPARouting(); 
+            patchIGSelfStoryShortcutV44();
             updateOverlayState();
             makeOverlayLikesClickable(); 
             if (!isReelsPage() && !document.hidden) {
@@ -3178,6 +3346,8 @@ injectInlineCSS();
             if (isSearchSurfacePresent()) hideInstagramSearchResults();
         }
     }, false);
+
+    onEvent(document, 'click', handleIGSelfStoryShortcutClickV44, true);
 
     onEvent(document, 'click', (e) => {
         const a = e.target && e.target.closest && e.target.closest('a[href^="/p/"], a[href^="/reel/"], a[href^="/tv/"]');
@@ -3207,6 +3377,7 @@ injectInlineCSS();
     onEvent(window, 'locationchange', function() {
         updateMetaManglerFeedGateClass();
         updateMetaManglerAccountEditClassV43();
+        patchIGSelfStoryShortcutV44();
         isFeedScanPhase = true; 
         reelsStyleInjected = false;
         currentURL = window.location.href;
