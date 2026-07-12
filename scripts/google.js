@@ -416,7 +416,7 @@
 	/windsor/i, /alex wind/i, /Alex Windsor/i, /analsex/i, /The Kat/, /Nikki/i, /lewdy/i, /lewdi/i, /lewdie's/i, /wuhmans/i, /wahmans/i, /wehmans/i, /Torrie/i, /Torr1/i, /Torr!/i, 
 	/Dreamboot/i, /Dream boot/i, /Sxuel/i, /Sxual/i, /Sxu3l/i, /5xu3l/i, /5xuel/i, /5xu4l/i, /5xual/i, /dre4m/i, /dr34m/i, /bo0th/i, /b0oth/i, /b0o7h/i, /bo07h/i, /b007h/i, /b00th/i, 
 	/booo/i, /b0oo/i, /bo0o/i, /boo0/i, /b000/i, /booo/i, /n000/i, /n00d/i, /no0d/i, /n0od/i, /dpnod/i, /dpnood/i, /dpnud/i, /depnud/i, /depnuud/i, /depenud/i, /depenuu/i, /dpepenud/i, 
-	/dpeepenud/i, /dpeepnud/i, /dpeependu/i, /dpeepndu/i, /Elayna/i, /Eleyna/i, /Elena/i, /Elyna/i, /Elina WWE/i, /Elyna WWE/i, /Elyina/i, /Elina Blac/i, /Elina Blak/i, /Fantop/i, 
+	/dpeepenud/i, /dpeepnud/i, /dpeependu/i, /dpeepndu/i, /Elayna/i, /Eleyna/i, /Elyna/i, /Elina WWE/i, /Elyna WWE/i, /Elyina/i, /Elina Blac/i, /Elina Blak/i, /Fantop/i, /Lust-Theory/i,
 	/Fan top/i, /Fan-top/i, /Topfan/i, /Top fan/i, /Top-fan/i, /Top-fans/i, /fanstopia/i, /Jenni/i, /fans top/i, /topiafan/i, /topia fan/i, /topia-fan/i, /topifan/i, /topi fan/i, 
 	/topi-fan/i, /topaifan/i, /topai fan/i, /topai-fan/i, /fans-topia/i, /fans-topai/i, /Henni/i, /Lawren/i, /Lawrenc/i, /Lawrence/i, /Jennif/i, /Jenn1/i, /J3nn1/i, /J3nni/i, /J3nn4/i, 
 	/Brave/i, /Browser/i, /Selain/i, /TOR-Selain/i, /MS Edge/i, /TOR-browser/i, /Opera/i, /Opera GX/i, /Browsi/i, /Browse/i, /safari/i, /Opera Browser/i, /Mozilla/i, /Firefox/i, 
@@ -432,7 +432,7 @@
 	/body belfie/i, /full body/i, /pic body/i, /pict body/i, /body selfie/i, /phot body/i, /image body/i, /postu tweak/i, /pose tweak/i, /pose swap/i, /post swap/i, /body swap/i, /pose adjust/i, 
 	/post adjust/i, /body adjust/i, /stefa/i, /adjust pose/i, /adjust posture/i, /pose trans/i, /post trans/i, /pose morph/i, /post morph/i, /body morph/i, /body reshape/i, /shape body/i, /5yvä/i,
 	/repose edit/i, /pose redo/i, /repose chang/i, /body editor/i, /body filter/i, /filter body/i, /angle chang/i, /change angle/i, /edit angle/i, /camera angle/i, /head turn/i, /body turn/i, 
-	/pose reconstruct/i, /reconstruct pose/i, /pose fix/i, /fix pose/i, /body fix/i, /repose/i, /fix body/i, /edit selfie/i, /AIRemove/i, /RemoveAI/i, /RemovalAI/i, /selfie editor/i, 
+	/pose reconstruct/i, /reconstruct pose/i, /pose fix/i, /fix pose/i, /body fix/i, /repose/i, /ComfyUI/i, /fix body/i, /edit selfie/i, /AIRemove/i, /RemoveAI/i, /RemovalAI/i, /selfie editor/i, 
 	/pose shift/i, /posture shift/i, /angle shift/i, /pic shift/i, /phot shift/i, /img shift/i, /ima shift/i, /promeai/i, /prome-ai/i, /openpose/i, /open pose/i, /open-pose/i, /AIRemov/i, 
 	/AIRemoving/i, /pose-open/i, /poseopen/i, /pos open/i, /Lily Adam/i, /Lilly Adam/i, /Toiviainen/i, /Tatujo/i, /PiFuHD/i, /Hirada/i, /Hirata/i, /Cathy/i, /Kathy/i, /Catherine/i, /AIRemoval/i,
         /Prim3r/i, /Pr1m3r/i, /Pr1mer/i, /Primar/i, /Pr1m4r/i, /Pr1mar/i, /Pramer/i, /Pramir/i, /LaPrime/i, /LaPrima/i, /LaPr1ma/i, /L4Pr1ma/i, /LaPr1m4/i, /LaPrim4/i, /LaPrim3/i, /LaPr1m3/i, /grok/i, 
@@ -468,7 +468,7 @@
 	/img online/i, /image online/i, /photo online/i, /pic online/i, /onl1/i, /fappp/i, /depn/i, /d3pn/i, /p05/i, /po5/i, /p0s/i, /postur/i, /posin/i, /Anthr/i, /Antro/i, /s0ftw/i, /softw/i, /w4re/i, 
 	/war3/i, /w4r3/i, /p41n/i, /pa1n/i, /p4in/i, /bl15s/i, /bl1s5/i, /bl155/i, /bl1ss/i, /bli55/i, /Stratu/i, /machinelearning/i, /Kairi/i, /sexx/i, /4lexa/i, /al3xa/i, /alex4/i,  /4l3xa/i, /al3x4/i, 
 	/Virtualbox/i, /Virtual box/i, /4l3x4/i, /4lex4/i, /bl15s/i, /bl1s5/i, /bl155/i, /blis5/i, /bli5s/i, /artintel/i, /LusTheory/i, /L-Theory/i, /LustTheory/i, /Lust Theory/i, /Lu-Theory/i, /mat1c/i, 
-	/m4tic/i, /m47ic/i, /ma7ic/i, /ma71c/i, /Lus-Theory/i, /Lust-Theory/i, /LusTheory/i, /L-Theory/i, /m4tic/i, /LustTheory/i, /Lust Theory/i, /Lu-Theory/i, /Lus-Theory/i, /Lust-Theory/i, /ComfyUI/i, 
+	/m4tic/i, /m47ic/i, /ma7ic/i, /ma71c/i, /Lus-Theory/i, /Lust-Theory/i, /LusTheory/i, /L-Theory/i, /m4tic/i, /LustTheory/i, /Lust Theory/i, /Lu-Theory/i, /Lus-Theory/i,
 	 
 
 
@@ -485,7 +485,7 @@
 	/\b5h3\b/i, /\bphotor\b/i, /\bGina\b/i, /\bGin4\b/i, /\bG1n4\b/i, /\bG1na\b/i, /\bGlna\b/i, /\bG!na\b/i, /\bGril\b/i,  /\bGail\b/i, /\bAshley\b/i, /\bPamela\b/i, /\bBrooke\b/i, 
 	/\bTylo\b/i, /\bCatherine\b/i, /\bBridget\b/i, /\bSally\b/i, /\bvsco\b/i, /\bdp nood\b/i, /\bdp nod\b/i, /\bdep nod\b/i, /\bFux\b/i, /\bVM\b/i, /\bVMs\b/i, /\bTNA\b/i, /\bButt\b/i,
 	/\bMachiine\b/i, /\bLily\b/i, /\bMacheine\b/i, /\bMachiene\b/i, /\bLilly\b/i, /\bAmber\b/i, /\bFuk\b/i, /\bFuc\b/i, /\bmotion\b/i, /\bH3r\b/i, /\bS0ft\b/i, /\b50ft\b/i, /\bFag\b/i,
-	/\bThekla\b/i, /\bShotzi\b/i, /\bPant\b/i, 
+	/\bThekla\b/i, /\bShotzi\b/i, /\bPant\b/i, /\bElena\b/i,
 	
 
     // Finnish Nuclear regex list
