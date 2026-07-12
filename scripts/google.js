@@ -1,7 +1,7 @@
 (function () {
     'use strict';
 
-    // BraveFox Enhancer v25.4.11 - Google Images related-search cleanup patch
+    // BraveFox Enhancer v25.4.12 - explicit result/link/redirect hierarchy
 
     // === INSTANT GEMINI ABORT ===
     // Gemini's React router hates URL parameter stripping. 
@@ -372,7 +372,7 @@
 
     // --- Keyword arrays ---
     // NUCLEAR Regexes
-    	const nuclearTerms = [
+    	const nuclearRegex = [
         /deepnude/i, /deepfake/i, /lex bl/i, /livmorgan/i, /zelina/i, /roxanne/i, /raquel/i, /stephanie/i, /woman/i, /women/i, /ladies/i, /ladye/i, /girls/i, /girly/i, /girli/i, 
 	/pussy/i, /vagin/i, /vagen/i, /vegane/i, /pussie/i, /deepn/i, /deepf/i, /deeph/i, /deeps/i, /deepm/i, /deepb/i, /deept/i, /deepa/i, /nudi/i, /nude/i, /naked/i, /undre/i, 
 	/nude app/i, /dress/i, /deepnude/i, /face swap/i, /Stacy/i, /Staci/i, /Keibler/i, /generat/i, /inpaint/i, /art intel/i, /birpp/i,  /ismartta/i, /image enhanced/i, /palge/i, 
@@ -386,7 +386,7 @@
 	/unc1oth/i, /photo AI/i, /pict AI/i, /pics app/i, /picsart/i, /enhance image/i, /erootti/i, /vegi/i, /vegen/i, /faceswap/i, /DeepSeek/i, /deepnude ai/i, /deepnude-ai/i, 
 	/object/i, /Roxan/i, /Perez/i, /Mickie/i, /Micky/i, /vagena/i, /ed17/i, /birppis/i,  /aitool/i, /Lana Perry/i, /Del Rey/i, /Tiffa/i, /Stratt/i, /puzz/i, /vulv/i, /clito/i, 
 	/clita/i, /cl1t/i, /cloth/i, /uncloth/i, /decloth/i, /rem cloth/i, /del cloth/i, /babyg/i, /eras cloth/i, /Bella/i, /Tiffy/i, /vagi/i, /vagene/i, /Del Ray/i, /CJ Lana/i, 
-	/generator/i, /Liv org/i,  /pant/i, /off pant/i, /rem pant/i, /Kristen Stewart/i, /Steward/i, /Brit Bake/i, /3dit/i, /ed1t/i, /playboy/i, /poses/i, /Sydney Sweeney/i,  
+	/generator/i, /Liv org/i, /off pant/i, /rem pant/i, /Kristen Stewart/i, /Steward/i, /Brit Bake/i, /3dit/i, /ed1t/i, /pantie/i, /panty/i, /pants/i, /playboy/i, /poses/i,  
 	/Sydnee/i, /Stee/i,  /del pant/i, /eras pant/i, /her pant/i, /she pant/i, /pussy/i, /Babe/i, /content adult/i, /porn/i, /editing/i, /3d1t/i, /AI Tool/i, /Stewart/i, 
 	/Chelsey/i, /Zel Veg/i, /Ch3l/i, /Sweeney/i, /P4IG3/i, /input face/i, /upload face/i, /Paig3/i, /P4ige/i, /pa1g/i, /editor/i, /Tw4t/i, /Brltt/i, /Steph/i, /St3ph/i, 
 	/editation/i, /3d!7/i, /3d!t/i, /CJ Perry/i, /Lana WWE/i, /Lana Del Rey/i, /CJ WWE/i, /image app/i, /edi7/i, /3d17/i, /ed!7/i, /picture app/i, /edit app/i, /pic app/i, 
@@ -485,7 +485,7 @@
 	/\b5h3\b/i, /\bphotor\b/i, /\bGina\b/i, /\bGin4\b/i, /\bG1n4\b/i, /\bG1na\b/i, /\bGlna\b/i, /\bG!na\b/i, /\bGril\b/i,  /\bGail\b/i, /\bAshley\b/i, /\bPamela\b/i, /\bBrooke\b/i, 
 	/\bTylo\b/i, /\bCatherine\b/i, /\bBridget\b/i, /\bSally\b/i, /\bvsco\b/i, /\bdp nood\b/i, /\bdp nod\b/i, /\bdep nod\b/i, /\bFux\b/i, /\bVM\b/i, /\bVMs\b/i, /\bTNA\b/i, /\bButt\b/i,
 	/\bMachiine\b/i, /\bLily\b/i, /\bMacheine\b/i, /\bMachiene\b/i, /\bLilly\b/i, /\bAmber\b/i, /\bFuk\b/i, /\bFuc\b/i, /\bmotion\b/i, /\bH3r\b/i, /\bS0ft\b/i, /\b50ft\b/i, /\bFag\b/i,
-	/\bThekla\b/i, /\bShotzi\b/i, 
+	/\bThekla\b/i, /\bShotzi\b/i, /\bPant\b/i, 
 	
 
     // Finnish Nuclear regex list
@@ -516,7 +516,7 @@
 
     // Finnish boundaried Nuclear regex list 
 	/\bRinnat\b/i, /\bTatu\b/i, /\bTissi\b/i, /\bTisu\b/i, /\bTisut\b/i, /\bM1mmusk4\b/i, /\bMimmusk4\b/i, /\bMimmi\b/i, /\bMimmuska\b/i, /\bM1mmi\b/i, /\bM1mmuska\b/i, /\bMimm1\b/i, 
-	/\bAnus\b/i, /\bAnaali\b/i, /\bSeksi\b/i, /\bHoro\b/i, /\bGa5m\b/i, /\bG4sm\b/i, /\b@$\b/i, /\bkuvake\b/i, /\bKim\b/i, /\bLili\b/i, /\bLilli\b/i, /\bDiva\b/i, 
+	/\bAnus\b/i, /\bAnaali\b/i, /\bSeksi\b/i, /\bHoro\b/i, /\bGa5m\b/i, /\bG4sm\b/i, /\b@$\b/i, /\bkuvake\b/i, /\bKim\b/i, /\bLili\b/i, /\bLilli\b/i, /\bDiva\b/i,  
         
 
     // Special Nuclear regexes
@@ -557,8 +557,8 @@
     ];
 
 
-    // Basic regex array (Won't hide links)
-    const regexKeywordsToHide = [
+    // Redirect-only terms (never hide ordinary result links/cards)
+    const termsToRedirect = [
 	/Virtual laatikko/i, /Virtuaali laatikko/i, /Virtuaalilaatikko/i, /Virtuaalibox/i, /virtualmachine/i, /virtual machine/i, /kuvankäsittely/i, /virtuaalikone/i, /virtuaali kone/i, 
 	/virtuaali tietokone/i, /virtuaalitietokone/i, /hyper-v/i, /hyper v/i, /virtuaalimasiina/i, /virtuaali masiina/i, /virtuaalimasiini/i, /virtuaali masiini/i, /virtuaali workstation/i, 
 	/virtual workstation/i, /virtualworkstation/i, /virtual workstation/i, /vrbox/i, /vibox/i, /virtuaaliworkstation/i, /hypervisor/i, /hyper visor/i, /hyperv/i, /vbox/i, /virbox/i, 
@@ -606,7 +606,7 @@
                         }
 
                         function nuclearTermExists(source) {
-                            return nuclearTerms.some(rx => rx && rx.source === source);
+                            return nuclearRegex.some(rx => rx && rx.source === source);
                         }
 
                         result.wrestling_women_urls.forEach(url => {
@@ -634,12 +634,12 @@
                                 return;
                             }
 
-                            nuclearTerms.push(new RegExp(regexSource, 'i'));
+                            nuclearRegex.push(new RegExp(regexSource, 'i'));
                             addedCount++;
                         });
 
                         if (addedCount > 0) {
-                            devLog(`Dynamically added ${addedCount} wrestler names from shared storage to nuclearTerms. Skipped duplicates: ${skippedDuplicateCount}.`);
+                            devLog(`Dynamically added ${addedCount} wrestler names from shared storage to nuclearRegex. Skipped duplicates: ${skippedDuplicateCount}.`);
                             // Re-run main filtering immediately to apply new nuclear rules
                             if (typeof mainFiltering === 'function') {
                                 mainFiltering();
@@ -662,7 +662,15 @@
 
     ];
 
+    // The former specialRegexes have the same behavior as termsToRedirect:
+    // redirect queries, never hide ordinary links by themselves.
+    termsToRedirect.push(...specialRegexes);
+
     const allowedWords = [
+    ];
+
+    // Strong allowed-context allow-list. Nuclear matches remain absolute.
+    const allowedTerms = [
         /reddit/i, /OSRS/i, /RS/i, /RS3/i, /Old School/i, /RuneScape/i, /netflix/i, /pushpull/i, /facebook/i, /FB/i, /instagram/i, /Wiki/i, /pedia/i, /hikipedia/i, /fandom/i, /lehti/i, /tiktok/i, /bond/i, /bonds/i, /2007scape/i, /youtube/i, /ublock/i, 
         /wrestling/i, /wrestler/i, /tori/i, /tori\.fi/i, /www\.tori\.fi/i, /Kirpputori/i, /käytetty/i, /käytetyt/i, /käytettynä/i, /proshop/i, /hinta/i, /hintavertailu/i, /hintaopas/i, /sähkö/i, /pörssi/i, /sähkösopimus/i, /vatfall/i, /elenia/i, 
         /kulutus/i,  /sähkön/i, /sähkönkulutus/i, /bing/i, /duckduckgo/i, /old/i, /new/i, /veikkaus/i, /lotto/i, /jokeri/i, /jääkiekko/i, /viikinkilotto/i, /perho/i, /vakuutus/i, /kela/i, /sosiaalitoimisto/i, /sossu/i, /OP/i, /Osuuspankki/i, /Speaker/i,
@@ -700,12 +708,17 @@
 	/lookup/i,
     ];
 
+    // Link/card-only terms. These never participate in query, form, correction,
+    // suggestion or address-bar redirects. Add future hide-only expressions here.
+    const termsToHide = [
+    ];
+
     // === NEW: Firefox Only Allowed Words (Browser Promos) ===
     const firefoxAllowedWords = [
         /Chrome/i, /oletushakukone/i, /hakukone/i, /Lataa/i, /selaimessa Firefox/i, /Käytät Firefoxia/i, /toimii paremmin/i
     ];
 
-    const allowedUrls = [
+    const allowedURLs = [
         "archive.org", "iltalehti.fi", "is.fi", "youtube.com", "www.wikipedia.org", "www.netflix.com", "netflix.com", "runescape.wiki", "github.com/paintdotnet", "www.getpaint.net", "oldschool.runescape.com", "runescape.com", "openai.com", "status.openai.com",
         "www.reddit.com", "old.reddit.com", "new.reddit.com", "spotify.com", "www.thesmackdownhotel.com", "thesmackdownhotel.com", "wwe.com", "amd.com", "nvidia.com", "intel.com", "www.techpowerup.com", "chatgpt.com", "github.com/copilot", "gemini.google.com",
 	"www.jimms.fi", "www.verkkokauppa.com", "www.motonet.fi", "datatronic.fi", "www.datatronic.fi", "multitronic.fi", "www.multitronic.fi", "www.proshop.fi", "tori.fi", "www.tori.fi", "hintaopas.fi", "www.yliopistonapteekki.fi", "www.yliopistonapteekki.fi", 
@@ -1444,15 +1457,10 @@
         return list;
     }
 
-    dedupeRegexArray(nuclearTerms);
-    dedupeRegexArray(regexKeywordsToHide);
-    dedupeRegexArray(specialRegexes);
-
-    const redirectKeywordRegexes = [...nuclearTerms, ...specialRegexes, ...regexKeywordsToHide];
-
-    const blockKeywordsPattern = redirectKeywordRegexes.length
-        ? new RegExp(redirectKeywordRegexes.map(pat => pat.source).join("|"), "i")
-        : null;
+    dedupeRegexArray(nuclearRegex);
+    dedupeRegexArray(allowedTerms);
+    dedupeRegexArray(termsToRedirect);
+    dedupeRegexArray(termsToHide);
 
     // --- Helpers ---
     function containsAllowedWords(text) {
@@ -1466,8 +1474,8 @@
     function isUrlAllowed(url) {
         if (!url) return false;
         const lowerUrl = url.toLowerCase();
-        for (let i = 0; i < allowedUrls.length; ++i) {
-            const safeDomain = allowedUrls[i].toLowerCase().replace(/^www\./, '');
+        for (let i = 0; i < allowedURLs.length; ++i) {
+            const safeDomain = allowedURLs[i].toLowerCase().replace(/^www\./, '');
             if (lowerUrl.includes(safeDomain)) return true;
         }
         return false;
@@ -1500,7 +1508,7 @@
     // Record details of the last forbidden match for better debugging
     function recordMatchDetail(kind, value, inText) {
         lastMatchDetails = {
-            kind,                          // 'nuclear' | 'regex' | 'special' | 'ai-boundary'
+            kind,                          // 'nuclear' | 'allowed' | 'redirect' | 'hide' | 'ai-boundary'
             value: String(value || ''),
             snippet: String(inText || '').substring(0, 200),
             when: new Date().toISOString()
@@ -1526,24 +1534,22 @@
     // === NUCLEAR KEYWORD CHECKER ===
     // Used for hard-removing Google links/cards/image-results. Runs above allowed URL/allowed word shields.
     function containsNuclearTerms(text) {
-        return testRegexList(nuclearTerms, text, 'nuclear');
+        return testRegexList(nuclearRegex, text, 'nuclear');
     }
 
-    // === BASE REDIRECT KEYWORD CHECKER (NO AI BOUNDARY) ===
-    // Used for query/suggestion redirects. Regular terms are redirect-only; they do not remove result links anymore.
-    function containsForbiddenKeywordsBase(text) {
-        if (!text) return false;
+    // Strong contextual exception. Nuclear terms are deliberately checked first.
+    function containsallowedTerms(text) {
+        return testRegexList(allowedTerms, text, 'allowed');
+    }
 
-        const nuclearHit = containsNuclearTerms(text);
-        if (nuclearHit) return nuclearHit;
+    // Query/form/suggestion redirect tier. This never hides an ordinary result link.
+    function containsTermsToRedirect(text) {
+        return testRegexList(termsToRedirect, text, 'redirect');
+    }
 
-        const specialHit = testRegexList(specialRegexes, text, 'special');
-        if (specialHit) return specialHit;
-
-        const regexHit = testRegexList(regexKeywordsToHide, text, 'regex');
-        if (regexHit) return regexHit;
-
-        return false;
+    // Result/card hide tier. This never redirects a query or form submission.
+    function containsTermsToHide(text) {
+        return testRegexList(termsToHide, text, 'hide');
     }
 
     // === AI-BOUNDARY FUNCTION (USED FOR QUERIES ETC.) ===
@@ -1684,10 +1690,16 @@
     }
 
     // === UNIFIED RESULT/LINK HIERARCHY CHECKER ===
-    // 1. Nuclear terms (absolute) -> 2. Allowed URLs -> 3. Banned URLs/TLDs/Image URLs -> 4. Allowed Words
-    // Regular regex/literal keyword arrays are redirect-only and intentionally do not hide normal result links.
+    // 1. nuclearRegex (hide + redirect, absolute)
+    // 2. allowedTerms (strong context allow-list)
+    // 3. allowedURLs
+    // 4. blockedImageURLs / urlPatternsToHide / blocked TLDs
+    // 5. termsToRedirect (redirect-only; a link match is kept)
+    // 6. termsToHide (link/card hide-only)
+    // 7. allowedWords (legacy weak allow-list)
     function shouldRemoveElement(url, text, isImage = false) {
         const combined = `${text || ''} ${url || ''}`;
+        let embeddedSignal = '';
 
         // 1. Nuclear terms: absolute top priority, no allowed URL/word shield.
         const nuclearHit = containsNuclearTerms(combined);
@@ -1699,18 +1711,27 @@
                 const qParam = u.searchParams.get('q') || '';
                 const imgUrl = u.searchParams.get('imgurl') || '';
                 const imgRefUrl = u.searchParams.get('imgrefurl') || '';
-                if (containsNuclearTerms(`${qParam} ${imgUrl} ${imgRefUrl}`)) return true;
+                embeddedSignal = `${qParam} ${imgUrl} ${imgRefUrl}`;
+                if (containsNuclearTerms(embeddedSignal)) return true;
             }
         } catch(e) {}
 
-        // 2. Allowed URLs still shield against normal URL/TLD/image-url blocks.
+        // 2. allowed context shields every lower tier.
+        if (containsallowedTerms(`${combined} ${embeddedSignal}`)) return false;
+
+        // 3. Allowed URLs shield every lower tier.
         if (isUrlAllowed(url)) return false;
 
-        // 3. Banned URLs & TLDs
+        // 4. Hard URL, TLD and image-source blocks.
         if (matchesBlockedUrlPattern(url) || isBannedTLD(url)) return true;
         if (isImage && matchesBlockedImagePattern(url)) return true;
 
-        // 4. Allowed Words remain a weak shield below hard URL blocks.
+        // 5. termsToRedirect is deliberately skipped in link/card context.
+
+        // 6. Hide-only text never participates in query redirects.
+        if (containsTermsToHide(combined)) return true;
+
+        // 7. Legacy weak shield, below all explicit hide tiers.
         if (containsAllowedWords(text) || containsAllowedWords(url)) return false;
 
         return false;
@@ -1721,12 +1742,19 @@
         if (!text) return false;
         devLog('containsForbiddenKeywords called with:', JSON.stringify(String(text)));
 
+        // Query hierarchy mirrors the shared tiers, while URL/image and hide-only
+        // rules intentionally have no redirect action.
+        const nuclearHit = containsNuclearTerms(text);
+        if (nuclearHit) return nuclearHit;
+        if (containsallowedTerms(text)) return false;
+        if (isUrlAllowed(text)) return false;
+
         const aiHit = containsAiBoundary(text);
         if (aiHit) {
             recordMatchDetail('ai-boundary', aiHit, text);
             return aiHit;
         }
-        return containsForbiddenKeywordsBase(text);
+        return containsTermsToRedirect(text);
     }
 
     if (typeof window !== 'undefined') {
@@ -1831,21 +1859,34 @@
             const signal = collectGoogleImageSignal(node);
             if (!signal) return false;
 
-            // Nuclear terms are absolute and apply to visible text, alt/title, source URLs, imgurl and imgrefurl.
+            // 1. Nuclear terms are absolute across text, alt/title and decoded URLs.
             if (containsNuclearTerms(signal)) return true;
 
-            // Keep WEBP trash out of Image Search results/previews.
-            if (isWebpImageSignal(signal)) return true;
-
-            // Direct regex pass over the full decoded signal catches encoded Google /imgres payloads.
-            if (matchesBlockedImagePattern(signal) || matchesBlockedUrlPattern(signal)) return true;
+            // 2. allowed context is a strong allow-list below nuclear.
+            if (containsallowedTerms(signal)) return false;
 
             const urls = extractUrlsFromSignal(signal);
+
+            // 3. One explicitly allowed source/referrer protects the image card.
+            if (urls.some(isUrlAllowed)) return false;
+
+            // 4. Hard image/URL/TLD rules, including encoded /imgres payloads.
+            if (isWebpImageSignal(signal) ||
+                matchesBlockedImagePattern(signal) ||
+                matchesBlockedUrlPattern(signal)) return true;
+
             for (let i = 0; i < urls.length; i++) {
                 const u = urls[i];
-                if (isUrlAllowed(u)) continue;
                 if (isBannedTLD(u) || matchesBlockedUrlPattern(u) || matchesBlockedImagePattern(u)) return true;
             }
+
+            // 5. termsToRedirect is deliberately skipped in image-card context.
+
+            // 6. Hide-only terms remove cards without ever redirecting searches.
+            if (containsTermsToHide(signal)) return true;
+
+            // 7. Legacy weak allow-list is intentionally last.
+            if (containsAllowedWords(signal)) return false;
         } catch (e) {}
         return false;
     }
@@ -1984,9 +2025,22 @@
         const nuclearHit = containsNuclearTerms(text);
         if (nuclearHit) return nuclearHit;
 
-        if (containsAllowedWords(text)) return false;
+        if (containsallowedTerms(text)) return false;
+        if (isUrlAllowed(text)) return false;
 
-        return containsForbiddenKeywordsBase(text);
+        const aiHit = containsAiBoundary(text);
+        if (aiHit) {
+            recordMatchDetail('ai-boundary', aiHit, text);
+            return aiHit;
+        }
+
+        const redirectHit = containsTermsToRedirect(text);
+        if (redirectHit) return redirectHit;
+
+        // termsToHide is intentionally absent: suggestions are redirect context,
+        // not result links/cards. allowedWords remains the last weak exception.
+        if (containsAllowedWords(text)) return false;
+        return false;
     }
 
     function isInsideImagePreviewOrHidden(node) {
@@ -2088,7 +2142,7 @@
         const query = searchParams.get('q') || '';
 
         const forbiddenMatch = containsForbiddenKeywords(query);
-        if (forbiddenMatch && !isUrlAllowed(window.location.href)) {
+        if (forbiddenMatch) {
             doRedirect('preflight', forbiddenMatch);
             return true;
         }
@@ -2143,7 +2197,7 @@ function cleanGoogleUrl() {
                 for (let i = 0; i < inputs.length; ++i) {
                     const val = inputs[i].value || '';
                     const forbiddenMatch = containsForbiddenKeywords(val);
-                    if (forbiddenMatch && !isUrlAllowed(window.location.href)) {
+                    if (forbiddenMatch) {
                         event.preventDefault();
                         event.stopImmediatePropagation();
                         overlay && (overlay.style.display = 'block');
@@ -2163,7 +2217,7 @@ function cleanGoogleUrl() {
             if (active.name === 'q' || (active.tagName === 'INPUT' && /search|text/i.test(active.type))) {
                 const val = active.value || '';
                 const forbiddenMatch = containsForbiddenKeywords(val);
-                if (forbiddenMatch && !isUrlAllowed(window.location.href)) {
+                if (forbiddenMatch) {
                     event.preventDefault();
                     event.stopImmediatePropagation();
                     overlay && (overlay.style.display = 'block');
@@ -2183,7 +2237,7 @@ function cleanGoogleUrl() {
                 try {
                     const val = searchInput.value || '';
                     const forbiddenMatch = containsForbiddenKeywords(val);
-                    if (forbiddenMatch && !isUrlAllowed(window.location.href)) {
+                    if (forbiddenMatch) {
                         overlay && (overlay.style.display = 'block');
                         doRedirect('input-change', forbiddenMatch);
                     }
@@ -2741,7 +2795,7 @@ function swapSearchTabs() {
         const sp = new URLSearchParams(window.location.search);
         const q = sp.get('q') || '';
         const bad = containsForbiddenKeywords(q);
-        if (bad && !isUrlAllowed(window.location.href)) {
+        if (bad) {
             overlay && (overlay.style.display = 'block');
             doRedirect('late-query', bad);
             return;
