@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         FBCleaner
-// @version      2026-07-12
+// @version      26.2.0
 // @description  Makes my Facebook experience less terrible.
 // @match        *://*.facebook.com/*
 // @grant        none
@@ -185,12 +185,12 @@ function addTimeout(fn, ms) {
     __fbTimers.timeouts.add(id);
     return id;
 }
-function addIdleCallback(fn) {
+function addIdleCallback(fn, options) {
     // Track requestIdleCallback so we can cancel on cleanup (prevents leaks on SPA navigations)
     if (typeof window.requestIdleCallback === 'function') {
         const id = window.requestIdleCallback(() => {
             try { fn(); } finally { __fbTimers.idleCallbacks.delete(id); }
-        });
+        }, options);
         __fbTimers.idleCallbacks.add(id);
         return id;
     } else {
@@ -448,12 +448,13 @@ const protectNotificationSurfaces = (root = document) => {
     try {
         const scanRoot = (root && root.querySelectorAll) ? root : document;
         const panels = [];
+        const fullNotificationsPage = /\/(notifications|ilmoitukset)(?:\/|$)/i.test(location.pathname || '');
         const add = (panel) => {
             if (!panel || panels.includes(panel)) return;
             panels.push(panel);
         };
 
-        if (/\/(notifications|ilmoitukset)(?:\/|$)/i.test(location.pathname || '')) {
+        if (fullNotificationsPage) {
             add(document.querySelector('[role="main"], main') || document.body);
         }
 
@@ -461,11 +462,15 @@ const protectNotificationSurfaces = (root = document) => {
             add(scanRoot.closest?.('[data-pagelet*="Notification" i], [aria-label*="Ilmoitukset" i], [aria-label*="Notifications" i], [role="dialog"], [role="menu"], [role="region"], [role="list"]') || scanRoot);
         }
 
-        const selector = '[data-pagelet*="Notification" i], [aria-label*="Ilmoitukset" i], [aria-label*="Notifications" i], [role="dialog"], [role="menu"], [role="region"], [role="list"]';
-        const candidates = scanRoot.querySelectorAll ? scanRoot.querySelectorAll(selector) : [];
-        for (let i = 0; i < candidates.length && panels.length < 8; i++) {
-            const candidate = candidates[i];
-            if (isNotificationPanelElement(candidate)) add(candidate);
+        // The full notifications route already has one authoritative root. Avoid walking the
+        // entire page again looking for nested dialog/list/region candidates inside that root.
+        if (!fullNotificationsPage || scanRoot.nodeType === 1) {
+            const selector = '[data-pagelet*="Notification" i], [aria-label*="Ilmoitukset" i], [aria-label*="Notifications" i], [role="dialog"], [role="menu"], [role="region"], [role="list"]';
+            const candidates = scanRoot.querySelectorAll ? scanRoot.querySelectorAll(selector) : [];
+            for (let i = 0; i < candidates.length && panels.length < 8; i++) {
+                const candidate = candidates[i];
+                if (isNotificationPanelElement(candidate)) add(candidate);
+            }
         }
 
         panels.slice(0, 8).forEach(panel => {
@@ -1118,11 +1123,12 @@ const releaseFBTrustedTimelinePosts = (root = document) => {
         document.documentElement?.classList.add('fb-trusted-profile-timeline-v50');
         const scanRoot = root?.querySelectorAll ? root : document;
         const selector = [
-            'div[data-pagelet^="FeedUnit_"]',
-            'div[data-pagelet^="TimelineFeedUnit_"]',
-            '[role="feed"] > [role="article"]',
+            'div[data-pagelet^="FeedUnit_"]:not(.fb-trusted-profile-post-v50)',
+            'div[data-pagelet^="TimelineFeedUnit_"]:not(.fb-trusted-profile-post-v50)',
+            '[role="feed"] > [role="article"]:not(.fb-trusted-profile-post-v50)',
             '[role="feed"] .fb-post-screening-v47',
-            '[role="feed"] .fb-post-banned'
+            '[role="feed"] .fb-post-banned',
+            '[role="feed"] .fb-element-banned'
         ].join(',');
         const nodes = [];
         if (scanRoot.nodeType === 1 && scanRoot.matches?.(selector)) nodes.push(scanRoot);
@@ -1131,8 +1137,17 @@ const releaseFBTrustedTimelinePosts = (root = document) => {
         nodes.forEach(seed => {
             try {
                 const post = getFBFeedUnitWrapper(seed) || seed;
-                if (!post || seen.has(post) || isNotificationPanelElement(post) || isFBCommentSurfaceElement(post)) return;
+                if (!post || seen.has(post)) return;
                 seen.add(post);
+                const alreadyClean = post.classList?.contains('fb-trusted-profile-post-v50') &&
+                    post.getAttribute?.('data-fb-v25-scan-complete') === 'trusted-profile-v50' &&
+                    !post.matches?.('.fb-post-banned, .fb-element-banned, .fb-post-screening-v47, .fb-post-pending, .fb-post-scanning, .fb-post-expanding');
+                if (alreadyClean) return;
+
+                // Canonical posts under the trusted profile's feed cannot be notification or
+                // comment panels. Avoid repeatedly reading ancestor/feed text to rediscover that.
+                if (!post.closest?.('[role="feed"]') &&
+                    (isNotificationPanelElement(post) || isFBCommentSurfaceElement(post))) return;
                 const wasHardHidden = hasFBCleanerHardHideClass(post);
                 if (wasHardHidden) clearFBCleanerHideStylesOnly(post);
                 releaseFBFeedSlot(post);
@@ -1146,7 +1161,12 @@ const releaseFBTrustedTimelinePosts = (root = document) => {
                 post.removeAttribute('data-fb-v31-cache-type');
                 post.removeAttribute('data-fb-v31-cache-decision');
                 post.style?.removeProperty('--fb-v47-screen-height');
-                post.querySelectorAll?.('[role="article"]').forEach(article => {
+                post.querySelectorAll?.([
+                    '[role="article"]:not(.fb-trusted-profile-post-v50)',
+                    '[role="article"].fb-post-banned',
+                    '[role="article"].fb-element-banned',
+                    '[role="article"].fb-post-screening-v47'
+                ].join(',')).forEach(article => {
                     try {
                         const hidden = hasFBCleanerHardHideClass(article);
                         if (hidden) clearFBCleanerHideStylesOnly(article);
@@ -1576,6 +1596,55 @@ const injectInlineCSS = () => {
             content-visibility: visible !important;
         }
 
+        /* v52: keep pending/hydrating virtual slots as a one-pixel in-flow anchor.
+           The anchor remains observable by Facebook's lazy loader, but the 300px fallback
+           card and Facebook's own empty skeleton slot never become visible. Native sizing
+           returns as soon as hydration/scanning reaches a terminal state. */
+        .fb-feed-slot-screening-v51:not(.fb-feed-slot-banned-v49),
+        .fb-feed-slot-hydrating-v52:not(.fb-feed-slot-banned-v49),
+        .fb-native-post-hydrating-v52:not(.fb-feed-slot-banned-v49),
+        html.fb-trusted-profile-timeline-v50 [role="feed"] .fb-feed-slot-hydrating-v52:not(.fb-feed-slot-banned-v49),
+        html.fb-trusted-profile-timeline-v50 [role="feed"] .fb-native-post-hydrating-v52:not(.fb-feed-slot-banned-v49) {
+            position: relative !important;
+            height: 1px !important;
+            min-height: 1px !important;
+            max-height: 1px !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            border: 0 !important;
+            overflow: hidden !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+            content-visibility: hidden !important;
+            contain: strict !important;
+            transition: none !important;
+            animation: none !important;
+        }
+
+        /* Trusted timelines bypass content scanning, but their initial Facebook skeletons
+           still need the same no-slot treatment. Restrict this synchronous CSS fallback to
+           hydration-only cards so loading comments/media inside a real post stay untouched. */
+        html.fb-trusted-profile-timeline-v50 div[data-pagelet^="FeedUnit_"]:has([data-visualcompletion="loading-state"]):not(:has([data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"], video)),
+        html.fb-trusted-profile-timeline-v50 div[data-pagelet^="TimelineFeedUnit_"]:has([data-visualcompletion="loading-state"]):not(:has([data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"], video)),
+        html.fb-trusted-profile-timeline-v50 [role="feed"] > [role="article"]:has([data-visualcompletion="loading-state"]):not(:has([data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"], video)) {
+            position: relative !important;
+            height: 1px !important;
+            min-height: 1px !important;
+            max-height: 1px !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            border: 0 !important;
+            overflow: hidden !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+            content-visibility: hidden !important;
+            contain: strict !important;
+            transition: none !important;
+            animation: none !important;
+        }
+
         .fb-feed-slot-banned-v49 {
             display: none !important;
             visibility: hidden !important;
@@ -1824,63 +1893,33 @@ const injectInlineCSS = () => {
             animation: none !important;
         }
 
-        /* v48 CSS-FIRST PRECLAIM VEIL.
-           The video exposed the remaining race: a FeedUnit can lose Facebook's loading skeleton
-           and paint its real post before the MutationObserver/scan queue has added
-           .fb-post-screening-v47. CSS sees that state change synchronously, JS does not.
-
-           Therefore every still-undecided canonical FeedUnit hides its real children immediately,
-           even before JS has claimed it. Facebook's own loading-state/progress skeleton remains
-           visible. Once JS claims the wrapper, the compact v47 placeholder below takes over.
-           Approved/banned posts are terminal and never enter this veil again. */
-        html.fb-feed-screening-gate-v46 div[data-pagelet^="FeedUnit_"]:not(.fb-post-approved):not(.fb-feed-unit-approved):not(.fb-post-banned):not(.fb-element-banned):not([data-fb-v25-scan-complete="1"]):not(:has([data-visualcompletion="loading-state"], [role="progressbar"])) > *,
-        html.fb-feed-screening-gate-v46 div[data-pagelet^="TimelineFeedUnit_"]:not(.fb-post-approved):not(.fb-feed-unit-approved):not(.fb-post-banned):not(.fb-element-banned):not([data-fb-v25-scan-complete="1"]):not(:has([data-visualcompletion="loading-state"], [role="progressbar"])) > *,
-        html.fb-feed-screening-gate-v46 [role="feed"] > [role="article"]:not(.fb-post-approved):not(.fb-feed-unit-approved):not(.fb-post-banned):not(.fb-element-banned):not([data-fb-v25-scan-complete="1"]):not(:has([data-visualcompletion="loading-state"], [role="progressbar"])) > * {
-            visibility: hidden !important;
-            opacity: 0 !important;
-            pointer-events: none !important;
-            transition: none !important;
-            animation: none !important;
-        }
-
-        /* During Facebook's native skeleton phase, hide any real-content siblings that arrive
-           early while leaving the skeleton branch itself alone. */
-        html.fb-feed-screening-gate-v46 div[data-pagelet^="FeedUnit_"]:not(.fb-post-approved):not(.fb-feed-unit-approved):not(.fb-post-banned):not(.fb-element-banned):has([data-visualcompletion="loading-state"], [role="progressbar"]) > *:not([data-visualcompletion="loading-state"]):not([role="progressbar"]):not(:has([data-visualcompletion="loading-state"], [role="progressbar"])),
-        html.fb-feed-screening-gate-v46 div[data-pagelet^="TimelineFeedUnit_"]:not(.fb-post-approved):not(.fb-feed-unit-approved):not(.fb-post-banned):not(.fb-element-banned):has([data-visualcompletion="loading-state"], [role="progressbar"]) > *:not([data-visualcompletion="loading-state"]):not([role="progressbar"]):not(:has([data-visualcompletion="loading-state"], [role="progressbar"])),
-        html.fb-feed-screening-gate-v46 [role="feed"] > [role="article"]:not(.fb-post-approved):not(.fb-feed-unit-approved):not(.fb-post-banned):not(.fb-element-banned):has([data-visualcompletion="loading-state"], [role="progressbar"]) > *:not([data-visualcompletion="loading-state"]):not([role="progressbar"]):not(:has([data-visualcompletion="loading-state"], [role="progressbar"])) {
-            visibility: hidden !important;
-            opacity: 0 !important;
-            pointer-events: none !important;
-            transition: none !important;
-            animation: none !important;
-        }
-
-        /* v47/v48 one-shot feed hydration gate.
-           1) Facebook's own loading-state/progress skeleton remains untouched and visible.
-           2) As soon as real post content replaces it, CSS hides that unapproved FeedUnit before
-              the periodic scanner can paint it.
-           3) JS expands "See more", waits for a quiet hydration turn, scans once, then applies a
-              terminal approved/banned decision. Approved posts are not reopened for ordinary
-              mutations, menus, video controls, reactions, or comments.
-
-           Only the explicit .fb-post-screening-v47 state is rendered as our fallback placeholder;
-           this prevents unclaimed FeedUnits from being blanked by CSS alone. */
-        /* v47: only posts explicitly claimed by JS receive our fallback placeholder.
-           v46 gated every unapproved FeedUnit directly from CSS, so a post missed by the queue
-           could become a permanent giant ghost card. Native Facebook loading skeletons remain
-           untouched and visible because the selector below excludes loading-state/progress nodes. */
-        .fb-post-screening-v47:not([data-fb-v25-scan-complete="1"]):not(.fb-post-banned):not(.fb-element-banned):not(:has([data-visualcompletion="loading-state"], [role="progressbar"])) {
+        /* v52 CSS-FIRST ZERO-SLOT GATE.
+           Every undecided canonical FeedUnit becomes a one-pixel, invisible lazy-load anchor
+           before JavaScript's mutation queue can run. This covers both Facebook skeletons and
+           real content awaiting the one-shot scan, so neither phase paints an empty card. */
+        html.fb-feed-screening-gate-v46 div[data-pagelet^="FeedUnit_"]:not(.fb-post-approved):not(.fb-feed-unit-approved):not(.fb-post-banned):not(.fb-element-banned):not([data-fb-v25-scan-complete="1"]),
+        html.fb-feed-screening-gate-v46 div[data-pagelet^="TimelineFeedUnit_"]:not(.fb-post-approved):not(.fb-feed-unit-approved):not(.fb-post-banned):not(.fb-element-banned):not([data-fb-v25-scan-complete="1"]),
+        html.fb-feed-screening-gate-v46 [role="feed"] > [role="article"]:not(.fb-post-approved):not(.fb-feed-unit-approved):not(.fb-post-banned):not(.fb-element-banned):not([data-fb-v25-scan-complete="1"]),
+        .fb-post-screening-v47:not([data-fb-v25-scan-complete="1"]):not(.fb-post-banned):not(.fb-element-banned) {
             position: relative !important;
             isolation: isolate !important;
-            height: var(--fb-v47-screen-height, 300px) !important;
-            min-height: var(--fb-v47-screen-height, 300px) !important;
-            max-height: var(--fb-v47-screen-height, 300px) !important;
+            height: 1px !important;
+            min-height: 1px !important;
+            max-height: 1px !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            border: 0 !important;
             overflow: hidden !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
             pointer-events: none !important;
-            background: var(--card-background, #ffffff) !important;
+            content-visibility: hidden !important;
+            contain: strict !important;
+            transition: none !important;
+            animation: none !important;
         }
 
-        .fb-post-screening-v47:not([data-fb-v25-scan-complete="1"]):not(.fb-post-banned):not(.fb-element-banned):not(:has([data-visualcompletion="loading-state"], [role="progressbar"])) > * {
+        .fb-post-screening-v47:not([data-fb-v25-scan-complete="1"]):not(.fb-post-banned):not(.fb-element-banned) > * {
             visibility: hidden !important;
             opacity: 0 !important;
             pointer-events: none !important;
@@ -1888,24 +1927,10 @@ const injectInlineCSS = () => {
             animation: none !important;
         }
 
-        .fb-post-screening-v47:not([data-fb-v25-scan-complete="1"]):not(.fb-post-banned):not(.fb-element-banned):not(:has([data-visualcompletion="loading-state"], [role="progressbar"]))::after {
-            content: "" !important;
-            position: absolute !important;
-            inset: 0 !important;
-            z-index: 2 !important;
-            display: block !important;
-            visibility: visible !important;
-            opacity: 1 !important;
-            pointer-events: none !important;
-            transition: none !important;
-            animation: none !important;
-            background:
-                linear-gradient(var(--placeholder-icon-background, #e4e6eb) 0 0) 18px 18px / 42px 42px no-repeat,
-                linear-gradient(var(--placeholder-icon-background, #e4e6eb) 0 0) 74px 22px / 34% 12px no-repeat,
-                linear-gradient(var(--placeholder-icon-background, #e4e6eb) 0 0) 74px 43px / 20% 10px no-repeat,
-                linear-gradient(var(--placeholder-icon-background, #e4e6eb) 0 0) 18px 82px / calc(100% - 36px) 12px no-repeat,
-                linear-gradient(var(--placeholder-icon-background, #e4e6eb) 0 0) 18px 106px / 72% 12px no-repeat,
-                var(--card-background, #ffffff) !important;
+        /* Patch 1's generated 300px placeholder was itself the visible empty post slot. */
+        .fb-post-screening-v47::after {
+            content: none !important;
+            display: none !important;
         }
 
         /* v20 profile header safe island.
@@ -2604,6 +2629,19 @@ const collapseFBFeedSlot = (seed) => {
         const unit = getFBFeedUnitWrapper(seed) || seed;
         const slot = getFBFeedSlotWrapper(unit);
         if (!slot?.classList) return;
+
+        // Clear any earlier screening owner first. Facebook may have inserted/replaced a
+        // wrapper during hydration, so the final slot is not guaranteed to be the same node.
+        let current = unit;
+        let depth = 0;
+        while (current && depth < 7) {
+            current.classList?.remove('fb-feed-slot-screening-v51');
+            current.style?.removeProperty('--fb-v51-screen-height');
+            if (current.getAttribute?.('role') === 'feed') break;
+            current = current.parentElement;
+            depth++;
+        }
+
         slot.classList.add('fb-feed-slot-banned-v49');
         slot.setAttribute('data-fb-v49-collapsed-slot', '1');
         unit?.style?.removeProperty('--fb-v47-screen-height');
@@ -2622,10 +2660,253 @@ const releaseFBFeedSlot = (seed) => {
                 current.classList.remove('fb-feed-slot-banned-v49');
                 current.removeAttribute?.('data-fb-v49-collapsed-slot');
             }
+            if (current.classList?.contains('fb-feed-slot-screening-v51')) {
+                current.classList.remove('fb-feed-slot-screening-v51');
+                current.style?.removeProperty('--fb-v51-screen-height');
+            }
             if (current.getAttribute?.('role') === 'feed') break;
             current = current.parentElement;
             depth++;
         }
+    } catch (e) {}
+};
+
+// ===== v53 NATIVE POST-HYDRATION SLOT SUPPRESSOR =====
+// Facebook's skeleton can live inside a one-post virtualization wrapper whose height is
+// independent of the FeedUnit. Keep that wrapper as a one-pixel lazy-load anchor until real
+// post structure arrives. This lane also runs on trusted timelines, where content scanning is
+// deliberately bypassed, and it never treats a loading comment/media control as a whole-post load.
+//
+// Patch 2 scanned up to 180 complete FeedUnits from several overlapping 140ms/240ms/2s paths.
+// On a long feed those repeated deep queries monopolized the main thread. Patch 3 tracks only
+// actual loading-marker owners and their already-collapsed slots, with a short release debounce
+// to prevent Facebook's recycled DOM from bouncing the layout between loading/real states.
+const FB_NATIVE_POST_LOADING_SELECTOR_V52 = '[data-visualcompletion="loading-state"], [role="progressbar"]';
+const FB_NATIVE_FEED_UNIT_SELECTOR_V53 = 'div[data-pagelet^="FeedUnit_"], div[data-pagelet^="TimelineFeedUnit_"], [role="feed"] > [role="article"]';
+const FB_NATIVE_POST_LOADING_MARKER_QUERY_V53 = [
+    '[role="feed"] [data-visualcompletion="loading-state"]',
+    '[role="feed"] [role="progressbar"]',
+    'div[data-pagelet^="FeedUnit_"] [data-visualcompletion="loading-state"]',
+    'div[data-pagelet^="TimelineFeedUnit_"] [data-visualcompletion="loading-state"]'
+].join(',');
+const FB_STABLE_POST_CONTENT_SELECTOR_V52 = [
+    '[data-ad-rendering-role="story_message"]',
+    '[data-ad-preview="message"]',
+    '[data-ad-comet-preview="message"]',
+    'video',
+    'a[href*="/posts/"]',
+    'a[href*="/permalink/"]',
+    'a[href*="/photo/"]',
+    'a[href*="/videos/"]',
+    'a[href*="/reel/"]',
+    '[aria-label*="Like" i]',
+    '[aria-label*="Tykkää" i]',
+    '[aria-label*="Comment" i]',
+    '[aria-label*="Kommentoi" i]'
+].join(',');
+
+const __fbNativeHydrationTrackedPostsV53 = new Set();
+const __fbNativeHydrationSlotByPostV53 = new WeakMap();
+const __fbNativeHydrationSlotRefCountV53 = new Map();
+const __fbNativeHydrationReleaseQueuedV53 = new WeakSet();
+const __fbNativeHydrationSyncRootsV53 = new Set();
+let __fbNativeHydrationSyncPendingV53 = false;
+
+const isFBNativeHydrationOnlyPost = (post, alreadyTracked = false) => {
+    try {
+        if (!post?.querySelector || isNotificationPanelElement(post) || isFBCommentSurfaceElement(post)) return false;
+        const loadingState = post.querySelector('[data-visualcompletion="loading-state"]');
+        const progressbar = post.querySelector('[role="progressbar"]');
+        if (!loadingState && !progressbar) return false;
+
+        // A normally approved post is terminal. Later comment/video spinners must not collapse it.
+        const scanComplete = post.getAttribute?.('data-fb-v25-scan-complete') || '';
+        if (scanComplete === '1' && post.classList?.contains('fb-post-approved')) return false;
+
+        // Once an initial whole-post skeleton owns a slot, keep that decision stable until its
+        // loading-state marker is actually gone. Facebook often inserts real children shortly
+        // before removing the marker; treating that overlap as completion caused layout thrash.
+        if (alreadyTracked && loadingState) return true;
+
+        const stableContent = !!post.querySelector(FB_STABLE_POST_CONTENT_SELECTOR_V52);
+        if (stableContent) return false;
+
+        const compactText = String(post.textContent || '').replace(/\s+/g, ' ').trim();
+        if (loadingState) return compactText.length < 220;
+
+        // A bare progressbar is a weaker signal than Facebook's loading-state marker.
+        return compactText.length < 90 && !post.querySelector('img[src], a[href], video');
+    } catch (e) {
+        return false;
+    }
+};
+
+const retainFBNativeHydrationSlotV53 = (post) => {
+    try {
+        if (!post?.classList || !post.isConnected) return false;
+        post.classList.add('fb-native-post-hydrating-v52');
+        __fbNativeHydrationTrackedPostsV53.add(post);
+
+        let slot = __fbNativeHydrationSlotByPostV53.get(post);
+        if (!slot?.isConnected || (slot !== post && !slot.contains?.(post))) {
+            const previousSlot = slot;
+            slot = getFBFeedSlotWrapper(post);
+            if (previousSlot && previousSlot !== slot) {
+                const previousCount = (__fbNativeHydrationSlotRefCountV53.get(previousSlot) || 1) - 1;
+                if (previousCount <= 0) {
+                    __fbNativeHydrationSlotRefCountV53.delete(previousSlot);
+                    previousSlot.classList?.remove('fb-feed-slot-hydrating-v52');
+                    previousSlot.removeAttribute?.('data-fb-v52-hydrating-slot');
+                } else {
+                    __fbNativeHydrationSlotRefCountV53.set(previousSlot, previousCount);
+                }
+            }
+
+            if (slot?.classList && slot.getAttribute?.('role') !== 'feed') {
+                __fbNativeHydrationSlotByPostV53.set(post, slot);
+                __fbNativeHydrationSlotRefCountV53.set(slot, (__fbNativeHydrationSlotRefCountV53.get(slot) || 0) + 1);
+            } else {
+                slot = null;
+                __fbNativeHydrationSlotByPostV53.delete(post);
+            }
+        }
+
+        if (slot?.classList) {
+            slot.classList.add('fb-feed-slot-hydrating-v52');
+            slot.setAttribute('data-fb-v52-hydrating-slot', '1');
+        }
+        return true;
+    } catch (e) {
+        return false;
+    }
+};
+
+const releaseFBNativeHydrationSlotV53 = (post) => {
+    try {
+        if (!post) return;
+        post.classList?.remove('fb-native-post-hydrating-v52');
+        __fbNativeHydrationTrackedPostsV53.delete(post);
+        const slot = __fbNativeHydrationSlotByPostV53.get(post);
+        __fbNativeHydrationSlotByPostV53.delete(post);
+        if (!slot) return;
+
+        const count = (__fbNativeHydrationSlotRefCountV53.get(slot) || 1) - 1;
+        if (count <= 0) {
+            __fbNativeHydrationSlotRefCountV53.delete(slot);
+            slot.classList?.remove('fb-feed-slot-hydrating-v52');
+            slot.removeAttribute?.('data-fb-v52-hydrating-slot');
+        } else {
+            __fbNativeHydrationSlotRefCountV53.set(slot, count);
+        }
+    } catch (e) {}
+};
+
+const addFBNativeHydrationCandidatesV53 = (root, candidates, documentWide = false) => {
+    try {
+        if (!root || !candidates) return;
+        const doc = root.nodeType === 9 ? root : (root.ownerDocument || document);
+
+        const addPost = (seed) => {
+            try {
+                if (!seed?.closest) return;
+                const post = getFBFeedUnitWrapper(seed) || seed.closest('[role="feed"] [role="article"]');
+                if (post?.isConnected && !isProfileHeaderProtectedArea(post)) candidates.add(post);
+            } catch (e) {}
+        };
+
+        if (root.nodeType === 9 || documentWide) {
+            __fbNativeHydrationTrackedPostsV53.forEach(post => candidates.add(post));
+            const markers = doc.querySelectorAll(FB_NATIVE_POST_LOADING_MARKER_QUERY_V53);
+            for (let i = 0; i < markers.length && i < 80; i++) addPost(markers[i]);
+            return;
+        }
+
+        if (root.nodeType !== 1) return;
+        addPost(root);
+        if (root.matches?.(FB_NATIVE_FEED_UNIT_SELECTOR_V53)) candidates.add(getFBFeedUnitWrapper(root) || root);
+
+        const markers = root.querySelectorAll?.(FB_NATIVE_POST_LOADING_SELECTOR_V52) || [];
+        for (let i = 0; i < markers.length && i < 24; i++) addPost(markers[i]);
+
+        // A removed loading marker leaves no marker to discover. Include a few canonical
+        // descendants of the mutation root so a previously tracked owner can be released.
+        const units = root.querySelectorAll?.(FB_NATIVE_FEED_UNIT_SELECTOR_V53) || [];
+        for (let i = 0; i < units.length && i < 12; i++) candidates.add(getFBFeedUnitWrapper(units[i]) || units[i]);
+
+        __fbNativeHydrationTrackedPostsV53.forEach(post => {
+            try { if (root === post || root.contains?.(post)) candidates.add(post); } catch (e) {}
+        });
+    } catch (e) {}
+};
+
+function syncFBNativePostHydrationSlots(root = document) {
+    try {
+        const candidates = new Set();
+        addFBNativeHydrationCandidatesV53(root, candidates, root?.nodeType === 9);
+
+        candidates.forEach(post => {
+            try {
+                if (!post?.isConnected) {
+                    releaseFBNativeHydrationSlotV53(post);
+                    return;
+                }
+
+                const wasHydrating = __fbNativeHydrationTrackedPostsV53.has(post);
+                if (isFBNativeHydrationOnlyPost(post, wasHydrating)) {
+                    retainFBNativeHydrationSlotV53(post);
+                    return;
+                }
+
+                if (!wasHydrating) {
+                    post.classList?.remove('fb-native-post-hydrating-v52');
+                    return;
+                }
+
+                const terminalApproved = post.getAttribute?.('data-fb-v25-scan-complete') === '1' &&
+                    post.classList?.contains('fb-post-approved');
+                if (terminalApproved) {
+                    releaseFBNativeHydrationSlotV53(post);
+                    return;
+                }
+
+                // Confirm the marker stayed absent for one quiet paint window. This absorbs
+                // Facebook's remove/reinsert recycle burst without expanding/collapsing twice.
+                if (!__fbNativeHydrationReleaseQueuedV53.has(post)) {
+                    __fbNativeHydrationReleaseQueuedV53.add(post);
+                    addTimeout(() => {
+                        __fbNativeHydrationReleaseQueuedV53.delete(post);
+                        if (post?.isConnected && isFBNativeHydrationOnlyPost(post, true)) {
+                            retainFBNativeHydrationSlotV53(post);
+                        } else {
+                            releaseFBNativeHydrationSlotV53(post);
+                        }
+                    }, 160);
+                }
+            } catch (e) {}
+        });
+
+        return __fbNativeHydrationTrackedPostsV53.size;
+    } catch (e) {
+        return 0;
+    }
+}
+
+const queueFBNativePostHydrationSyncV53 = (root) => {
+    try {
+        const candidates = new Set();
+        addFBNativeHydrationCandidatesV53(root, candidates, false);
+        candidates.forEach(post => {
+            if (__fbNativeHydrationSyncRootsV53.size < 32) __fbNativeHydrationSyncRootsV53.add(post);
+        });
+
+        if (__fbNativeHydrationSyncPendingV53 || __fbNativeHydrationSyncRootsV53.size === 0) return;
+        __fbNativeHydrationSyncPendingV53 = true;
+        addTimeout(() => {
+            __fbNativeHydrationSyncPendingV53 = false;
+            const roots = Array.from(__fbNativeHydrationSyncRootsV53);
+            __fbNativeHydrationSyncRootsV53.clear();
+            roots.forEach(post => syncFBNativePostHydrationSlots(post));
+        }, 48);
     } catch (e) {}
 };
 
@@ -3879,6 +4160,7 @@ const activeElementIsNativeTopSearch = () => {
     try {
         const el = document.activeElement;
         if (!el || !el.closest) return false;
+        if (el === document.body || el === document.documentElement) return false;
         return !!(
             el.closest('input[placeholder*="Hae Facebookista" i], input[placeholder*="Search Facebook" i], [role="searchbox"], [role="combobox"]') ||
             el.closest('[role="banner"] form[role="search"], [role="banner"] div[role="search"]') ||
@@ -3894,7 +4176,9 @@ const isFBNativeTopSearchActive = () => {
         if (isFBSearchPagePath()) return false;
         if (performance.now() < __fbNativeTopSearchActiveUntil) return true;
         if (activeElementIsNativeTopSearch()) return true;
-        if (fbNativeTopSearchDropdownExists()) return true;
+        // v53: focus/pointer/input listeners and the mutation router mark this surface when
+        // it opens. Do not run a document-wide pack of :has() selectors on every filter tick
+        // merely to prove that the dropdown is absent.
     } catch (e) {}
     return false;
 };
@@ -5242,12 +5526,13 @@ const currentProfileOrPageHasBlockedIdentityOrTerms = () => {
     return false;
 };
 
-// ===== v44: non-allowlisted profile screening veil =====
+// ===== v52: non-allowlisted profile screening veil =====
 // Explicitly allowlisted/self/family profile routes remain immediate. Every other profile/page
 // route is covered with a lightweight white veil while the existing identity/URL/header filters
 // get three clean hydration passes plus one bounded deep identity scan. The veil fails open after a short window.
 const FB_PROFILE_SCREENING = {
     routeKey: '',
+    completedRouteKey: '',
     startedAt: 0,
     cleanPasses: 0,
     timerPending: false,
@@ -5276,6 +5561,9 @@ const isExplicitlyAllowedProfileRoute = (inputUrl = window.location.href) => {
 
 const shouldScreenCurrentProfile = (inputUrl = window.location.href) => {
     try {
+        // Exact supported pages already have the stricter specific-URL no-glimpse lane.
+        // Stacking the full-page profile veil on top only creates a second competing gate.
+        if (isCurrentSpecificUrlSurface(inputUrl)) return false;
         return isLikelyProfileOrPageRoute(inputUrl) && !isExplicitlyAllowedProfileRoute(inputUrl);
     } catch (e) {
         return false;
@@ -5292,15 +5580,34 @@ const ensureFBProfileScreeningOverlay = () => {
             overlay.style.cssText = [
                 'position:fixed',
                 'inset:0',
-                'z-index:2147483500',
+                'width:100vw',
+                'height:100vh',
+                'z-index:2147483647',
                 'display:block',
-                'background:rgba(255,255,255,0.965)',
+                'visibility:visible',
+                'background:#ffffff',
+                'background-color:#ffffff',
                 'pointer-events:auto',
                 'opacity:1',
-                'transition:opacity 120ms linear',
+                'transition:none',
                 'animation:none',
-                'contain:strict'
+                'mix-blend-mode:normal',
+                'filter:none',
+                'backdrop-filter:none',
+                'isolation:isolate',
+                'transform:translateZ(0)',
+                'backface-visibility:hidden',
+                'contain:strict',
+                'cursor:progress',
+                'overscroll-behavior:contain',
+                'color-scheme:light'
             ].join(';') + ';';
+            overlay.style.setProperty('background', '#ffffff', 'important');
+            overlay.style.setProperty('background-color', '#ffffff', 'important');
+            overlay.style.setProperty('opacity', '1', 'important');
+            overlay.style.setProperty('visibility', 'visible', 'important');
+            overlay.style.setProperty('transition', 'none', 'important');
+            overlay.style.setProperty('z-index', '2147483647', 'important');
         }
         if (!overlay.isConnected) (document.documentElement || document.body).appendChild(overlay);
         return overlay;
@@ -5356,9 +5663,17 @@ const evaluateFBProfileScreening = () => {
 
         if (routeKey !== FB_PROFILE_SCREENING.routeKey) {
             FB_PROFILE_SCREENING.routeKey = routeKey;
+            FB_PROFILE_SCREENING.completedRouteKey = '';
             FB_PROFILE_SCREENING.startedAt = Date.now();
             FB_PROFILE_SCREENING.cleanPasses = 0;
             FB_PROFILE_SCREENING.deepScanDone = false;
+        }
+
+        // Screening is terminal for the current route. Without this guard every normal
+        // filter tick recreated the white veil immediately after a successful release.
+        if (FB_PROFILE_SCREENING.completedRouteKey === routeKey) {
+            releaseFBProfileScreeningOverlay();
+            return false;
         }
 
         ensureFBProfileScreeningOverlay();
@@ -5391,6 +5706,7 @@ const evaluateFBProfileScreening = () => {
         }
 
         if ((FB_PROFILE_SCREENING.cleanPasses >= 3 && elapsed >= 540) || elapsed >= 3000) {
+            FB_PROFILE_SCREENING.completedRouteKey = routeKey;
             releaseFBProfileScreeningOverlay();
             return false;
         }
@@ -5398,6 +5714,7 @@ const evaluateFBProfileScreening = () => {
         scheduleFBProfileScreeningPass(180);
         return true;
     } catch (e) {
+        try { FB_PROFILE_SCREENING.completedRouteKey = getFBProfileRouteKey(); } catch (ignored) {}
         releaseFBProfileScreeningOverlay();
         return false;
     }
@@ -5410,6 +5727,7 @@ const updateFBProfileScreening = (force = false) => {
 
         if (!shouldScreenCurrentProfile(currentUrl)) {
             FB_PROFILE_SCREENING.routeKey = routeKey;
+            FB_PROFILE_SCREENING.completedRouteKey = '';
             FB_PROFILE_SCREENING.startedAt = 0;
             FB_PROFILE_SCREENING.cleanPasses = 0;
             FB_PROFILE_SCREENING.deepScanDone = false;
@@ -5419,9 +5737,15 @@ const updateFBProfileScreening = (force = false) => {
 
         if (routeKey !== FB_PROFILE_SCREENING.routeKey) {
             FB_PROFILE_SCREENING.routeKey = routeKey;
+            FB_PROFILE_SCREENING.completedRouteKey = '';
             FB_PROFILE_SCREENING.startedAt = Date.now();
             FB_PROFILE_SCREENING.cleanPasses = 0;
             FB_PROFILE_SCREENING.deepScanDone = false;
+        }
+
+        if (FB_PROFILE_SCREENING.completedRouteKey === routeKey) {
+            releaseFBProfileScreeningOverlay();
+            return false;
         }
 
         ensureFBProfileScreeningOverlay();
@@ -5804,12 +6128,17 @@ const hasFBNativePostSkeleton = (post) => {
 const rememberFBPostScreenHeight = (post) => {
     try {
         if (!post?.style) return;
-        const rect = post.getBoundingClientRect?.();
-        const measured = Math.round(rect?.height || 0);
-        // v47: preserve a modest amount of layout without reproducing a 900–1400px media post
-        // as one enormous blank placeholder. The real post resumes its natural height on approval.
-        const compactHeight = measured >= 120 ? Math.max(220, Math.min(360, measured)) : 300;
-        post.style.setProperty('--fb-v47-screen-height', compactHeight + 'px');
+        // v52: preserve only a one-pixel in-flow lazy-load anchor. Patch 1 measured and kept
+        // 220-360px here, which was the empty card visible in the recordings.
+        post.style.setProperty('--fb-v47-screen-height', '1px');
+
+        // The visible gap is usually owned by Facebook's outer virtualization slot, not the
+        // FeedUnit itself. Collapse that safe one-post wrapper during the one-shot scan.
+        const slot = getFBFeedSlotWrapper(post);
+        if (slot?.classList && slot.getAttribute?.('role') !== 'feed') {
+            slot.classList.add('fb-feed-slot-screening-v51');
+            slot.style?.setProperty('--fb-v51-screen-height', '1px');
+        }
     } catch (e) {}
 };
 
@@ -5925,7 +6254,7 @@ const queueFBPostForSingleScan = (seed, delay = 90) => {
             state = { queued: false, queuedAt: 0, attempts: 0, stableTurns: 0, lastSignature: '', expanded: false };
             __fbPostHydrationState.set(post, state);
         }
-        // A canceled/throttled callback must not strand the card forever behind its placeholder.
+        // A canceled/throttled callback must not strand the card forever at its loading anchor.
         if (state.queued && (Date.now() - (state.queuedAt || 0)) < 1400) return;
         state.queued = true;
         state.queuedAt = Date.now();
@@ -5951,16 +6280,16 @@ const queueFBPostForSingleScan = (seed, delay = 90) => {
             const screenStartedAt = Number(post.getAttribute('data-fb-v47-screen-start') || Date.now());
             const screenElapsed = Math.max(0, Date.now() - screenStartedAt);
 
-            // Facebook owns this phase. Keep its actual skeleton visible and wait until it hands
-            // the FeedUnit over to real content. v47 bounds the wait so a stale loading marker
-            // cannot hold the queue forever.
+            // Facebook owns this phase. Keep its one-pixel hydration anchor (not the painted
+            // skeleton) until it hands the FeedUnit over to real content. The bounded wait keeps
+            // a stale loading marker from holding the scanner forever.
             if (hasFBNativePostSkeleton(post) && state.attempts < 18 && screenElapsed < 5000) {
                 queueFBPostForSingleScan(post, 140);
                 return;
             }
 
-            // Any approval applied solely to expose a Facebook loading skeleton is provisional.
-            // Once the skeleton disappears, the real content returns to the hidden one-shot lane.
+            // Clear any legacy/provisional skeleton approval. Once hydration finishes, the real
+            // content stays in the hidden one-shot lane until the scanner decides it.
             if (post.getAttribute('data-fb-v25-scan-complete') !== '1') {
                 post.classList.remove('fb-post-approved', 'fb-feed-unit-approved', 'fb-post-processed', 'fb-specific-url-loading-skeleton-v27');
                 post.classList.add('fb-post-screening-v47', 'fb-post-scanning');
@@ -5974,7 +6303,7 @@ const queueFBPostForSingleScan = (seed, delay = 90) => {
             }
 
             // Two quiet turns normally land around 300–500 ms. The bounded fallback prevents a
-            // permanently animated/video post from sitting behind the placeholder forever.
+            // permanently animated/video post from sitting at the loading anchor forever.
             if (state.stableTurns < 2 && state.attempts < 12 && screenElapsed < 5000) {
                 queueFBPostForSingleScan(post, 150);
                 return;
@@ -6200,22 +6529,26 @@ const scanAndBanEntirePosts = () => {
         ];
 
         const seenPosts = new WeakSet();
-        postSelectors.forEach(selector => {
-            document.querySelectorAll(selector).forEach(candidate => {
-                const post = getFBFeedUnitWrapper(candidate) || (candidate.closest && candidate.closest('[role="article"]')) || candidate;
-                if (!post || seenPosts.has(post)) return;
-                seenPosts.add(post);
-                if (isNotificationPanelElement(post) || isInsideComment(post)) return;
-                if (isFBSearchPagePath() && post.closest?.('[role="main"]')) return;
-                if (isProfileHeaderProtectedArea(post) || isTopLeftSearchDropdownElement(post)) return;
-                if (post.classList.contains('fb-post-banned') || post.classList.contains('fb-element-banned')) return;
-                if (post.getAttribute('data-fb-v25-scan-complete') === '1' && post.classList.contains('fb-post-approved')) return;
+        const candidates = document.querySelectorAll(postSelectors.join(','));
+        for (let i = 0; i < candidates.length; i++) {
+            const candidate = candidates[i];
+            const post = getFBFeedUnitWrapper(candidate) || (candidate.closest && candidate.closest('[role="article"]')) || candidate;
+            if (!post || seenPosts.has(post)) continue;
+            seenPosts.add(post);
 
-                // v46: one owner, one queue, one final decision. The CSS gate already keeps
-                // real post content hidden while Facebook's own skeleton remains visible.
-                queueFBPostForSingleScan(post, 70);
-            });
-        });
+            // Terminal decisions are overwhelmingly the common case on a settled feed. Test
+            // them before notification/comment helpers that inspect ancestors and local text.
+            if (post.classList.contains('fb-post-banned') || post.classList.contains('fb-element-banned')) continue;
+            if (post.getAttribute('data-fb-v25-scan-complete') === '1' && post.classList.contains('fb-post-approved')) continue;
+            const inFeed = !!post.closest?.('[role="feed"]');
+            if ((!inFeed && isNotificationPanelElement(post)) || isInsideComment(post)) continue;
+            if (isFBSearchPagePath() && post.closest?.('[role="main"]')) continue;
+            if (isProfileHeaderProtectedArea(post) || isTopLeftSearchDropdownElement(post)) continue;
+
+            // v52: one owner, one queue, one final decision. The CSS gate keeps both native
+            // skeletons and real unapproved content behind the one-pixel anchor.
+            queueFBPostForSingleScan(post, 70);
+        }
     } catch (e) {
         console.log('Error scanning entire posts v25.4.25: ' + e.message);
     }
@@ -6246,29 +6579,31 @@ const scanVisibleHomeFeedPostsFast = () => {
         const viewportTop = -700;
         let processed = 0;
 
-        for (let s = 0; s < selectors.length && processed < 14; s++) {
-            const nodes = document.querySelectorAll(selectors[s]);
-            for (let i = 0; i < nodes.length && processed < 14; i++) {
-                const candidate = nodes[i];
-                const post = getFBFeedUnitWrapper(candidate) || (candidate.closest && candidate.closest('[role="article"]')) || candidate;
-                if (!post || seen.has(post)) continue;
-                seen.add(post);
+        const nodes = document.querySelectorAll(selectors.join(','));
+        for (let i = 0; i < nodes.length && processed < 14; i++) {
+            const candidate = nodes[i];
+            const post = getFBFeedUnitWrapper(candidate) || (candidate.closest && candidate.closest('[role="article"]')) || candidate;
+            if (!post || seen.has(post)) continue;
+            seen.add(post);
 
-                if (isNotificationPanelElement(post) || isInsideComment(post)) continue;
-                if (isProfileHeaderProtectedArea(post) || isTopLeftSearchDropdownElement(post)) continue;
-                if (post.classList.contains('fb-post-banned') || post.classList.contains('fb-element-banned')) continue;
-                if (post.classList.contains('fb-post-scanning') || post.classList.contains('fb-post-expanding')) continue;
-                if (applyCachedFBPostDecision(post)) continue;
-                if (post.getAttribute('data-fb-v25-scan-complete') === '1' && post.classList.contains('fb-post-approved')) continue;
+            // Most virtualized cards are already terminal. Keep their hot path to class/attribute
+            // reads instead of ancestor text inspection and cache reconstruction.
+            if (post.classList.contains('fb-post-banned') || post.classList.contains('fb-element-banned')) continue;
+            if (post.classList.contains('fb-post-scanning') || post.classList.contains('fb-post-expanding')) continue;
+            if (post.getAttribute('data-fb-v25-scan-complete') === '1' && post.classList.contains('fb-post-approved')) continue;
+            if (applyCachedFBPostDecision(post)) continue;
 
-                try {
-                    const rect = post.getBoundingClientRect && post.getBoundingClientRect();
-                    if (rect && (rect.top > viewportBottom || rect.bottom < viewportTop)) continue;
-                } catch (e) {}
+            const inFeed = !!post.closest?.('[role="feed"]');
+            if ((!inFeed && isNotificationPanelElement(post)) || isInsideComment(post)) continue;
+            if (isProfileHeaderProtectedArea(post) || isTopLeftSearchDropdownElement(post)) continue;
 
-                processed++;
-                queueFBPostForSingleScan(post, 35);
-            }
+            try {
+                const rect = post.getBoundingClientRect && post.getBoundingClientRect();
+                if (rect && (rect.top > viewportBottom || rect.bottom < viewportTop)) continue;
+            } catch (e) {}
+
+            processed++;
+            queueFBPostForSingleScan(post, 35);
         }
     } catch (e) {}
 };
@@ -6902,6 +7237,7 @@ const hideSpecificUrlNonFeedModule = (element) => {
 const markSpecificUrlLoadingSkeletons = (root = document) => {
     try {
         if (!isCurrentSpecificUrlSurface()) return;
+        syncFBNativePostHydrationSlots(root);
         const scanRoot = (root && root.querySelectorAll) ? root : document;
         const skeletons = scanRoot.querySelectorAll([
             '[role="feed"] [data-visualcompletion="loading-state"]',
@@ -6913,9 +7249,17 @@ const markSpecificUrlLoadingSkeletons = (root = document) => {
 
         skeletons.forEach(node => {
             try {
-                const host = node.closest('[data-pagelet^="FeedUnit_"], [data-pagelet^="TimelineFeedUnit_"], [role="feed"] [role="article"], [data-pagelet="ProfileTimeline"]') || node;
+                const host = node.closest('[data-pagelet^="FeedUnit_"], [data-pagelet^="TimelineFeedUnit_"], [role="feed"] [role="article"]');
                 if (!host || isSpecificUrlDangerousGlobal(host)) return;
-                host.classList.add('fb-specific-url-loading-skeleton-v27', 'fb-post-approved', 'fb-feed-unit-approved');
+                host.classList.add('fb-specific-url-loading-skeleton-v27');
+            } catch (e) {}
+        });
+
+        scanRoot.querySelectorAll('.fb-specific-url-loading-skeleton-v27').forEach(host => {
+            try {
+                if (!host.querySelector(FB_NATIVE_POST_LOADING_SELECTOR_V52)) {
+                    host.classList.remove('fb-specific-url-loading-skeleton-v27');
+                }
             } catch (e) {}
         });
     } catch (e) {}
@@ -7059,15 +7403,24 @@ const injectSpecificUrlPrehideCSS = () => {
             animation: none !important;
         }
 
-        /* v25.4.27 surgical-r5: supported-page feed-unit no-glimpse.
-           Hide real unapproved page/timeline feed units until JS approves/bans them,
-           but do not hide Facebook's own post-loading skeletons. */
-        html.fb-specific-url-noglimpse-v26 div[data-pagelet^="FeedUnit_"]:not(.fb-feed-unit-approved):not(.fb-post-approved):not(.fb-post-banned):not(.fb-element-banned):not(:has([data-visualcompletion="loading-state"])),
-        html.fb-specific-url-noglimpse-v26 div[data-pagelet^="TimelineFeedUnit_"]:not(.fb-feed-unit-approved):not(.fb-post-approved):not(.fb-post-banned):not(.fb-element-banned):not(:has([data-visualcompletion="loading-state"])) {
+        /* v52 supported-page zero-slot lane. Loading and real unapproved FeedUnits use the
+           same one-pixel anchor until the normal scanner supplies a terminal decision. */
+        html.fb-specific-url-noglimpse-v26 div[data-pagelet^="FeedUnit_"]:not(.fb-feed-unit-approved):not(.fb-post-approved):not(.fb-post-banned):not(.fb-element-banned),
+        html.fb-specific-url-noglimpse-v26 div[data-pagelet^="TimelineFeedUnit_"]:not(.fb-feed-unit-approved):not(.fb-post-approved):not(.fb-post-banned):not(.fb-element-banned),
+        html.fb-specific-url-noglimpse-v26 .fb-specific-url-loading-skeleton-v27 {
+            position: relative !important;
+            height: 1px !important;
+            min-height: 1px !important;
+            max-height: 1px !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            border: 0 !important;
+            overflow: hidden !important;
             visibility: hidden !important;
             opacity: 0 !important;
             pointer-events: none !important;
             content-visibility: hidden !important;
+            contain: strict !important;
             transition: none !important;
             animation: none !important;
         }
@@ -7082,8 +7435,8 @@ const injectSpecificUrlPrehideCSS = () => {
             content-visibility: visible !important;
         }
 
-        /* Supported-page album/header skeleton guard. These are the wrong skeletons — hide them,
-           then the feed/timeline skeleton allow-list below re-opens only post-loading skeletons. */
+        /* Supported-page skeleton guard. Patch 1 reopened feed skeletons below; Patch 2 keeps
+           every loading marker hidden while the one-pixel host remains available to hydration. */
         html.fb-specific-url-noglimpse-v26 [role="main"] [data-visualcompletion="loading-state"],
         html.fb-specific-url-noglimpse-v26 [role="main"] [role="progressbar"] {
             display: none !important;
@@ -7091,35 +7444,17 @@ const injectSpecificUrlPrehideCSS = () => {
             opacity: 0 !important;
             pointer-events: none !important;
             content-visibility: hidden !important;
-        }
-
-        /* v25.4.27: on supported pages, allow Facebook's own post-loading skeletons through.
-           The page chrome/recommended/photo modules stay no-glimpse, but the feed no longer looks dead
-           while new posts are loading/scanning. */
-        html.fb-specific-url-noglimpse-v26 [role="feed"] [data-visualcompletion="loading-state"],
-        html.fb-specific-url-noglimpse-v26 [role="feed"] [role="progressbar"],
-        html.fb-specific-url-noglimpse-v26 [data-pagelet^="FeedUnit_"]:has([data-visualcompletion="loading-state"]),
-        html.fb-specific-url-noglimpse-v26 [data-pagelet^="TimelineFeedUnit_"]:has([data-visualcompletion="loading-state"]),
-        html.fb-specific-url-noglimpse-v26 [data-pagelet="ProfileTimeline"]:has([data-visualcompletion="loading-state"]),
-        html.fb-specific-url-noglimpse-v26 .fb-specific-url-loading-skeleton-v27 {
-            display: revert !important;
-            visibility: visible !important;
-            opacity: 1 !important;
-            pointer-events: none !important;
-            position: static !important;
-            left: auto !important;
-            top: auto !important;
-            width: auto !important;
+            width: 0 !important;
+            height: 0 !important;
             min-width: 0 !important;
-            max-width: none !important;
-            height: auto !important;
             min-height: 0 !important;
-            max-height: none !important;
-            margin: revert !important;
-            padding: revert !important;
-            overflow: visible !important;
-            content-visibility: visible !important;
+            max-width: 0 !important;
+            max-height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: hidden !important;
             transition: none !important;
+            animation: none !important;
         }
         `;
         // Safe append (no document.write)
@@ -7202,10 +7537,9 @@ const deleteSelectorsForSpecificUrl = () => {
                     if (isInsideSafe) return true;
                 }
 
-                // v25.4.27 surgical-r5: keep only FEED/TIMELINE post-loading skeletons safe.
-                // The older blanket skeleton exemption also spared photo-album/profile-module skeletons,
-                // which could flash on supported pages. Feed skeletons remain allowed so the page does not
-                // open dead-empty while posts hydrate.
+                // Keep FEED/TIMELINE loading DOM alive so Facebook can finish hydration. Patch 2's
+                // CSS/slot lane makes it invisible and one pixel tall; deleting it here could cancel
+                // or repeatedly restart Facebook's lazy loader.
                 const inFeedSkeletonArea = !!element.closest('[role="feed"], [data-pagelet="ProfileTimeline"], div[data-pagelet^="FeedUnit_"], div[data-pagelet^="TimelineFeedUnit_"], [role="article"]');
                 if (inFeedSkeletonArea) {
                     if (element.hasAttribute('data-visualcompletion') && element.getAttribute('data-visualcompletion') === 'loading-state') return true;
@@ -7804,7 +8138,73 @@ const interceptNavigation = () => {
     }
 };
 
-// v39: coalesced full-filter scheduler.
+// v53: interaction quiet lane.
+// Facebook virtualizes/recycles feed cards while wheel, touch, keyboard and scrollbar input is
+// still active. Running document-wide policy passes inside that burst can block the browser from
+// painting the scroll for seconds. Keep the CSS/local mutation guards active, then perform one
+// consolidated safety pass after the input stream has been quiet for a short window.
+const FB_USER_INTERACTION_QUIET_MS_V53 = 320;
+let __fbLastUserInteractionAtV53 = 0;
+let __fbInteractionSettlePendingV53 = false;
+let __fbInteractionQuietLaneInstalledV53 = false;
+
+const isFBUserInteractionHotV53 = () => {
+    try {
+        return (Date.now() - __fbLastUserInteractionAtV53) < FB_USER_INTERACTION_QUIET_MS_V53;
+    } catch (e) {
+        return false;
+    }
+};
+
+const scheduleFBInteractionSettledPassV53 = () => {
+    try {
+        if (__fbInteractionSettlePendingV53) return;
+        __fbInteractionSettlePendingV53 = true;
+
+        const finishWhenQuiet = () => {
+            const remaining = FB_USER_INTERACTION_QUIET_MS_V53 - (Date.now() - __fbLastUserInteractionAtV53);
+            if (remaining > 0) {
+                addTimeout(finishWhenQuiet, remaining + 24);
+                return;
+            }
+
+            __fbInteractionSettlePendingV53 = false;
+            if (document.hidden || __fbCleanupRan) return;
+            try { syncFBNativePostHydrationSlots(document); } catch (e) {}
+            scheduleRunAllFilters();
+        };
+
+        addTimeout(finishWhenQuiet, FB_USER_INTERACTION_QUIET_MS_V53 + 24);
+    } catch (e) {
+        __fbInteractionSettlePendingV53 = false;
+    }
+};
+
+const noteFBUserInteractionV53 = () => {
+    __fbLastUserInteractionAtV53 = Date.now();
+    scheduleFBInteractionSettledPassV53();
+};
+
+const installFBUserInteractionQuietLaneV53 = () => {
+    try {
+        if (__fbInteractionQuietLaneInstalledV53) return;
+        __fbInteractionQuietLaneInstalledV53 = true;
+        const passiveCapture = { passive: true, capture: true };
+        onWindowEvent(window, 'wheel', noteFBUserInteractionV53, passiveCapture);
+        onWindowEvent(window, 'touchstart', noteFBUserInteractionV53, passiveCapture);
+        onWindowEvent(window, 'pointerdown', noteFBUserInteractionV53, passiveCapture);
+        onWindowEvent(window, 'scroll', noteFBUserInteractionV53, passiveCapture);
+        onWindowEvent(window, 'keydown', event => {
+            const key = String(event?.key || '');
+            if (key === 'ArrowDown' || key === 'ArrowUp' || key === 'PageDown' || key === 'PageUp' ||
+                key === 'Home' || key === 'End' || key === ' ' || event?.code === 'Space') {
+                noteFBUserInteractionV53();
+            }
+        }, true);
+    } catch (e) {}
+};
+
+// v39/v53: coalesced full-filter scheduler.
 // Several FB lifecycle events can fire back-to-back for the same visual update. Queueing one
 // run on the next timer tick keeps behavior identical while avoiding duplicate full-page sweeps.
 let __fbRunAllFiltersQueued = false;
@@ -7815,6 +8215,10 @@ const scheduleRunAllFilters = () => {
         addTimeout(() => {
             __fbRunAllFiltersQueued = false;
             try {
+                if (isFBUserInteractionHotV53()) {
+                    scheduleFBInteractionSettledPassV53();
+                    return;
+                }
                 if (runFBNativeInteractiveLightLane()) return;
                 runAllFilters();
             } catch (e) {}
@@ -7832,8 +8236,11 @@ const hookHistoryAPI = () => {
 
         const originalPushState = history.pushState;
         history.pushState = function() {
+            const previousProfileRoute = getFBProfileRouteKey();
             const rv = originalPushState.apply(this, arguments);
-            try { updateFBProfileScreening(true); } catch (e) {}
+            try {
+                if (previousProfileRoute !== getFBProfileRouteKey()) updateFBProfileScreening(true);
+            } catch (e) {}
             try { protectFBReelsCurrentLocation(); } catch (e) {}
             try { injectSpecificUrlPrehideCSS(); } catch (e) {}
             try { scrubSpecificUrlNonFeedModules(document); } catch (e) {}
@@ -7843,8 +8250,11 @@ const hookHistoryAPI = () => {
 
         const originalReplaceState = history.replaceState;
         history.replaceState = function() {
+            const previousProfileRoute = getFBProfileRouteKey();
             const rv = originalReplaceState.apply(this, arguments);
-            try { updateFBProfileScreening(true); } catch (e) {}
+            try {
+                if (previousProfileRoute !== getFBProfileRouteKey()) updateFBProfileScreening(true);
+            } catch (e) {}
             try { protectFBReelsCurrentLocation(); } catch (e) {}
             try { injectSpecificUrlPrehideCSS(); } catch (e) {}
             try { scrubSpecificUrlNonFeedModules(document); } catch (e) {}
@@ -7911,6 +8321,11 @@ const scheduleFBPostHydrationRetry = () => {
         addTimeout(() => {
             __fbHydrationRetryPending = false;
             try {
+                if (isFBUserInteractionHotV53()) {
+                    scheduleFBInteractionSettledPassV53();
+                    return;
+                }
+                syncFBNativePostHydrationSlots(document);
                 markSpecificUrlLoadingSkeletons(document);
                 scrubSpecificUrlNonFeedModules(document);
                 protectFBCommentSurfaces(document);
@@ -7928,10 +8343,10 @@ const runFBObserverMaintenance = createThrottle(() => {
         protectFBReelsCurrentLocation();
         markSpecificUrlLoadingSkeletons(document);
         scrubSpecificUrlNonFeedModules(document);
-        protectNotificationSurfaces(document);
+        if (isFBNotificationsPath(window.location.href)) protectNotificationSurfaces(document);
         protectFBCommentSurfaces(document);
     } catch (e) {}
-}, 140);
+}, 360);
 
 const observeDOMChanges = () => {
     try {
@@ -7940,7 +8355,7 @@ const observeDOMChanges = () => {
 
         devLog('Setting up DOM observer with coalesced search/feed processing');
 
-        const throttledRunAllFilters = createThrottle(() => runAllFilters(), 240);
+        const throttledRunAllFilters = createThrottle(() => runAllFilters(), 650);
         const feedNodeSelector = 'div[data-pagelet^="FeedUnit_"], div[data-pagelet^="TimelineFeedUnit_"], [role="feed"] [role="article"], [role="article"]';
         const feedDeepSelector = 'div[data-pagelet^="FeedUnit_"], div[data-pagelet^="TimelineFeedUnit_"], [role="feed"] [role="article"], [role="article"], [aria-label="Kelat"][role="region"], [aria-label="Reels"][role="region"]';
 
@@ -7949,7 +8364,38 @@ const observeDOMChanges = () => {
                 return !node ||
                     node === document.documentElement ||
                     node === document.body ||
+                    node.id === 'fb-profile-screening-overlay-v44' ||
+                    (node.closest && !!node.closest('#fb-profile-screening-overlay-v44')) ||
                     (node.matches && node.matches('script, style, link, meta'));
+            } catch (e) {
+                return false;
+            }
+        };
+
+        // The profile veil is our own DOM. Its insertion/removal must not wake the filter
+        // stack and recreate itself in an observer feedback loop.
+        const mutationBatchOnlyIgnoredNodes = (mutations) => {
+            try {
+                let sawElement = false;
+                const checkNode = (node) => {
+                    if (!node || node.nodeType !== 1) return true;
+                    sawElement = true;
+                    return isIgnoredMutationNode(node);
+                };
+
+                for (let mi = 0; mi < mutations.length; mi++) {
+                    const mutation = mutations[mi];
+                    if (!checkNode(mutation.target)) return false;
+                    const added = mutation.addedNodes || [];
+                    for (let ni = 0; ni < added.length; ni++) {
+                        if (!checkNode(added[ni])) return false;
+                    }
+                    const removed = mutation.removedNodes || [];
+                    for (let ni = 0; ni < removed.length; ni++) {
+                        if (!checkNode(removed[ni])) return false;
+                    }
+                }
+                return sawElement;
             } catch (e) {
                 return false;
             }
@@ -7982,10 +8428,13 @@ const observeDOMChanges = () => {
         };
 
         const observer = trackObserver(new MutationObserver((mutations) => {
+            if (mutationBatchOnlyIgnoredNodes(mutations)) return;
+
             // v40: Stories are Facebook-native/animated. Keep the overlay smooth by not
             // waking full feed/search crawlers for every progress/DOM tick.
             if (runFBStoriesNativeMaintenance()) return;
-            if (runFBNativeInteractiveLightLane()) return;
+            const interactionHot = isFBUserInteractionHotV53();
+            if (!interactionHot && runFBNativeInteractiveLightLane()) return;
 
             // v39: same notification/menu fast paths as before, but without building throwaway
             // arrays for every mutation batch. Less garbage collection, same decisions.
@@ -7999,16 +8448,18 @@ const observeDOMChanges = () => {
                 return;
             }
 
-            runFBObserverMaintenance();
-            if (isFBFriendsSurfacePath()) learnFBTrustedProfilesFromFriendsSurface(document);
-            if (isFBTrustedProfileTimelineSurface()) releaseFBTrustedTimelinePosts(document);
-            if (updateFBCommentOverlayClass()) {
-                hideCriticalNavOnly();
-                return;
-            }
-            if (isFBNoPostScanUrl(window.location.href)) {
-                hideCriticalNavOnly();
-                return;
+            if (!interactionHot) {
+                runFBObserverMaintenance();
+                if (isFBFriendsSurfacePath()) learnFBTrustedProfilesFromFriendsSurface(document);
+                if (isFBTrustedProfileTimelineSurface()) releaseFBTrustedTimelinePosts(document);
+                if (updateFBCommentOverlayClass()) {
+                    hideCriticalNavOnly();
+                    return;
+                }
+                if (isFBNoPostScanUrl(window.location.href)) {
+                    hideCriticalNavOnly();
+                    return;
+                }
             }
 
             // Check for search/feed-related changes first for instant processing.
@@ -8019,10 +8470,12 @@ const observeDOMChanges = () => {
             for (let m = 0; m < mutations.length; m++) {
                 const mutation = mutations[m];
 
-                if (!hasHomeFeedUnitChanges && mutation.target && mutation.target.closest && !isNotificationPanelElement(mutation.target) && !isFBCommentSurfaceElement(mutation.target) && (
+                const targetTouchesFeed = mutation.target && mutation.target.closest && !isNotificationPanelElement(mutation.target) && !isFBCommentSurfaceElement(mutation.target) && (
                     mutation.target.closest('div[data-pagelet^="FeedUnit_"], div[data-pagelet^="TimelineFeedUnit_"], [role="feed"], [role="feed"] [role="article"]') ||
                     mutation.target.getAttribute?.('role') === 'feed'
-                )) {
+                );
+                if (targetTouchesFeed) {
+                    queueFBNativePostHydrationSyncV53(mutation.target);
                     hasHomeFeedUnitChanges = true;
                 }
 
@@ -8046,6 +8499,7 @@ const observeDOMChanges = () => {
                             (node.querySelector && node.querySelector(feedDeepSelector))
                         );
                         if (looksLikePostMutation) {
+                            queueFBNativePostHydrationSyncV53(node);
                             // Facebook may have replaced only an inner article of a FeedUnit whose
                             // final decision is already approved. Propagate that terminal state first;
                             // otherwise claim the canonical new post for one-time screening.
@@ -8070,9 +8524,20 @@ const observeDOMChanges = () => {
             // Home feed FeedUnits are softgated; approve/ban them without waiting for the 650ms cadence.
             if (hasHomeFeedUnitChanges) {
                 updateFBHomeFeedGateClass();
-                scanVisibleHomeFeedPostsFast();
-                // Coalesced hydration retry: one pending retry per burst instead of one timeout per mutation callback.
-                scheduleFBPostHydrationRetry();
+                if (interactionHot) {
+                    // New/recycled cards were locally soft-gated above. Let Facebook paint the
+                    // scroll now; the trailing quiet pass makes the final approve/ban decision.
+                    scheduleFBInteractionSettledPassV53();
+                } else {
+                    scanVisibleHomeFeedPostsFast();
+                    // Coalesced hydration retry: one pending retry per burst instead of one timeout per mutation callback.
+                    scheduleFBPostHydrationRetry();
+                }
+            }
+
+            if (interactionHot) {
+                scheduleFBInteractionSettledPassV53();
+                return;
             }
 
             // Then run other filtering functions only when the mutation mattered.
@@ -8780,17 +9245,22 @@ const isFBNativeInteractiveSurfaceOpen = () => {
     try {
         if (isFBStoriesNativeSurface(window.location.href)) return true;
         if (document.documentElement?.classList.contains('fb-comment-overlay-active-v35')) return true;
-        if (document.querySelector('[role="menu"], [role="listbox"], [role="tooltip"]')) return true;
+
+        const activeElement = document.activeElement;
+        const activeSurface = activeElement?.closest?.('[role="menu"], [role="listbox"], [role="tooltip"], [role="dialog"]');
+        if (activeSurface && activeSurface.getAttribute?.('aria-hidden') !== 'true' && !activeSurface.hidden) return true;
 
         // A newly created dialog must enter the native light lane before its text/labels finish
         // hydrating. Waiting to classify it as comments/notifications/likes creates the race that
         // lets feed scanners touch the half-built overlay.
-        const dialogs = document.querySelectorAll('[role="dialog"]');
-        for (let i = 0; i < dialogs.length && i < 12; i++) {
-            const dialog = dialogs[i];
-            if (!dialog || !dialog.isConnected || dialog.getAttribute?.('aria-hidden') === 'true') continue;
-            if (dialog.hidden) continue;
-            const rects = dialog.getClientRects ? dialog.getClientRects() : null;
+        // One combined selector walk replaces the old menu probe plus separate dialog walk.
+        const surfaces = document.querySelectorAll('[role="menu"], [role="listbox"], [role="tooltip"], [role="dialog"]');
+        for (let i = 0; i < surfaces.length && i < 12; i++) {
+            const surface = surfaces[i];
+            if (!surface || !surface.isConnected || surface.getAttribute?.('aria-hidden') === 'true') continue;
+            if (surface.hidden) continue;
+            if (surface.getAttribute?.('role') !== 'dialog') return true;
+            const rects = surface.getClientRects ? surface.getClientRects() : null;
             if (!rects || rects.length > 0) return true;
         }
     } catch (e) {}
@@ -9185,36 +9655,61 @@ const runFBRamSaver = (force = false) => {
     } catch (e) {}
 };
 
+// v53: heavy selector packs run only when the browser offers an idle slice. Mutation-local
+// gating and the visible-feed fast lane still make the immediate safety decision; this pass is
+// the slower compatibility/audit layer and no longer sits between input and the next paint.
+let __fbHeavyFilterPassPendingV53 = false;
+const scheduleFBHeavyFilterPassV53 = () => {
+    try {
+        if (__fbHeavyFilterPassPendingV53 || __fbCleanupRan) return;
+        __fbHeavyFilterPassPendingV53 = true;
+        addIdleCallback(() => {
+            __fbHeavyFilterPassPendingV53 = false;
+            if (__fbCleanupRan) return;
+            if (isFBUserInteractionHotV53()) {
+                scheduleFBInteractionSettledPassV53();
+                return;
+            }
+            runGeneralHeavyFilters(false);
+            runSpecificSurfaceFilters(false);
+            runFBRamSaver(false);
+        }, { timeout: 1100 });
+    } catch (e) {
+        __fbHeavyFilterPassPendingV53 = false;
+    }
+};
+
 const runAllFilters = () => {
     try {
+        if (isFBUserInteractionHotV53()) {
+            scheduleFBInteractionSettledPassV53();
+            return;
+        }
         updateFBProfileScreening(false);
         updateFBSearchPageClass();
         updateFBHomeFeedGateClass();
         updateFBCommentImmunityClasses();
+        if (isFBNoPostScanUrl(window.location.href)) {
+            protectNotificationSurfaces(document);
+            protectFBCommentSurfaces(document);
+            hideCriticalNavOnly();
+            return;
+        }
         if (runFBStoriesNativeMaintenance()) return;
         if (runFBNativeInteractiveLightLane()) return;
         const commentOverlayActive = updateFBCommentOverlayClass();
         if (typeof refreshFBNativeTopSearchHandoff === 'function') refreshFBNativeTopSearchHandoff();
-        if (isFBNativeTransientMenuOpen()) {
-            runFBNativeTransientMenuMaintenance();
-            return;
-        }
         updateSpecificUrlNoGlimpseClass();
         markSpecificUrlLoadingSkeletons(document);
         normalizeFBReelsLinks(document);
         protectFBReelsCurrentLocation();
         refreshAccountScopedFilters();
         learnFBTrustedProfilesFromFriendsSurface(document);
-        protectNotificationSurfaces(document);
         if (commentOverlayActive) {
             hideCriticalNavOnly();
             return;
         }
         protectFBCommentSurfaces(document);
-        if (isFBNoPostScanUrl(window.location.href)) {
-            hideCriticalNavOnly();
-            return;
-        }
         checkVanityProfileFBID();
         handleRedirects();
         approveCurrentApprovedBrowseSurface();
@@ -9225,10 +9720,8 @@ const runAllFilters = () => {
         processSearchResults();
         scanVisibleHomeFeedPostsFast();
 
-        // Heavy passes are still active, just cadenced instead of brute-forced every 250ms.
-        runGeneralHeavyFilters(false);
-        runSpecificSurfaceFilters(false);
-        runFBRamSaver(false);
+        // Heavy passes remain active, but are coalesced behind the browser's next idle slice.
+        scheduleFBHeavyFilterPassV53();
     } catch (e) {
         console.log('Error running all filters: ' + e.message);
     }
@@ -9256,6 +9749,7 @@ const ensureDOMReady = () => {
 // [SPA-RUNTIME] v50 canonical one-pass initialization.
 const initializeFacebookCleaner = () => {
     devLog('Initializing BraveFox Facebook policy engine v50');
+    installFBUserInteractionQuietLaneV53();
     updateFBProfileScreening(true);
     updateFBSearchPageClass();
     updateFBHomeFeedGateClass();
@@ -9287,6 +9781,7 @@ const initializeFacebookCleaner = () => {
     cleanUrl();
     hideCriticalElements();
     processSearchResults();
+    syncFBNativePostHydrationSlots(document);
 
     if (isFBTrustedProfileTimelineSurface()) releaseFBTrustedTimelinePosts(document);
     else {
@@ -9317,6 +9812,9 @@ function scheduleMainInterval() {
         if (!document.hidden) {
             if (runFBStoriesNativeMaintenance()) {
                 // Native Stories overlay: cheap maintenance only.
+            } else if (isFBUserInteractionHotV53()) {
+                // Do not interrupt an active scroll/click/key stream with a document sweep.
+                scheduleFBInteractionSettledPassV53();
             } else if (runFBNativeInteractiveLightLane()) {
                 // Native menus/dialogs/video overlays: cheap maintenance only.
             } else if (updateFBCommentOverlayClass()) {
@@ -9327,7 +9825,7 @@ function scheduleMainInterval() {
                 runAllFilters();
             }
         }
-    }, 2000);
+    }, 3000);
 }
 
 // Start intervals now (foreground), pause/resume on visibility changes

@@ -1,7 +1,7 @@
 (function () {
     'use strict';
 
-    // BraveFox Enhancer v25.4.12 - explicit result/link/redirect hierarchy
+    // Google.js of BraveFox Enhancer v26.2.0
 
     // === INSTANT GEMINI ABORT ===
     // Gemini's React router hates URL parameter stripping. 
@@ -416,7 +416,7 @@
 	/windsor/i, /alex wind/i, /Alex Windsor/i, /analsex/i, /The Kat/, /Nikki/i, /lewdy/i, /lewdi/i, /lewdie's/i, /wuhmans/i, /wahmans/i, /wehmans/i, /Torrie/i, /Torr1/i, /Torr!/i, 
 	/Dreamboot/i, /Dream boot/i, /Sxuel/i, /Sxual/i, /Sxu3l/i, /5xu3l/i, /5xuel/i, /5xu4l/i, /5xual/i, /dre4m/i, /dr34m/i, /bo0th/i, /b0oth/i, /b0o7h/i, /bo07h/i, /b007h/i, /b00th/i, 
 	/booo/i, /b0oo/i, /bo0o/i, /boo0/i, /b000/i, /booo/i, /n000/i, /n00d/i, /no0d/i, /n0od/i, /dpnod/i, /dpnood/i, /dpnud/i, /depnud/i, /depnuud/i, /depenud/i, /depenuu/i, /dpepenud/i, 
-	/dpeepenud/i, /dpeepnud/i, /dpeependu/i, /dpeepndu/i, /Elayna/i, /Eleyna/i, /Elyna/i, /Elina WWE/i, /Elyna WWE/i, /Elyina/i, /Elina Blac/i, /Elina Blak/i, /Fantop/i, /Lust-Theory/i,
+	/dpeepenud/i, /dpeepnud/i, /dpeependu/i, /dpeepndu/i, /Elayna/i, /Eleyna/i, /Elyna/i, /Elina WWE/i, /Elyna WWE/i, /Elyina/i, /Elina Blac/i, /Elina Blak/i, /Fantop/i, 
 	/Fan top/i, /Fan-top/i, /Topfan/i, /Top fan/i, /Top-fan/i, /Top-fans/i, /fanstopia/i, /Jenni/i, /fans top/i, /topiafan/i, /topia fan/i, /topia-fan/i, /topifan/i, /topi fan/i, 
 	/topi-fan/i, /topaifan/i, /topai fan/i, /topai-fan/i, /fans-topia/i, /fans-topai/i, /Henni/i, /Lawren/i, /Lawrenc/i, /Lawrence/i, /Jennif/i, /Jenn1/i, /J3nn1/i, /J3nni/i, /J3nn4/i, 
 	/Brave/i, /Browser/i, /Selain/i, /TOR-Selain/i, /MS Edge/i, /TOR-browser/i, /Opera/i, /Opera GX/i, /Browsi/i, /Browse/i, /safari/i, /Opera Browser/i, /Mozilla/i, /Firefox/i, 
@@ -432,7 +432,7 @@
 	/body belfie/i, /full body/i, /pic body/i, /pict body/i, /body selfie/i, /phot body/i, /image body/i, /postu tweak/i, /pose tweak/i, /pose swap/i, /post swap/i, /body swap/i, /pose adjust/i, 
 	/post adjust/i, /body adjust/i, /stefa/i, /adjust pose/i, /adjust posture/i, /pose trans/i, /post trans/i, /pose morph/i, /post morph/i, /body morph/i, /body reshape/i, /shape body/i, /5yvä/i,
 	/repose edit/i, /pose redo/i, /repose chang/i, /body editor/i, /body filter/i, /filter body/i, /angle chang/i, /change angle/i, /edit angle/i, /camera angle/i, /head turn/i, /body turn/i, 
-	/pose reconstruct/i, /reconstruct pose/i, /pose fix/i, /fix pose/i, /body fix/i, /repose/i, /ComfyUI/i, /fix body/i, /edit selfie/i, /AIRemove/i, /RemoveAI/i, /RemovalAI/i, /selfie editor/i, 
+	/pose reconstruct/i, /reconstruct pose/i, /pose fix/i, /fix pose/i, /body fix/i, /repose/i, /fix body/i, /edit selfie/i, /AIRemove/i, /RemoveAI/i, /RemovalAI/i, /selfie editor/i, 
 	/pose shift/i, /posture shift/i, /angle shift/i, /pic shift/i, /phot shift/i, /img shift/i, /ima shift/i, /promeai/i, /prome-ai/i, /openpose/i, /open pose/i, /open-pose/i, /AIRemov/i, 
 	/AIRemoving/i, /pose-open/i, /poseopen/i, /pos open/i, /Lily Adam/i, /Lilly Adam/i, /Toiviainen/i, /Tatujo/i, /PiFuHD/i, /Hirada/i, /Hirata/i, /Cathy/i, /Kathy/i, /Catherine/i, /AIRemoval/i,
         /Prim3r/i, /Pr1m3r/i, /Pr1mer/i, /Primar/i, /Pr1m4r/i, /Pr1mar/i, /Pramer/i, /Pramir/i, /LaPrime/i, /LaPrima/i, /LaPr1ma/i, /L4Pr1ma/i, /LaPr1m4/i, /LaPrim4/i, /LaPrim3/i, /LaPr1m3/i, /grok/i, 
@@ -449,7 +449,7 @@
 	/chr0m/i, /m1um/i, /changemotion/i, /swapmotion/i, /motionsw/i, /motionc/i, /poseai/i, /AIblow/i, /AIsuck/i, /AI-suck/i, /drool/i, /RemovingAI/i, /bjob/i, /Down Marie/i, /M4rie/i, /Mar1e/i,
         /blowjob/i, /bj0b/i, /bl0w/i, /blowj0b/i, /dr0ol/i, /dro0l/i, /dr00l/i, /BJAI/i, /AIBJ/i, /BJ0b/i, /BJob/i, /B-J0b/i, /B-Job/i, /Suckjob/i, /Suckj0b/i, /Suck-job/i, /Suck-j0b/i, /SDuck/i, 
 	/Mouthjob/i, /Mouthj0b/i, /M0uthjob/i, /M0uthj0b/i, /Mouth-job/i, /Mouth-j0b/i, /M0uth-job/i, /M0uth/i, /M0u7h/i, /Mou7h/i, /MouthAI/i, /MouthinAI/i, /MouthingAI/i, /AIMouth/i, /BlowAI/i,
-        /BlowsAI/i, /BlowingAI/i, /JobAI/i, /AIJob/i, /Mouthig/i, /ZuckCock/i, /ZuckC/i, /ZuckD/i, /ZuckP/i, /Zuckz/i, /Zucks/i, /Zuckc/i, /Zuzkc/i, /YouZuck/i, /ZuckYou/i, /AIZuck/i, 
+        /BlowsAI/i, /BlowingAI/i, /JobAI/i, /AIJob/i, /Mouthig/i, /ZuckCock/i, /ZuckC/i, /ZuckD/i, /ZuckP/i, /Zuckz/i, /Zucks/i, /Zuckc/i, /Zuzkc/i, /YouZuck/i, /EX-GF/i, /EXGF/i, /ZuckYou/i, 
 	/Cuck/i, /Guck/i, /Cheeks/i, /Sukc/i, /AISucc/i, /SuccAI/i, /Suqz/i, /Suqs/i, /Suqc/i, /Suqq/i, /Suqq/i, /Suqi/i, /Suqz/i, /Sucq/i, /cukc/i, /boob/i, /b0ob/i, /b00b/i, /bo0b/i, /titjob/i,  
 	/titti/i, /j0b/i, /w0rk/i, /assjob/i, /buttjob/i, /wank/i, /w4nk/i, /tittt/i, /tiitt/i, /crotch/i, /thigh/i, /legjob/i, /asssex/i, /buttsex/i, /titsex/i, /buttsex/i, /ass sex/i, /butt sex/i, 
         /butt sex/i, /buttstuff/i, /butt stuff/i, /p0rn/i, /redtube/i, /xhamster/i, /asstube/i, /butttube/i, /FapAI/i, /adulttube/i, /adult tube/i, /HerAi/i, /AiHer/i, /SheAi/i, /AIShe/i, /AroundAI/i, 
@@ -462,13 +462,14 @@
         /ellie/i, /3llie/i, /elli3/i, /3lli3/i, /cha0tic/i, /AISketch/i, /SketchAI/i, /AIDraw/i, /AIDrew/i, /DrawAI/i, /DrewAI/i, /DrawsAI/i, /DrawingAI/i, /DrawingsAI/i, /PaintAI/i, /PaintsAI/i, /4ppli/i,
         /PaintingAI/i, /PaintingsAI/i, /AIPain/i, /OpenHerLegs/i, /OpenLegs/i, /OpeningLegs/i, /OpeningHerLegs/i, /OpensLegs/i, /OpensHerLegs/i, /SpreadLeg/i, /SpreadHerLeg/i, /cunnt/i, /cunnn/i, /strips/i,
 	/SpreadsLeg/i, /SpreadsHerLeg/i, /HerThig/i, /HerLeg/i, /HerThic/i, /SheThig/i, /SheLeg/i, /SheThic/i, /HerLeg/i, /HerThic/i, /LegShe/i, /LegsShe/i, /Thicc/i, /ThickShe/i, /fondl/i, /bdsm/i, /bar3/i, 
-        /4ppl1/i, /appl1/i, /pr0gram/i, /progr4m/i, /pr0gr4m/i, /pr0/i, /gr4m/i, /palg3/i, /censor/i, /sencor/i, /zencor/i, /zensor/i, /reveals/i, /reveali/i, /revealing/i, /reveale/i, /stripp/i, /b4re/i, 
+        /4ppl1/i, /appl1/i, /pr0gram/i, /progr4m/i, /pr0gr4m/i, /pr0/i, /gr4m/i, /palg3/i, /censor/i, /sencor/i, /zencor/i, /zensor/i, /reveals all/i, /reveali/i, /revealing/i, /stripp/i, /strips/i, /b4re/i, 
 	/stripz/i, /stripi/i, /striper/i, /stripes/i, /striped/i, /shetakeoff/i, /takeoffher/i, /takesoffher/i, /shetakesoff/i, /takingoff/i, /tookoffher/i, /shetookoff/i, /baring/i, /bares/i, /artintel/i,  
 	/zenzor/i, /cencor/i, /cenzor/i, /cens0/i, /c3ns/i, /cen5/i, /c3n5/i, /cen5o/i, /blisswwe/i, /c3n5o/i, /zen5o/i, /z3n5o/i, /s3n5o/i, /sen5o/i, /s3nso/i, /s3nc/i, /ph0t/i, /p1c/i, /picc/i, /im4g/i, 
 	/img online/i, /image online/i, /photo online/i, /pic online/i, /onl1/i, /fappp/i, /depn/i, /d3pn/i, /p05/i, /po5/i, /p0s/i, /postur/i, /posin/i, /Anthr/i, /Antro/i, /s0ftw/i, /softw/i, /w4re/i, 
 	/war3/i, /w4r3/i, /p41n/i, /pa1n/i, /p4in/i, /bl15s/i, /bl1s5/i, /bl155/i, /bl1ss/i, /bli55/i, /Stratu/i, /machinelearning/i, /Kairi/i, /sexx/i, /4lexa/i, /al3xa/i, /alex4/i,  /4l3xa/i, /al3x4/i, 
 	/Virtualbox/i, /Virtual box/i, /4l3x4/i, /4lex4/i, /bl15s/i, /bl1s5/i, /bl155/i, /blis5/i, /bli5s/i, /artintel/i, /LusTheory/i, /L-Theory/i, /LustTheory/i, /Lust Theory/i, /Lu-Theory/i, /mat1c/i, 
-	/m4tic/i, /m47ic/i, /ma7ic/i, /ma71c/i, /Lus-Theory/i, /Lust-Theory/i, /LusTheory/i, /L-Theory/i, /m4tic/i, /LustTheory/i, /Lust Theory/i, /Lu-Theory/i, /Lus-Theory/i,
+	/m4tic/i, /m47ic/i, /ma7ic/i, /ma71c/i, /Lus-Theory/i, /Lust-Theory/i, /LusTheory/i, /L-Theory/i, /m4tic/i, /LustTheory/i, /Lust Theory/i, /Lu-Theory/i, /Lus-Theory/i, /Lust-Theory/i, /ComfyUI/i, 
+	/AIZuck/i,
 	 
 
 
@@ -480,12 +481,12 @@
 	/\bgirl\b/i, /\blady\b/i, /\bshe\b/i, /\bher\b/i, /\banal\b/i, /\bsex\b/i, /\bbra\b/i, /\bass\b/i, /\bmorph\b/i, /\bVega\b/i, /\bSlut\b/i, /\bFap\b/i, /\bTor\b/i, /\bBoob\b/i, 
 	/\bAMX\b/i, /\bAnal-\b/i, /\bAlexa\b/i, /\bAleksa\b/i, /\bAi-\b/i, /\b-Ai\b/i, /\bADM\b/i, /\bADMX\b/i, /\bAis\b/i, /\bedit\b/i, /\bIzzi\b/i, /\bDame\b/i, /\bNox\b/i, /\bLiv\b/i,  
 	/\bSol\b/i, /\bEmma\b/i, /\bRiho\b/i, /\bJaida\b/i, /\bCum\b/i, /\bAnal\b/i, /\bTay\b/i, /\balexa wwe\b/i, /\bazz\b/i, /\bLana\b/i, /\bFuku\b/i, /\bMina\b/i, /\bMachaine\b/i,
-	/\bjaida\b/i, /\bRembg\b/i, /\bRem bg\b/i, /\bDel bg\b/i, /\bDelbg\b/i, /\bMorf\b/i, /\bIA\b/i, /\bIas\b/i, /\b-Ia\b/i, /\bIa-\b/i,  /\bMLM\b/i, /\bLLM\b/i, /\bTit\b/i, /\bGen\b/i, 
+	/\bjaida\b/i, /\bRembg\b/i, /\bRem bg\b/i, /\bDel bg\b/i, /\bDelbg\b/i, /\bMorf\b/i, /\bIA\b/i, /\bAI\b/i, /\bIas\b/i, /\b-Ia\b/i, /\bIa-\b/i,  /\bMLM\b/i, /\bLLM\b/i, /\bGen\b/i, 
 	/\bTits\b/i, /\b5he\b/i, /\bChaturbate\b/i, /\bToni\b/i, /\bStripchat\b/i, /\b0rg\b/i, /\bg45m\b/i, /\bSX\b/i, /\bNud\b/i, /\bdpnod\b/i, /\bdp nod\b/i, /\bsh3\b/i, /\bGrils\b/i, 
 	/\b5h3\b/i, /\bphotor\b/i, /\bGina\b/i, /\bGin4\b/i, /\bG1n4\b/i, /\bG1na\b/i, /\bGlna\b/i, /\bG!na\b/i, /\bGril\b/i,  /\bGail\b/i, /\bAshley\b/i, /\bPamela\b/i, /\bBrooke\b/i, 
 	/\bTylo\b/i, /\bCatherine\b/i, /\bBridget\b/i, /\bSally\b/i, /\bvsco\b/i, /\bdp nood\b/i, /\bdp nod\b/i, /\bdep nod\b/i, /\bFux\b/i, /\bVM\b/i, /\bVMs\b/i, /\bTNA\b/i, /\bButt\b/i,
 	/\bMachiine\b/i, /\bLily\b/i, /\bMacheine\b/i, /\bMachiene\b/i, /\bLilly\b/i, /\bAmber\b/i, /\bFuk\b/i, /\bFuc\b/i, /\bmotion\b/i, /\bH3r\b/i, /\bS0ft\b/i, /\b50ft\b/i, /\bFag\b/i,
-	/\bThekla\b/i, /\bShotzi\b/i, /\bPant\b/i, /\bElena\b/i,
+	/\bThekla\b/i, /\bTit\b/i, /\bShotzi\b/i, /\bPant\b/i, /\bElena\b/i, /\bExGF\b/i, /\bEx-GF\b/i,
 	
 
     // Finnish Nuclear regex list
@@ -500,7 +501,7 @@
 	/aikuiskontsa/i, /aikuiskontentti/i, /aikuis kontentti/i, /aikuiskontentti/i, /aikuis contentti/i, /kuvankäsittely/i, /applikaatio/i, /4l4ston/i, /last0n/i, /pillu/i, /huora/i, 
 	/huoru/i, /horats/i, /prostit/i, /ilotyttå/i, /ilotyttö/i, /ilötyttö/i, /ilötytto/i, /ilåtyttå/i, /ilåtyttö/i, /iløtyttö/i, /iløtytto/i, /iløtyttø/i, /il0tyttö/i, /il0tytto/i, 
 	/il0tytt0/i, /il0tyttå/i, /il0tyttø/i, /1lotyttö/i, /1lotytto/i, /!lotyttö/i, /ilotyttø/i, /ilotytt0/i, /ilotytto/i, /bordel/i, /bordel/i, /bordelli/i, /ilotalo/i, /ilåtalo/i, 
-	/ilåtalå/i, /ilotalå/i, /iløtalo/i, /ilötalo/i, /erooti/i, /erotii/i, /erootii/i, /kuvakenet/i, /il0talo/i, /iløtalå/i, /ilötalå/i, /ilotalø/i, /kuvake.net/i, /Diipfeikki/i, 
+	/ilåtalå/i, /ilotalå/i, /iløtalo/i, /ilötalo/i, /erooti/i, /erotii/i, /erootii/i, /kuvakenet/i, /il0talo/i, /iløtalå/i, /ilötalå/i, /ilotalø/i, /kuvake\.net/i, /Diipfeikki/i, 
 	/Diipfeik/i, /deep feik/i, /deepfeik/i, /Diip feik/i, /Diip feikki/i,  /peppu/i, /pimppi/i, /pinppi/i, /Peba/i, /persreikä/i, /perse reikä/i, /pers reikä/i, /pyllyn reikä/i, 
 	/pylly reikä/i, /pyllynreikä/i, /pyllyreikä/i, /persa/i, /vaatepoist/i, /pers a/i, /anusa/i, /anus a/i, /pers-/i, /pylly-/i, /-kolo/i, /syva vaarennos/i, /syvä vaarennos/i, 
 	/perse/i, /pylly/i, /pyllyn-/i, /-reikä/i, /-aukko/i, /pimpp/i, /pimpe/i, /pinpp/i, /pinpi/i, /pimpi/i, /pimps/i, /pimsu/i, /pimsa/i, /pimps/i, /pilde/i, /pilper/i, /tussu/i, 
@@ -511,7 +512,7 @@
         /persaukko/i, /perseaukko/i, /perse aukko/i, /perse-aukko/i, /pers-aukko/i, /bliswwe/i, /li1vi/i, /p3rs aukko/i, /p3r5 aukko/i, /per5 aukko/i, /0nli/i, /p3rs-aukko/i, /p3r5 aukko/i, 
 	/per5 aukko/i, /p3rse/i, /pers3/i, /p3rs3/i, /per5e/i, /per53/i, /p3r5e/i, /p3r53/i, /rints/i, /r1nts/i, /r1nt5/i, /rint5/i, /p1p4r/i, /pip4r/i, /p1par/i, /rintalii/i, /rinta lii/i,
         /r1nta/i, /r1nt4/i, /rint4/i, /l1ivi/i, /sexi/i, /liiv1/i, /l1iv1/i, /li1v1/i, /l11v1/i, /l11vi/i, /vaatteet pois/i, /lahiopekoni/i, /lähiopekoni/i, /lähiöpekoni/i, /lahiöpekoni/i,
-	/diiva/i,
+	/diiva/i, /aimaito/i, /maitoai/i,
 
 
     // Finnish boundaried Nuclear regex list 
@@ -549,7 +550,7 @@
         /(?:poista|poisto|poistaminen|poistamis).*vaat/i,
         /(?:alaston|alasti|vaatteeton|paljas)\s*[-_ ]?\s*(?:kuva|kuvia|video|sivu|app|teko[aä]ly)/i,
         /(?:seksikuva|seksivideo|aikuissis[aä]lt[oö]|aikuisviihde|jynkky|runkku)/i,
-        /(?:pillu|pimppi|vittu|em[aä]tin|tussu|r[oö]mps[aä]|kyrp[aä]|kulli|kikkeli)/i,
+        /(?:pillu|pimppi|tuhero|em[aä]tin|tussu|r[oö]mps[aä]|kyrp[aä]|kulli|kikkeli)/i,
         /(?:boob|boobs|tits|titty|pussy|vagina|cock|dick|penis|blowjob|handjob|titjob|assjob)/i,
 	/(?:poista|poisto|poistaminen|poistamis)[ -]?(?:vaatteet|vaatteiden)/i,
 	/see[- ]?through/i,
@@ -557,8 +558,14 @@
     ];
 
 
-    // Redirect-only terms (never hide ordinary result links/cards)
-    const termsToRedirect = [
+    // Query-only redirect terms (never hide ordinary result links/cards)
+    const queryRedirectTerms = [
+    	/#/i, /##/i, /###/i, /@@/i, /#\*/i, /\*#/i, /@\*/i, /\*@/i, /#@/i, /@#/i,
+    ];
+
+
+    // Result/link/card-only terms. These merely hide search results containing keywords on this list.
+    const resultHideTerms = [
 	/Virtual laatikko/i, /Virtuaali laatikko/i, /Virtuaalilaatikko/i, /Virtuaalibox/i, /virtualmachine/i, /virtual machine/i, /kuvankäsittely/i, /virtuaalikone/i, /virtuaali kone/i, 
 	/virtuaali tietokone/i, /virtuaalitietokone/i, /hyper-v/i, /hyper v/i, /virtuaalimasiina/i, /virtuaali masiina/i, /virtuaalimasiini/i, /virtuaali masiini/i, /virtuaali workstation/i, 
 	/virtual workstation/i, /virtualworkstation/i, /virtual workstation/i, /vrbox/i, /vibox/i, /virtuaaliworkstation/i, /hypervisor/i, /hyper visor/i, /hyperv/i, /vbox/i, /virbox/i, 
@@ -569,11 +576,12 @@
 	/org@/i, /0rg@/i, /0rgi/i, /0rga5m/i, /origas/i, /0riga/i, /0r1g4/i, /0rlg4/i, /orlg4/i, /0rlg@/i, /orlg@/i, /origa/i, /or1ga/i, /orig4/i, /0r1g4/i, /0rlga/i, /orlg4/i, /0rlg4/i, /0rlg@/i, 
 	/orlg@/i, /0rrg4/i, /orrg4/i, /or1g@/i, /0r1g@/i, /0r1ga/i, /0r!g@/i, /0r!g4/i, /0rig@/i, /0rig4/i, /0r9ga/i, /reveals/i, /reveali/i, /revealing/i, /reveale/i, /booba/i, /Waaa/i, /w333d/i, 
 	/w3333/i, /we333/i, /w3e33/i, /w33e3/i, /w333e/i, /we33e/i, /we3e3/i, /wee3e/i, /w3e3e/i, /weee/i, /w3333/i, /f4gg/i, /fagg3/i, /fagger/i, /wedgi/i, /wedge/i, /wedgy/i, /wedg1/i, /wedg!/i, 
-	/w3dg/i, /w33d/i, /we3d/i, /w3ed/i, /wemen's/i, /wemen/i, /wemon's/i, /wemons/i, /ldaies/i, /laadie/i, /laadis/i, /leydis/i, /leydies/i, /5uck/i, /Suck/i,
+	/w3dg/i, /w33d/i, /we3d/i, /w3ed/i, /wemen's/i, /wemen/i, /wemon's/i, /wemons/i, /ldaies/i, /laadie/i, /laadis/i, /leydis/i, /leydies/i, /5uck/i,
 
-    // Symbols and emojis (Regular regex)
-    	/#/i, /##/i, /###/i, /@@/i, /#\*/i, /\*#/i, /@\*/i, /\*@/i, /#@/i, /@#/i,
-];
+
+	// Boundaried link result regexes
+	/\bSuck\b/i, /\bSucks\b/i,
+    ];
 
 
     // --- NEW: DYNAMIC WRESTLER BANS FROM WRESTLING.JS ---
@@ -653,8 +661,8 @@
     // Execute immediately
     applyDynamicWrestlerBans();
 
-    // Special Regexes array, kept separate for readability.
-    const specialRegexes = [
+    // Special query-redirect regexes, kept separate for readability.
+    const specialRedirectRegexes = [
         /gr[a4][i1l]n(?:[\s_\-\/.]{0,3}(?:re(?:mov(?:e|al|ing)?|m)|(?:delet(?:e|ing|ion)?|del)|eras(?:e|ing)?|(?:ph(?:o|0)?t(?:o|0)?|pic(?:t(?:ure|ures)?)?|image|img)))|(?:re(?:mov(?:e|al|ing)?|m)|(?:delet(?:e|ing|ion)?|del)|eras(?:e|ing)?|fix|denois(?:e|er|ing)?)(?:[\s_\-\/.]{0,3}(?:ph(?:o|0)?t(?:o|0)?|pic(?:t(?:ure|ures)?)?|image|img))?(?:[\s_\-\/.]{0,3}gr[a4][i1l]n)|gr[a4][i1l]n(?:[\s_\-\/.]{0,3}(?:ph(?:o|0)?t(?:o|0)?|pic|image|img))|(?:ph(?:o|0)?t(?:o|0)?|pic|image|img)(?:[\s_\-\/.]{0,3}fix)/i, /lex.*bl/i, /liv.*morgan/i, /saad.*pipar/i, /s4ad.*pipar/i, /s44d.*pipar/i, /sa4d.*pipar/i, /rint.*pois/i, /dress.*remov/i,
         /(?:n(?:o|0)ise(?:[\s_\-\/.]{0,3}(?:re(?:mov(?:e|al|ing)?|m|duc(?:e|ed|ing|tion)?)|(?:delet(?:e|ing|ion)?|del)|eras(?:e|ing)?|fix|filter(?:ing)?))|(?:re(?:mov(?:e|al|ing)?|m|duc(?:e|ed|ing|tion)?)|(?:delet(?:e|ing|ion)?|del)|eras(?:e|ing)?|fix|filter(?:ing)?)(?:[\s_\-\/.]{0,3})n(?:o|0)ise|de[\s_\-\.]?n(?:o|0)is(?:e|er|ing)?)/i, /make.*(move|gif|video)/i, /photo.*(move|gif|video)/i, /image.*(move|gif|video)/i, /pic.*(move|gif|video)/i, /img.*(move|gif|video)/i, /booty/i, /ass.*(animat|ai|move)/i, /twerk/i, /twerking/i, /jiggle/i, /bounce.*(ai|gif)/i, /booty.*(ai|gif|video|animat)/i, /ass.*(ai|gif|video|animat)/i, /mangoanimat/i, /deepnude/i, /undress/i, /strip.*ai/i, /nude.*ai/i, /clothes.*remove/i, /remove.*(clothes|clothing|dress)/i, /face.*(swap|deepfake|replace)/i, /vaat.*pois/i, /hous.*pois/i, /pait.*pois/i, /pait.*pois/i, /liiv.*pois/i, /alushous.*pois/i, /alkkarit.*pois/i, /alusvaat.*pois/i, /clothing.*remove/i, 
 /alexa.*(wwe|wrest|ras|NXT|pro)/i, /blis.*(wwe|wrest|ras|NXT|pro)/i, /lexa.*(wwe|wrest|ras|NXT|pro)/i, /lexi.*(wwe|wrest|ras|NXT|pro)/i, /blis.*(wwe|wrest|ras|NXT|pro)/i, /bils.*(wwe|wrest|ras|NXT|pro)/i, /lex.*(kauf|cabr|carb)/i, /model.*(mach|langu)/i, /robe.*(wwe|tna|aew|njpw|wrestl|rasll|rasslin)/i,
@@ -662,70 +670,184 @@
 
     ];
 
-    // The former specialRegexes have the same behavior as termsToRedirect:
+    // These have the same behavior as queryRedirectTerms:
     // redirect queries, never hide ordinary links by themselves.
-    termsToRedirect.push(...specialRegexes);
+    queryRedirectTerms.push(...specialRedirectRegexes);
 
-    const allowedWords = [
+    // Search Allow Terms list, these should not redirect (probably). 
+    const searchAllowTerms = [
+
+	// General terms
+        /reddit/i, /OSRS/i, /RS3/i, /Old School/i, /RuneScape/i, /GTA/i, /Battlefield/i, /BF/i, /netflix/i, /pushpull/i, /facebook/i, /FB/i, /instagram/i, /Wiki/i, /pedia/i, /fandom/i, /tiktok/i, /bond/i, /bonds/i, /2007scape/i, 
+	/President/i, /lookup/i, /wrestling/i, /wrestler/i, /WWE/i, /wrestle/i, /Raw/i, /SmackDown/i, /PS1/i, /PS2/i, /PS3/i, /PS4/i, /PS5/i, /PS6/i, /Dagon'hai/i, /Dagon´hai/i, /Dagon`hai/i, /Joakim/i, /James/i, /Steve/i, /Hetfield/i, 
+	/Lewis Hamilton/i, /Alexander/i, /mother/i, /Coffee/i, /Monster/i, /Energy/i, /LH44/i, /LH-44/i, /Greenzero/i, /Green/i, /Zero/i, /blue/i, /white/i, /red/i, /yellow/i, /brown/i, /cyan/i, /black/i, /giver/i, /taker/i, /Metallica/i, 
+	/Sabaton/i, /TheGamingDefinition/i, /Twitch/i, /Lake/i, /TGD/i, /wayback/i, /Ucey/i, /dagonhai/i, /Dagon'hai/i, /Dagon´hai/i, /Dagon`hai/i, /europe/i, /world/i, /champ/i, /fifa/i, /football/i, /ice hockey/i, /NHL/i, /american/i, 
+	/america/i, /ethiopea/i, /brazil/i, /finland/i, /netherland/i, /old/i, /new/i, /used/i, /sale/i, /toyota/i, /opel/i, /mitsubishi/i, /galant/i, /Edge WWE/i, /National Hockey League/i, /maps/i, /earth/i, /WhatsApp/i, /Messenger/i,
+	/Crate/i, 
+	
+
+
+	// Tech terms
+	/SSD/i, /NVME/i, /SATA/i, /HDD/i, /disc/i, /UEFI/i, /BIOS/i, /EZFlash/i, /flash/i, /Disk/i, /RPM/i, /rounds-per-minute/i, /driver/i, /drivers/i, /chipset/i, /GPU/i, /CPU/i, /mobo/i, /motherboard/i, /Graphics Card/i, /sound/i, 
+	/speaker/i, /bass/i, /subwoofer/i, /home theater/i, /receiver/i, /LED/i, /USB/i, /cable/i, /HDMI/i, /DPCable/i, /DP-Cable/i, /DisplayPort/i, /Display Port/i, /dp port/i, /Galaxy/i, /Magic8/i, /Android/i, /EMUI/i, /MagicOS/i, 
+	/OnePlus/i, /Magic8/i, /P30 Lite/i, /WAN/i, /LAN/i, /Ethernet/i, /WiFi/i, /Wireless/i, /Connect/i, /findidfb/i, /fbid/i, /idfb/i, /Stream/i, /google/i, /OnePlus/i, /Xbox One/i, /SR393/i, /profile/i, /inspect/i, /inspector/i, 
+	/post/i, /card/i, /refresh/i, /rate/i, /Frames per second/i, /FPS/i, /NVIDIA/i, /AMD/i, /INTEL/i, /EVGA/i, /ASUS/i, /MSI/i, /SAPPHIRE/i, /MICROSOFT/i, /XFX/i, /POWERCOLOR/i, /GIGABYTE/i, /ASROCK/i, /GAINWARD/i, /INNO3D/i, 
+	/COLORFUL/i, /ZOTAC/i, /PNY/i, /SAMSUNG/i, /HEWLETT/i, /LENOVO/i, /COMPAQ/i, /ACER/i, /PACKARD/i, /GeForce/i, /Ryzen/i, /Radeon/i, /GTX/i, /RTX/i, /Core/i, /Ultra/i, /Athlon/i, /Pentium/i, /Celeron/i, /Celeron/i, /nForce/i, 
+	/Processor/i, /Chip/i, /DLSS/i, /FSR/i, /NIS/i, /PALIT/i, /ShadowPlay/i, /Control Panel/i, /Audio/i, /Realtek/i, /Mediatek/i, /Computex/i, /Assembly/i, /KeyNote/i, /Key Note/i, /Sega/i, /Sony/i, /Nintendo/i, /Nokia/i, /Onkyo/i, 
+	/Huawei/i, /Motorola/i, /Honor/i, /Phillips/i, /Philips/i, /OpenAI/i, /Catalyst/i, /Crimson/i, /Adrenalin/i, /Fermi/i, /Ampere/i, /Duel/i, /Blackwell/i, /spotify/i, /spicetify/i, /youtube/i, /ublock/i, /-series/i, /hardware/i, 
+	/tech/i, /techpowerup/i, /tech powerup/i, /powerup/i, /GamersNexus/i, /Center/i, /paint\.net/i, /paintdotnet/i, /paintnet/i, /paint net/i, /Corsair/i, /Thermalright/i, /Noctua/i, /Arctic/i, /quiet/i, /Cooler Master/i, /Codec/i,  
+	/Fractal/i, /FractalDesign/i, /Sandisk/i, /Lian Li/i, /NZXT/i, /Seasonic/i, /iCUE/i, /MasterPlus/i, /AuraSync/i, /Armoury/i, /MSICenter/i, /Razer/i, /144hz/i, /165hz/i, /200hz/i, /RAM/i, /DRAM/i, /SDRAM/i, /VRAM/i, /DDR3/i, 
+	/DDR4/i, /DDR5/i, /GDDR5/i, /GDDR6/i, /GDDR6X/i, /GDDR7/i, /HBM/i, /DIMM/i, /SO-DIMM/i, /SODIMM/i, /XMP/i, /EXPO/i, /ECC/i, /NAND/i, /TLC/i, /QLC/i, /SLC/i, /TBW/i, /IOPS/i, /PSU/i, /power/i, /supply/i, /consumption/i,  
+	/Audio/i, /SteelSeries/i, /wattage/i, /SMART/i, /RAID/i, /AHCI/i, /M\.2/i, /U\.2/i, /PCI/i, /PCIe/i, /PCI Express/i, /AGP/i, /AM1/i, /AM1\+/i, /AM2/i, /AM2\+/i, /AM3/i, /AM3\+/i, /AM4/i, /AM5/i, /AM3/i, /AM4/i, /AM5/i, /LGA/i, 
+	/LGA1151/i, /LGA1200/i, /LGA1700/i, /LGA1851/i, /VRM/i, /PBO/i, /Resizable BAR/i, /ReBAR/i, /Smart Access Memory/i, /Optimizer/i, /SAM/i, /12VHPWR/i, /B350/i, /X370/i, /B450/i, /X470/i, /B550/i, /X570/i, /B650/i, /X670/i, 
+	/B850/i, /X870/i, /B560/i, /B660/i, /B760/i, /Z690/i, /Z790/i, /B860/i, /Z890/i, /Z97/i, /Z97AR/i, /Z97-AR/i, /B550-F/i, /X570-E/i, /12VHPWR/i, /8pin/i, /8-pin/i, /12pin/i, /12-pin/i, /16pin/i, /16-pin/i, /24pin/i, 
+	/24-pin/i, /12V-2x6/i, /SoundBlaster/i, /4790K/i, /1050 TI/i, /1080 TI/i, /3080/i, /1080TI/i, /2080TI/i, /2080 TI/i, /3080 TI/i, /4080 TI/i, /5080 TI/i, /2080TI/i, /1080TI/i, /3080TI/i, /4080TI/i, /5080TI/i, /6080TI/i, 
+	/7080TI/i, /8080TI/i, /9080TI/i, /50 TI/i, /60 TI/i, /70 TI/i, /80 TI/i, /90 TI/i, /50TI/i, /60TI/i, /70TI/i, /80TI/i, /90TI/i, /0TI/i, /0X/i, /50/i, /60/i, /70/i, /80/i, /90/i, /5080 TI/i, /1050Ti/i, /2080/i, /8600K/i, 
+	/9700K/i, /5900X/i, /7900/i, /9800/i, /5700X3D/i, /5800X3D/i, /7800X3D/i, /9800X3D/i, /X3D/i, /VCache/i, /3DVCache/i, /XTX/i, /GALAX/i, /PRIME/i, /TUF/i, /STRIX/i, /PROART/i, /SUPRIM/i, /WINDFORCE/i, /GAMING/i, /GAMING X/i, 
+	/GAMING OC/i, /STEALTH/i, /EMTEK/i, /VISION/i, /ROG/i, /STRIX/i, /FTW/i, /AORUS/i, /AORUS/i, /SAPPHIRE/i, /POWERCOLOR/i, /DUKE/i, /ARMOR/i, /MECH/i, /AERO/i, /JETSTREAM/i, /PHANTOM/i, /MATRIX/i, /ASTRAL/i, /PLATINUM/i, 
+	/PULSE/i, /NITRO/i, /RED DEVIL/i, /HELLHOUND/i, /FIRESTORM/i, /FIREPRO/i, /FURY/i, /TITAN/i, /QUADRO/i, /BLOWER/i, /XC3/i, /TURBO/i, /DUAL/i, /ITX/i, /TRIPLE FAN/i, /TRIPLEFAN/i, /TRINITY/i, /VANGUARD/i, /OCV/i, /AMP/i,
+	/OC VERSION/i, /ULTRA/i, /HOF/i, /HALL OF FAME/i, /LEGION/i, /SHADOW/i, /EX/i, /VENTUS/i, /MINI/i, /OC EDITION/i, /EAGLE/i, /TRIO/i, /Overclocked/i, /Overclockers/i, /Dual/i, /Series/i, /Lite/i, /live/i, /Windows/i,
+	/10-series/i, /20-series/i, /30-series/i, /40-series/i, /50-series/i, /60-series/i, /70-series/i, /80-series/i, /90-series/i, /200-series/i, /400-series/i, /500-series/i, /600-series/i, /700-series/i, /900-series/i, 
+	/1000-series/i, /2000-series/i, /3000-series/i, /4000-series/i, /5000-series/i, /6000-series/i, /7000-series/i, /8000-series/i, /9000-series/i, /10000-series/i, /10K-series/i, /TI-series/i, /R5-series/i, /R7-series/i, 
+	/R9-series/i, /RX-series/i, /GTX-series/i, /RTX-series/i, /xbox/i, /playstation/i, /Linux/i, /MacOS/i, /Hyper-Threading/i, /SMT/i, /AVX/i, /AVX2/i, /Meteor/i, /Arrow/i, /Lunar/i, /Raphael/i, /Ridge/i, /Threadripper/i, 
+	/EPYC/i, /Granite/i, /Summit/i, /Pinnacle/i, /Matisse/i, /Vermeer/i, /Matisse/i, /Vermeer/i, /Xeon/i, /Zen/i, /CUDA/i, /NVENC/i, /NVDEC/i, /NVIDIA Reflex/i, /Reflex/i, /PhysX/i, /ROCm/i, /OpenCL/i, /OpenGL/i, /Vulkan/i, 
+	/DirectX/i, /DX11/i, /DX12/i, /Ray Tracing/i, /Path Tracing/i, /Rasterization/i, /DLAA/i, /XeSS/i, /Shader/i, /Tensor Core/i, /RT Core/i, /OLED/i, /QD-OLED/i, /Mini-LED/i, /HDR/i, /HDR10/i, /DisplayHDR/i, /VRR/i, /Mini-ITX/i, 
+	/SFF/i, /mATX/i, /Micro-ATX/i, /ATX/i, /Variable Refresh Rate/i, /Adaptive Sync/i, /Adaptive-Sync/i, /G-SYNC/i, /FreeSync/i, /Display Stream Compression/i, /DSC/i, /HDCP/i, /1080p/i, /1440p/i, /2160p/i, /240hz/i, /360hz/i, 
+	/480hz/i, /air cooler/i, /CPU cooler/i, /liquid cooler/i, /water cooling/i, /AIO/i, /radiator/i, /heatsink/i, /heat sink/i, /thermal paste/i, /thermal pad/i, /fan curve/i, /PWM/i, /cooler/i, /Bluetooth/i, /Wi-Fi/i, 
+	/WiFi 5/i, /WiFi 6/i, /Wi-Fi 6/i, /WiFi 6E/i, /Wi-Fi 6E/i, /WiFi 7/i, /Wi-Fi 7/i, /RJ45/i, /2\.5GbE/i, /5GbE/i, /10GbE/i, /DHCP/i, /NAT/i, /charg/i, /IP address/i, /IPv4/i, /IPv6/i, /AV1/i, /H\.264/i, /H\.265/i, /HEVC/i,
+	/USB-C/i, /USB Type-C/i, /Thunderbolt/i, /DisplayPort Cable/i, /DP cable/i, /Windows/i, /Linux/i, /Ubuntu/i, /Debian/i, /Fedora/i, /macOS/i, /iOS/i, /ChromeOS/i, /Steam/i, /Epic Games/i, /GOG/i, /Battle\.net/i, /Discord/i, 
+	/Snapdragon/i, /Exynos/i, /Dimensity/i, /Qualcomm/i, /ChatGPT/i, /GPT-4o/i, /GPT-5.1/i, /GPT-5.4/i, /GPT-5.5/i, /GPT-5.6/i, /GPT-5.6 SOL/i, /Sonnet/i, /Gemini/i, /black friday/i, /SmackDown/i, /search/i, /GPT-5.4/i, /GPT-5.5/i, 
+	/Google Gemini/i, /GitHub CoPilot/i, /github/i, /hub/i, /git/i, /artifact/i,
+
+
+    	// English Medical Terms
+    	/choledochoduodenostomiam/i, /choledocho-duodenostomiam/i, /cholecystectomiam/i, /cauda/i, /cauda pancreatis/i, /pancreatis/i, /gastroenterostomiam/i, /retrocolica/i, /gastroenterostomiam retrocolica/i, /Haemorrhagia/i, /bile stasis/i,
+	/gastrointestinalis/i, /Haemorrhagia gastrointestinalis/i, /retrocolic/i, /gastroenterostomy/i, /retrocolic gastroenterostomy/i, /choledochoduodenostomy/i, /choledocho-duodenostomy/i, /choledocho/i, /duodenostomiam/i, /duodenostomy/i, 
+	/cholecystectomy/i, /cholecyst/i, /resectionem/i, /resectionem cauda pancreatis/i, /pancreas/i, /resection of pancreas/i, /resection of pancreatic tail/i, /pancreas tail resection/i, /haemorrhagia gastrointestinalis/i, /hemorrhagia/i, 
+	/gastrointestinal/i, /gastrointestinal bleeding/i, /intestinal bleeding/i, /liver bile stasis/i, /stasis biliaris hepatis/i, /stasis biliaris/i, /biliaris/i, /hepatis/i, /atherosclerosis aortae gravis/i, /atherosclerosis aortae/i, 
+	/aortae/i, /gravis/i, /aortic atherosclerosis/i, /atherosclerosis arteriae coronariae cordis gravis/i, /atherosclerosis coronariae/i, /coronariae cordis/i, /coronary artery disease/i, /coronary atherosclerosis/i, /arteriae cerebri/i,
+	/atherosclerosis cordis/i, /atherosclerosis arteriae cerebri levis/i, /uteri/i, /atherosclerosis cerebri/i, /cerebral atherosclerosis/i, /brain artery disease/i, /status post extirpationem uteri totalis/i, /extirpationem uteri totalis/i, 
+	/extirpationem/i, /hysterectomy/i, /uterus removal/i, /total/i, /Carcinoma parvocellulare pancreatis cum/i, /Carcinoma parvocellulare pancreatis/i, /Carcinoma/i, /parvocellulare/i, /pancreatis/i, /metastasibus/i, /pulmonum/i, /l\. dx\./i,
+	/pulmonum l\. dx\./i, /lymphnodi mediastini/i, /mediastini/i, /renis sin/i, /metastasibus pulmonum l\. dx\. lymphnodi mediastini/i, /et retroperinonei renis sin/i, /retroperinonei renis sin/i, /retroperinonei renis sin/i, /retroperinonei sin/i,
+	/oramorph/i, /medical/i, /medicine/i, /health/i, /healthcare/i, /diagnosis/i, /prognosis/i, /symptom/i, /symptoms/i, /medical history/i, /medical record/i, /patient record/i, /discharge summary/i, /epicrisis/i, /referral/i, /follow-up/i, 
+	/follow up/i, /specialist/i, /physician/i, /doctor/i, /nurse/i, /hospital/i, /clinic/i, /emergency department/i, /emergency room/i, /ambulance/i, /surgery/i, /operation/i, /procedure/i, /treatment/i, /therapy/i, /rehabilitation/i, 
+	/physiotherapy/i, /palliative care/i, /heart/i, /cardiac/i, /cardiology/i, /cardiologist/i, /coronary/i, /myocardial/i, /myocardial infarction/i, /heart attack/i, /heart failure/i, /arrhythmia/i, /atrial fibrillation/i, /tachycardia/i, 
+	/bradycardia/i, /hypertension/i, /hypotension/i, /blood pressure/i, /angina pectoris/i, /cardiomyopathy/i, /valvular disease/i, /aortic aneurysm/i, /thrombosis/i, /embolism/i, /blood clot/i, /circulation/i, /vascular disease/i, /pulmonary/i, 
+	/respiratory/i, /pneumonia/i, /bronchitis/i, /asthma/i, /COPD/i, /emphysema/i, /pulmonary embolism/i, /pleurisy/i, /respiratory failure/i, /shortness of breath/i, /dyspnea/i, /oxygen saturation/i, /SpO2/i, /sleep apnea/i, /stomach/i,
+	/gastric/i, /gastritis/i, /peptic ulcer/i, /stomach ulcer/i, /reflux/i, /GERD/i, /esophagus/i, /oesophagus/i, /esophagitis/i, /oesophagitis/i, /dysphagia/i, /intestine/i, /small intestine/i, /large intestine/i, /colon/i, /colitis/i, 
+	/diverticulitis/i, /Crohn disease/i, /Crohn's disease/i, /celiac disease/i, /coeliac disease/i, /IBD/i, /constipation/i, /diarrhea/i, /diarrhoea/i, /nausea/i, /vomiting/i, /abdominal pain/i, /hepatic/i, /hepatitis/i, /cirrhosis/i, 
+	/fatty liver/i, /cholestasis/i, /gallbladder/i, /gallstone/i, /bile duct/i, /pancreatitis/i, /kidney/i, /renal/i, /nephrology/i, /nephrologist/i, /kidney disease/i, /kidney failure/i, /renal failure/i, /chronic kidney disease/i, /CKD/i, 
+	/acute kidney injury/i, /AKI/i, /nephritis/i, /dialysis/i, /hemodialysis/i, /haemodialysis/i, /creatinine/i, /eGFR/i, /brain/i, /neurology/i, /neurologist/i, /stroke/i, /cerebral infarction/i, /brain infarction/i, /brain hemorrhage/i, 
+	/brain haemorrhage/i, /intracerebral hemorrhage/i, /TIA/i, /epilepsy/i, /seizure/i, /migraine/i, /neuropathy/i, /nerve damage/i, /dementia/i, /Alzheimer/i, /Alzheimer's disease/i, /Parkinson/i, /Parkinson's disease/i, /multiple sclerosis/i, 
+	/sciatica/i, /diabetes/i, /type 1 diabetes/i, /type 2 diabetes/i, /blood glucose/i, /glucose/i, /insulin/i, /hypoglycemia/i, /hyperglycemia/i, /thyroid/i, /hypothyroidism/i, /hyperthyroidism/i, /goiter/i, /metabolic syndrome/i, /cholesterol/i, 
+	/LDL/i, /HDL/i, /triglyceride/i, /obesity/i, /endocrinology/i, /endocrinologist/i, /anemia/i, /anaemia/i, /hemoglobin/i, /haemoglobin/i, /white blood cell/i, /leukocyte/i, /platelet/i, /thrombocyte/i, /coagulation/i, /anticoagulant/i, /INR/i,
+	/blood thinner/i, /APTT/i, /D-dimer/i, /leukemia/i, /lymphoma/i, /myeloma/i, /thrombocytopenia/i, /leukopenia/i, /neutropenia/i, /blood transfusion/i, /hematology/i, /hematologist/i, /cancer/i, /tumor/i, /tumour/i, /malignant/i, /benign/i, 
+	/metastasis/i, /metastases/i, /oncology/i, /oncologist/i, /chemotherapy/i, /radiotherapy/i, /radiation therapy/i, /immunotherapy/i, /remission/i, /palliative treatment/i, /arthritis/i, /osteoarthritis/i, /rheumatoid arthritis/i, /osteoporosis/i, 
+	/fracture/i, /sprain/i, /dislocation/i, /tendonitis/i, /tendinitis/i, /bursitis/i, /back pain/i, /neck pain/i, /muscle pain/i, /joint pain/i, /orthopedics/i, /orthopedic/i, /infection/i, /bacterial infection/i, /viral infection/i, /ALP/i,
+    	/inflammation/i, /sepsis/i, /septic shock/i, /fever/i, /antibiotic/i, /antiviral/i, /antifungal/i, /allergy/i, /anaphylaxis/i, /autoimmune disease/i, /rheumatology/i, /rheumatologist/i, /COVID-19/i, /SARS-CoV-2/i, /AST/i, /ALT/i, /GGT/i,  
+    	/influenza/i, /RSV/i, /norovirus/i, /chronic pain/i, /fatigue/i, /weakness/i, /dizziness/i, /fainting/i, /syncope/i, /swelling/i, /edema/i, /oedema/i, /chills/i, /night sweats/i, /bilirubin/i, /albumin/i, /electrolyte/i, /sodium/i, /calcium/i,
+    	/weight loss/i, /loss of appetite/i, /dehydration/i, /blood test/i, /laboratory test/i, /complete blood count/i, /CBC/i, /CRP/i, /ESR/i, /HbA1c/i, /glucose test/i, /liver function test/i, /kidney function test/i, /medication/i, /cytology/i,
+    	/potassium/i,  /magnesium/i, /vitamin B12/i, /ferritin/i, /ECG/i, /EKG/i, /EEG/i, /MRI/i, /CT scan/i, /ultrasound/i, /radiograph/i, /angiography/i, /echocardiogram/i, /endoscopy/i, /gastroscopy/i, /colonoscopy/i, /biopsy/i, /pathology/i, 
+	/histology/i, /radiology/i, /radiologist/i, /pathologist/i, /fungal infection/i, /prescription/i, /dosage/i, /dose/i, /tablet/i, /capsule/i, /infusion/i, /intravenous/i, /painkiller/i, /opioid/i, /morphine/i, /statin/i, /anticoagulation/i, 
+	/chemotherapy drug/i, /internal medicine/i, /gastroenterology/i, /anesthesiology/i,
+	
+
+	// Finnish search terms
+	/hikipedia/i, /kulutus/i, /sähkön/i, /sähkönkulutus/i, /tori/i, /tori\.fi/i, /www\.tori\.fi/i, /Kirpputori/i, /käytetty/i, /käytetyt/i, /käytettynä/i, /proshop/i, /hinta/i, /hintavertailu/i, /hintaopas/i, /sähkö/i, /pörssi/i, 
+	/sähkösopimus/i, /vatfall/i, /elenia/i, /veikkaus/i, /lotto/i, /jokeri/i, /jääkiekko/i, /viikinkilotto/i, /perho/i, /vakuutus/i, /kela/i, /sosiaalitoimisto/i, /sossu/i, /OP/i, /Osuuspankki/i, /Osuuspankin/i, /Artikkeli/i, 
+	/jalkapallo/i, /sanomat/i, /sanoma/i, /päivän sana/i, /jumala/i, /jeesus/i, /jesus/i, /christ/i, /kristus/i, /vapahtaja/i, /messias/i, /pääsiäinen/i, /joulu/i, /uusivuosi/i, /vuosi/i, /uusi/i, /uuden/i, /vuoden/i, /Psykologi/i, 
+	/psyka/i, /kotiteatteri/i, /vahvistin/i, /pleikkari/i, /näytönohjain/i, /näytön/i, /ohjain/i, /Telsu/i, /Televisio/i, /Telvisio/i, /Ohjelma/i, /Ohjelmat/i, /Ajurit/i, /emolevy/i, /emo levy/i, /vaihd/i, /vaihe/i, /vaiht/i, /jako/i, 
+	/jakopäähihna/i, /hihna/i, /pää/i, /auto/i, /pankki/i, /moto/i, /osa/i, /vara/i, /raha/i, /ooppeli/i, /diagnoosi/i, /diagnosoitiin/i, /diagnosoitu/i, /diagnosis/i, /saada/i, /löytää/i, /ostaa/i, /löytö/i, /osto/i, /saanti/i, 
+	/muumit/i, /Tarina/i, /veren/i, /paine/i, /päiväkirja/i, /luokka/i, /Kannan otto/i, /vaihdetaan/i, /vaihdan/i, /vaihto/i, /vaihtoi/i, /vaihtoi/i, /vaihdossa/i, /vaihtaa/i, /paa/i, /jakopää hihna/i, /jako hihna/i, /jako pää hihna/i, 
+	/jako päähihna/i, /\?/i, /\!/i, /opas/i, /ohje/i, /manuaali/i, /käyttö/i, /history/i, /historia/i, /haku/i, /classic/i, /klassikko/i, /klassik/i, /south park/i, /siivoton juttu/i, /pasila/i, /jakohihna/i, /poliisin poika/i, /poliisi/i, 
+	/poika/i, /Ravage/i, /Savage/i, /volksvagen/i, /konsoli/i, /console/i, /Sega/i, /Xbox/i, /Game/i, /Terapia/i, /Therapy/i, /Masennus/i, /Depression/i, /Psykiatri/i, /Striimi/i, /Stream/i, /antenni/i, /verkko/i, /digibox/i, /hamppari/i, 
+	/hampurilainen/i, /ranskalaiset/i, /peruna/i, /automaatti/i, /automaatin/i, /autismi/i, /autisti/i, /ADHD/i, /asperger/i, /kebab/i, /ravintola/i, /ruokala/i, /pikaruoka/i, /suomi/i, /finnish/i, /renkaan/i, /nopeusluokka/i, /nopeus/i, 
+	/renkaan nopeusluokka/i, /Yleisönosasto/i, /sääennuste/i, /ennuste/i, /maksaminen/i, /posti/i, /Kuningas/i, /Kuninkaitten/i, /Aleksis Kivi/i, /Kiven/i, /Aleksanteri Suuri/i, /Yleisön osasto/i, /Aleksanteri Stubb/i, /Stubb/i, /kortti/i,
+	/Poliitikka/i, /Politiikka/i, /Poliittinen/i, /Kannanotto/i, /kirje/i, /päivän/i, /kirjekuori/i, /kuinka/i, /miten/i, /miksi/i, /minkä/i, /takia/i, /minä/i, /teen/i, /tätä/i, /ilman/i, /ilma/i, /sää/i, /foreca/i, /ilmatieteenlaitos/i, 
+	/lehti/i, /yliopistonapteekki/i, /Pentium/i, /Kela/i, /kuule/i, /kirje/i, /kuulemiskirje/i, /kelan/i, /Presidentti/i, /Tie/i, /katu/i, /opas/i, /amerika/i, /ameriika/i, /ameriikka/i, /eurooppa/i, /eurooppa/i, /muisto/i, /sota-aika/i,
+	/matkahuolto/i, /posti/i, /smarket/i, /kmarket/i, /s-market/i, /k-market/i, /kpo/i, /kesko/i, /ikiliikku/i, /st1/i, /rautakauppa/i, /talouskauppa/i, /kauppa/i, /pankki/i, /osuus/i, /ruoka/i, /tupakka/i, /savuke/i, /aski/i, /toppa/i,
+	/rizla/i, /sätkäpaperi/i, /filtteri/i, /tupakkitoppa/i, /tupakkatoppa/i, /purutoppa/i, /filtteripussi/i, /ventti/i, /körssi/i, /rööki/i, /savu/i, /sauhu/i, /viina/i, /alkoholi/i, /koskenkorva/i, /leijona/i, /leijona/i, /saarenmaa/i,
+	/energiajuoma/i, /limsa/i, /limsa/i, /virvoitusjuoma/i, /painolaskuri/i, /palkkalaskuri/i, /palkkalaskuri/i, /iltalehti/i, /iltasanomat/i, /ilta-lehti/i, /ilta-sanomat/i, /aikakausi/i, /aika/i, /aito/i, /kiuas/i, /sauna/i, /grilli/i,
+	/aamu/i, /päivä/i, /ilta/i, /yö/i, /maanantai/i, /tiistai/i, /keskiviikko/i, /torstai/i, /perjantai/i, /lauantai/i, /sunnuntai/i,  /tammikuu/i, /helmikuu/i, /maaliskuu/i, /huhtikuu/i, /toukokuu/i, /kesäkuu/i, /heinäkuu/i, /elokuu/i, 
+	/syyskuu/i, /lokakuu/i, /marraskuu/i, /joulukuu/i, /kevä/i, /kesä/i, /syksy/i, /talv/i, /juhannus/i, /joulu/i, /pääsiäinen/i, /halloween/i, /laskiainen/i, /laskiais/i, /laskiais-/i, /pulla/i, /munkki/i, /viineri/i, /vadelma/i, 
+	/leivos/i, /hillo/i, /mansikka/i, /mustikka/i, /puolukka/i, /karpalo/i, /pirkka/i, /kotimainen/i, /kotimaista/i, /koti mainen/i, /koti maista/i, 
+
+
+	// Finnish Medical Terms
+	/lääketiede/i, /terveys/i, /terveydenhuolto/i, /diagnoosi/i, /ennuste/i, /oire/i, /oireet/i, /sairaushistoria/i, /sairauskertomus/i, /potilaskertomus/i, /epikriisi/i, /lähete/i, /seuranta/i, /kontrollikäynti/i, /erikoislääkäri/i, 
+	/lääkäri/i, /hoitaja/i, /sairaala/i, /klinikka/i, /päivystys/i, /ambulanssi/i, /kirurgia/i, /leikkaus/i, /operaatio/i, /toimenpide/i, /hoito/i, /terapia/i, /kuntoutus/i, /fysioterapia/i, /palliatiivinen hoito/i, /sydänsairaus/i, 
+	/sydän/i, /kardiologia/i, /kardiologi/i, /sepelvaltimo/i, /sepelvaltimotauti/i, /sydäninfarkti/i, /sydänkohtaus/i, /sydämen vajaatoiminta/i, /rytmihäiriö/i, /eteisvärinä/i, /takykardia/i, /bradykardia/i, /aortan aneurysma/i, 
+	/kohonnut verenpaine/i, /matala verenpaine/i, /kardiomyopatia/i, /läppävika/i, /verenpaine/i, /tromboosi/i, /embolia/i, /veritulppa/i, /verenkierto/i, /verisuonisairaus/i, /keuhko/i, /keuhkosairaus/i, /hengityselin/i, /struuma/i, 
+	/keuhkoputkentulehdus/i, /astma/i, /keuhkoahtaumatauti/i, /emfyseema/i, /keuhkoveritulppa/i, /keuhkopussintulehdus/i, /hengitysvajaus/i, /hengenahdistus/i, /happisaturaatio/i, /uniapnea/i, /maha/i, /vatsa/i, /mahalaukku/i, 
+	/mahahaava/i, /refluksi/i, /ruokatorvi/i, /ruokatorvitulehdus/i, /nielemisvaikeus/i, /suolisto/i, /ohutsuoli/i, /paksusuoli/i, /koliitti/i, /divertikuliitti/i, /Crohnin tauti/i, /keliakia/i, /ummetus/i, /ripuli/i, /pahoinvointi/i, 
+	/oksentelu/i, /vatsakipu/i, /maksa/i, /maksasairaus/i, /hepatiitti/i, /maksakirroosi/i, /rasvamaksa/i, /kolestaasi/i, /sappirakko/i, /sappikivi/i, /sappitie/i, /haimatulehdus/i, /munuainen/i, /munuaiset/i, /munuaissairaus/i,  
+	/nefrologi/i, /munuaisten vajaatoiminta/i, /krooninen munuaissairaus/i, /akuutti munuaisvaurio/i, /nefriitti/i, /dialyysi/i, /hemodialyysi/i, /kreatiniini/i, /aivot/i, /neurologia/i, /neurologi/i, /aivohalvaus/i, /aivoinfarkti/i, 
+	/epilepsia/i, /aivoverenvuoto/i, /TIA-kohtaus/i, /nefrologia/i, /keuhkokuume/i, /gastriitti/i, /kouristus/i, /migreeni/i, /neuropatia/i, /hermovaurio/i, /muistisairaus/i, /Alzheimerin tauti/i, /Parkinsonin tauti/i, /MS-tauti/i,
+	/multippeliskleroosi/i, /iskias/i, /tyypin 1 diabetes/i, /tyypin 2 diabetes/i, /verensokeri/i, /glukoosi/i, /insuliini/i, /hypoglykemia/i, /hyperglykemia/i, /kilpirauhanen/i, /kilpirauhasen vajaatoiminta/i, /hemoglobiini/i,
+	/kilpirauhasen liikatoiminta/i, /metabolinen oireyhtymä/i, /kolesteroli/i, /triglyseridi/i, /lihavuus/i, /endokrinologia/i, /endokrinologi/i,  /valkosolu/i, /leukosyytti/i, /verihiutale/i, /trombosyytti/i, /veren hyytyminen/i, 
+	/verenohennuslääke/i, /lymfooma/i, /myelooma/i, /trombosytopenia/i, /verensiirto/i, /hematologia/i, /hematologi/i, /syöpä/i, /kasvain/i, /pahanlaatuinen/i, /hyvänlaatuinen/i, /etäpesäke/i, /etäpesäkkeet/i, /onkologia/i, /onkologi/i, 
+	/kemoterapia/i, /solunsalpaaja/i, /sädehoito/i, /immunoterapia/i, /remissio/i, /niveltulehdus/i, /nivelrikko/i, /nivelreuma/i, /reuma/i, /osteoporoosi/i, /murtuma/i, /venähdys/i, /sijoiltaanmeno/i, /jännetulehdus/i, /sienilääke/i,
+    	/selkäkipu/i, /niskakipu/i, /lihaskipu/i, /nivelkipu/i, /ortopedia/i, /ortopedi/i, /infektio/i, /bakteeri-infektio/i, /virusinfektio/i, /sieni-infektio/i, /tulehdus/i, /septinen sokki/i, /kuume/i, /antibiootti/i, /viruslääke/i, 
+	/allergia/i, /anafylaksia/i, /autoimmuunisairaus/i, /reumatologia/i, /reumatologi/i, /limapussitulehdus/i, /koronavirus/i, /influenssa/i, /flunssa/i, /RS-virus/i, /kipu/i, /krooninen kipu/i, /väsymys/i, /heikotus/i, /huimaus/i, 
+	/pyörtyminen/i, /turvotus/i, /ödeema/i, /vilunväristys/i, /yöhikoilu/i, /laihtuminen/i, /ruokahaluttomuus/i, /nestehukka/i, /verikoe/i, /laboratoriokoe/i, /verenkuva/i, /lasko/i, /maksa-arvot/i, /munuaisarvot/i, /bilirubiini/i, 
+	/albumiini/i, /elektrolyytti/i, /natrium/i, /kalium/i, /kalsium/i, /B12-vitamiini/i, /ferritiini/i, /sydänfilmi/i, /magneettikuvaus/i, /tietokonetomografia/i, /ultraääni/i, /röntgen/i, /angiografia/i, /sydämen ultraääni/i, 
+	/tähystys/i, /gastroskopia/i, /kolonoskopia/i, /koepala/i, /patologia/i, /histologia/i, /sytologia/i, /radiologia/i, /radiologi/i, /patologi/i, /lääke/i, /lääkitys/i, /resepti/i, /annostus/i, /annos/i, /tabletti/i, /kapseli/i, 
+	/infuusio/i, /suonensisäinen/i, /kipulääke/i, /opioidi/i, /statiini/i, /antikoagulaatio/i, /sisätaudit/i, /gastroenterologia/i, /anestesiologia/i, /oramorfiini/i, /morfiini/i,
+
+
+	// Boundaried search regexes (mixed languages)
+	/\bPC\b/i, /\bRX\b/i, /\bTX\b/i, /\bThx\b/i, /\bR9\b/i, /\bR7\b/i, /\bR5\b/i, /\bR3\b/i, /\bi9\b/i, /\bi7\b/i, /\bi5\b/i, /\bOC\b/i, /\bRS\b/i, /\bLG\b/i, /\bA03\b/i, /\bP30\b/i, /\bJ5\b/i, /\bHP\b/i, /\bIG\b/i, /\b4K\b/i, /\b8K\b/i, /\bCT\b/i,
+
     ];
 
-    // Strong allowed-context allow-list. Nuclear matches remain absolute.
-    const allowedTerms = [
-        /reddit/i, /OSRS/i, /RS/i, /RS3/i, /Old School/i, /RuneScape/i, /netflix/i, /pushpull/i, /facebook/i, /FB/i, /instagram/i, /Wiki/i, /pedia/i, /hikipedia/i, /fandom/i, /lehti/i, /tiktok/i, /bond/i, /bonds/i, /2007scape/i, /youtube/i, /ublock/i, 
-        /wrestling/i, /wrestler/i, /tori/i, /tori\.fi/i, /www\.tori\.fi/i, /Kirpputori/i, /käytetty/i, /käytetyt/i, /käytettynä/i, /proshop/i, /hinta/i, /hintavertailu/i, /hintaopas/i, /sähkö/i, /pörssi/i, /sähkösopimus/i, /vatfall/i, /elenia/i, 
-        /kulutus/i,  /sähkön/i, /sähkönkulutus/i, /bing/i, /duckduckgo/i, /old/i, /new/i, /veikkaus/i, /lotto/i, /jokeri/i, /jääkiekko/i, /viikinkilotto/i, /perho/i, /vakuutus/i, /kela/i, /sosiaalitoimisto/i, /sossu/i, /OP/i, /Osuuspankki/i, /Speaker/i,
-        /Osuuspankin/i, /Artikkeli/i, /jalkapallo/i, /sanomat/i, /sanoma/i, /päivän sana/i, /jumala/i, /jeesus/i, /jesus/i, /christ/i, /kristus/i, /vapahtaja/i, /messias/i, /pääsiäinen/i, /joulu/i, /uusivuosi/i, /vuosi/i, /uusi/i, /uuden/i, /vuoden/i, 
-        /raketti/i, /raketit/i, /sipsit/i, /dippi/i, /dipit/i, /Monster/i, /Energy/i, /Lewis Hamilton/i, /LH44/i, /LH-44/i, /Greenzero/i, /Green/i, /Zero/i, /blue/i, /white/i, /red/i, /yellow/i, /brown/i, /cyan/i, /black/i, /Tie/i, /katu/i, /opas/i, 
-        /google/i, /maps/i, /earth/i, /Psykologi/i, /psyka/i, /USB/i, /kotiteatteri/i, /vahvistin/i, /Onkyo/i, /Sony/i, /TX/i, /Thx/i, /SR393/i, /Suprim/i, /Strix/i, /TUF/i, /Gaming/i, /Prime/i, /Matrix/i, /Astral/i, /MSI/i, /Vanguard/i, /Center/i, 
-        /Samsung/i, /Asus/i, /PNY/i, /AsRock/i, /XFX/i, /Sapphire/i, /PowerColor/i, /emolevy/i, /emo levy/i, /live/i, /näytönohjain/i, /näytön/i, /ohjain/i, /xbox/i, /playstation/i, /Dual/i, /pleikkari/i, /Series/i, /PS1/i, /PS2/i, /PS3/i, /PS4/i, 
-        /PS5/i, /PS6/i, /One/i, /Telsu/i, /Televisio/i, /Telvisio/i, /Ohjelma/i, /Ohjelmat/i, /Ajurit/i, /Lenovo/i, /Compaq/i, /Acer/i, /HP/i, /Hewlet Packard/i, /Ventus/i, /Duel/i, /OC/i, /Overclocked/i, /Overclockers/i, /bass/i, /bas/i, /AMD/i, 
-        /NVidia/i, /Intel/i, /Ryzen/i, /Core/i, /GeForce/i, /Radeon/i, /0TI/i, /0X/i, /50/i, /60/i, /70/i, /80/i, /90/i, /RX/i, /GTA/i, /GTX/i, /RTX/i, /PC/i, /Battlefield/i, /BF/i, /driver/i, /sub/i, /WWE/i, /wrestle/i, /Raw/i, /SmackDown/i, /SSD/i, 
-        /HDD/i, /Disk/i, /disc/i, /cable/i, /microsoft/i, /drivers/i, /chipset/i, /mobo/i, /motherboard/i, /mother/i, /GPU/i, /CPU/i, /Ucey/i, /Graphics Card/i, /paint\.net/i, /paintdotnet/i, /paintnet/i, /paint net/i, /github/i, /hub/i, /git/i, 
-        /Processor/i, /Chip/i, /R9/i, /R7/i, /R5/i, /i9/i, /i7/i, /i5/i, /subwoofer/i, /sound/i, /spotify/i, /spicetify/i, /IG/i, /home theater/i, /receiver/i, /giver/i, /taker/i, /ChatGPT/i, /Chat GPT/i, /Uce/i, /DLSS/i, /FSR/i, /NIS/i, /profile/i, 
-        /inspect/i, /inspector/i, /vaihd/i, /vaihe/i, /vaiht/i, /ai/i, /jako/i, /jakopäähihna/i, /hihna/i, /pää/i, /auto/i, /pankki/i, /moto/i, /toyota/i, /opel/i, /mitsubishi/i, /galant/i, /osa/i, /vara/i, /raha/i, /ooppeli/i, /HDMI/i, /Edge WWE/i, 
-        /vaihdetaan/i, /vaihdan/i, /vaihto/i, /vaihtoi/i, /vaihtoi/i, /vaihdossa/i, /vaihtaa/i, /paa/i, /jakopää hihna/i, /jako hihna/i, /jako pää hihna/i, /jako päähihna/i, /\?/i, /\!/i, /opas/i, /ohje/i, /manuaali/i, /käyttö/i, /history/i, /historia/i, 
-        /haku/i, /classic/i, /klassikko/i, /klassik/i, /south park/i, /siivoton juttu/i, /pasila/i, /jakohihna/i, /poliisin poika/i, /poliisi/i, /poika/i, /Ravage/i, /Savage/i, /volksvagen/i, /konsoli/i, /console/i, /Sega/i, /Nintendo/i, /PlayStation/i, 
-        /Xbox/i, /Game/i, /Terapia/i, /Therapy/i, /Masennus/i, /Depression/i, /Psykiatri/i, /Striimi/i, /Stream/i, /antenni/i, /verkko/i, /digibox/i, /hamppari/i, /hampurilainen/i, /ranskalaiset/i, /peruna/i, /automaatti/i, /automaatin/i, /autismi/i, 
-        /autisti/i, /ADHD/i, /asperger/i, /kebab/i, /ravintola/i, /ruokala/i, /pikaruoka/i, /suomi/i, /finnish/i, /renkaan/i, /nopeusluokka/i, /nopeus/i, /renkaan nopeusluokka/i, /luokka/i, /america/i, /american/i, /Alexander/i, /President/i, /TGD/i,
-        /Kuningas/i, /Kuninkaitten/i, /Aleksis Kivi/i, /Kiven/i, /Aleksanteri Suuri/i, /Yleisön osasto/i, /Aleksanteri Stubb/i, /Stubb/i, /Poliitikka/i, /Politiikka/i, /Poliittinen/i, /Kannanotto/i, /Kannan otto/i, /Yleisönosasto/i, /7900/i, /9800/i, 
-        /9800X3D/i, /9800 X3D/i, /XTX/i, /XT/i, /1080 TI/i, /1050TI/i, /1080TI/i, /3080/i, /5080TI/i, /5080 TI/i, /1050 TI/i, /2080/i, /XC/i, /8600K/i, /9700K/i, /5900X/i, /Coffee/i, /Lake/i, /Refresh/i, /Athlon/i, /Fermi/i, /Ampere/i, /Blackwell/i, 
-        /diagnoosi/i, /diagnosoitiin/i, /diagnosoitu/i, /diagnosis/i, /saada/i, /löytää/i, /ostaa/i, /löytö/i, /osto/i, /saanti/i, /muumit/i, /Tarina/i, /veren/i, /paine/i, /päiväkirja/i, /Joakim/i, /kuinka/i, /miten/i, /miksi/i, /minkä/i, /takia/i, 
-        /minä/i, /teen/i, /tätä/i, /ilman/i, /ilma/i, /sää/i, /foreca/i, /ilmatieteenlaitos/i, /päivän/i, /Stream/i, /Presidentti/i, /James/i, /Hetfield/i, /Metallica/i, /Sabaton/i,  /TheGamingDefinition/i, /Twitch/i, /WhatsApp/i, /Messenger/i, 
-        /yliopistonapteekki/i, /Pentium/i, /Kela/i, /kuule/i, /kirje/i, /kuulemiskirje/i, /kelan/i, /TUF/i, /STRIX/i, /SUPRIM/i, /EAGLE/i, /WINDFORCE/i, /GAMING X/i, /GAMING OC/i, /STEALTH/i, /ZOTAC/i, /EMTEK/i, /PALIT/i, /VISION/i, /ROG Strix/i, 
-        /FTW/i, /ASUS/i, /GIGABYTE/i, /AORUS/i, /AORUS/i, /sääennuste/i, /ennuste/i, /oramorph/i, /oramorfiini/i, /morfiini/i,  /SAPPHIRE/i, /POWERCOLOR/i, /ASROCK/i, /XFX/i, /GALAX/i, /GAINWARD/i, /INNO3D/i, /COLORFUL/i, /DUKE/i, /ARMOR/i, /MECH/i, 
-        /AERO/i, /JETSTREAM/i, /PHANTOM/i, /AMP/i, /PULSE/i, /NITRO/i, /RED DEVIL/i, /HELLHOUND/i, /FIRESTORM/i, /FIREPRO/i, /FURY/i, /TITAN/i, /QUADRO/i, /PROART/i,  /BLOWER/i, /TURBO/i, /OC/i, /OC EDITION/i, /DUAL/i, /MINI/i, /ITX/i, /TRIPLE FAN/i, 
-        /TRIPLEFAN/i, /TRINITY/i, /OC VERSION/i, /OCV/i, /ULTRA/i, /HOF/i, /HALL OF FAME/i, /LEGION/i, /SHADOW/i, /EX/i, /EVGA/i, /XC/i, /XC3/i, /VENTUS/i,  /2080TI/i, /2080 TI/i, /1080 TI/i, /3080 TI/i, /4080 TI/i, /5080 TI/i, /2080TI/i, /1080TI/i, 
-        /3080TI/i, /4080TI/i, /5080TI/i, /6080TI/i, /7080TI/i, /8080TI/i, /9080TI/i,  /50 TI/i, /60 TI/i, /70 TI/i, /80 TI/i, /90 TI/i, /50TI/i, /60TI/i, /70TI/i, /80TI/i, /90TI/i, /post/i, /card/i, /kortti/i, /kirje/i, /kirjekuori/i, /maksaminen/i, 
-        /choledochoduodenostomiam/i, /choledocho-duodenostomiam/i, /cholecystectomiam/i, /cauda/i, /cauda pancreatis/i, /pancreatis/i, /gastroenterostomiam/i, /retrocolica/i, /gastroenterostomiam retrocolica/i, /Haemorrhagia/i, /gastrointestinalis/i,
-        /Haemorrhagia gastrointestinalis/i, /retrocolic/i, /gastroenterostomy/i, /retrocolic gastroenterostomy/i, /choledochoduodenostomy/i, /choledocho-duodenostomy/i, /choledocho/i, /duodenostomiam/i, /duodenostomy/i, /cholecystectomy/i, /cholecyst/i,
-        /resectionem/i, /resectionem cauda pancreatis/i, /pancreas/i, /resection of pancreas/i, /resection of pancreatic tail/i, /pancreas tail resection/i, /haemorrhagia gastrointestinalis/i, /hemorrhagia/i, /gastrointestinal/i, /gastrointestinal bleeding/i, 
-        /intestinal bleeding/i, /liver bile stasis/i, /stasis biliaris hepatis/i, /stasis biliaris/i, /biliaris/i, /hepatis/i, /bile stasis/i, /atherosclerosis aortae gravis/i, /atherosclerosis aortae/i, /aortae/i, /gravis/i, /aortic atherosclerosis/i,
-        /atherosclerosis arteriae coronariae cordis gravis/i, /atherosclerosis coronariae/i, /coronariae cordis/i, /coronary artery disease/i, /coronary atherosclerosis/i, /atherosclerosis cordis/i, /atherosclerosis arteriae cerebri levis/i, /uteri/i,
-        /atherosclerosis cerebri/i, /arteriae cerebri/i, /cerebral atherosclerosis/i, /brain artery disease/i, /status post extirpationem uteri totalis/i, /extirpationem uteri totalis/i, /extirpationem/i, /hysterectomy/i, /uterus removal/i, /total/i,
-        /Carcinoma parvocellulare pancreatis cum/i, /Carcinoma parvocellulare pancreatis/i, /Carcinoma/i, /parvocellulare/i, /pancreatis/i, /metastasibus/i, /pulmonum/i, /pulmonum l. dx./i, /lymphnodi mediastini/i, /l. dx./i, /mediastini/i, /GPT-5.1/i,
-        /metastasibus pulmonum l. dx. lymphnodi mediastini/i, /et retroperinonei renis sin/i, /retroperinonei renis sin/i, /renis sin/i, /retroperinonei renis sin/i, /retroperinonei sin/i, /black friday/i, /SmackDown/i, /OpenAI/i, /ChatGPT/i, /GPT-4o/i,
-	/search/i, /GPT-5.4/i, /GPT-5.5/i, /findidfb/i, /fbid/i, /idfb/i, /techpowerup/i, /tech powerup/i, /tech/i, /hardware/i, /powerup/i, /wayback/i, /artifact/i, /dagonhai/i, /Dagon'hai/i, /Dagon´hai/i, /Dagon`hai/i, /Gemini/i, /Google Gemini/i,
-	/lookup/i,
+
+    // Result URL allowances are anchored regexes. Anchoring the scheme and host
+    // prevents lookalike URLs such as youtube.com.example.org from being allowed.
+    // Specific blocked result/image patterns still take priority over these rules.
+    const allowedResultURLs = [
+        /^https?:\/\/(?:[a-z0-9-]+\.)*archive\.org(?:[\/:?#]|$)/i,
+        /^https?:\/\/(?:www\.)?iltalehti\.fi(?:[\/:?#]|$)/i,
+        /^https?:\/\/(?:www\.)?is\.fi(?:[\/:?#]|$)/i,
+        /^https?:\/\/(?:www\.|m\.)?youtube\.com(?:[\/:?#]|$)/i,
+        /^https?:\/\/(?:[a-z]{2,3}\.)?wikipedia\.org(?:[\/:?#]|$)/i,
+        /^https?:\/\/(?:www\.)?netflix\.com(?:[\/:?#]|$)/i,
+        /^https?:\/\/runescape\.wiki(?:[\/:?#]|$)/i,
+        /^https?:\/\/github\.com\/paintdotnet(?:[\/?#]|$)/i,
+        /^https?:\/\/(?:www\.)?getpaint\.net(?:[\/:?#]|$)/i,
+        /^https?:\/\/(?:oldschool\.)?runescape\.com(?:[\/:?#]|$)/i,
+        /^https?:\/\/(?:status\.)?openai\.com(?:[\/:?#]|$)/i,
+        /^https?:\/\/(?:www|old|new)\.reddit\.com(?:[\/:?#]|$)/i,
+        /^https?:\/\/(?:www\.)?spotify\.com(?:[\/:?#]|$)/i,
+        /^https?:\/\/(?:www\.)?thesmackdownhotel\.com(?:[\/:?#]|$)/i,
+        /^https?:\/\/(?:www\.)?wwe\.com(?:[\/:?#]|$)/i,
+        /^https?:\/\/(?:www\.)?amd\.com(?:[\/:?#]|$)/i,
+        /^https?:\/\/(?:www\.)?nvidia\.com(?:[\/:?#]|$)/i,
+        /^https?:\/\/(?:www\.)?intel\.com(?:[\/:?#]|$)/i,
+        /^https?:\/\/(?:www\.)?techpowerup\.com(?:[\/:?#]|$)/i,
+        /^https?:\/\/(?:www\.)?chatgpt\.com(?:[\/:?#]|$)/i,
+        /^https?:\/\/github\.com\/copilot(?:[\/?#]|$)/i,
+        /^https?:\/\/gemini\.google\.com(?:[\/:?#]|$)/i,
+        /^https?:\/\/(?:www\.)?jimms\.fi(?:[\/:?#]|$)/i,
+        /^https?:\/\/(?:www\.)?verkkokauppa\.com(?:[\/:?#]|$)/i,
+        /^https?:\/\/(?:www\.)?motonet\.fi(?:[\/:?#]|$)/i,
+        /^https?:\/\/(?:www\.)?datatronic\.fi(?:[\/:?#]|$)/i,
+        /^https?:\/\/(?:www\.)?multitronic\.fi(?:[\/:?#]|$)/i,
+        /^https?:\/\/(?:www\.)?proshop\.fi(?:[\/:?#]|$)/i,
+        /^https?:\/\/(?:www\.)?tori\.fi(?:[\/:?#]|$)/i,
+        /^https?:\/\/(?:www\.)?hintaopas\.fi(?:[\/:?#]|$)/i,
+        /^https?:\/\/(?:www\.)?yliopistonapteekki\.fi(?:[\/:?#]|$)/i,
+        /^https?:\/\/(?:www\.)?findidfb\.com(?:[\/:?#]|$)/i,
+        /^https?:\/\/(?:www\.)?lookup-id\.com(?:[\/:?#]|$)/i,
     ];
 
-    // Link/card-only terms. These never participate in query, form, correction,
-    // suggestion or address-bar redirects. Add future hide-only expressions here.
-    const termsToHide = [
+    // Precise deny paths on otherwise allowed hosts. Keep this list anchored and
+    // narrow: these rules outrank allowedResultURLs without giving broad fragments
+    // such as /x\.com/i or /ai\./i the same power.
+    const priorityBlockedResultURLPatterns = [
+        /^https?:\/\/(?:www|old|new)\.reddit\.com\/r\/(?:comfyui|stablediffusion|machinelearning|grok)(?:[\/?#]|$)/i,
     ];
 
-    // === NEW: Firefox Only Allowed Words (Browser Promos) ===
-    const firefoxAllowedWords = [
-        /Chrome/i, /oletushakukone/i, /hakukone/i, /Lataa/i, /selaimessa Firefox/i, /Käytät Firefoxia/i, /toimii paremmin/i
-    ];
-
-    const allowedURLs = [
-        "archive.org", "iltalehti.fi", "is.fi", "youtube.com", "www.wikipedia.org", "www.netflix.com", "netflix.com", "runescape.wiki", "github.com/paintdotnet", "www.getpaint.net", "oldschool.runescape.com", "runescape.com", "openai.com", "status.openai.com",
-        "www.reddit.com", "old.reddit.com", "new.reddit.com", "spotify.com", "www.thesmackdownhotel.com", "thesmackdownhotel.com", "wwe.com", "amd.com", "nvidia.com", "intel.com", "www.techpowerup.com", "chatgpt.com", "github.com/copilot", "gemini.google.com",
-	"www.jimms.fi", "www.verkkokauppa.com", "www.motonet.fi", "datatronic.fi", "www.datatronic.fi", "multitronic.fi", "www.multitronic.fi", "www.proshop.fi", "tori.fi", "www.tori.fi", "hintaopas.fi", "www.yliopistonapteekki.fi", "www.yliopistonapteekki.fi", 
-	"techpowerup.com", "findidfb.com", "lookup-id.com", "web.archive.org", "wayback.archive.org", "gemini.google.com/app",
-    ];
-
-    const urlPatternsToHide = [
+    const blockedResultURLPatterns = [
         /github\.com\/best-deepnude-ai-apps/i,
         /github\.com\/AI-Reviewed\/tools\/blob\/main\/Nude%20AI%20:%205%20Best%20AI%20Nude%20Generators%20-%20AIReviewed\.md/i,
         /github\.com\/nudify-ai/i,
@@ -845,7 +967,7 @@
         /123rf\./i,
         /virtualbox\./i,
         /oracle\./i,
-        /play.google./i,
+        /play\.google\./i,
         /formulae\./i,
         /rem\./i,
         /remove\./i,
@@ -1199,7 +1321,7 @@
         /x\.com/i,
     ];
 
-    const blockedImageURLs = [
+    const blockedImageURLPatterns = [
         /reddit\.com\/r\/SquaredCircle/i,
         /reddit\.com\/r\/SCJerk/i,
         /reddit\.com\/r\/AlexaBliss/i,
@@ -1362,9 +1484,9 @@
         /thesportster\.com/i,
         /cagesideseats\.com/i,
         /f4wonline\.com/i,
-        /www\.\f4wonline\.com/i,
+        /www\.f4wonline\.com/i,
         /medium\.com/i,
-        /https:\medium\.com/i,
+        /https?:\/\/(?:www\.)?medium\.com/i,
         /medium\.com\/@/i,
         /awfulannouncing\.com/i,
         /pwpix\./i,
@@ -1438,7 +1560,7 @@
         '.EDblX.JpOecb' // Prevent nav bar from being swept
     ];
 
-    // --- Runtime regex hygiene + compiled pattern (combined regex) ---
+    // --- Runtime regex hygiene + scoped URL-policy compilation ---
     function dedupeRegexArray(list) {
         const seen = new Set();
         for (let i = list.length - 1; i >= 0; --i) {
@@ -1458,45 +1580,55 @@
     }
 
     dedupeRegexArray(nuclearRegex);
-    dedupeRegexArray(allowedTerms);
-    dedupeRegexArray(termsToRedirect);
-    dedupeRegexArray(termsToHide);
+    dedupeRegexArray(resultHideTerms);
+    dedupeRegexArray(searchAllowTerms);
+    dedupeRegexArray(queryRedirectTerms);
+    dedupeRegexArray(allowedResultURLs);
+    dedupeRegexArray(priorityBlockedResultURLPatterns);
+    dedupeRegexArray(blockedResultURLPatterns);
+    dedupeRegexArray(blockedImageURLPatterns);
 
     // --- Helpers ---
-    function containsAllowedWords(text) {
-        if (!text) return false;
-        for (let i = 0; i < allowedWords.length; ++i) {
-            if (allowedWords[i].test(text)) return true;
-        }
-        return false;
-    }
-
-    function isUrlAllowed(url) {
+    // Result-only URL allow checker. Every rule is anchored at the real URL's
+    // scheme/host, so an allowed name in a query string or lookalike host cannot win.
+    function isResultURLAllowed(url) {
         if (!url) return false;
-        const lowerUrl = url.toLowerCase();
-        for (let i = 0; i < allowedURLs.length; ++i) {
-            const safeDomain = allowedURLs[i].toLowerCase().replace(/^www\./, '');
-            if (lowerUrl.includes(safeDomain)) return true;
+        try {
+            const parsed = new URL(String(url), window.location.origin);
+            if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+            return Boolean(testRegexList(allowedResultURLs, parsed.href));
+        } catch (e) {
+            return false;
         }
-        return false;
     }
 
-    function matchesBlockedUrlPattern(url) {
+    function matchesBlockedResultURLPattern(url) {
         if (!url) return false;
-        for (let i = 0; i < urlPatternsToHide.length; ++i) {
-            if (urlPatternsToHide[i].test(url)) return true;
+        for (let i = 0; i < blockedResultURLPatterns.length; ++i) {
+            blockedResultURLPatterns[i].lastIndex = 0;
+            if (blockedResultURLPatterns[i].test(url)) return true;
         }
         return false;
     }
 
-    function matchesBlockedImagePattern(url) {
+    function matchesPriorityBlockedResultURLPattern(url) {
+        if (!url) return false;
+        for (let i = 0; i < priorityBlockedResultURLPatterns.length; ++i) {
+            priorityBlockedResultURLPatterns[i].lastIndex = 0;
+            if (priorityBlockedResultURLPatterns[i].test(url)) return true;
+        }
+        return false;
+    }
+
+    function matchesBlockedImageURLPattern(url) {
         if (!url) return false;
         let testUrl = url;
         try {
             if (url.startsWith('http')) testUrl = url.replace(/#imgrc=[^\s]*/g, '');
         } catch(e) {}
-        for (let i = 0; i < blockedImageURLs.length; ++i) {
-            if (blockedImageURLs[i].test(testUrl)) return true;
+        for (let i = 0; i < blockedImageURLPatterns.length; ++i) {
+            blockedImageURLPatterns[i].lastIndex = 0;
+            if (blockedImageURLPatterns[i].test(testUrl)) return true;
         }
         return false;
     }
@@ -1505,51 +1637,70 @@
         return protectedSelectors.some(selector => element.matches && element.matches(selector));
     }
 
-    // Record details of the last forbidden match for better debugging
-    function recordMatchDetail(kind, value, inText) {
+    const POLICY_ACTION = Object.freeze({
+        NONE: 'none',
+        ALLOW: 'allow',
+        HIDE: 'hide',
+        REDIRECT: 'redirect'
+    });
+
+    const NO_POLICY_DECISION = Object.freeze({
+        action: POLICY_ACTION.NONE,
+        scope: 'none',
+        reason: 'no-match',
+        match: ''
+    });
+
+    function makePolicyDecision(action, scope, reason, value, inText) {
+        const decision = {
+            action,
+            scope,
+            reason,
+            match: String(value || '')
+        };
         lastMatchDetails = {
-            kind,                          // 'nuclear' | 'allowed' | 'redirect' | 'hide' | 'ai-boundary'
+            kind: reason,
+            action,
+            scope,
             value: String(value || ''),
             snippet: String(inText || '').substring(0, 200),
             when: new Date().toISOString()
         };
-        devLog('FORBIDDEN ' + kind.toUpperCase() + ' MATCH:', value, 'in:', lastMatchDetails.snippet);
+        devLog('POLICY DECISION:', decision, 'in:', lastMatchDetails.snippet);
+        return decision;
     }
 
-    function testRegexList(list, text, kind) {
+    function testRegexList(list, text) {
         if (!text) return false;
         for (let i = 0; i < list.length; ++i) {
             const re = list[i];
             try {
                 re.lastIndex = 0;
-                if (re.test(text)) {
-                    recordMatchDetail(kind, re.toString(), text);
-                    return re.toString();
-                }
+                if (re.test(text)) return re.toString();
             } catch (e) {}
         }
         return false;
     }
 
     // === NUCLEAR KEYWORD CHECKER ===
-    // Used for hard-removing Google links/cards/image-results. Runs above allowed URL/allowed word shields.
+    // Shared by query redirects and hard result/card/image hiding.
     function containsNuclearTerms(text) {
-        return testRegexList(nuclearRegex, text, 'nuclear');
+        return testRegexList(nuclearRegex, text);
     }
 
-    // Strong contextual exception. Nuclear terms are deliberately checked first.
-    function containsallowedTerms(text) {
-        return testRegexList(allowedTerms, text, 'allowed');
+    // Query-only allow tier. Never called by result/link/image decisions.
+    function containsSearchAllowTerms(text) {
+        return testRegexList(searchAllowTerms, text);
     }
 
-    // Query/form/suggestion redirect tier. This never hides an ordinary result link.
-    function containsTermsToRedirect(text) {
-        return testRegexList(termsToRedirect, text, 'redirect');
+    // Query/form/suggestion redirect tier. Never called by result decisions.
+    function containsQueryRedirectTerms(text) {
+        return testRegexList(queryRedirectTerms, text);
     }
 
-    // Result/card hide tier. This never redirects a query or form submission.
-    function containsTermsToHide(text) {
-        return testRegexList(termsToHide, text, 'hide');
+    // Result/link/card hide tier. Never called by query decisions.
+    function containsResultHideTerms(text) {
+        return testRegexList(resultHideTerms, text);
     }
 
     // === AI-BOUNDARY FUNCTION (USED FOR QUERIES ETC.) ===
@@ -1563,64 +1714,66 @@
 
         // -- Sexual/AI keywords regexes --
         const AIRegexes = [
-            /sex/i, /porn/i, /nud/i, /naked/i, /nsfw/i, /oral/i, /blow/i, /fell/i, /tit/i, /boob/i, /pussy/i, /vag/i, /veg/i, /cock/i, /trap/i, /boinking/i, /lesbian/i,
-            /dick/i, /cum/i, /penis/i, /fuck/i, /suck/i, /mast/i, /jerk/i, /fap/i, /ass/i, /butt/i, /boot/i, /bra/i, /bro/i, /pant/i, /strip/i, /stripping/i, /raping/i,
-            /head/i, /give/i, /giving/i, /her/i, /she/i, /him/i, /his/i, /woman/i, /women/i, /fem/i, /male/i, /girl/i, /rassling/i, /gril/i, /cumshots/i, /picture/i,
-            /boy/i, /lady/i, /ladi/i, /guy/i, /gal/i, /g4l/i, /tush/i, /anal/i, /penet/i, /anim/i, /mode/i, /LLM/i, /MLM/i, /deep/i, /visuals/i, /visualis/i, /open/i,
-            /learn/i, /learning/i, /diff/i, /diffuse/i, /diffusion/i, /cloth/i, /clothing/i, /clothes/i, /wwe/i, /aew/i, /tna/i, /njpw/i, /ajpw/i, /allelite/i, /gene/i,
-            /wrestl/i, /wrestle/i, /wrestles/i, /wrestling/i, /rassl/i, /rassle/i, /anal/i, /suck/i, /sucking/i, /sucks/i, /spread/i, /spreads/i, /spreading/i, /generates/i,
-            /opens/i, /opening/i, /hole/i, /thigh/i, /leg/i, /legs/i, /toe/i, /toes/i, /pen/i, /penly/i, /pens/i, /pencil/i, /pic/i, /photo/i, /generated/i, /generati/i,
-            /imag/i, /img/i, /graph/i, /graphs/i, /graphic/i, /graphics/i, /journey/i, /journal/i, /new/i, /list/i, /listof/i, /lists/i, /listsof/i, /about/i, /fella/i,
-            /gf/i, /friend/i, /friends/i, /buddy/i, /buddi/i, /buddies/i, /mate/i, /mates/i, /panty/i, /pantys/i, /panti/i, /panties/i, /ladies/i, /ladys/i, /booby/i,
-            /tool/i, /tools/i, /find/i, /finding/i, /finder/i, /twerk/i, /twerks/i, /twerking/i, /jerking/i, /jerks/i, /wank/i, /wanker/i, /wanks/i, /fapp/i, /seksikäs/i,
-            /faps/i, /faping/i, /fapping/i, /fappening/i, /leak/i, /leaks/i, /talk/i, /leaked/i, /leaking/i, /leakings/i, /edit/i, /editing/i, /editation/i, /lesbians/i,
-            /pictures/i, /photos/i, /image/i, /images/i, /imgs/i, /photograph/i, /photographs/i, /visual/i, /visualiz/i, /visualization/i, /visualize/i, /raped/i, /rape/i,
-            /visualisation/i, /visualise/i, /visualic/i, /visualication/i, /visualice/i, /speech/i, /gen/i, /gener/i, /genera/i, /generat/i, /generate/i, /nipple/i, /horny/i, 
-            /generativ/i, /generative/i, /vid/i, /vide/i, /vidu/i, /video/i, /tube/i, /tubes/i, /bf/i, /blows/i, /blowing/i, /titti/i, /tittie/i, /titties/i, /hornier/i,
-            /fellat/i, /fellati/i, /fellatio/i, /fellation/i, /tits/i, /titty/i, /tittys/i, /tittyes/i, /boob/i, /boobs/i, /boobi/i, /boobie/i, /boobies/i, /handjob/i,
-            /boobye/i, /boobyes/i, /pus/i, /puss/i, /pussy/i, /pussi/i, /pussie/i, /pussies/i, /vag/i, /vagi/i, /vagin/i, /vagina/i, /vaginal/i, /vaginall/i, /peeping/i,
-            /vaginally/i, /vaginaly/i, /vega/i, /vegana/i, /vegane/i, /vagane/i, /vagene/i, /vagena/i, /anall/i, /anally/i, /analli/i, /anaali/i, /seksi/i, /spanking/i,
-            /seksikkyys/i, /masturbate/i, /masturbation/i, /masturbating/i, /jizz/i, /ejaculate/i, /ejaculated/i, /ejaculating/i, /blowjob/i, /blowjobs/i, /underwear/i,
-            /stripper/i, /strippers/i, /erotic/i, /erotica/i, /kink/i, /kinky/i, /fetish/i, /fetishes/i, /bdsm/i, /bondage/i, /domination/i, /submission/i, /sexcapade/i,
-            /gay/i, /gays/i, /queer/i, /bi/i, /bisexual/i, /trans/i, /transgender/i, /transexual/i, /intersex/i, /nonbinary/i, /genderfluid/i, /ladyboy/i, /fondling/i,
-            /screwing/i, /fucking/i, /fuckin/i, /fucks/i, /orgasm/i, /orgasms/i, /threesome/i, /foursome/i, /gangbang/i, /voyeur/i, /voyeurism/i, /peep/i, /cumshot/i,
-            /nipples/i, /clit/i, /clitoris/i, /labia/i, /labial/i, /sexed/i, /sexes/i, /sexting/i, /porned/i, /fondled/i, /porning/i, /fetishize/i, /fetishized/i, 
-            /spanked/i, /touch/i, /touching/i, /touched/i, /suck/i, /sucks/i, /sucking/i, /lick/i, /licked/i, /licking/i, /panty/i, /panties/i, /briefs/i, /spank/i, 
-            /lingerie/i, /bra/i, /bras/i, /corset/i, /corsets/i, /thong/i, /thongs/i, /gstring/i, /gstrings/i, /erot/i, /erotic/i, /erotica/i, /vibrator/i, /scrotum/i,
-            /horniest/i, /moan/i, /moaned/i, /moaning/i, /moans/i, /grope/i, /groped/i, /groping/i, /sexually/i, /sensual/i, /seduce/i, /seduced/i, /seducing/i, /mast/i,
-            /sexcapades/i, /nudephoto/i, /nudephotos/i, /nudes/i, /bare/i, /barely/i, /bareback/i, /naught/i, /naughty/i, /kissing/i, /kissed/i, /fondle/i, /handjobs/i,
-            /thrust/i, /thrusted/i, /thrusting/i, /penetrate/i, /penetrated/i, /penetrating/i, /balls/i, /testicle/i, /testicles/i, /vibrators/i, /spit/i, /spitting/i,
-            /squirting/i, /squirt/i, /bdsm/i, /dom/i, /sub/i, /voyeur/i, /exhibitionist/i, /masturb/i, /art/i, /arts/i, /artsy/i, /arti/i, /artis/i, /artist/i, /artisan/i, 
-            /creat/i, /creati/i, /creatio/i, /creation/i, /creatin/i, /creating/i, /create/i, /creates/i, /make/i, /makes/i, /maki/i, /makin/i, /making/i, /site/i, /sites/i,
-            /app/i, /apps/i, /application/i, /applications/i, /applic/i, /work/i, /works/i, /working/i, /worked/i, /job/i, /jobs/i, /chat/i, /chatt/i, /chatte/i, /chatter/i,
-            /anima/i, /animat/i, /animate/i, /animates/i, /animati/i, /animatio/i, /animation/i, /animations/i, /sora/i, /gemini/i, /claude/i, /cunt/i, /twat/i, /dress/i,  
-            /pillu/i, /pimppi/i, /pinppi/i, /vittu/i, /pano/i, /pane/i, /ban/i, /mua/i, /mut/i, /riisu/i, /riisua/i, /riisumis/i, /poist/i, /poiso/i, /poistaa/i, /poistam/i, 
-            /poistami/i, /poistamis/i, /poistamine/i, /poistamen/i, /sovellus/i, /applikaatio/i, /kuva/i, /kuvia/i, /kuvien/i, /käsittely/i, /käsitellä/i, /banned/i, /pers/i, 
-            /bans/i, /perse/i, /persaus/i, /persvako/i, /persevako/i, /persreikä/i, /persereikä/i, /trans/i, /transf/i, /transfo/i, /transfor/i, /transform/i, /transformi/i, 
-            /animated/i, /transforming/i, /transforms/i, /transformings/i, /transformed/i, /convert/i, /converted/i, /convers/i, /conversi/i, /conversio/i, /conversion/i,
-            /slut/i, /sluts/i, /slutt/i, /slutti/i, /sluttin/i, /slutting/i, /reveal/i, /skin/i, /body/i, /belly/i, /backside/i, /frontside/i, /belf/i, /belfie/i, /bottom/i, 
-            /front/i, /frontal/i, /perc/i, /perv/i, /pervert/i, /perverted/i, /strip/i, /strips/i, /stripz/i, /stripe/i, /stripp/i, /takeoff/i, /takesoff/i, /takesoff/i,
-            /shap/i, /shape/i, /shapes/i, /shapeing/i, /shaping/i, /POS/i, /position/i, /adjust/i, /change/i, /replaces/i, /replacing/i, /replacement/i, /replac/i, /replace/i,
-            /adjustment/i,/adjusted/i, /adjustin/i, /adjusting/i, /change/i, /changes/i, /changin/i, /changing/i, /mod/i, /modify/i, /modif/i, /modification/i, /mods/i, /mode/i,
-            /modifyin/i, /modifying/i, /tweak/i, /tweakin/i, /tweaking/i, /back/i, /front/i, /legging/i, /leggings/i, /cloth/i, /clothy/i, /clothes/i, /clothing/i, /clothying/i,
-            /\bAI\b/i, /page/i, /pages/i, /site/i, /mango/i, /mangos/i, /mangoing/i, /icegirl/i, /wank/i, /jerk/i, /icegirls/i, /ismartta/i, /ismart/i, /ismartt/i, /gasm/i, /org/i,
-            /\bIA\b/i, /stuffed/i, /stuffing/i, /around/i, /off/i, /spin/i, /spins/i, /spun/i, /spinned/i, /spinning/i, /online/i, /on-line/i, /machinelearn/i,
-            /-/i, /=/i, /\+/i, /_/i, 
+	/sex/i, /porn/i, /nud/i, /naked/i, /nsfw/i, /oral/i, /blow/i, /fell/i, /tit/i, /boob/i, /pussy/i, /vag/i, /veg/i, /cock/i, /trap/i, /boinking/i, /lesbian/i,
+	/dick/i, /cum/i, /penis/i, /fuck/i, /suck/i, /mast/i, /jerk/i, /fap/i, /ass/i, /butt/i, /boot/i, /bra/i, /bro/i, /pant/i, /strip/i, /stripping/i, /raping/i,
+	/head/i, /give/i, /giving/i, /her/i, /she/i, /him/i, /his/i, /woman/i, /women/i, /fem/i, /male/i, /girl/i, /rassling/i, /gril/i, /cumshots/i, /picture/i,
+	/boy/i, /lady/i, /ladi/i, /guy/i, /gal/i, /g4l/i, /tush/i, /anal/i, /penet/i, /anim/i, /mode/i, /LLM/i, /MLM/i, /deep/i, /visuals/i, /visualis/i, /open/i,
+	/learn/i, /learning/i, /diff/i, /diffuse/i, /diffusion/i, /cloth/i, /clothing/i, /clothes/i, /wwe/i, /aew/i, /tna/i, /njpw/i, /ajpw/i, /allelite/i, /gene/i,
+	/wrestl/i, /wrestle/i, /wrestles/i, /wrestling/i, /rassl/i, /rassle/i, /anal/i, /suck/i, /sucking/i, /sucks/i, /spread/i, /spreads/i, /spreading/i, /generates/i,
+	/opens/i, /opening/i, /hole/i, /thigh/i, /leg/i, /legs/i, /toe/i, /toes/i, /pen/i, /penly/i, /pens/i, /pencil/i, /pic/i, /photo/i, /generated/i, /generati/i,
+	/imag/i, /img/i, /graph/i, /graphs/i, /graphic/i, /graphics/i, /journey/i, /journal/i, /new/i, /list/i, /listof/i, /lists/i, /listsof/i, /about/i, /fella/i,
+	/gf/i, /friend/i, /friends/i, /buddy/i, /buddi/i, /buddies/i, /mate/i, /mates/i, /panty/i, /pantys/i, /panti/i, /panties/i, /ladies/i, /ladys/i, /booby/i,
+	/tool/i, /tools/i, /find/i, /finding/i, /finder/i, /twerk/i, /twerks/i, /twerking/i, /jerking/i, /jerks/i, /wank/i, /wanker/i, /wanks/i, /fapp/i, /seksikäs/i,
+	/faps/i, /faping/i, /fapping/i, /fappening/i, /leak/i, /leaks/i, /talk/i, /leaked/i, /leaking/i, /leakings/i, /edit/i, /editing/i, /editation/i, /lesbians/i,
+	/pictures/i, /photos/i, /image/i, /images/i, /imgs/i, /photograph/i, /photographs/i, /visual/i, /visualiz/i, /visualization/i, /visualize/i, /raped/i, /rape/i,
+	/visualisation/i, /visualise/i, /visualic/i, /visualication/i, /visualice/i, /speech/i, /gen/i, /gener/i, /genera/i, /generat/i, /generate/i, /nipple/i, /horny/i, 
+	/generativ/i, /generative/i, /vid/i, /vide/i, /vidu/i, /video/i, /tube/i, /tubes/i, /bf/i, /blows/i, /blowing/i, /titti/i, /tittie/i, /titties/i, /hornier/i,
+	/fellat/i, /fellati/i, /fellatio/i, /fellation/i, /tits/i, /titty/i, /tittys/i, /tittyes/i, /boob/i, /boobs/i, /boobi/i, /boobie/i, /boobies/i, /handjob/i,
+	/boobye/i, /boobyes/i, /pus/i, /puss/i, /pussy/i, /pussi/i, /pussie/i, /pussies/i, /vag/i, /vagi/i, /vagin/i, /vagina/i, /vaginal/i, /vaginall/i, /peeping/i,
+	/vaginally/i, /vaginaly/i, /vega/i, /vegana/i, /vegane/i, /vagane/i, /vagene/i, /vagena/i, /anall/i, /anally/i, /analli/i, /anaali/i, /seksi/i, /spanking/i,
+	/seksikkyys/i, /masturbate/i, /masturbation/i, /masturbating/i, /jizz/i, /ejaculate/i, /ejaculated/i, /ejaculating/i, /blowjob/i, /blowjobs/i, /underwear/i,
+	/stripper/i, /strippers/i, /erotic/i, /erotica/i, /kink/i, /kinky/i, /fetish/i, /fetishes/i, /bdsm/i, /bondage/i, /domination/i, /submission/i, /sexcapade/i,
+	/gay/i, /gays/i, /queer/i, /bi/i, /bisexual/i, /trans/i, /transgender/i, /transexual/i, /intersex/i, /nonbinary/i, /genderfluid/i, /ladyboy/i, /fondling/i,
+	/screwing/i, /fucking/i, /fuckin/i, /fucks/i, /orgasm/i, /orgasms/i, /threesome/i, /foursome/i, /gangbang/i, /voyeur/i, /voyeurism/i, /peep/i, /cumshot/i,
+	/nipples/i, /clit/i, /clitoris/i, /labia/i, /labial/i, /sexed/i, /sexes/i, /sexting/i, /porned/i, /fondled/i, /porning/i, /fetishize/i, /fetishized/i, 
+	/spanked/i, /touch/i, /touching/i, /touched/i, /suck/i, /sucks/i, /sucking/i, /lick/i, /licked/i, /licking/i, /panty/i, /panties/i, /briefs/i, /spank/i, 
+	/lingerie/i, /bra/i, /bras/i, /corset/i, /corsets/i, /thong/i, /thongs/i, /gstring/i, /gstrings/i, /erot/i, /erotic/i, /erotica/i, /vibrator/i, /scrotum/i,
+	/horniest/i, /moan/i, /moaned/i, /moaning/i, /moans/i, /grope/i, /groped/i, /groping/i, /sexually/i, /sensual/i, /seduce/i, /seduced/i, /seducing/i, /mast/i,
+	/sexcapades/i, /nudephoto/i, /nudephotos/i, /nudes/i, /bare/i, /barely/i, /bareback/i, /naught/i, /naughty/i, /kissing/i, /kissed/i, /fondle/i, /handjobs/i,
+	/thrust/i, /thrusted/i, /thrusting/i, /penetrate/i, /penetrated/i, /penetrating/i, /balls/i, /testicle/i, /testicles/i, /vibrators/i, /spit/i, /spitting/i,
+	/squirting/i, /squirt/i, /bdsm/i, /dom/i, /sub/i, /voyeur/i, /exhibitionist/i, /masturb/i, /art/i, /arts/i, /artsy/i, /arti/i, /artis/i, /artist/i, /artisan/i, 
+	/creat/i, /creati/i, /creatio/i, /creation/i, /creatin/i, /creating/i, /create/i, /creates/i, /make/i, /makes/i, /maki/i, /makin/i, /making/i, /site/i, /off/i, 
+	/app/i, /apps/i, /application/i, /applications/i, /applic/i, /work/i, /works/i, /working/i, /worked/i, /job/i, /jobs/i, /chat/i, /chatt/i, /chatte/i, /chatter/i,
+	/anima/i, /animat/i, /animate/i, /animates/i, /animati/i, /animatio/i, /animation/i, /animations/i, /sora/i, /gemini/i, /claude/i, /cunt/i, /twat/i, /dress/i,  
+	/pillu/i, /pimppi/i, /pinppi/i, /vittu/i, /pano/i, /pane/i, /ban/i, /mua/i, /mut/i, /riisu/i, /riisua/i, /riisumis/i, /poist/i, /poiso/i, /poistaa/i, /poistam/i, 
+	/poistami/i, /poistamis/i, /poistamine/i, /poistamen/i, /sovellus/i, /applikaatio/i, /kuva/i, /kuvia/i, /kuvien/i, /käsittely/i, /käsitellä/i, /banned/i, /pers/i, 
+	/bans/i, /perse/i, /persaus/i, /persvako/i, /persevako/i, /persreikä/i, /persereikä/i, /trans/i, /transf/i, /transfo/i, /transfor/i, /transform/i, /transformi/i, 
+       	/animated/i, /transforming/i, /transforms/i, /transformings/i, /transformed/i, /convert/i, /converted/i, /convers/i, /conversi/i, /conversio/i, /conversion/i,
+        /slut/i, /sluts/i, /slutt/i, /slutti/i, /sluttin/i, /slutting/i, /reveal/i, /skin/i, /body/i, /belly/i, /backside/i, /frontside/i, /belf/i, /belfie/i, /bottom/i, 
+        /front/i, /frontal/i, /perc/i, /perv/i, /pervert/i, /perverted/i, /strip/i, /strips/i, /stripz/i, /stripe/i, /stripp/i, /takeoff/i, /takesoff/i, /takesoff/i,
+        /shap/i, /shape/i, /shapes/i, /shapeing/i, /shaping/i, /POS/i, /position/i, /adjust/i, /change/i, /replaces/i, /replacing/i, /replacement/i, /replac/i, /replace/i,
+        /adjustment/i,/adjusted/i, /adjustin/i, /adjusting/i, /change/i, /changes/i, /changin/i, /changing/i, /mod/i, /modify/i, /modif/i, /modification/i, /mods/i, /mode/i,
+        /modifyin/i, /modifying/i, /tweak/i, /tweakin/i, /tweaking/i, /back/i, /front/i, /legging/i, /leggings/i, /cloth/i, /clothy/i, /clothes/i, /clothing/i, /clothying/i,
+        /\bAI\b/i, /page/i, /pages/i, /site/i, /mango/i, /mangos/i, /mangoing/i, /icegirl/i, /wank/i, /jerk/i, /icegirls/i, /ismartta/i, /ismart/i, /ismartt/i, /gasm/i, /org/i,
+        /\bIA\b/i, /stuffed/i, /stuffing/i, /around/i, /spin/i, /spins/i, /spun/i, /spinned/i, /spinning/i, /online/i, /on-line/i, /machinelearn/i, /tekoäly/i, /sivu/i, /sites/i,
+        /-/i, /=/i, /\+/i, /_/i, 
         ];
+
 
         const finnishWordsList = [
 	//finnish names list:
-            /nen/i, /lampi/i, /lehti/i, /mäki/i, /maki/i, /lahti/i, /järvi/i, /jarvi/i, /koski/i, /kallio/i, /niemi/i, /aho/i, /aho/i, /salo/i, /kari/i, /oja/i, /pelto/i, /luoto/i, 
-            /saari/i, /ranta/i, /virta/i, /keto/i, /vaara/i, /lä/i, /la/i, /maa/i,  /kosken/i, /pää/i, /paa/i, /mäen/i, /mae/i, /sivu/i, /vieri/i, /kaarto/i, /kaarre/i, /aito/i, /aira/i, 
-            /man/i, /hauki/i, /rauma/i, /liite/i, /laine/i, /salmi/i, /harju/i, /kangas/i, /vuori/i, /korpi/i, /suo/i, /tal[oö]/i, /nius/i, /kuiva/i, /timo/i, /olli/i, /nyman/i, /nylund/i, 
-            /nygard/i, /aine/i, /nygård/i, /raunio/i, /mies/i, /nainen/i, /aitto/i, /jylhä/i, /anoai/i, /aitto/i, /aino/i, /kaija/i, /anneli/i, 
+        /nen/i, /lampi/i, /lehti/i, /mäki/i, /maki/i, /lahti/i, /järvi/i, /jarvi/i, /koski/i, /kallio/i, /niemi/i, /aho/i, /aho/i, /salo/i, /kari/i, /oja/i, /pelto/i, /luoto/i, 
+        /saari/i, /ranta/i, /virta/i, /keto/i, /vaara/i, /lä/i, /la/i, /maa/i,  /kosken/i, /pää/i, /paa/i, /mäen/i, /mae/i, /sivu/i, /vieri/i, /kaarto/i, /kaarre/i, /aito/i, /aira/i, 
+        /man/i, /hauki/i, /rauma/i, /liite/i, /laine/i, /salmi/i, /harju/i, /kangas/i, /vuori/i, /korpi/i, /suo/i, /tal[oö]/i, /nius/i, /kuiva/i, /timo/i, /olli/i, /nyman/i, /nylund/i, 
+        /nygard/i, /aine/i, /nygård/i, /raunio/i, /mies/i, /nainen/i, /aitto/i, /jylhä/i, /anoai/i, /aitto/i, /aino/i, /kaija/i, /anneli/i, /kata/i, /kati/i, /katarina/i, /katariina/i, 
+
 
 	//Finnish words list
-            /aika/i, /aino/i, /aikuinen/i, /saippua/i, /aisti/i, /aivo/i, /tilaisuus/i, /aikuiskoulutus/i, /paikka/i, /saippua/i, /aivast/i,
-            /hais/i, /mais/i, /kais/i, /tais/i, /raiska/i, /raippa/i, /pais/i, /alainen/i, /koululainen/i, /Kuinka/i, /Miten/i, /avain/i,
-            /Miksi/i, /Milloin/i, /Milloin/i, /Miksei/i, /aita/i, /aidan/i, /maailma/i, /avoin/i, /avaim/i, /dagonhai/i, /Dagon'hai/i, /Dagon´hai/i, /Dagon`hai/i,
-            /maanantai/i, /tiistai/i, /torstai/i, /perjantai/i, /lauantai/i, /sunnuntai/i, 
+	/aika/i, /aikuinen/i, /saippua/i, /aisti/i, /aivo/i, /tilaisuus/i, /aikuiskoulutus/i, /paikka/i, /saippua/i, /aivast/i, /hais/i, /mais/i, /kais/i, /tais/i, /raiska/i, /raippa/i, 
+	/pais/i, /alainen/i, /koululainen/i, /Kuinka/i, /Miten/i, /Miksi/i, /Milloin/i, /Milloin/i, /Miksei/i, /aita/i, /aidan/i, /maailma/i, /avoin/i, /avaim/i, /avain/i, /aivan/i,
+        /maanantai/i, /tiistai/i, /torstai/i, /perjantai/i, /lauantai/i, /sunnuntai/i,
         ];
+
 
         function isFinnishLike(word) {
             const w = word.toLowerCase();
@@ -1689,72 +1842,279 @@
         return false;
     }
 
-    // === UNIFIED RESULT/LINK HIERARCHY CHECKER ===
-    // 1. nuclearRegex (hide + redirect, absolute)
-    // 2. allowedTerms (strong context allow-list)
-    // 3. allowedURLs
-    // 4. blockedImageURLs / urlPatternsToHide / blocked TLDs
-    // 5. termsToRedirect (redirect-only; a link match is kept)
-    // 6. termsToHide (link/card hide-only)
-    // 7. allowedWords (legacy weak allow-list)
-    function shouldRemoveElement(url, text, isImage = false) {
-        const combined = `${text || ''} ${url || ''}`;
-        let embeddedSignal = '';
+    // === SCOPED POLICY ENGINE ===
+    // Each context has its own hierarchy; query-only allowances never rescue
+    // result URLs, and result-only rules never redirect an ordinary question.
+    // Query:  nuclearRegex -> searchAllowTerms -> existing AI/query redirect tiers -> none
+    // Result: nuclearRegex -> resultHideTerms -> blocked TLD -> precise blocked path
+    //         -> allowed result URL -> generic blocked result URL -> none
+    // Image:  nuclearRegex -> resultHideTerms -> blocked TLD -> blocked image URL
+    //         -> precise blocked path -> allowed result URL -> generic blocked result URL
+    //         -> generic WebP fallback -> none
+    // A skipped tier means "not applicable", never "allow and stop".
 
-        // 1. Nuclear terms: absolute top priority, no allowed URL/word shield.
-        const nuclearHit = containsNuclearTerms(combined);
-        if (nuclearHit) return true;
+    function getResultURLCandidates(url) {
+        const candidates = [];
+        const add = (value) => {
+            const raw = String(value || '').trim();
+            if (!raw) return;
+            candidates.push(raw);
+            try {
+                const decoded = decodeRepeatedly(raw);
+                if (decoded && decoded !== raw) candidates.push(decoded);
+            } catch (e) {}
+        };
 
+        add(url);
         try {
-            if (url) {
-                const u = new URL(url, window.location.origin);
-                const qParam = u.searchParams.get('q') || '';
-                const imgUrl = u.searchParams.get('imgurl') || '';
-                const imgRefUrl = u.searchParams.get('imgrefurl') || '';
-                embeddedSignal = `${qParam} ${imgUrl} ${imgRefUrl}`;
-                if (containsNuclearTerms(embeddedSignal)) return true;
+            const parsed = new URL(String(url || ''), window.location.origin);
+            // Only Google's own redirect/image wrappers may nominate an embedded
+            // destination. An arbitrary site cannot whitelist itself by putting an
+            // allowed URL in a ?url= parameter.
+            if (/^(?:[a-z0-9-]+\.)*google\.[a-z.]+$/i.test(parsed.hostname)) {
+                ['q', 'url', 'imgurl', 'imgrefurl'].forEach(name => add(parsed.searchParams.get(name) || ''));
             }
-        } catch(e) {}
+        } catch (e) {}
 
-        // 2. allowed context shields every lower tier.
-        if (containsallowedTerms(`${combined} ${embeddedSignal}`)) return false;
-
-        // 3. Allowed URLs shield every lower tier.
-        if (isUrlAllowed(url)) return false;
-
-        // 4. Hard URL, TLD and image-source blocks.
-        if (matchesBlockedUrlPattern(url) || isBannedTLD(url)) return true;
-        if (isImage && matchesBlockedImagePattern(url)) return true;
-
-        // 5. termsToRedirect is deliberately skipped in link/card context.
-
-        // 6. Hide-only text never participates in query redirects.
-        if (containsTermsToHide(combined)) return true;
-
-        // 7. Legacy weak shield, below all explicit hide tiers.
-        if (containsAllowedWords(text) || containsAllowedWords(url)) return false;
-
-        return false;
+        return Array.from(new Set(candidates));
     }
 
-    // === AI-AWARE FORBIDDEN CHECKER (used for queries, forms, etc.) ===
-    function containsForbiddenKeywords(text) {
-        if (!text) return false;
-        devLog('containsForbiddenKeywords called with:', JSON.stringify(String(text)));
+    function decideQueryPolicy(text) {
+        const input = String(text || '');
+        if (!input) return NO_POLICY_DECISION;
 
-        // Query hierarchy mirrors the shared tiers, while URL/image and hide-only
-        // rules intentionally have no redirect action.
-        const nuclearHit = containsNuclearTerms(text);
-        if (nuclearHit) return nuclearHit;
-        if (containsallowedTerms(text)) return false;
-        if (isUrlAllowed(text)) return false;
-
-        const aiHit = containsAiBoundary(text);
-        if (aiHit) {
-            recordMatchDetail('ai-boundary', aiHit, text);
-            return aiHit;
+        const nuclearHit = containsNuclearTerms(input);
+        if (nuclearHit) {
+            return makePolicyDecision(POLICY_ACTION.REDIRECT, 'query', 'nuclearRegex', nuclearHit, input);
         }
-        return containsTermsToRedirect(text);
+
+        const allowHit = containsSearchAllowTerms(input);
+        if (allowHit) {
+            return makePolicyDecision(POLICY_ACTION.ALLOW, 'query', 'searchAllowTerms', allowHit, input);
+        }
+
+        const aiHit = containsAiBoundary(input);
+        if (aiHit) {
+            return makePolicyDecision(POLICY_ACTION.REDIRECT, 'query', 'ai-boundary', aiHit, input);
+        }
+
+        const redirectHit = containsQueryRedirectTerms(input);
+        if (redirectHit) {
+            return makePolicyDecision(POLICY_ACTION.REDIRECT, 'query', 'queryRedirectTerms', redirectHit, input);
+        }
+
+        return NO_POLICY_DECISION;
+    }
+
+    function decideResultPolicy(url, text, isImage = false) {
+        let candidates = getResultURLCandidates(url);
+        if (isImage) {
+            try {
+                extractUrlsFromSignal(decodeRepeatedly(String(text || '')))
+                    .forEach(candidate => candidates.push(candidate));
+                candidates = Array.from(new Set(candidates));
+            } catch (e) {}
+        }
+        const urlSignal = candidates.join(' ');
+        const signal = `${text || ''} ${urlSignal}`.trim();
+
+        const nuclearHit = containsNuclearTerms(signal);
+        if (nuclearHit) {
+            return makePolicyDecision(POLICY_ACTION.HIDE, isImage ? 'image' : 'result', 'nuclearRegex', nuclearHit, signal);
+        }
+
+        const hideHit = containsResultHideTerms(signal);
+        if (hideHit) {
+            return makePolicyDecision(POLICY_ACTION.HIDE, isImage ? 'image' : 'result', 'resultHideTerms', hideHit, signal);
+        }
+
+        // A banned TLD is absolute in result/image context. It is checked before
+        // every URL allowance so an accidental future allow rule cannot rescue it.
+        const blockedTLD = candidates.find(isBannedTLD);
+        if (blockedTLD) {
+            return makePolicyDecision(POLICY_ACTION.HIDE, isImage ? 'image' : 'result', 'blocked-tld', blockedTLD, signal);
+        }
+
+        // Explicit image denies outrank URL allowances. Keep the broad WebP
+        // fallback below allowances so harmless logos/thumbnails can still load.
+        if (isImage) {
+            const blockedImageURL = candidates.find(matchesBlockedImageURLPattern);
+            if (blockedImageURL || matchesBlockedImageURLPattern(urlSignal)) {
+                return makePolicyDecision(POLICY_ACTION.HIDE, 'image', 'blocked-image-url', blockedImageURL || urlSignal, signal);
+            }
+        }
+
+        // Narrow deny paths beat a broader allowed host. This keeps explicitly
+        // blocked communities hidden while ordinary pages on that host stay allowed.
+        const priorityBlockedURL = candidates.find(matchesPriorityBlockedResultURLPattern);
+        if (priorityBlockedURL || matchesPriorityBlockedResultURLPattern(urlSignal)) {
+            return makePolicyDecision(POLICY_ACTION.HIDE, isImage ? 'image' : 'result', 'priority-blocked-result-url', priorityBlockedURL || urlSignal, signal);
+        }
+
+        const allowedURL = candidates.find(isResultURLAllowed);
+        if (allowedURL) {
+            return makePolicyDecision(POLICY_ACTION.ALLOW, isImage ? 'image' : 'result', 'allowedResultURLs', allowedURL, signal);
+        }
+
+        // Broad legacy URL fragments are deliberately below anchored allowances.
+        // For example, /x\.com/i must not accidentally hide netflix.com.
+        const blockedURL = candidates.find(matchesBlockedResultURLPattern);
+        if (blockedURL || matchesBlockedResultURLPattern(urlSignal)) {
+            return makePolicyDecision(POLICY_ACTION.HIDE, isImage ? 'image' : 'result', 'blocked-result-url', blockedURL || urlSignal, signal);
+        }
+
+        if (isImage && isWebpImageSignal(urlSignal)) {
+            return makePolicyDecision(POLICY_ACTION.HIDE, 'image', 'blocked-image-format', urlSignal, signal);
+        }
+
+        return NO_POLICY_DECISION;
+    }
+
+    function shouldRemoveElement(url, text, isImage = false) {
+        return decideResultPolicy(url, text, isImage).action === POLICY_ACTION.HIDE;
+    }
+
+    // Compatibility wrapper retained for existing submit/input/preflight hooks.
+    function containsForbiddenKeywords(text) {
+        devLog('containsForbiddenKeywords called with:', JSON.stringify(String(text || '')));
+        const decision = decideQueryPolicy(text);
+        return decision.action === POLICY_ACTION.REDIRECT
+            ? (decision.match || decision.reason)
+            : false;
+    }
+
+    function runPolicySelfTests() {
+        const tests = [
+            {
+                name: 'nuclear overrides a query allow term',
+                decision: decideQueryPolicy('deepnude RuneScape'),
+                expectedAction: POLICY_ACTION.REDIRECT,
+                expectedReason: 'nuclearRegex'
+            },
+            {
+                name: 'query allow overrides an ordinary redirect term',
+                decision: decideQueryPolicy('RuneScape jiggle'),
+                expectedAction: POLICY_ACTION.ALLOW,
+                expectedReason: 'searchAllowTerms'
+            },
+            {
+                name: 'ordinary redirect term redirects a query',
+                decision: decideQueryPolicy('jiggle'),
+                expectedAction: POLICY_ACTION.REDIRECT,
+                expectedReason: 'queryRedirectTerms'
+            },
+            {
+                name: 'conversational Finnish question stays allowed',
+                decision: decideQueryPolicy('Kuinka virtuaalikone toimii'),
+                expectedAction: POLICY_ACTION.ALLOW,
+                expectedReason: 'searchAllowTerms'
+            },
+            {
+                name: 'Miten protects an ordinary question from a lower redirect rule',
+                decision: decideQueryPolicy('Miten image move toimii'),
+                expectedAction: POLICY_ACTION.ALLOW,
+                expectedReason: 'searchAllowTerms'
+            },
+            {
+                name: 'allowed result URL is kept',
+                decision: decideResultPolicy('https://github.com/paintdotnet/issues', 'Paint.NET issue tracker', false),
+                expectedAction: POLICY_ACTION.ALLOW,
+                expectedReason: 'allowedResultURLs'
+            },
+            {
+                name: 'an unrelated URL cannot smuggle an allowed destination',
+                decision: decideResultPolicy('https://example.com/redirect?url=https://github.com/paintdotnet', 'ordinary redirect', false),
+                expectedAction: POLICY_ACTION.NONE,
+                expectedReason: 'no-match'
+            },
+            {
+                name: 'query allow terms cannot rescue a blocked result TLD',
+                decision: decideResultPolicy('https://example.xyz/ordinary', 'RuneScape guide', false),
+                expectedAction: POLICY_ACTION.HIDE,
+                expectedReason: 'blocked-tld'
+            },
+            {
+                name: 'specific blocked path overrides an allowed Reddit host',
+                decision: (() => {
+                    const probeRule = /reddit\.com\/r\/qz7391(?:\/|$)/i;
+                    priorityBlockedResultURLPatterns.push(probeRule);
+                    try {
+                        return decideResultPolicy('https://www.reddit.com/r/qz7391/comments/example', 'ordinary post', false);
+                    } finally {
+                        priorityBlockedResultURLPatterns.pop();
+                    }
+                })(),
+                expectedAction: POLICY_ACTION.HIDE,
+                expectedReason: 'priority-blocked-result-url'
+            },
+            {
+                name: 'specific image block overrides an allowed Reddit host',
+                decision: decideResultPolicy('https://www.reddit.com/r/SquaredCircle/comments/example', 'ordinary image', true),
+                expectedAction: POLICY_ACTION.HIDE,
+                expectedReason: 'blocked-image-url'
+            },
+            {
+                name: 'lookalike host does not match an allowed URL regex',
+                decision: decideResultPolicy('https://youtube.com.example.org/watch?v=123', 'ordinary result', false),
+                expectedAction: POLICY_ACTION.NONE,
+                expectedReason: 'no-match'
+            },
+            {
+                name: 'anchored allow protects Netflix from a broad x.com fragment',
+                decision: decideResultPolicy('https://www.netflix.com/title/123', 'ordinary title', false),
+                expectedAction: POLICY_ACTION.ALLOW,
+                expectedReason: 'allowedResultURLs'
+            },
+            {
+                name: 'anchored allow protects OpenAI from a broad ai-dot fragment',
+                decision: decideResultPolicy('https://openai.com/research', 'ordinary article', false),
+                expectedAction: POLICY_ACTION.ALLOW,
+                expectedReason: 'allowedResultURLs'
+            },
+            {
+                name: 'blocked image format is hidden',
+                decision: decideResultPolicy('https://example.com/file.webp', 'ordinary file', true),
+                expectedAction: POLICY_ACTION.HIDE,
+                expectedReason: 'blocked-image-format'
+            },
+            {
+                name: 'allowed result URL precedes a generic image block',
+                decision: decideResultPolicy('https://youtube.com/static/logo.webp', 'ordinary logo', true),
+                expectedAction: POLICY_ACTION.ALLOW,
+                expectedReason: 'allowedResultURLs'
+            },
+            {
+                name: 'result hide term applies before every URL allowance',
+                decision: decideResultPolicy('https://youtube.com/watch?v=123', 'Virtual laatikko', false),
+                expectedAction: POLICY_ACTION.HIDE,
+                expectedReason: 'resultHideTerms'
+            },
+            {
+                name: 'query redirect terms do not hide result links',
+                decision: decideResultPolicy('https://example.com/ordinary', 'jiggle', false),
+                expectedAction: POLICY_ACTION.NONE,
+                expectedReason: 'no-match'
+            },
+            {
+                name: 'nuclear term overrides an allowed result URL',
+                decision: decideResultPolicy('https://youtube.com/watch?v=123', 'deepnude', false),
+                expectedAction: POLICY_ACTION.HIDE,
+                expectedReason: 'nuclearRegex'
+            }
+        ];
+
+        const results = tests.map(test => ({
+            name: test.name,
+            passed: test.decision.action === test.expectedAction &&
+                    test.decision.reason === test.expectedReason,
+            expected: { action: test.expectedAction, reason: test.expectedReason },
+            actual: test.decision
+        }));
+
+        return {
+            passed: results.every(result => result.passed),
+            results
+        };
     }
 
     if (typeof window !== 'undefined') {
@@ -1762,6 +2122,9 @@
         window.containsForbiddenKeywords = containsForbiddenKeywords;
         window.GoogleJS = window.GoogleJS || {};
         window.GoogleJS.getLastRedirectInfo = () => lastRedirectInfo || readPersistedRedirect();
+        window.GoogleJS.getQueryPolicyDecision = (text) => ({ ...decideQueryPolicy(text) });
+        window.GoogleJS.getResultPolicyDecision = (url, text, isImage = false) => ({ ...decideResultPolicy(url, text, isImage) });
+        window.GoogleJS.runPolicySelfTests = runPolicySelfTests;
     }
 
     function hideElementSafely(el) {
@@ -1858,35 +2221,7 @@
         try {
             const signal = collectGoogleImageSignal(node);
             if (!signal) return false;
-
-            // 1. Nuclear terms are absolute across text, alt/title and decoded URLs.
-            if (containsNuclearTerms(signal)) return true;
-
-            // 2. allowed context is a strong allow-list below nuclear.
-            if (containsallowedTerms(signal)) return false;
-
-            const urls = extractUrlsFromSignal(signal);
-
-            // 3. One explicitly allowed source/referrer protects the image card.
-            if (urls.some(isUrlAllowed)) return false;
-
-            // 4. Hard image/URL/TLD rules, including encoded /imgres payloads.
-            if (isWebpImageSignal(signal) ||
-                matchesBlockedImagePattern(signal) ||
-                matchesBlockedUrlPattern(signal)) return true;
-
-            for (let i = 0; i < urls.length; i++) {
-                const u = urls[i];
-                if (isBannedTLD(u) || matchesBlockedUrlPattern(u) || matchesBlockedImagePattern(u)) return true;
-            }
-
-            // 5. termsToRedirect is deliberately skipped in image-card context.
-
-            // 6. Hide-only terms remove cards without ever redirecting searches.
-            if (containsTermsToHide(signal)) return true;
-
-            // 7. Legacy weak allow-list is intentionally last.
-            if (containsAllowedWords(signal)) return false;
+            return decideResultPolicy('', signal, true).action === POLICY_ACTION.HIDE;
         } catch (e) {}
         return false;
     }
@@ -2017,30 +2352,12 @@
     }
 
     // === SUGGESTION/CORRECTION TEXT CHECKER ===
-    // Nuclear terms must stay absolute here too:
-    // "Did you mean?" / "Showing results for" can otherwise sneak past if allowedWords also match.
+    // Suggestions use the same scoped query policy as typed/submitted searches.
     function getSuggestionForbiddenMatch(text) {
-        if (!text) return false;
-
-        const nuclearHit = containsNuclearTerms(text);
-        if (nuclearHit) return nuclearHit;
-
-        if (containsallowedTerms(text)) return false;
-        if (isUrlAllowed(text)) return false;
-
-        const aiHit = containsAiBoundary(text);
-        if (aiHit) {
-            recordMatchDetail('ai-boundary', aiHit, text);
-            return aiHit;
-        }
-
-        const redirectHit = containsTermsToRedirect(text);
-        if (redirectHit) return redirectHit;
-
-        // termsToHide is intentionally absent: suggestions are redirect context,
-        // not result links/cards. allowedWords remains the last weak exception.
-        if (containsAllowedWords(text)) return false;
-        return false;
+        const decision = decideQueryPolicy(text);
+        return decision.action === POLICY_ACTION.REDIRECT
+            ? (decision.match || decision.reason)
+            : false;
     }
 
     function isInsideImagePreviewOrHidden(node) {
@@ -2436,7 +2753,7 @@ function swapSearchTabs() {
                 if (isInsideOpenImagePreview(link)) continue;
                 if (!overlayRemoved && isWithinSuggestionNode(link)) continue;
 
-                if (!isUrlAllowed(link.href) && !isFirefox && !isImageSearch) {
+                if (!isResultURLAllowed(link.href) && !isFirefox && !isImageSearch) {
                     try {
                         const urlObj = new URL(link.href, location.origin);
                         if (urlObj.pathname.includes('/search')) {
@@ -2565,7 +2882,7 @@ function swapSearchTabs() {
                         const txt = element.textContent || '';
                         if (element.getAttribute('data-gj-cache') === String(txt.length)) return;
 
-                        if (!containsAllowedWords(txt)) {
+                        if (!containsSearchAllowTerms(txt)) {
                             hideElementSafely(element);
                         } else {
                             element.setAttribute('data-gj-cache', String(txt.length));
@@ -2607,7 +2924,7 @@ function swapSearchTabs() {
                         }
                     }
 
-                    if (!containsAllowedWords(textContent)) {
+                    if (!containsSearchAllowTerms(textContent)) {
                         hideElementSafely(element);
                         return;
                     }
