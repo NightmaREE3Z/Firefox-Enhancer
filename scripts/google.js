@@ -1,13 +1,18 @@
 (function () {
     'use strict';
 
-    // Google.js of BraveFox Enhancer v26.2.0
+    // google.js of BraveFox Enhancer v26.3.1 (result parity, complete-card cleanup, centred desktop hover and Firefox menus)
 
-    // === INSTANT GEMINI ABORT ===
-    // Gemini's React router hates URL parameter stripping. 
-    // Since we don't need filtering here, we kill the script immediately.
-    if (window.location.hostname.includes('gemini.google.com')) {
-    return;
+    // === INSTANT NON-SEARCH GOOGLE APP ABORT ===
+    // Gemini and Google Translate are standalone apps, not Google Search result pages.
+    // BraveFox does not filter or modify them at all.
+    const initialGoogleHostname = String(window.location.hostname || '')
+        .toLowerCase()
+        .replace(/\.$/, '');
+
+    if (initialGoogleHostname === 'gemini.google.com' ||
+        initialGoogleHostname.startsWith('translate.google.')) {
+        return;
     }
 
     // === DEBUG CONFIG (0 = off, 1 = on) ===
@@ -121,6 +126,8 @@
     const isFirefox = /Firefox/i.test(ua);
     const isAndroid = /Android/i.test(ua);
     const isFirefoxAndroid = isFirefox && isAndroid;
+    const isFirefoxPC = isFirefox && !isAndroid;
+    const isChromePC = !isFirefox && !isAndroid;
     devLog('Platform: ' + (isFirefoxAndroid ? 'Firefox Android' : (isFirefox ? 'Firefox Desktop' : 'Chrome/Desktop or other')));
 
     // === INSTANT WHITE OVERLAY ===
@@ -281,6 +288,192 @@
         document.documentElement.appendChild(hideStyle);
     } catch (e) {}
 
+    // === SEARCH NAVIGATION POLISH / RECOMMENDED-CHIP SUPPRESSION ===
+    // Google's query-refinement chips (for example Game log / Reference / Stats) sit in a separate
+    // carousel beneath the search-mode tabs. Remove that carousel on every supported platform.
+    // On desktop-class browsers only, add a restrained blue hover state to the real Chrome tabs and
+    // the synthetic Firefox tabs. Firefox Android intentionally receives no hover-only styling.
+    try {
+        const searchNavPolishStyle = document.createElement('style');
+        searchNavPolishStyle.id = 'googlejs-search-navigation-polish';
+        searchNavPolishStyle.textContent = `
+            #hdtb-sc[data-id="trc"],
+            #bqHHPb:has(#hdtb-sc[data-id="trc"]),
+            .ZeeOc:has(.IUOThf[role="list"] a.nPDzT[jsname="VIftV"]),
+            [data-st-tgt="mode"][role="navigation"]:has(.IUOThf[role="list"] a.nPDzT[jsname="VIftV"]),
+            .TrmO7[data-st-cnt="mode"]:has(#hdtb-sc[data-id="trc"]),
+            .xhjkHe.CEXVle:has(#hdtb-sc[data-id="trc"]) {
+                display: none !important;
+                visibility: hidden !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
+                width: 0 !important;
+                height: 0 !important;
+                min-width: 0 !important;
+                min-height: 0 !important;
+                max-width: 0 !important;
+                max-height: 0 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                border: 0 !important;
+                overflow: hidden !important;
+            }
+
+            ${!isAndroid ? `
+            #googlejs-firefox-search-tabs > a,
+            #googlejs-firefox-search-tabs > button,
+            #googlejs-firefox-search-tabs > details > summary,
+            .googlejs-desktop-search-tab-hover {
+                position: relative !important;
+                isolation: isolate !important;
+                overflow: visible !important;
+                color: inherit !important;
+                transition: color 120ms ease-out !important;
+            }
+
+            /* Firefox's synthetic controls are label-width with zero horizontal padding, so
+               their tile must grow outward from the label rather than reuse Chrome's wrapper inset. */
+            ${isFirefoxPC ? `
+            #googlejs-firefox-search-tabs > a::before,
+            #googlejs-firefox-search-tabs > button::before,
+            #googlejs-firefox-search-tabs > details > summary::before,
+            .googlejs-desktop-search-tab-hover::before {
+                content: '' !important;
+                position: absolute !important;
+                left: -8px !important;
+                right: -8px !important;
+                top: 50% !important;
+                height: 30px !important;
+                transform: translateY(-50%) !important;
+                border-radius: 5px !important;
+                background: transparent !important;
+                box-shadow: none !important;
+                pointer-events: none !important;
+                z-index: -1 !important;
+                transition: background-color 120ms ease-out, box-shadow 120ms ease-out !important;
+            }
+            ` : ''}
+
+            /* Chrome's native controls already include horizontal wrapper padding. Inset the tile
+               inside that control so it remains centred around the actual label, not the full slot. */
+            ${isChromePC ? `
+            .googlejs-desktop-search-tab-hover::before {
+                content: '' !important;
+                position: absolute !important;
+                left: 6px !important;
+                right: 6px !important;
+                top: calc(50% + 2px) !important;
+                height: 30px !important;
+                transform: translateY(-50%) !important;
+                border-radius: 5px !important;
+                background: transparent !important;
+                box-shadow: none !important;
+                pointer-events: none !important;
+                z-index: -1 !important;
+                transition: background-color 120ms ease-out, box-shadow 120ms ease-out !important;
+            }
+            ` : ''}
+
+            #googlejs-firefox-search-tabs > a:hover,
+            #googlejs-firefox-search-tabs > button:hover,
+            #googlejs-firefox-search-tabs > details > summary:hover,
+            .googlejs-desktop-search-tab-hover,
+            .googlejs-desktop-search-tab-hover * {
+                color: #174ea6 !important;
+            }
+
+            #googlejs-firefox-search-tabs > a:hover::before,
+            #googlejs-firefox-search-tabs > button:hover::before,
+            #googlejs-firefox-search-tabs > details > summary:hover::before,
+            .googlejs-desktop-search-tab-hover::before {
+                background-color: rgba(26, 115, 232, 0.13) !important;
+                box-shadow: 0 1px 4px rgba(26, 115, 232, 0.18) !important;
+            }
+
+            .googlejs-desktop-search-tab-hover svg,
+            .googlejs-desktop-search-tab-hover path {
+                fill: #174ea6 !important;
+            }
+            ` : ''}
+        `;
+        document.documentElement.appendChild(searchNavPolishStyle);
+    } catch (e) {}
+
+    // Chrome desktop receives temporary hover classes only while the pointer is over a real
+    // search-mode control. No mutation observer or persistent tab tagging is used.
+    let chromeDesktopHoveredSearchTab = null;
+    let chromeDesktopSearchTabHoverInstalled = false;
+
+    function getChromeDesktopSearchTabControl(target) {
+        if (isFirefox || isAndroid || !target || !target.closest) return null;
+        try {
+            const control = target.closest('a[href], button, [role="button"], summary');
+            if (!control) return null;
+            if (control.closest('#hdtb-sc[data-id="trc"], .IUOThf[role="list"], #rso, #res, #search')) return null;
+
+            const navRoot = control.closest('#hdtb, #hdtb-msb, #top_nav, #slim_appbar, .MUFPAc, [role="navigation"]');
+            if (!navRoot) return null;
+            const rect = control.getBoundingClientRect();
+            const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 900;
+            if (rect.width < 12 || rect.height < 10 || rect.bottom < 35 || rect.top > Math.min(240, viewportHeight * 0.30)) return null;
+
+            const label = String(control.textContent || control.getAttribute('aria-label') || '')
+                .replace(/[▾▼⌄]/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+            const knownLabel = /^(?:Verkkohaku|Kuvahaku|Videot|Virikkeinen haku|Talous|Lisää|Työkalut|Uutiset|Ostokset|Kirjat|Kartat|Web|Images|Videos|All|All results|Finance|More|Tools|News|Shopping|Books|Maps)$/i;
+            if (!knownLabel.test(label)) return null;
+
+            // Always paint the actual labelled control. Painting Google's surrounding wrapper can
+            // fill the entire tab slot on Chrome, while Firefox's different wrapper can be too narrow.
+            // The shared ::before tile above supplies the same centred label-sized highlight on both.
+            return { control, paintTarget: control, needsCompactBox: false };
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function clearChromeDesktopSearchTabHover(state) {
+        const target = state?.paintTarget || state;
+        if (!target) return;
+        try {
+            target.classList.remove('googlejs-desktop-search-tab-hover', 'googlejs-desktop-search-tab-hover-compact');
+        } catch (e) {}
+        if (chromeDesktopHoveredSearchTab === state || chromeDesktopHoveredSearchTab?.paintTarget === target) {
+            chromeDesktopHoveredSearchTab = null;
+        }
+    }
+
+    function installChromeDesktopSearchTabHover() {
+        if (isFirefox || isAndroid || chromeDesktopSearchTabHoverInstalled) return;
+        chromeDesktopSearchTabHoverInstalled = true;
+
+        document.addEventListener('pointerover', event => {
+            const state = getChromeDesktopSearchTabControl(event.target);
+            if (!state) return;
+            if (chromeDesktopHoveredSearchTab?.paintTarget !== state.paintTarget) {
+                clearChromeDesktopSearchTabHover(chromeDesktopHoveredSearchTab);
+            }
+            chromeDesktopHoveredSearchTab = state;
+            try {
+                state.paintTarget.classList.add('googlejs-desktop-search-tab-hover');
+                if (state.needsCompactBox) state.paintTarget.classList.add('googlejs-desktop-search-tab-hover-compact');
+            } catch (e) {}
+        }, true);
+
+        document.addEventListener('pointerout', event => {
+            const state = chromeDesktopHoveredSearchTab;
+            if (!state) return;
+            const next = event.relatedTarget;
+            if (next && state.paintTarget.contains(next)) return;
+            clearChromeDesktopSearchTabHover(state);
+        }, true);
+
+        window.addEventListener('blur', () => clearChromeDesktopSearchTabHover(chromeDesktopHoveredSearchTab), true);
+    }
+
+    installChromeDesktopSearchTabHover();
+
     // === REGIONAL TLD REDIRECTOR ===
     function forceGoogleComAndFi() {
         try {
@@ -326,40 +519,103 @@
         return false;
     }
 
-    // === FORCE WEB SEARCH DEFAULT ===
-    function forceWebSearchDefault() {
-        if (isRedirecting) return false;
-        // BF25_4_0_FIREFOX_TAB_FIX: Firefox PC/Android can lose the normal Google tab row when forced into udm=14.
-        if (isFirefox) return false;
+    // === FIREFOX-ONLY CHROME-STYLE WEB SEARCH DEFAULT ===
+    // Google can rank and shape results differently when the visible request carries Firefox-specific
+    // client/channel parameters. Keep the browser engine untouched, but normalize Firefox search URLs
+    // to the same public query parameters Chrome uses. Explicit Images/Videos/News/etc. modes remain
+    // intact, and source=lnms still protects the synthetic "All results" tab from the Web redirect.
+    function normalizeGooglePublicSearchUrl(url, removeFirefoxClientHints) {
+        let changed = false;
+
+        if (removeFirefoxClientHints) {
+            ['client', 'channel'].forEach(parameter => {
+                if (url.searchParams.has(parameter)) {
+                    url.searchParams.delete(parameter);
+                    changed = true;
+                }
+            });
+        }
+
+        const query = url.searchParams.get('q') || '';
+        const ensureParam = (name, value) => {
+            if (url.searchParams.get(name) !== value) {
+                url.searchParams.set(name, value);
+                changed = true;
+            }
+        };
+
+        if (query) ensureParam('oq', query);
+        ensureParam('safe', 'active');
+
+        // Keep both browsers on the same stable, visible public-search parameters.
+        // Google either ignores or canonicalises pws/filter/num inconsistently across
+        // signed-in Firefox and signed-out Chrome, so retaining them can create reload
+        // churn without guaranteeing the same server-side result pool.
+        ['pws', 'filter', 'num'].forEach(parameter => {
+            if (url.searchParams.has(parameter)) {
+                url.searchParams.delete(parameter);
+                changed = true;
+            }
+        });
+
+        const source = url.searchParams.get('source') || '';
+        if (source !== 'lnms' && source !== 'chrome') {
+            url.searchParams.set('source', 'chrome');
+            changed = true;
+        }
+
+        if (!url.searchParams.has('udm') && !url.searchParams.has('tbm') &&
+            url.searchParams.get('source') !== 'lnms') {
+            url.searchParams.set('udm', '14');
+            changed = true;
+        }
+
+        return changed;
+    }
+
+    // === FIREFOX-ONLY CHROME-STYLE WEB SEARCH DEFAULT ===
+    function forceFirefoxChromeStyleWebSearch() {
+        if (!isFirefox || isRedirecting) return false;
         try {
             const url = new URL(window.location.href);
-            if (url.pathname.includes('/search') && url.searchParams.has('q')) {
-                if (!url.searchParams.has('udm') && !url.searchParams.has('tbm')) {
-                    if (url.searchParams.get('source') !== 'lnms') {
-                        isRedirecting = true;
-                        url.searchParams.set('udm', '14'); 
-                        
-                        if (overlay) overlay.style.display = 'block';
-                        
-                        window.location.replace(url.toString());
-                        return true;
-                    }
-                }
-            }
+            if (!url.pathname.includes('/search') || !url.searchParams.has('q')) return false;
+            if (!normalizeGooglePublicSearchUrl(url, true)) return false;
+
+            isRedirecting = true;
+            if (overlay) overlay.style.display = 'block';
+            window.location.replace(url.toString());
+            return true;
+        } catch (e) {}
+        return false;
+    }
+
+    // === FORCE WEB SEARCH DEFAULT / PUBLIC-QUERY PARITY ===
+    function forceWebSearchDefault() {
+        if (isRedirecting || isFirefox) return false;
+        try {
+            const url = new URL(window.location.href);
+            if (!url.pathname.includes('/search') || !url.searchParams.has('q')) return false;
+            if (!normalizeGooglePublicSearchUrl(url, false)) return false;
+
+            isRedirecting = true;
+            if (overlay) overlay.style.display = 'block';
+            window.location.replace(url.toString());
+            return true;
         } catch (e) {}
         return false;
     }
 
     if (forceGoogleComAndFi()) return;
+    if (forceFirefoxChromeStyleWebSearch()) return;
     if (forceWebSearchDefault()) return;
 
     // === TLD HIDER LOGIC ===
     const blockedTLDs = [
         '.ai', '.app', '.art', '.io', '.makeup', '.off', '.club', '.id', '.it', '.best', '.cc', '.cn', '.click',
-        '.you', '.to', '.top', '.me', '.us', '.ru', '.vip', '.online', '.hot', '.her', '.sex', '.xxx', '.nsfw',
+        '.you', '.to', '.top', '.me', '.us', '.red', '.vip', '.online', '.hot', '.her', '.sex', '.xxx', '.nsfw',
         '.porn', '.show', '.work', '.fit', '.tool', '.tools', '.system', '.systems', '.surf', '.review', '.asia',
         '.tokyo', '.monster', '.info', '.机构', '.xn--nqv7f', '.one', '.ee', '.in', '.gf', '.fox', '.fun', '.exposed',
-        '.fyi', '.fr', '.life', '.now', '.today', '.world', '.xyz', '.zone', '.cu', '.su',
+        '.fyi', '.fr', '.life', '.now', '.today', '.world', '.xyz', '.zone', '.cu', '.su', 
     ];
 
     function isBannedTLD(urlStr) {
@@ -683,7 +939,7 @@
 	/Lewis Hamilton/i, /Alexander/i, /mother/i, /Coffee/i, /Monster/i, /Energy/i, /LH44/i, /LH-44/i, /Greenzero/i, /Green/i, /Zero/i, /blue/i, /white/i, /red/i, /yellow/i, /brown/i, /cyan/i, /black/i, /giver/i, /taker/i, /Metallica/i, 
 	/Sabaton/i, /TheGamingDefinition/i, /Twitch/i, /Lake/i, /TGD/i, /wayback/i, /Ucey/i, /dagonhai/i, /Dagon'hai/i, /Dagon´hai/i, /Dagon`hai/i, /europe/i, /world/i, /champ/i, /fifa/i, /football/i, /ice hockey/i, /NHL/i, /american/i, 
 	/america/i, /ethiopea/i, /brazil/i, /finland/i, /netherland/i, /old/i, /new/i, /used/i, /sale/i, /toyota/i, /opel/i, /mitsubishi/i, /galant/i, /Edge WWE/i, /National Hockey League/i, /maps/i, /earth/i, /WhatsApp/i, /Messenger/i,
-	/Crate/i, 
+	/Crate/i, /Wiki/i, /pedia/i, /Wikipedia/i,
 	
 
 
@@ -811,6 +1067,7 @@
         /^https?:\/\/(?:www\.|m\.)?youtube\.com(?:[\/:?#]|$)/i,
         /^https?:\/\/(?:[a-z]{2,3}\.)?wikipedia\.org(?:[\/:?#]|$)/i,
         /^https?:\/\/(?:www\.)?netflix\.com(?:[\/:?#]|$)/i,
+        /^https?:\/\/(?:oldschool\.)?runescape\.wiki(?:[\/:?#]|$)/i,
         /^https?:\/\/runescape\.wiki(?:[\/:?#]|$)/i,
         /^https?:\/\/github\.com\/paintdotnet(?:[\/?#]|$)/i,
         /^https?:\/\/(?:www\.)?getpaint\.net(?:[\/:?#]|$)/i,
@@ -819,12 +1076,20 @@
         /^https?:\/\/(?:www|old|new)\.reddit\.com(?:[\/:?#]|$)/i,
         /^https?:\/\/(?:www\.)?spotify\.com(?:[\/:?#]|$)/i,
         /^https?:\/\/(?:www\.)?thesmackdownhotel\.com(?:[\/:?#]|$)/i,
+        /^https?:\/\/(?:fi\.)?wikipedia\.org(?:[\/:?#]|$)/i,
+        /^https?:\/\/(?:en\.)?wikipedia\.org(?:[\/:?#]|$)/i,
+        /^https?:\/\/(?:fi\.)?wiktionary\.org(?:[\/:?#]|$)/i,
+        /^https?:\/\/(?:en\.)?wiktionary\.org(?:[\/:?#]|$)/i,
         /^https?:\/\/(?:www\.)?wwe\.com(?:[\/:?#]|$)/i,
         /^https?:\/\/(?:www\.)?amd\.com(?:[\/:?#]|$)/i,
         /^https?:\/\/(?:www\.)?nvidia\.com(?:[\/:?#]|$)/i,
         /^https?:\/\/(?:www\.)?intel\.com(?:[\/:?#]|$)/i,
         /^https?:\/\/(?:www\.)?techpowerup\.com(?:[\/:?#]|$)/i,
+        /^https?:\/\/(?:www\.)?guru3d\.com(?:[\/:?#]|$)/i,
+        /^https?:\/\/(?:www\.)?is\.fi(?:[\/:?#]|$)/i,
+        /^https?:\/\/(?:www\.)?iltalehti\.fi(?:[\/:?#]|$)/i,
         /^https?:\/\/(?:www\.)?chatgpt\.com(?:[\/:?#]|$)/i,
+        /^https?:\/\/(?:www\.)?openai\.com(?:[\/:?#]|$)/i,
         /^https?:\/\/github\.com\/copilot(?:[\/?#]|$)/i,
         /^https?:\/\/gemini\.google\.com(?:[\/:?#]|$)/i,
         /^https?:\/\/(?:www\.)?jimms\.fi(?:[\/:?#]|$)/i,
@@ -834,10 +1099,13 @@
         /^https?:\/\/(?:www\.)?multitronic\.fi(?:[\/:?#]|$)/i,
         /^https?:\/\/(?:www\.)?proshop\.fi(?:[\/:?#]|$)/i,
         /^https?:\/\/(?:www\.)?tori\.fi(?:[\/:?#]|$)/i,
+        /^https?:\/\/(?:www\.)?huuto\.net(?:[\/:?#]|$)/i,
+        /^https?:\/\/(?:www\.)?motonet\.fi(?:[\/:?#]|$)/i,
         /^https?:\/\/(?:www\.)?hintaopas\.fi(?:[\/:?#]|$)/i,
         /^https?:\/\/(?:www\.)?yliopistonapteekki\.fi(?:[\/:?#]|$)/i,
         /^https?:\/\/(?:www\.)?findidfb\.com(?:[\/:?#]|$)/i,
         /^https?:\/\/(?:www\.)?lookup-id\.com(?:[\/:?#]|$)/i,
+        /^https?:\/\/(?:www\.)?wiktionary\.org(?:[\/:?#]|$)/i,
     ];
 
     // Precise deny paths on otherwise allowed hosts. Keep this list anchored and
@@ -860,7 +1128,6 @@
         /github\.com\/Top-AI-Apps\/Review\/blob\/main\/Top%205%20DeepNude%20AI%3A%20Free%20%26%20Paid%20Apps%20for%20Jan%202025%20-%20topai\.md/i,
         /chromewebstore\.google\.com\/detail\/tor-selain\/eaoamcgoidmhaficdbmcbamiedeklfol/i,
         /www\.opera\.com/i,
-        /www\.apple\.com/i,
         /microsoft\.com\/en-us\/edge\//i,
         /microsoft\.com\/fi-fi\/edge\//i,
         /brave\.com/i,
@@ -941,8 +1208,6 @@
         /play\.google\.com\/store\/apps\/details\?id=com\.lightricks\.facetune\.free/i,
         /apps\.apple\.com\/us\/app\/facetune-video-photo-editor\/id1149994032/i,
         /lunapic\.com/i,
-        /tenor\./i,
-        /tenor\.com/i,
         /azure\./i,
         /vidu\./i,
         /vidyu\./i,
@@ -1461,8 +1726,6 @@
         /x\.com/i,
         /huggingface\./i,
         /hugging-face\./i,
-        /tenor\./i,
-        /tenor\.com/i,
         /torproject\.org/i,
         /tor\.app/i,
         /mozilla\.org/i,
@@ -1557,8 +1820,1030 @@
         '#tsf > div:nth-child(1) > div:nth-child(2)', '#tsf > div:nth-child(1) > script',
         '#tsf > div:nth-child(1)', '#tophf', '#tsf',
         '#hdtb-msb', '#hdtb', '#top_nav', '#slim_appbar', '.MUFPAc', '.hdtb-mitem', '#botabar', '.crJ18e', '.T3mIbg',
-        '.EDblX.JpOecb' // Prevent nav bar from being swept
+        '.EDblX.JpOecb', '#googlejs-firefox-search-tabs-host', '#googlejs-firefox-search-tabs-host *',
+        '#googlejs-firefox-search-tabs', '#googlejs-firefox-search-tabs *' // Prevent nav bars from being swept
     ];
+
+    // Firefox receives several alternate Google tab DOMs. Protect the complete search-filter
+    // navigation (and every descendant) from generic result/phrase sweepers. AI Mode and the two
+    // explicitly unwanted rabbit-hole tabs remain eligible for the dedicated hiders below.
+    const FIREFOX_SEARCH_NAV_SELECTOR = [
+        '#hdtb-msb', '#hdtb', '#top_nav', '#slim_appbar', '.MUFPAc', '.hdtb-mitem',
+        '#botabar', '.crJ18e', '.T3mIbg', '.EDblX.JpOecb',
+        '#googlejs-firefox-search-tabs-host', '#googlejs-firefox-search-tabs', 'nav', '[role="navigation"]'
+    ].join(', ');
+
+    function isFirefoxIntentionallyHiddenSearchTab(element) {
+        if (!isFirefox || !element || !element.closest) return false;
+        try {
+            const tab = element.closest('div[role="listitem"], a[href]') || element;
+            const link = tab.matches && tab.matches('a[href]') ? tab : tab.querySelector && tab.querySelector('a[href]');
+            const href = link ? (link.getAttribute('href') || '') : '';
+            if (/[?&]udm=(?:39|50)(?:&|$)/i.test(href)) return true;
+
+            const text = String(tab.textContent || tab.getAttribute?.('aria-label') || '')
+                .replace(/\s+/g, ' ')
+                .trim();
+            return /(?:tekoälytila|ai\s*mode)/i.test(text);
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function isFirefoxSearchNavigationElement(element) {
+        if (!isFirefox || !element || !element.closest) return false;
+        if (isFirefoxIntentionallyHiddenSearchTab(element)) return false;
+        try {
+            if (element.closest(FIREFOX_SEARCH_NAV_SELECTOR)) return true;
+
+            // Some Firefox/mobile experiments expose the filter strip only as a role=list wrapper.
+            const roleList = element.closest('div[role="list"]');
+            return !!(roleList && roleList.querySelector('a[href*="/search"]'));
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function restoreFirefoxSearchNavigation() {
+        if (!isFirefox) return;
+        try {
+            const roots = new Set(document.querySelectorAll(FIREFOX_SEARCH_NAV_SELECTOR));
+            document.querySelectorAll('div[role="list"]').forEach(list => {
+                if (list.querySelector('a[href*="/search"]')) roots.add(list);
+            });
+
+            roots.forEach(root => {
+                const nodes = [root, ...root.querySelectorAll('[data-googlejs-hidden="1"]')];
+                nodes.forEach(node => {
+                    if (!node || isFirefoxIntentionallyHiddenSearchTab(node)) return;
+                    if (node.getAttribute('data-googlejs-hidden') !== '1') return;
+                    node.removeAttribute('data-googlejs-hidden');
+                    node.removeAttribute('aria-hidden');
+                    ['display', 'visibility', 'opacity', 'pointer-events'].forEach(property => {
+                        if (node.style.getPropertyPriority(property) === 'important') {
+                            node.style.removeProperty(property);
+                        }
+                    });
+                });
+            });
+        } catch (e) {}
+    }
+
+
+    // === FIREFOX SEARCH-MODE PARITY LAYER ===
+    // Chrome keeps its existing/native path untouched. Firefox desktop and Firefox Android share
+    // URL mode handling, navigation protection and cleanup exemptions, then use platform-specific
+    // placement and sizing for the replacement filter strip Google omits from Firefox responses.
+    const FIREFOX_SEARCH_TABS_HOST_ID = 'googlejs-firefox-search-tabs-host';
+    const FIREFOX_SEARCH_TABS_ID = 'googlejs-firefox-search-tabs';
+    const FIREFOX_SEARCH_TABS_STYLE_ID = 'googlejs-firefox-search-tabs-style';
+    const FIREFOX_NATIVE_TAB_STRIP_ATTR = 'data-googlejs-firefox-native-tab-strip';
+    const FIREFOX_NATIVE_TOOLS_ATTR = 'data-googlejs-firefox-native-tools';
+    const FIREFOX_NATIVE_OVERFLOW_ATTR = 'data-googlejs-firefox-native-overflow';
+    const FIREFOX_CHIP_SHIFT_ATTR = 'data-googlejs-firefox-chip-shift';
+    const FIREFOX_RESULT_SPACING_ATTR = 'data-googlejs-firefox-result-spacing';
+    let firefoxDesktopCollisionFrame = 0;
+
+    function isFirefoxGoogleResultsPage() {
+        if (!isFirefox) return false;
+        try {
+            const url = new URL(window.location.href);
+            return /\/search$/i.test(url.pathname) && !!url.searchParams.get('q');
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function getFirefoxSearchTabLabels() {
+        let finnish = false;
+        try {
+            const url = new URL(window.location.href);
+            const lang = String(document.documentElement.lang || '').toLowerCase();
+            finnish = url.searchParams.get('hl') === 'fi' || lang === 'fi' || lang.startsWith('fi-') ||
+                /(?:^|\s)(?:Verkkohaku|Kuvahaku|Videot|Työkalut)(?:\s|$)/i.test(document.body?.innerText || '');
+        } catch (e) {}
+
+        return finnish ? {
+            web: 'Verkkohaku',
+            images: 'Kuvahaku',
+            videos: 'Videot',
+            all: 'Virikkeinen haku',
+            finance: 'Talous',
+            more: 'Lisää',
+            news: 'Uutiset',
+            shopping: 'Ostokset',
+            books: 'Kirjat',
+            maps: 'Kartat',
+            tools: 'Työkalut',
+            anytime: 'Milloin tahansa',
+            pastHour: 'Viime tunti',
+            pastDay: 'Viime vuorokausi',
+            pastWeek: 'Viime viikko',
+            pastMonth: 'Viime kuukausi',
+            pastYear: 'Viime vuosi',
+            verbatim: 'Sanasta sanaan',
+            allResults: 'Kaikki tulokset'
+        } : {
+            web: 'Web',
+            images: 'Images',
+            videos: 'Videos',
+            all: 'All results',
+            finance: 'Finance',
+            more: 'More',
+            news: 'News',
+            shopping: 'Shopping',
+            books: 'Books',
+            maps: 'Maps',
+            tools: 'Tools',
+            anytime: 'Any time',
+            pastHour: 'Past hour',
+            pastDay: 'Past 24 hours',
+            pastWeek: 'Past week',
+            pastMonth: 'Past month',
+            pastYear: 'Past year',
+            verbatim: 'Verbatim',
+            allResults: 'All results'
+        };
+    }
+
+    function makeFirefoxSearchModeUrl(mode) {
+        try {
+            const url = new URL(window.location.href);
+            url.searchParams.delete('start');
+            url.searchParams.delete('tbm');
+            url.searchParams.delete('udm');
+            url.searchParams.delete('source');
+            url.searchParams.delete('client');
+            url.searchParams.delete('channel');
+
+            const query = url.searchParams.get('q') || '';
+            if (query) url.searchParams.set('oq', query);
+            url.searchParams.set('safe', 'active');
+            url.searchParams.set('pws', '0');
+
+            if (mode === 'web') {
+                url.searchParams.set('udm', '14');
+                url.searchParams.set('source', 'chrome');
+            }
+            else if (mode === 'images') {
+                url.searchParams.set('udm', '2');
+                url.searchParams.set('source', 'chrome');
+            } else if (mode === 'videos') {
+                url.searchParams.set('udm', '7');
+                url.searchParams.set('source', 'chrome');
+            } else if (mode === 'finance') {
+                url.searchParams.set('tbm', 'fin');
+                url.searchParams.set('source', 'chrome');
+            } else if (mode === 'news') {
+                url.searchParams.set('tbm', 'nws');
+                url.searchParams.set('source', 'chrome');
+            } else if (mode === 'shopping') {
+                url.searchParams.set('udm', '28');
+                url.searchParams.set('source', 'chrome');
+            } else if (mode === 'books') {
+                url.searchParams.set('tbm', 'bks');
+                url.searchParams.set('source', 'chrome');
+            } else if (mode === 'all') url.searchParams.set('source', 'lnms');
+            // "All results" deliberately leaves both mode parameters absent. source=lnms is the
+            // native filter-navigation marker and prevents the Firefox Web-default redirect winning.
+
+            return url.toString();
+        } catch (e) {
+            return window.location.href;
+        }
+    }
+
+    function getFirefoxCurrentSearchMode() {
+        try {
+            const url = new URL(window.location.href);
+            const udm = url.searchParams.get('udm') || '';
+            const tbm = url.searchParams.get('tbm') || '';
+            if (udm === '14') return 'web';
+            if (udm === '2' || tbm === 'isch') return 'images';
+            if (udm === '7' || tbm === 'vid') return 'videos';
+            if (tbm === 'fin') return 'finance';
+            if (tbm === 'nws' || udm === '12') return 'news';
+            if (udm === '28' || tbm === 'shop') return 'shopping';
+            if (tbm === 'bks') return 'books';
+            return 'all';
+        } catch (e) {
+            return 'all';
+        }
+    }
+
+    function makeFirefoxToolUrl(tool) {
+        try {
+            const url = new URL(window.location.href);
+            url.searchParams.delete('start');
+            url.searchParams.delete('client');
+            url.searchParams.delete('channel');
+            url.searchParams.set('safe', 'active');
+            url.searchParams.set('pws', '0');
+            if ((url.searchParams.get('source') || '') !== 'lnms') url.searchParams.set('source', 'chrome');
+
+            let tokens = String(url.searchParams.get('tbs') || '')
+                .split(',')
+                .map(token => token.trim())
+                .filter(Boolean);
+
+            const qdr = { hour: 'qdr:h', day: 'qdr:d', week: 'qdr:w', month: 'qdr:m', year: 'qdr:y' };
+            if (tool === 'anytime' || qdr[tool]) {
+                tokens = tokens.filter(token => !/^qdr:/i.test(token));
+                if (qdr[tool]) tokens.push(qdr[tool]);
+            }
+            if (tool === 'verbatim' || tool === 'allResults') {
+                tokens = tokens.filter(token => !/^li:1$/i.test(token));
+                if (tool === 'verbatim') tokens.push('li:1');
+            }
+
+            if (tokens.length) url.searchParams.set('tbs', tokens.join(','));
+            else url.searchParams.delete('tbs');
+            return url.toString();
+        } catch (e) {
+            return window.location.href;
+        }
+    }
+
+    function getFirefoxCurrentToolState() {
+        try {
+            const tbs = String(new URL(window.location.href).searchParams.get('tbs') || '');
+            return {
+                active: /(?:^|,)qdr:[hdwmy](?:,|$)|(?:^|,)li:1(?:,|$)/i.test(tbs),
+                verbatim: /(?:^|,)li:1(?:,|$)/i.test(tbs)
+            };
+        } catch (e) {
+            return { active: false, verbatim: false };
+        }
+    }
+
+    function installFirefoxSyntheticMenuDismiss() {
+        if (!isFirefox || window.__googlejsFirefoxSyntheticMenuDismiss) return;
+        window.__googlejsFirefoxSyntheticMenuDismiss = true;
+        document.addEventListener('click', event => {
+            const nav = document.getElementById(FIREFOX_SEARCH_TABS_ID);
+            if (!nav) return;
+            const inside = event.target?.closest?.(`#${FIREFOX_SEARCH_TABS_ID} details`);
+            nav.querySelectorAll('details[open]').forEach(details => {
+                if (details !== inside) details.removeAttribute('open');
+            });
+        }, true);
+    }
+
+    function armFirefoxDetailsMenu(details) {
+        const summary = details?.querySelector(':scope > summary');
+        if (!details || !summary) return details;
+        summary.addEventListener('click', event => {
+            event.preventDefault();
+            event.stopPropagation();
+            const nav = details.closest(`#${FIREFOX_SEARCH_TABS_ID}`);
+            const willOpen = !details.hasAttribute('open');
+            nav?.querySelectorAll('details[open]').forEach(other => {
+                if (other !== details) other.removeAttribute('open');
+            });
+            details.toggleAttribute('open', willOpen);
+            summary.setAttribute('aria-expanded', String(willOpen));
+        }, true);
+        return details;
+    }
+
+    function ensureFirefoxSearchTabsStyle() {
+        if (!isFirefox || document.getElementById(FIREFOX_SEARCH_TABS_STYLE_ID)) return;
+        try {
+            const style = document.createElement('style');
+            style.id = FIREFOX_SEARCH_TABS_STYLE_ID;
+            style.textContent = `
+                #${FIREFOX_SEARCH_TABS_HOST_ID} {
+                    box-sizing: border-box !important;
+                    display: block !important;
+                    flex: 0 0 100vw !important;
+                    width: 100vw !important;
+                    max-width: none !important;
+                    min-width: 0 !important;
+                    min-height: 44px !important;
+                    margin: 0 0 0 calc(50% - 50vw) !important;
+                    padding: 0 !important;
+                    clear: both !important;
+                    overflow: visible !important;
+                    background: #fff !important;
+                    border-bottom: 1px solid #dadce0 !important;
+                    position: relative !important;
+                    z-index: 2147482000 !important;
+                    pointer-events: auto !important;
+                }
+                #${FIREFOX_SEARCH_TABS_ID} {
+                    box-sizing: border-box !important;
+                    display: flex !important;
+                    align-items: stretch !important;
+                    gap: 22px !important;
+                    width: 100% !important;
+                    max-width: none !important;
+                    min-width: 0 !important;
+                    min-height: 44px !important;
+                    margin: 0 !important;
+                    padding: 0 var(--googlejs-firefox-tabs-right, 24px) 0 var(--googlejs-firefox-tabs-left, 150px) !important;
+                    overflow-x: auto !important;
+                    overflow-y: visible !important;
+                    white-space: nowrap !important;
+                    scrollbar-width: none !important;
+                    background: #fff !important;
+                    color: #5f6368 !important;
+                    font-family: Arial, sans-serif !important;
+                    font-size: 14px !important;
+                    position: relative !important;
+                    z-index: 2147482001 !important;
+                    pointer-events: auto !important;
+                }
+                #${FIREFOX_SEARCH_TABS_ID}::-webkit-scrollbar { display: none !important; }
+                #${FIREFOX_SEARCH_TABS_ID} > a,
+                #${FIREFOX_SEARCH_TABS_ID} > button,
+                #${FIREFOX_SEARCH_TABS_ID} > details > summary {
+                    appearance: none !important;
+                    -moz-appearance: none !important;
+                    box-sizing: border-box !important;
+                    display: inline-flex !important;
+                    align-items: center !important;
+                    min-height: 44px !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    border: 0 !important;
+                    border-bottom: 0 !important;
+                    outline: 0 !important;
+                    background: transparent !important;
+                    color: #5f6368 !important;
+                    cursor: pointer !important;
+                    font: inherit !important;
+                    text-decoration: none !important;
+                    flex: 0 0 auto !important;
+                    position: relative !important;
+                    z-index: 2147482002 !important;
+                    pointer-events: auto !important;
+                    touch-action: manipulation !important;
+                }
+                #${FIREFOX_SEARCH_TABS_ID} > a[data-active="true"],
+                #${FIREFOX_SEARCH_TABS_ID} > details[data-active="true"] > summary {
+                    color: #202124 !important;
+                    font-weight: 400 !important;
+                    position: relative !important;
+                    z-index: 2147482003 !important;
+                }
+                #${FIREFOX_SEARCH_TABS_ID} > a[data-active="true"]::after,
+                #${FIREFOX_SEARCH_TABS_ID} > details[data-active="true"] > summary::after {
+                    content: '' !important;
+                    display: block !important;
+                    position: absolute !important;
+                    left: 0 !important;
+                    right: 0 !important;
+                    bottom: 0 !important;
+                    height: 2px !important;
+                    border-radius: 2px 2px 0 0 !important;
+                    background: #202124 !important;
+                    pointer-events: none !important;
+                }
+                #${FIREFOX_SEARCH_TABS_ID} details {
+                    position: relative !important;
+                    flex: 0 0 auto !important;
+                }
+                #${FIREFOX_SEARCH_TABS_ID} details > summary { list-style: none !important; }
+                #${FIREFOX_SEARCH_TABS_ID} details > summary::-webkit-details-marker { display: none !important; }
+                #${FIREFOX_SEARCH_TABS_ID} details:not([open]) > .googlejs-firefox-more-menu {
+                    display: none !important;
+                }
+                #${FIREFOX_SEARCH_TABS_ID} details[open] > .googlejs-firefox-more-menu {
+                    display: flex !important;
+                }
+                #${FIREFOX_SEARCH_TABS_ID} .googlejs-firefox-more-menu {
+                    position: absolute !important;
+                    top: 40px !important;
+                    left: 0 !important;
+                    flex-direction: column !important;
+                    min-width: 150px !important;
+                    padding: 8px 0 !important;
+                    border: 1px solid #dadce0 !important;
+                    border-radius: 8px !important;
+                    background: #fff !important;
+                    box-shadow: 0 2px 8px rgba(60,64,67,.2) !important;
+                    z-index: 2147483000 !important;
+                }
+                #${FIREFOX_SEARCH_TABS_ID} .googlejs-firefox-more-menu a {
+                    display: block !important;
+                    padding: 9px 14px !important;
+                    color: #202124 !important;
+                    text-decoration: none !important;
+                }
+                #${FIREFOX_SEARCH_TABS_ID} .googlejs-firefox-more-menu a:hover {
+                    background: #f1f3f4 !important;
+                }
+                /* Firefox desktop's suggestion chips use a tight/partly negative app-bar offset.
+                   Give the synthetic mode row an explicit Chrome-like lane plus a small gutter so the
+                   chips begin underneath it instead of climbing over the labels and active marker. */
+                #${FIREFOX_SEARCH_TABS_HOST_ID}[data-googlejs-firefox-platform="desktop"] {
+                    height: 50px !important;
+                    min-height: 50px !important;
+                    max-height: 50px !important;
+                    margin-bottom: 14px !important;
+                }
+                #${FIREFOX_SEARCH_TABS_HOST_ID}[data-googlejs-firefox-platform="desktop"] #${FIREFOX_SEARCH_TABS_ID} {
+                    height: 50px !important;
+                    min-height: 50px !important;
+                    max-height: 50px !important;
+                    overflow-x: visible !important;
+                    overflow-y: visible !important;
+                }
+                #${FIREFOX_SEARCH_TABS_HOST_ID}[data-googlejs-firefox-platform="desktop"] #${FIREFOX_SEARCH_TABS_ID} > a,
+                #${FIREFOX_SEARCH_TABS_HOST_ID}[data-googlejs-firefox-platform="desktop"] #${FIREFOX_SEARCH_TABS_ID} > button,
+                #${FIREFOX_SEARCH_TABS_HOST_ID}[data-googlejs-firefox-platform="desktop"] #${FIREFOX_SEARCH_TABS_ID} > details > summary {
+                    height: 50px !important;
+                    min-height: 50px !important;
+                    padding-top: 3px !important;
+                }
+                [${FIREFOX_CHIP_SHIFT_ATTR}="true"] {
+                    position: relative !important;
+                    transform: translateY(var(--googlejs-firefox-chip-shift, 0px)) !important;
+                    transition: none !important;
+                    z-index: 1 !important;
+                }
+                [${FIREFOX_RESULT_SPACING_ATTR}="true"] {
+                    padding-top: 18px !important;
+                }
+                [${FIREFOX_NATIVE_TAB_STRIP_ATTR}="true"],
+                [${FIREFOX_NATIVE_TOOLS_ATTR}="true"],
+                [${FIREFOX_NATIVE_OVERFLOW_ATTR}="true"] {
+                    display: none !important;
+                    visibility: hidden !important;
+                    width: 0 !important;
+                    height: 0 !important;
+                    min-width: 0 !important;
+                    min-height: 0 !important;
+                    max-width: 0 !important;
+                    max-height: 0 !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    border: 0 !important;
+                    overflow: hidden !important;
+                    pointer-events: none !important;
+                }
+                #${FIREFOX_SEARCH_TABS_HOST_ID}[data-googlejs-firefox-platform="android"] {
+                    min-height: 52px !important;
+                    overflow: hidden !important;
+                }
+                #${FIREFOX_SEARCH_TABS_HOST_ID}[data-googlejs-firefox-platform="android"] #${FIREFOX_SEARCH_TABS_ID} {
+                    gap: 28px !important;
+                    min-height: 52px !important;
+                    padding: 0 18px !important;
+                    font-size: 16px !important;
+                    -webkit-overflow-scrolling: touch !important;
+                    overscroll-behavior-x: contain !important;
+                    touch-action: pan-x !important;
+                    scroll-snap-type: x proximity !important;
+                }
+                #${FIREFOX_SEARCH_TABS_HOST_ID}[data-googlejs-firefox-platform="android"] #${FIREFOX_SEARCH_TABS_ID} > a,
+                #${FIREFOX_SEARCH_TABS_HOST_ID}[data-googlejs-firefox-platform="android"] #${FIREFOX_SEARCH_TABS_ID} > button,
+                #${FIREFOX_SEARCH_TABS_HOST_ID}[data-googlejs-firefox-platform="android"] #${FIREFOX_SEARCH_TABS_ID} > details > summary {
+                    min-height: 52px !important;
+                    scroll-snap-align: start !important;
+                }
+                #${FIREFOX_SEARCH_TABS_HOST_ID}[data-googlejs-firefox-platform="android"] .googlejs-firefox-more-menu {
+                    position: fixed !important;
+                    top: 118px !important;
+                    left: 18px !important;
+                    right: 18px !important;
+                    min-width: 0 !important;
+                    max-height: 55vh !important;
+                    overflow-y: auto !important;
+                }
+            `;
+            (document.head || document.documentElement).appendChild(style);
+        } catch (e) {}
+    }
+
+    function isLikelyNativeFirefoxSearchTabStrip(root) {
+        if (!root || root.id === FIREFOX_SEARCH_TABS_ID || root.id === FIREFOX_SEARCH_TABS_HOST_ID ||
+            root.querySelector?.(`#${FIREFOX_SEARCH_TABS_ID}, #${FIREFOX_SEARCH_TABS_HOST_ID}`)) return false;
+        if (root.querySelector?.('input[name="q"], textarea[name="q"], form[role="search"]')) return false;
+        try {
+            const text = String(root.textContent || '').replace(/\s+/g, ' ').trim();
+            const hasKnownLabel = /(?:Verkkohaku|Kuvahaku|Videot|Kaikki|Virikkeinen haku|Talous|Lisää|Työkalut|Web|Images|Videos|All|Finance|More|Tools)/i.test(text);
+            const hasSearchLink = !!root.querySelector('a[href*="/search"], a[href*="udm="], a[href*="tbm="]');
+            return hasKnownLabel && hasSearchLink;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function findFirefoxNativeSearchTabStrip() {
+        if (!isFirefoxGoogleResultsPage()) return null;
+        const selectors = [
+            '#hdtb-msb', '.MUFPAc', '#hdtb .MUFPAc', '#top_nav [role="list"]',
+            '#slim_appbar [role="list"]', '.T3mIbg [role="list"]', '.crJ18e [role="list"]',
+            'div[role="navigation"] div[role="list"]', 'nav div[role="list"]'
+        ];
+        for (const selector of selectors) {
+            const roots = document.querySelectorAll(selector);
+            for (const root of roots) {
+                if (isLikelyNativeFirefoxSearchTabStrip(root)) return root;
+            }
+        }
+        return null;
+    }
+
+    function armFirefoxSyntheticNavigation(link) {
+        if (!link || link.getAttribute('data-googlejs-firefox-nav-armed') === 'true') return link;
+        link.setAttribute('data-googlejs-firefox-nav-armed', 'true');
+        link.addEventListener('click', event => {
+            try {
+                // Preserve the browser's normal modified-click behavior for new tabs/windows.
+                if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+                const href = link.href || link.getAttribute('href') || '';
+                if (!href) return;
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                window.location.assign(href);
+            } catch (e) {}
+        }, true);
+        return link;
+    }
+
+    function makeFirefoxTabLink(label, mode, activeMode) {
+        const link = document.createElement('a');
+        link.textContent = label;
+        link.href = makeFirefoxSearchModeUrl(mode);
+        link.dataset.googlejsFirefoxMode = mode;
+        link.dataset.active = String(activeMode === mode);
+        if (activeMode === mode) link.setAttribute('aria-current', 'page');
+        return armFirefoxSyntheticNavigation(link);
+    }
+
+    function clickNativeFirefoxSearchTools() {
+        const customHost = document.getElementById(FIREFOX_SEARCH_TABS_HOST_ID);
+        const candidates = document.querySelectorAll(
+            '#hdtb-tls, [aria-label="Hakutyökalut"], [aria-label="Search tools"], ' +
+            'button[aria-label*="työkal" i], button[aria-label*="tools" i], ' +
+            'a[aria-label*="työkal" i], a[aria-label*="tools" i], [role="button"]'
+        );
+        for (const candidate of candidates) {
+            if (!candidate || customHost?.contains(candidate)) continue;
+            const text = String(candidate.textContent || candidate.getAttribute?.('aria-label') || '').replace(/\s+/g, ' ').trim();
+            if (!/^(?:Työkalut|Hakutyökalut|Tools|Search tools)$/i.test(text) && candidate.id !== 'hdtb-tls') continue;
+            try {
+                candidate.click();
+                return true;
+            } catch (e) {}
+        }
+        return false;
+    }
+
+    function buildFirefoxSearchTabs() {
+        const labels = getFirefoxSearchTabLabels();
+        const activeMode = getFirefoxCurrentSearchMode();
+        const toolState = getFirefoxCurrentToolState();
+        const nav = document.createElement('nav');
+        nav.id = FIREFOX_SEARCH_TABS_ID;
+        nav.setAttribute('aria-label', labels.web + ' / ' + labels.more);
+        nav.setAttribute('data-googlejs-firefox-tabs', 'true');
+        nav.addEventListener('click', event => {
+            try {
+                const link = event.target?.closest?.('a[href]');
+                if (!link || !nav.contains(link)) return;
+                if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                window.location.assign(link.href);
+            } catch (e) {}
+        }, true);
+
+        nav.appendChild(makeFirefoxTabLink(labels.web, 'web', activeMode));
+        nav.appendChild(makeFirefoxTabLink(labels.images, 'images', activeMode));
+        nav.appendChild(makeFirefoxTabLink(labels.videos, 'videos', activeMode));
+        nav.appendChild(makeFirefoxTabLink(labels.all, 'all', activeMode));
+        nav.appendChild(makeFirefoxTabLink(labels.finance, 'finance', activeMode));
+
+        const more = document.createElement('details');
+        more.dataset.googlejsFirefoxMenu = 'more';
+        more.dataset.active = String(['news', 'shopping', 'books'].includes(activeMode));
+        const moreSummary = document.createElement('summary');
+        moreSummary.textContent = labels.more;
+        moreSummary.setAttribute('aria-haspopup', 'menu');
+        moreSummary.setAttribute('aria-expanded', 'false');
+        more.appendChild(moreSummary);
+        const moreMenu = document.createElement('div');
+        moreMenu.className = 'googlejs-firefox-more-menu';
+        moreMenu.setAttribute('role', 'menu');
+        moreMenu.appendChild(makeFirefoxTabLink(labels.news, 'news', activeMode));
+        moreMenu.appendChild(makeFirefoxTabLink(labels.shopping, 'shopping', activeMode));
+        moreMenu.appendChild(makeFirefoxTabLink(labels.books, 'books', activeMode));
+        try {
+            const mapsLink = document.createElement('a');
+            mapsLink.textContent = labels.maps;
+            const query = new URL(window.location.href).searchParams.get('q') || '';
+            mapsLink.href = 'https://www.google.com/maps/search/' + encodeURIComponent(query);
+            mapsLink.setAttribute('role', 'menuitem');
+            armFirefoxSyntheticNavigation(mapsLink);
+            moreMenu.appendChild(mapsLink);
+        } catch (e) {}
+        more.appendChild(moreMenu);
+        armFirefoxDetailsMenu(more);
+        nav.appendChild(more);
+
+        const tools = document.createElement('details');
+        tools.dataset.googlejsFirefoxMenu = 'tools';
+        tools.dataset.active = String(toolState.active);
+        const toolsSummary = document.createElement('summary');
+        toolsSummary.textContent = labels.tools;
+        toolsSummary.setAttribute('aria-haspopup', 'menu');
+        toolsSummary.setAttribute('aria-expanded', 'false');
+        tools.appendChild(toolsSummary);
+        const toolsMenu = document.createElement('div');
+        toolsMenu.className = 'googlejs-firefox-more-menu googlejs-firefox-tools-menu';
+        toolsMenu.setAttribute('role', 'menu');
+        [
+            [labels.anytime, 'anytime'], [labels.pastHour, 'hour'], [labels.pastDay, 'day'],
+            [labels.pastWeek, 'week'], [labels.pastMonth, 'month'], [labels.pastYear, 'year'],
+            [labels.verbatim, 'verbatim'], [labels.allResults, 'allResults']
+        ].forEach(([label, tool]) => {
+            const link = document.createElement('a');
+            link.textContent = label;
+            link.href = makeFirefoxToolUrl(tool);
+            link.dataset.googlejsFirefoxTool = tool;
+            link.setAttribute('role', 'menuitem');
+            armFirefoxSyntheticNavigation(link);
+            toolsMenu.appendChild(link);
+        });
+        tools.appendChild(toolsMenu);
+        armFirefoxDetailsMenu(tools);
+        nav.appendChild(tools);
+        installFirefoxSyntheticMenuDismiss();
+        return nav;
+    }
+
+    function buildFirefoxSearchTabsHost() {
+        const host = document.createElement('div');
+        host.id = FIREFOX_SEARCH_TABS_HOST_ID;
+        host.setAttribute('data-googlejs-firefox-tabs-host', 'true');
+        host.appendChild(buildFirefoxSearchTabs());
+        return host;
+    }
+
+    function getFirefoxDesktopTabsLeftOffset() {
+        const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 1280;
+        const selectors = ['#search', '#rso', '#center_col', '#tsf', 'form[role="search"]'];
+        for (const selector of selectors) {
+            const element = document.querySelector(selector);
+            if (!element) continue;
+            try {
+                const rect = element.getBoundingClientRect();
+                if (rect.width < 280 || rect.left < 24 || rect.left > viewportWidth * 0.48) continue;
+                return Math.round(rect.left);
+            } catch (e) {}
+        }
+        return Math.max(24, Math.min(180, Math.round(viewportWidth * 0.09)));
+    }
+
+    function getVisibleRect(element) {
+        if (!element || !element.isConnected) return null;
+        try {
+            const rect = element.getBoundingClientRect();
+            if (rect.width <= 0 || rect.height <= 0) return null;
+            const style = window.getComputedStyle(element);
+            if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity || 1) === 0) return null;
+            return rect;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function clearFirefoxDesktopChipShifts(keep) {
+        document.querySelectorAll(`[${FIREFOX_CHIP_SHIFT_ATTR}="true"]`).forEach(element => {
+            if (element === keep) return;
+            element.removeAttribute(FIREFOX_CHIP_SHIFT_ATTR);
+            element.removeAttribute('data-googlejs-firefox-chip-shift-px');
+            element.style.removeProperty('--googlejs-firefox-chip-shift');
+        });
+    }
+
+    function findFirefoxDesktopSuggestionRow(host, nav) {
+        const navRect = getVisibleRect(nav);
+        const searchRect = getVisibleRect(document.querySelector('#searchform, #tsf, form[role="search"]'));
+        if (!navRect || !searchRect) return null;
+
+        const candidateControls = [];
+        document.querySelectorAll('a, button, [role="button"]').forEach(control => {
+            if (!control || host.contains(control) || control.closest?.(`#${FIREFOX_SEARCH_TABS_HOST_ID}`)) return;
+            if (control.closest?.('#rso, #res, .g, h3, [data-snhf], [data-header-feature]')) return;
+            const rect = getVisibleRect(control);
+            if (!rect || rect.height < 20 || rect.height > 48 || rect.width < 28 || rect.width > 260) return;
+            if (rect.top < searchRect.bottom - 8 || rect.top > navRect.bottom + 30) return;
+            const text = String(control.textContent || control.getAttribute?.('aria-label') || '').replace(/\s+/g, ' ').trim();
+            if (!text || text.length > 70) return;
+            candidateControls.push(control);
+        });
+        if (candidateControls.length < 2) return null;
+
+        const scores = new Map();
+        candidateControls.forEach(control => {
+            let node = control.parentElement;
+            for (let depth = 0; node && depth < 5; depth++, node = node.parentElement) {
+                if (node === document.body || node === document.documentElement || host.contains(node)) break;
+                if (node.matches?.('#searchform, #tsf, form[role="search"], #rso, #res')) break;
+                const rect = getVisibleRect(node);
+                if (!rect || rect.height > 90 || rect.width > Math.min(window.innerWidth * 0.9, 1100)) continue;
+                const count = candidateControls.filter(item => node.contains(item)).length;
+                if (count < 2) continue;
+                const area = Math.max(1, rect.width * rect.height);
+                const score = count * 1000000 - area;
+                if (!scores.has(node) || scores.get(node) < score) scores.set(node, score);
+            }
+        });
+
+        let best = null;
+        let bestScore = -Infinity;
+        scores.forEach((score, node) => {
+            if (score > bestScore) {
+                best = node;
+                bestScore = score;
+            }
+        });
+        return best;
+    }
+
+    function resolveFirefoxDesktopTabCollision(host, nav) {
+        if (!isFirefox || isFirefoxAndroid || !host || !nav) return;
+        if (firefoxDesktopCollisionFrame) cancelAnimationFrame(firefoxDesktopCollisionFrame);
+        firefoxDesktopCollisionFrame = requestAnimationFrame(() => {
+            firefoxDesktopCollisionFrame = 0;
+            try {
+                const row = findFirefoxDesktopSuggestionRow(host, nav);
+                clearFirefoxDesktopChipShifts(row);
+                if (!row) return;
+
+                const navRect = getVisibleRect(nav);
+                const rowRect = getVisibleRect(row);
+                if (!navRect || !rowRect) return;
+                const currentShift = Number.parseFloat(row.getAttribute('data-googlejs-firefox-chip-shift-px') || '0') || 0;
+                const unshiftedTop = rowRect.top - currentShift;
+                const requiredShift = Math.max(0, Math.min(64, Math.ceil(navRect.bottom + 8 - unshiftedTop)));
+                if (requiredShift <= 0) {
+                    row.removeAttribute(FIREFOX_CHIP_SHIFT_ATTR);
+                    row.removeAttribute('data-googlejs-firefox-chip-shift-px');
+                    row.style.removeProperty('--googlejs-firefox-chip-shift');
+                    return;
+                }
+                row.setAttribute(FIREFOX_CHIP_SHIFT_ATTR, 'true');
+                row.setAttribute('data-googlejs-firefox-chip-shift-px', String(requiredShift));
+                row.style.setProperty('--googlejs-firefox-chip-shift', requiredShift + 'px');
+            } catch (e) {}
+        });
+    }
+
+    function clearFirefoxDesktopResultSpacing(keep) {
+        document.querySelectorAll(`[${FIREFOX_RESULT_SPACING_ATTR}="true"]`).forEach(element => {
+            if (element === keep) return;
+            element.removeAttribute(FIREFOX_RESULT_SPACING_ATTR);
+        });
+    }
+
+    function applyFirefoxDesktopResultSpacing() {
+        const resultRoot = document.querySelector('#search') ||
+            document.querySelector('#res') ||
+            document.querySelector('#rso');
+        clearFirefoxDesktopResultSpacing(resultRoot);
+        if (resultRoot) resultRoot.setAttribute(FIREFOX_RESULT_SPACING_ATTR, 'true');
+    }
+
+    function applyFirefoxDesktopTabsLayout(host, nav) {
+        host.setAttribute('data-googlejs-firefox-platform', 'desktop');
+        nav.style.setProperty('--googlejs-firefox-tabs-left', getFirefoxDesktopTabsLeftOffset() + 'px');
+        nav.style.setProperty('--googlejs-firefox-tabs-right', '24px');
+        applyFirefoxDesktopResultSpacing();
+        resolveFirefoxDesktopTabCollision(host, nav);
+    }
+
+    function applyFirefoxAndroidTabsLayout(host, nav) {
+        host.setAttribute('data-googlejs-firefox-platform', 'android');
+        clearFirefoxDesktopResultSpacing(null);
+        nav.style.removeProperty('--googlejs-firefox-tabs-left');
+        nav.style.removeProperty('--googlejs-firefox-tabs-right');
+        requestAnimationFrame(() => {
+            try {
+                const active = nav.querySelector('[data-active="true"]');
+                if (active && nav.scrollWidth > nav.clientWidth) {
+                    active.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'auto' });
+                }
+            } catch (e) {}
+        });
+    }
+
+    function applyFirefoxPlatformTabsLayout(host, nav) {
+        if (!host || !nav) return;
+        if (isFirefoxAndroid) applyFirefoxAndroidTabsLayout(host, nav);
+        else applyFirefoxDesktopTabsLayout(host, nav);
+    }
+
+    function getFirefoxSearchTabsMountTarget(nativeStrip) {
+        // Google's reduced Firefox layout can place its incomplete native strip before the actual
+        // search header. Mounting relative to that strip therefore put our replacement above the
+        // search box. The stable visual contract on both Firefox platforms is: search header first,
+        // replacement tabs second, chips/results third.
+        const searchHeader = document.querySelector('#searchform');
+        if (searchHeader?.parentNode) {
+            return { parent: searchHeader.parentNode, before: searchHeader.nextSibling };
+        }
+
+        const searchForm = document.querySelector('#tsf, form[role="search"], form[action="/search"]');
+        if (searchForm) {
+            // Climb only through wrappers that contain no unrelated result content, then insert after
+            // the outer search-row wrapper. This keeps Android and desktop sharing the same rule while
+            // allowing their CSS/layout branches to remain separate.
+            let row = searchForm;
+            for (let depth = 0; depth < 4; depth++) {
+                const parent = row.parentElement;
+                if (!parent || parent === document.body || parent === document.documentElement) break;
+                if (parent.querySelector('#search, #rso, #res')) break;
+                row = parent;
+            }
+            if (row.parentNode) return { parent: row.parentNode, before: row.nextSibling };
+        }
+
+        // Last-resort fallbacks are used only before Google's search header exists. ensureFirefoxSearchTabs()
+        // runs again on DOM mutations and will relocate the already-connected host once the header mounts.
+        const fallback = isFirefoxAndroid
+            ? document.querySelector('#slim_appbar, .T3mIbg, .crJ18e')
+            : document.querySelector('#top_nav, #hdtb, #hdtb-msb');
+        if (fallback?.parentNode) {
+            return { parent: fallback.parentNode, before: fallback };
+        }
+
+        if (nativeStrip?.parentNode) {
+            return { parent: nativeStrip.parentNode, before: nativeStrip };
+        }
+
+        return { parent: document.body || document.documentElement, before: null };
+    }
+
+    function mountFirefoxSearchTabsHost(host, nativeStrip) {
+        if (!host) return;
+        const target = getFirefoxSearchTabsMountTarget(nativeStrip);
+        if (!target?.parent) return;
+
+        // Do not merely test host.isConnected. The first pass can run against Google's early shell,
+        // before #searchform exists. Re-evaluate placement on every pass and move the same host into
+        // its final below-search-bar position as soon as the stable header appears.
+        const reference = target.before && target.before.parentNode === target.parent
+            ? target.before
+            : null;
+        if (host.parentNode === target.parent && (reference === host || host.nextSibling === reference)) return;
+
+        try {
+            target.parent.insertBefore(host, reference);
+        } catch (e) {
+            try { target.parent.appendChild(host); } catch (ignored) {}
+        }
+    }
+
+    function markFirefoxNativeAuxiliaryControls(nativeStrip) {
+        if (!nativeStrip?.parentElement) return;
+        const customHost = document.getElementById(FIREFOX_SEARCH_TABS_HOST_ID);
+        const scope = nativeStrip.parentElement;
+        const candidates = new Set(scope.querySelectorAll('button, [role="button"], a[href]'));
+        Array.from(scope.children || []).forEach(child => candidates.add(child));
+
+        candidates.forEach(candidate => {
+            if (!candidate || candidate === nativeStrip || customHost?.contains(candidate) ||
+                candidate.contains?.(customHost) || nativeStrip.contains(candidate)) return;
+
+            const text = String(candidate.textContent || candidate.getAttribute?.('aria-label') || '')
+                .replace(/\s+/g, ' ')
+                .trim();
+            if (/^(?:Työkalut|Hakutyökalut|Tools|Search tools)$/i.test(text) || candidate.id === 'hdtb-tls') {
+                candidate.setAttribute(FIREFOX_NATIVE_TOOLS_ATTR, 'true');
+                return;
+            }
+
+            const aria = String(candidate.getAttribute?.('aria-label') || '').trim();
+            let compactIconControl = false;
+            try {
+                const rect = candidate.getBoundingClientRect();
+                compactIconControl = !text && rect.width > 0 && rect.width <= 96 &&
+                    rect.height > 0 && rect.height <= 72 &&
+                    (!!candidate.matches?.('button, [role="button"]') ||
+                        !!candidate.querySelector?.('svg, [class*="chevron" i], [class*="arrow" i]'));
+            } catch (e) {}
+
+            if ((!text && /(?:more|next|overflow|lisää|seuraava)/i.test(aria)) || compactIconControl) {
+                candidate.setAttribute(FIREFOX_NATIVE_OVERFLOW_ATTR, 'true');
+            }
+        });
+    }
+
+    function restoreFirefoxNativeSearchControls() {
+        if (!isFirefox) return;
+        [FIREFOX_NATIVE_TAB_STRIP_ATTR, FIREFOX_NATIVE_TOOLS_ATTR, FIREFOX_NATIVE_OVERFLOW_ATTR]
+            .forEach(attribute => {
+                document.querySelectorAll(`[${attribute}="true"]`).forEach(element => {
+                    element.removeAttribute(attribute);
+                });
+            });
+    }
+
+    function ensureFirefoxSearchTabsResizeHook() {
+        if (!isFirefox || window.__googlejsFirefoxTabsResizeHooked) return;
+        window.__googlejsFirefoxTabsResizeHooked = true;
+        window.addEventListener('resize', () => {
+            const host = document.getElementById(FIREFOX_SEARCH_TABS_HOST_ID);
+            const nav = document.getElementById(FIREFOX_SEARCH_TABS_ID);
+            if (host && nav) applyFirefoxPlatformTabsLayout(host, nav);
+        }, { passive: true });
+    }
+
+    function ensureFirefoxSearchTabs() {
+        if (!isFirefoxGoogleResultsPage()) {
+            document.getElementById(FIREFOX_SEARCH_TABS_HOST_ID)?.remove();
+            document.getElementById(FIREFOX_SEARCH_TABS_ID)?.remove();
+            clearFirefoxDesktopChipShifts(null);
+            clearFirefoxDesktopResultSpacing(null);
+            restoreFirefoxNativeSearchControls();
+            return;
+        }
+
+        ensureFirefoxSearchTabsStyle();
+        ensureFirefoxSearchTabsResizeHook();
+
+        const currentMode = getFirefoxCurrentSearchMode();
+        let host = document.getElementById(FIREFOX_SEARCH_TABS_HOST_ID);
+        let nav = host?.querySelector(`#${FIREFOX_SEARCH_TABS_ID}`) || document.getElementById(FIREFOX_SEARCH_TABS_ID);
+        const existingMode = nav?.getAttribute('data-googlejs-mode') || '';
+        const expectedModes = ['web', 'images', 'videos', 'all', 'finance', 'news', 'shopping', 'books'];
+        const navIsComplete = !!nav &&
+            expectedModes.every(mode => nav.querySelector(`[data-googlejs-firefox-mode="${mode}"]`)) &&
+            !!nav.querySelector('details[data-googlejs-firefox-menu="more"]') &&
+            !!nav.querySelector('details[data-googlejs-firefox-menu="tools"]');
+
+        // An older content-script generation may have removed only the anchors while leaving
+        // More/Tools behind. Rebuild the complete isolated Firefox host whenever integrity fails.
+        if (!host || !nav || existingMode !== currentMode || !navIsComplete) {
+            const replacement = buildFirefoxSearchTabsHost();
+            const replacementNav = replacement.querySelector(`#${FIREFOX_SEARCH_TABS_ID}`);
+            replacementNav?.setAttribute('data-googlejs-mode', currentMode);
+            if (host) host.replaceWith(replacement);
+            else if (nav) nav.replaceWith(replacement);
+            host = replacement;
+            nav = replacementNav;
+        }
+
+        const nativeStrip = findFirefoxNativeSearchTabStrip();
+        mountFirefoxSearchTabsHost(host, nativeStrip);
+        applyFirefoxPlatformTabsLayout(host, nav);
+
+        // Hide only Firefox's incomplete native strip and its separate Tools/overflow controls after
+        // the replacement is connected. Chrome never reaches this branch.
+        if (host?.isConnected && nativeStrip) {
+            nativeStrip.setAttribute(FIREFOX_NATIVE_TAB_STRIP_ATTR, 'true');
+            markFirefoxNativeAuxiliaryControls(nativeStrip);
+        }
+    }
+
+    // Remove Google's query-refinement carousel ("Game log", "Reference", "Stats", etc.).
+    // The fingerprints below come from Google's dedicated hdtb-sc/data-id=trc mode carousel and are
+    // intentionally narrower than generic role=list navigation selectors.
+    function removeGoogleRecommendedSearchChips() {
+        try {
+            const rows = document.querySelectorAll(
+                '#hdtb-sc[data-id="trc"] .IUOThf[role="list"], ' +
+                '[data-st-tgt="mode"][role="navigation"] .IUOThf[role="list"]'
+            );
+
+            rows.forEach(row => {
+                if (!row || !row.isConnected) return;
+                const hasRefinementLinks = !!row.querySelector(
+                    'a.nPDzT[jsname="VIftV"][href*="/search"], ' +
+                    'a[role="link"][aria-label^="Lisää "][href*="/search"], ' +
+                    'a[role="link"][aria-label^="Add "][href*="/search"]'
+                );
+                if (!hasRefinementLinks) return;
+
+                const root =
+                    row.closest('.xhjkHe.CEXVle') ||
+                    row.closest('.TrmO7[data-st-cnt="mode"]') ||
+                    row.closest('[data-st-tgt="mode"][role="navigation"]') ||
+                    row.closest('#bqHHPb') ||
+                    row.closest('#hdtb-sc[data-id="trc"]') ||
+                    row;
+                if (root && root.isConnected) root.remove();
+            });
+
+            // Catch a partially hydrated carousel whose inner role=list has not mounted yet.
+            document.querySelectorAll('#hdtb-sc[data-id="trc"]').forEach(element => {
+                if (element && element.isConnected) {
+                    const root =
+                        element.closest('.xhjkHe.CEXVle') ||
+                        element.closest('.TrmO7[data-st-cnt="mode"]') ||
+                        element.closest('[data-st-tgt="mode"][role="navigation"]') ||
+                        element.closest('#bqHHPb') ||
+                        element;
+                    root.remove();
+                }
+            });
+        } catch (e) {}
+    }
 
     // --- Runtime regex hygiene + scoped URL-policy compilation ---
     function dedupeRegexArray(list) {
@@ -1634,6 +2919,7 @@
     }
 
     function isProtectedElement(element) {
+        if (isFirefoxSearchNavigationElement(element)) return true;
         return protectedSelectors.some(selector => element.matches && element.matches(selector));
     }
 
@@ -2130,6 +3416,7 @@
     function hideElementSafely(el) {
         try {
             if (!el || !el.style) return;
+            if (isFirefoxSearchNavigationElement(el)) return;
             el.setAttribute('data-googlejs-hidden', '1');
             el.setAttribute('aria-hidden', 'true');
             el.style.setProperty('display', 'none', 'important');
@@ -2652,8 +3939,9 @@ function cleanGoogleUrl() {
 
 function swapSearchTabs() {
         if (isRedirecting) return;
-        // BF25_4_0_FIREFOX_TAB_FIX: leave Firefox desktop's tab strip untouched.
-        if (isFirefox && !isFirefoxAndroid) return;
+        // Firefox PC/Android now use Google's own tab order and labels. The old Android DOM swap
+        // renamed and physically moved tabs, which made alternate filters disappear or collapse.
+        if (isFirefox) return;
         try {
             if (isFirefoxAndroid) {
                 // ANDROID FIREFOX LOGIC: Physically swap the tabs and rename 'Kaikki'
@@ -2740,6 +4028,244 @@ function swapSearchTabs() {
         } catch(e) {}
     }
 
+    // === CROSS-BROWSER ORGANIC RESULT CARD NORMALIZATION ===
+    // Google gives signed-in Firefox and Incognito Chrome different wrapper class
+    // soups. Filter from the primary heading link outward and stop before a wrapper
+    // contains a second organic heading. This prevents a Chrome-only parent bucket
+    // from being mistaken for one result and taking several clean cards with it.
+    const GOOGLE_WEB_PRIMARY_RESULT_LINK_SELECTOR = [
+        '#search a[jsname="UWckNb"][href]',
+        '#search .yuRUbf > a[href]',
+        '#search a[href]:has(h3)',
+        '#search h3 a[href]',
+        '#rso a[jsname="UWckNb"][href]',
+        '#rso .yuRUbf > a[href]',
+        '#rso a[href]:has(h3)',
+        '#rso h3 a[href]',
+        '#res a[jsname="UWckNb"][href]',
+        '#res .yuRUbf > a[href]',
+        '#res a[href]:has(h3)',
+        '#res h3 a[href]'
+    ].join(',');
+
+    const GOOGLE_WEB_LOCAL_PRIMARY_LINK_SELECTOR = [
+        'a[jsname="UWckNb"][href]',
+        '.yuRUbf > a[href]',
+        'a[href]:has(h3)',
+        'h3 a[href]'
+    ].join(',');
+
+    function isGoogleWebPrimaryResultLink(link) {
+        try {
+            return !!(link && link.matches && link.matches(GOOGLE_WEB_LOCAL_PRIMARY_LINK_SELECTOR) &&
+                link.closest('#search, #rso, #res'));
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function countPrimaryResultLinksWithin(node) {
+        try {
+            return node.querySelectorAll(GOOGLE_WEB_LOCAL_PRIMARY_LINK_SELECTOR).length;
+        } catch (e) {
+            return 0;
+        }
+    }
+
+    const GOOGLE_WEB_OUTER_RESULT_SHELL_SELECTORS = [
+        '.MjjYud',
+        '.g',
+        '.tF2Cxc',
+        '.Gx5Zad',
+        '.SoaBEf',
+        '.M8OgIe',
+        '.N54PNb',
+        '[data-snhf]',
+        'article',
+        'li'
+    ];
+
+    const GOOGLE_WEB_INNER_RESULT_SHELL_SELECTOR = [
+        '.Ww4FFb',
+        '.yuRUbf',
+        '.kb0PBd',
+        '.VwiC3b'
+    ].join(',');
+
+    function countResultHeadingsWithin(node) {
+        try {
+            return node.querySelectorAll('h3, [role="heading"][aria-level="3"]').length;
+        } catch (e) {
+            return 0;
+        }
+    }
+
+    function isSafeSingleGoogleWebResultShell(candidate, boundary, link) {
+        try {
+            if (!candidate || candidate === boundary || !boundary.contains(candidate) || !candidate.contains(link)) return false;
+            const headingCount = countResultHeadingsWithin(candidate);
+            const primaryCount = countPrimaryResultLinksWithin(candidate);
+            return headingCount <= 1 && primaryCount <= 1;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function getGoogleWebResultCard(link) {
+        try {
+            if (!isGoogleWebPrimaryResultLink(link)) return null;
+            const boundary = link.closest('#search, #rso, #res');
+            if (!boundary) return null;
+
+            /*
+             * Google often nests the clickable title/header in .Ww4FFb while the
+             * visible snippet and metadata are siblings inside an outer .MjjYud/.g
+             * result shell. Element.closest() with one combined selector returned
+             * the nearest inner wrapper, so removing a blocked result deleted only
+             * its title/link and stranded the unclickable snippet text underneath.
+             *
+             * Prefer known outer one-result shells in explicit order. Firefox and
+             * Chrome use different class soup, so every candidate is still required
+             * to contain no more than one organic heading/link before we trust it.
+             */
+            for (const selector of GOOGLE_WEB_OUTER_RESULT_SHELL_SELECTORS) {
+                const candidate = link.closest(selector);
+                if (isSafeSingleGoogleWebResultShell(candidate, boundary, link)) return candidate;
+            }
+
+            const heading = link.querySelector('h3') || link.closest('h3');
+            const titleLength = String((heading && (heading.innerText || heading.textContent)) ||
+                link.innerText || link.textContent || '').trim().length;
+            let node = (heading || link).parentElement;
+            let depth = 0;
+            let best = null;
+
+            // Keep climbing while this is still demonstrably one result. Retain the
+            // outermost safe candidate so its title, URL, metadata and snippet vanish
+            // together, but stop before any shared multi-result bucket.
+            while (node && node !== boundary && depth < 14) {
+                if (node.nodeType === 1) {
+                    const headingCount = countResultHeadingsWithin(node);
+                    const primaryCount = countPrimaryResultLinksWithin(node);
+                    if (headingCount > 1 || primaryCount > 1) break;
+
+                    const tag = String(node.tagName || '').toLowerCase();
+                    const blockLike = tag === 'div' || tag === 'article' || tag === 'li';
+                    const textLength = String(node.innerText || node.textContent || '').trim().length;
+                    if (blockLike && headingCount === 1 && primaryCount <= 1 &&
+                        textLength >= Math.max(18, titleLength + 8)) {
+                        best = node;
+                    }
+                }
+                node = node.parentElement;
+                depth++;
+            }
+
+            if (best) return best;
+
+            // Last-resort inner shell. This should be rare, but is safer than removing
+            // a shared page bucket when Google supplies no recognisable outer card.
+            return link.closest(GOOGLE_WEB_INNER_RESULT_SHELL_SELECTOR) ||
+                link.closest('article, li, div');
+        } catch (e) {
+            return null;
+        }
+    }
+
+
+    function getGoogleWebResultOuterShellFromCard(card) {
+        try {
+            if (!card || !card.closest) return card;
+            for (const selector of GOOGLE_WEB_OUTER_RESULT_SHELL_SELECTORS) {
+                const candidate = card.closest(selector);
+                if (!candidate) continue;
+                const boundary = candidate.closest('#search, #rso, #res');
+                if (!boundary) continue;
+                if (countResultHeadingsWithin(candidate) <= 1 && countPrimaryResultLinksWithin(candidate) <= 1) {
+                    return candidate;
+                }
+            }
+        } catch (e) {}
+        return card;
+    }
+
+    function removeGoogleWebResultCardCompletely(card) {
+        try {
+            if (!card || !card.isConnected) return false;
+            const shell = getGoogleWebResultOuterShellFromCard(card) || card;
+            shell.setAttribute('data-googlejs-hidden-result-shell', '1');
+            hideElementSafely(shell);
+            shell.remove();
+            return true;
+        } catch (e) {
+            try {
+                hideElementSafely(card);
+                card.remove();
+                return true;
+            } catch (_) {}
+        }
+        return false;
+    }
+
+    function collectGoogleWebResultCards() {
+        const cards = new Map();
+        try {
+            document.querySelectorAll(GOOGLE_WEB_PRIMARY_RESULT_LINK_SELECTOR).forEach(link => {
+                try {
+                    const card = getGoogleWebResultCard(link);
+                    if (!card || card.id === 'search' || card.id === 'rso' || card.id === 'res') return;
+                    if (!cards.has(card)) cards.set(card, link);
+                } catch (e) {}
+            });
+        } catch (e) {}
+        return cards;
+    }
+
+    const googleWebResultAudit = {
+        timestamp: '',
+        detectedCards: 0,
+        keptCards: 0,
+        hiddenCards: 0,
+        preservedBroadContainers: 0,
+        hidden: []
+    };
+
+    function resetGoogleWebResultAudit(detectedCards) {
+        googleWebResultAudit.timestamp = new Date().toISOString();
+        googleWebResultAudit.detectedCards = detectedCards;
+        googleWebResultAudit.keptCards = 0;
+        googleWebResultAudit.hiddenCards = 0;
+        googleWebResultAudit.preservedBroadContainers = 0;
+        googleWebResultAudit.hidden = [];
+    }
+
+    function containsGoogleWebOrganicResult(element) {
+        try {
+            if (!element || !element.querySelector || !element.closest('#search, #rso, #res')) return false;
+            return !!element.querySelector(GOOGLE_WEB_LOCAL_PRIMARY_LINK_SELECTOR + ', h3');
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function restoreBroadContainerIfNeeded(element) {
+        try {
+            if (!element || !element.style) return;
+            if (element.getAttribute('data-googlejs-broad-selector-hidden') !== '1') return;
+            element.removeAttribute('data-googlejs-broad-selector-hidden');
+            element.removeAttribute('data-googlejs-hidden');
+            element.removeAttribute('aria-hidden');
+            ['display', 'visibility', 'opacity', 'pointer-events'].forEach(property => {
+                element.style.removeProperty(property);
+            });
+        } catch (e) {}
+    }
+
+    try {
+        window.GoogleJS = window.GoogleJS || {};
+        window.GoogleJS.getResultAudit = () => JSON.parse(JSON.stringify(googleWebResultAudit));
+    } catch (e) {}
+
     function blockUrls() {
         if (isRedirecting) return;
         const isImageSearch = isGoogleImageSearch();
@@ -2749,15 +4275,29 @@ function swapSearchTabs() {
             for (let i = 0; i < links.length; ++i) {
                 const link = links[i];
                 if (!link.href || link.href.startsWith('data:')) continue;
+
+                // Firefox-only synthetic/native search tabs are navigation controls, not results.
+                // The old URL sweeper inspected every <a> without consulting isProtectedElement(),
+                // so it deleted the synthetic tab links and left only the non-anchor More/Tools controls.
+                // Keep Chrome's path byte-for-byte behaviorally unchanged by gating this exemption to Firefox.
+                if (isFirefox && (
+                    link.closest?.(`#${FIREFOX_SEARCH_TABS_ID}`) ||
+                    isFirefoxSearchNavigationElement(link)
+                )) continue;
+
                 if (isNodeClicked(link)) continue;
                 if (isInsideOpenImagePreview(link)) continue;
                 if (!overlayRemoved && isWithinSuggestionNode(link)) continue;
+
+                // Organic web cards are handled once, as normalized cards, by blockResults().
+                // Never climb from one nested Chrome sitelink into a shared result bucket.
+                if (!isImageSearch && link.closest?.('#search, #rso, #res')) continue;
 
                 if (!isResultURLAllowed(link.href) && !isFirefox && !isImageSearch) {
                     try {
                         const urlObj = new URL(link.href, location.origin);
                         if (urlObj.pathname.includes('/search')) {
-                            const keepParams = ["q", "tbm", "tbs", "hl", "safe", "biw", "bih", "dpr", "ijn", "ei", "start", "source", "rlz", "oq", "gs_l", "sxsrf", "imgrc", "imgdii", "imgurl", "imgrefurl", "prev", "usg", "bvm", "psig", "ust", "chips", "asearch", "udm", "uact", "pbx", "sclient", "aqs", "gs_ivs", "iflsig", "ictx"];
+                            const keepParams = ["q", "tbm", "tbs", "hl", "safe", "biw", "bih", "dpr", "ijn", "ei", "start", "source", "rlz", "oq", "gs_l", "sxsrf", "imgrc", "imgdii", "imgurl", "imgrefurl", "prev", "usg", "bvm", "psig", "ust", "chips", "asearch", "udm", "uact", "pbx", "sclient", "aqs", "gs_ivs", "iflsig", "ictx", "pws", "filter", "num"];
                             let changed = false;
                             const paramsArray = Array.from(urlObj.searchParams.keys());
                             for (let j = 0; j < paramsArray.length; ++j) {
@@ -2835,34 +4375,56 @@ function swapSearchTabs() {
     function blockResults() {
         if (isRedirecting) return;
         try {
-            const results = document.querySelectorAll('div.g, div.srg > div, div.v7W49e, div.mnr-c, div.Ww4FFb, div.yuRUbf, .wQiwMc.related-question-pair, .XRVJtc, .b2Rnsc, .sHEJob, .vNFaUb, .EDblX:not(.JpOecb), .k8X5ve, .PmEWq, .vt6azd, .wHYlTd, div.vtSz8d, div.QpPSMb, div.kJSB8, div.e8Ck0d, div.mW90w, div.vCUuC, div.p7bv, div.kwICDb, div.oYLlHe, div.m3LIae, a.ddkIM');
-            for (let i = 0; i < results.length; ++i) {
-                const result = results[i];
-                if (isNodeClicked(result)) continue;
-                if (isInsideOpenImagePreview(result)) continue;
-                if (!overlayRemoved && isWithinSuggestionNode(result)) continue;
+            const cards = collectGoogleWebResultCards();
+            resetGoogleWebResultAudit(cards.size);
 
-                let resultText = (result.innerText || result.textContent || '');
-                const hiddenNodes = result.querySelectorAll('[aria-label], [title], .PZPZlf');
-                for (let j = 0; j < hiddenNodes.length; j++) {
-                    resultText += ' ' + (hiddenNodes[j].getAttribute('aria-label') || '') + ' ' + (hiddenNodes[j].title || '') + ' ' + (hiddenNodes[j].innerText || '');
-                }
-                resultText = resultText.toLowerCase();
+            cards.forEach((link, result) => {
+                try {
+                    if (!result || !result.isConnected) return;
+                    if (isNodeClicked(result)) return;
+                    if (isInsideOpenImagePreview(result)) return;
+                    if (!overlayRemoved && isWithinSuggestionNode(result)) return;
 
-                // Advanced link selector to ensure whitelist check gets the MAIN url
-                const link = result.querySelector('a[jsname="UWckNb"], h3 a, a:has(h3), .yuRUbf a') || result.querySelector('a');
-                const resultUrl = link && !link.href.startsWith('data:') ? link.href : '';
-                
-                const cacheKey = resultText.length + ':' + resultUrl;
-                if (result.getAttribute('data-gj-cache') === cacheKey) continue;
+                    // Use the card's rendered text plus the primary title/link only.
+                    // Do not concatenate every hidden aria-label/title descendant: Chrome's
+                    // accessibility and menu payloads differ from Firefox and can contain
+                    // unrelated blocked words that are not part of the actual result.
+                    const heading = link && (link.querySelector('h3') || link.closest('h3'));
+                    const titleText = String((heading && (heading.innerText || heading.textContent)) ||
+                        (link && (link.innerText || link.textContent)) || '');
+                    const linkTitle = String((link && link.getAttribute('title')) || '');
+                    const resultText = [result.innerText || result.textContent || '', titleText, linkTitle]
+                        .join(' ')
+                        .replace(/\s+/g, ' ')
+                        .trim()
+                        .toLowerCase();
 
-                if (shouldRemoveElement(resultUrl, resultText, false)) {
-                    hideElementSafely(result);
-                    result.remove();
-                } else {
-                    result.setAttribute('data-gj-cache', cacheKey);
-                }
-            }
+                    const resultUrl = link && link.href && !link.href.startsWith('data:') ? link.href : '';
+                    const cacheKey = resultText.length + ':' + resultUrl;
+                    if (result.getAttribute('data-gj-cache') === cacheKey) {
+                        googleWebResultAudit.keptCards++;
+                        return;
+                    }
+
+                    const decision = decideResultPolicy(resultUrl, resultText, false);
+                    if (decision.action === POLICY_ACTION.HIDE) {
+                        googleWebResultAudit.hiddenCards++;
+                        if (googleWebResultAudit.hidden.length < 20) {
+                            googleWebResultAudit.hidden.push({
+                                title: titleText.trim().slice(0, 180),
+                                url: resultUrl,
+                                reason: decision.reason || '',
+                                match: String(decision.match || '').slice(0, 180)
+                            });
+                        }
+                        removeGoogleWebResultCardCompletely(result);
+                    } else {
+                        googleWebResultAudit.keptCards++;
+                        result.setAttribute('data-gj-cache', cacheKey);
+                        result.setAttribute('data-googlejs-organic-card', '1');
+                    }
+                } catch (e) {}
+            });
         } catch (e) {}
     }
 
@@ -2871,22 +4433,33 @@ function swapSearchTabs() {
         try {
             const selectorsToHide = [
                 'span.gL9Hy', '.spell_orig', '.KDCVqf.card-section.p64x9c', '#oFNiHe', '#taw',
-                '.QRYxYe', '.NNMgCf', '#bres > div.ULSxyf', 'div.ULSxyf', '#bres', 
+                '.QRYxYe', '.NNMgCf', '#bres > div.ULSxyf', 'div.ULSxyf', '#bres',
                 'div[role="listitem"]:has(a[href*="udm=39"])',
                 'div[role="listitem"]:has(a[href*="udm=50"])'
             ];
             selectorsToHide.forEach(selector => {
                 const elements = document.querySelectorAll(selector);
                 elements.forEach(element => {
-                    if (!isProtectedElement(element) && !isInsideOpenImagePreview(element)) {
-                        const txt = element.textContent || '';
-                        if (element.getAttribute('data-gj-cache') === String(txt.length)) return;
+                    if (isProtectedElement(element) || isInsideOpenImagePreview(element)) return;
 
-                        if (!containsSearchAllowTerms(txt)) {
-                            hideElementSafely(element);
-                        } else {
-                            element.setAttribute('data-gj-cache', String(txt.length));
-                        }
+                    // Chrome can place perfectly ordinary later-page results inside #bres /
+                    // .ULSxyf / other broad buckets. Firefox often does not. Never hide a
+                    // broad cleanup wrapper when it contains a real organic heading/link.
+                    if (containsGoogleWebOrganicResult(element)) {
+                        restoreBroadContainerIfNeeded(element);
+                        element.setAttribute('data-googlejs-organic-container', '1');
+                        googleWebResultAudit.preservedBroadContainers++;
+                        return;
+                    }
+
+                    const txt = element.textContent || '';
+                    if (element.getAttribute('data-gj-cache') === String(txt.length)) return;
+
+                    if (!containsSearchAllowTerms(txt)) {
+                        element.setAttribute('data-googlejs-broad-selector-hidden', '1');
+                        hideElementSafely(element);
+                    } else {
+                        element.setAttribute('data-gj-cache', String(txt.length));
                     }
                 });
             });
@@ -3105,6 +4678,9 @@ function swapSearchTabs() {
         if (isRedirecting) return;
         devLog('Main filtering');
         
+        removeGoogleRecommendedSearchChips();
+        ensureFirefoxSearchTabs();
+        restoreFirefoxSearchNavigation();
         removePromoBanners();
         if (typeof hideGoogleAIModeButton === 'function') hideGoogleAIModeButton();
         swapSearchTabs(); 
