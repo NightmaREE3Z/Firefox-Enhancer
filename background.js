@@ -10,6 +10,120 @@ const CLEANUP_INTERVAL = 30 * 60 * 1000; // 30 minutes
 const MAX_HOSTS_PER_BATCH = 10000;
 const STORAGE_COMPRESSION_THRESHOLD = 50000;
 
+// Explicit Firefox allowlist. Base-domain entries also permit normal subdomains.
+// These domains remain in normal browser history.
+const allowedSites = new Set([
+    "sieni.us",
+    "sieni.es"
+]);
+
+// Accessible sites whose visits should be removed from Firefox history.
+// The Sieni domains are intentionally NOT included here.
+const historyAutoClearSites = new Set([
+    "user.blocksite.co"
+]);
+
+const isHostnameInSet = (hostname, domains) => {
+    if (!hostname || typeof hostname !== 'string') return false;
+    const normalizedHostname = hostname.trim().toLowerCase().replace(/\.$/, '');
+
+    for (const domain of domains) {
+        const normalizedDomain = String(domain || '').trim().toLowerCase().replace(/\.$/, '');
+        if (!normalizedDomain) continue;
+        if (normalizedHostname === normalizedDomain || normalizedHostname.endsWith(`.${normalizedDomain}`)) {
+            return true;
+        }
+    }
+
+    return false;
+};
+
+const isAllowlistedHostname = (hostname) => isHostnameInSet(hostname, allowedSites);
+const isHistoryAutoClearHostname = (hostname) => isHostnameInSet(hostname, historyAutoClearSites);
+
+const isHistoryAutoClearUrl = (url) => {
+    if (!url || typeof url !== 'string') return false;
+    try {
+        const parsed = new URL(url);
+        return (parsed.protocol === 'http:' || parsed.protocol === 'https:') &&
+               isHistoryAutoClearHostname(parsed.hostname);
+    } catch (_) {
+        return false;
+    }
+};
+
+const deleteAutoClearHistoryUrl = async (url, source = 'unknown') => {
+    if (!isHistoryAutoClearUrl(url) || !browser.history || !browser.history.deleteUrl) return false;
+
+    try {
+        await browser.history.deleteUrl({ url });
+        console.log(`🗑️ Auto-cleared history URL (${source}): ${url}`);
+        return true;
+    } catch (error) {
+        console.warn(`Failed to auto-clear history URL (${source}): ${url}`, error);
+        return false;
+    }
+};
+
+let historyAutoClearInitialPurgeStarted = false;
+const purgeAutoClearHistory = async () => {
+    if (historyAutoClearInitialPurgeStarted) return;
+    historyAutoClearInitialPurgeStarted = true;
+
+    if (!browser.history || !browser.history.search || !browser.history.deleteUrl) {
+        console.log('History auto-clear unavailable: Firefox history permission/API is missing.');
+        return;
+    }
+
+    let deletedCount = 0;
+    try {
+        for (const domain of historyAutoClearSites) {
+            const results = await browser.history.search({
+                text: domain,
+                startTime: 0,
+                maxResults: 100000
+            });
+
+            const matchingUrls = Array.from(new Set(
+                (results || [])
+                    .map(entry => entry && entry.url)
+                    .filter(url => isHistoryAutoClearUrl(url))
+            ));
+
+            for (let i = 0; i < matchingUrls.length; i += 100) {
+                const batch = matchingUrls.slice(i, i + 100);
+                const batchResults = await Promise.all(
+                    batch.map(url => deleteAutoClearHistoryUrl(url, 'initial purge'))
+                );
+                deletedCount += batchResults.filter(Boolean).length;
+            }
+        }
+
+        console.log(`History auto-clear purge completed: ${deletedCount} URL(s) removed.`);
+    } catch (error) {
+        console.warn('History auto-clear purge failed:', error);
+    }
+};
+
+const initializeHistoryAutoClear = () => {
+    if (!browser.history || !browser.history.onVisited) {
+        console.log('History auto-clear listener unavailable: Firefox history permission/API is missing.');
+        return;
+    }
+
+    browser.history.onVisited.addListener((historyItem) => {
+        try {
+            if (historyItem && isHistoryAutoClearUrl(historyItem.url)) {
+                deleteAutoClearHistoryUrl(historyItem.url, 'history.onVisited');
+            }
+        } catch (error) {
+            console.warn('History auto-clear listener failed:', error);
+        }
+    });
+
+    purgeAutoClearHistory();
+};
+
 // List of URLs to block (Firefox format)
 const urlsToBlock = [
     "*://www.lunapic.com/*",
@@ -207,6 +321,14 @@ let currentBlockedUrls = [];
 
 // Optimized function to block requests
 function blockRequest(details) {
+    try {
+        const hostname = new URL(details.url).hostname.toLowerCase().replace(/\.$/, '');
+        // Explicit allowlist always wins over static patterns, blocked TLDs and fetched hosts.
+        if (isAllowlistedHostname(hostname)) {
+            return { cancel: false };
+        }
+    } catch (_) {}
+
     console.log(`Blocking access to forbidden URL: ${details.url}`);
     return { cancel: true };
 }
@@ -363,9 +485,13 @@ const updateBlocklist = async () => {
         }
 
         console.log(`Processing ${allHosts.length} total hosts for deduplication...`);
-        const uniqueHostsList = Array.from(new Set(allHosts)).sort();
+        const deduplicatedHosts = Array.from(new Set(allHosts));
+        const uniqueHostsList = deduplicatedHosts
+            .filter(host => !isAllowlistedHostname(host))
+            .sort();
+        const allowlistedHostsRemoved = deduplicatedHosts.length - uniqueHostsList.length;
         const processingTime = ((Date.now() - startTime) / 1000).toFixed(2);
-        console.log(`✅ Processed ${allHosts.length} → ${uniqueHostsList.length} unique hosts in ${processingTime}s`);
+        console.log(`✅ Processed ${allHosts.length} → ${uniqueHostsList.length} unique blocked hosts in ${processingTime}s (${allowlistedHostsRemoved} allowlisted entries removed)`);
 
         const blockingUrls = uniqueHostsList.map(host => `*://${host}/*`);
         if (browser.webRequest.onBeforeRequest.hasListener(blockRequest)) {
@@ -623,25 +749,6 @@ const clearURLsStart = () => {
 // Initialize ClearURLs
 clearURLsStart();
 
-// Function to remove history entries for specific domains
-const removeHistoryForDomains = async (url) => {
-    const domains = ["xvideos.com", "instagram.com", "tiktok.com", "google.com", "google.fi", "addons.mozilla.org", "irc-galleria.net", "blogspot.com", "reddit.com"];
-    if (domains.some(domain => url.includes(domain))) {
-        try {
-            await browser.history.deleteUrl({ url: url });
-            console.log(`🗑️ Deleted URL ${url} from history.`);
-        } catch (error) {
-            console.error(`❌ Failed to delete URL ${url} from history:`, error);
-        }
-    }
-};
-
-// Minimal onUpdated: only perform history cleanup when URL changes
-browser.tabs.onUpdated.addListener((tabId, changeInfo) => {
-    if (changeInfo && changeInfo.url) {
-        console.log(`🔍 Checking history entry for: ${changeInfo.url}`);
-        removeHistoryForDomains(changeInfo.url);
-    }
-});
+initializeHistoryAutoClear();
 
 })();

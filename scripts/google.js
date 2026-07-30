@@ -1,7 +1,7 @@
 (function () {
     'use strict';
 
-    // google.js of BraveFox Enhancer v26.3.1 (result parity, complete-card cleanup, centred desktop hover and Firefox menus)
+    // google.js of BraveFox Enhancer v26.3.3 (result parity, complete-card cleanup, centred desktop hover and Firefox menus)
 
     // === INSTANT NON-SEARCH GOOGLE APP ABORT ===
     // Gemini and Google Translate are standalone apps, not Google Search result pages.
@@ -1891,9 +1891,9 @@
 
 
     // === FIREFOX SEARCH-MODE PARITY LAYER ===
-    // Chrome keeps its existing/native path untouched. Firefox desktop and Firefox Android share
-    // URL mode handling, navigation protection and cleanup exemptions, then use platform-specific
-    // placement and sizing for the replacement filter strip Google omits from Firefox responses.
+    // Both Firefox platforms share URL-mode handling and navigation protection. Firefox desktop may
+    // use the synthetic parity strip below; Firefox Android always keeps Google's native mobile strip
+    // and only receives a CSS-order marker so Web Search appears first without moving DOM nodes.
     const FIREFOX_SEARCH_TABS_HOST_ID = 'googlejs-firefox-search-tabs-host';
     const FIREFOX_SEARCH_TABS_ID = 'googlejs-firefox-search-tabs';
     const FIREFOX_SEARCH_TABS_STYLE_ID = 'googlejs-firefox-search-tabs-style';
@@ -1902,6 +1902,9 @@
     const FIREFOX_NATIVE_OVERFLOW_ATTR = 'data-googlejs-firefox-native-overflow';
     const FIREFOX_CHIP_SHIFT_ATTR = 'data-googlejs-firefox-chip-shift';
     const FIREFOX_RESULT_SPACING_ATTR = 'data-googlejs-firefox-result-spacing';
+    const FIREFOX_ANDROID_NATIVE_TABS_STYLE_ID = 'googlejs-firefox-android-native-tabs-style';
+    const FIREFOX_ANDROID_NATIVE_TAB_ROW_ATTR = 'data-googlejs-firefox-android-native-tab-row';
+    const FIREFOX_ANDROID_NATIVE_TAB_MODE_ATTR = 'data-googlejs-firefox-android-native-tab-mode';
     let firefoxDesktopCollisionFrame = 0;
 
     function isFirefoxGoogleResultsPage() {
@@ -2282,35 +2285,6 @@
                     overflow: hidden !important;
                     pointer-events: none !important;
                 }
-                #${FIREFOX_SEARCH_TABS_HOST_ID}[data-googlejs-firefox-platform="android"] {
-                    min-height: 52px !important;
-                    overflow: hidden !important;
-                }
-                #${FIREFOX_SEARCH_TABS_HOST_ID}[data-googlejs-firefox-platform="android"] #${FIREFOX_SEARCH_TABS_ID} {
-                    gap: 28px !important;
-                    min-height: 52px !important;
-                    padding: 0 18px !important;
-                    font-size: 16px !important;
-                    -webkit-overflow-scrolling: touch !important;
-                    overscroll-behavior-x: contain !important;
-                    touch-action: pan-x !important;
-                    scroll-snap-type: x proximity !important;
-                }
-                #${FIREFOX_SEARCH_TABS_HOST_ID}[data-googlejs-firefox-platform="android"] #${FIREFOX_SEARCH_TABS_ID} > a,
-                #${FIREFOX_SEARCH_TABS_HOST_ID}[data-googlejs-firefox-platform="android"] #${FIREFOX_SEARCH_TABS_ID} > button,
-                #${FIREFOX_SEARCH_TABS_HOST_ID}[data-googlejs-firefox-platform="android"] #${FIREFOX_SEARCH_TABS_ID} > details > summary {
-                    min-height: 52px !important;
-                    scroll-snap-align: start !important;
-                }
-                #${FIREFOX_SEARCH_TABS_HOST_ID}[data-googlejs-firefox-platform="android"] .googlejs-firefox-more-menu {
-                    position: fixed !important;
-                    top: 118px !important;
-                    left: 18px !important;
-                    right: 18px !important;
-                    min-width: 0 !important;
-                    max-height: 55vh !important;
-                    overflow-y: auto !important;
-                }
             `;
             (document.head || document.documentElement).appendChild(style);
         } catch (e) {}
@@ -2617,32 +2591,14 @@
         resolveFirefoxDesktopTabCollision(host, nav);
     }
 
-    function applyFirefoxAndroidTabsLayout(host, nav) {
-        host.setAttribute('data-googlejs-firefox-platform', 'android');
-        clearFirefoxDesktopResultSpacing(null);
-        nav.style.removeProperty('--googlejs-firefox-tabs-left');
-        nav.style.removeProperty('--googlejs-firefox-tabs-right');
-        requestAnimationFrame(() => {
-            try {
-                const active = nav.querySelector('[data-active="true"]');
-                if (active && nav.scrollWidth > nav.clientWidth) {
-                    active.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'auto' });
-                }
-            } catch (e) {}
-        });
-    }
-
     function applyFirefoxPlatformTabsLayout(host, nav) {
         if (!host || !nav) return;
-        if (isFirefoxAndroid) applyFirefoxAndroidTabsLayout(host, nav);
-        else applyFirefoxDesktopTabsLayout(host, nav);
+        applyFirefoxDesktopTabsLayout(host, nav);
     }
 
     function getFirefoxSearchTabsMountTarget(nativeStrip) {
-        // Google's reduced Firefox layout can place its incomplete native strip before the actual
-        // search header. Mounting relative to that strip therefore put our replacement above the
-        // search box. The stable visual contract on both Firefox platforms is: search header first,
-        // replacement tabs second, chips/results third.
+        // Google's reduced Firefox desktop layout can place its incomplete native strip before the
+        // actual search header. Mount the desktop replacement after the search form and before results.
         const searchHeader = document.querySelector('#searchform');
         if (searchHeader?.parentNode) {
             return { parent: searchHeader.parentNode, before: searchHeader.nextSibling };
@@ -2651,8 +2607,7 @@
         const searchForm = document.querySelector('#tsf, form[role="search"], form[action="/search"]');
         if (searchForm) {
             // Climb only through wrappers that contain no unrelated result content, then insert after
-            // the outer search-row wrapper. This keeps Android and desktop sharing the same rule while
-            // allowing their CSS/layout branches to remain separate.
+            // the outer desktop search-row wrapper.
             let row = searchForm;
             for (let depth = 0; depth < 4; depth++) {
                 const parent = row.parentElement;
@@ -2665,9 +2620,7 @@
 
         // Last-resort fallbacks are used only before Google's search header exists. ensureFirefoxSearchTabs()
         // runs again on DOM mutations and will relocate the already-connected host once the header mounts.
-        const fallback = isFirefoxAndroid
-            ? document.querySelector('#slim_appbar, .T3mIbg, .crJ18e')
-            : document.querySelector('#top_nav, #hdtb, #hdtb-msb');
+        const fallback = document.querySelector('#top_nav, #hdtb, #hdtb-msb');
         if (fallback?.parentNode) {
             return { parent: fallback.parentNode, before: fallback };
         }
@@ -2744,6 +2697,167 @@
             });
     }
 
+    // === FIREFOX ANDROID NATIVE TAB ORDER ===
+    // Android keeps Google's own tab elements. We only mark the existing direct children with CSS
+    // order values; no reparenting, replacement strip, label rewrite, height change or scrollIntoView.
+    function ensureFirefoxAndroidNativeTabsStyle() {
+        if (!isFirefoxAndroid || document.getElementById(FIREFOX_ANDROID_NATIVE_TABS_STYLE_ID)) return;
+        try {
+            const style = document.createElement('style');
+            style.id = FIREFOX_ANDROID_NATIVE_TABS_STYLE_ID;
+            style.textContent = `
+                [${FIREFOX_ANDROID_NATIVE_TAB_ROW_ATTR}="true"] > [${FIREFOX_ANDROID_NATIVE_TAB_MODE_ATTR}="web"] {
+                    order: -700 !important;
+                }
+                [${FIREFOX_ANDROID_NATIVE_TAB_ROW_ATTR}="true"] > [${FIREFOX_ANDROID_NATIVE_TAB_MODE_ATTR}="images"] {
+                    order: -600 !important;
+                }
+                [${FIREFOX_ANDROID_NATIVE_TAB_ROW_ATTR}="true"] > [${FIREFOX_ANDROID_NATIVE_TAB_MODE_ATTR}="videos"] {
+                    order: -500 !important;
+                }
+                [${FIREFOX_ANDROID_NATIVE_TAB_ROW_ATTR}="true"] > [${FIREFOX_ANDROID_NATIVE_TAB_MODE_ATTR}="all"] {
+                    order: -400 !important;
+                }
+                [${FIREFOX_ANDROID_NATIVE_TAB_ROW_ATTR}="true"] > [${FIREFOX_ANDROID_NATIVE_TAB_MODE_ATTR}="finance"] {
+                    order: -300 !important;
+                }
+                [${FIREFOX_ANDROID_NATIVE_TAB_ROW_ATTR}="true"] > [${FIREFOX_ANDROID_NATIVE_TAB_MODE_ATTR}="more"] {
+                    order: -200 !important;
+                }
+                [${FIREFOX_ANDROID_NATIVE_TAB_ROW_ATTR}="true"] > [${FIREFOX_ANDROID_NATIVE_TAB_MODE_ATTR}="tools"] {
+                    order: -100 !important;
+                }
+            `;
+            (document.head || document.documentElement).appendChild(style);
+        } catch (e) {}
+    }
+
+    function classifyFirefoxAndroidNativeTab(element) {
+        if (!element) return '';
+        try {
+            const directSummary = Array.from(element.children || []).find(child => child.tagName === 'SUMMARY');
+            const labelNode = directSummary || element;
+            const text = String(labelNode.getAttribute?.('aria-label') || labelNode.textContent ||
+                element.getAttribute?.('aria-label') || element.textContent || '')
+                .replace(/[▾▼⌄]/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+            const exactLabel = text.toLowerCase();
+            const link = element.matches?.('a[href]')
+                ? element
+                : element.querySelector?.('a[href]');
+            const href = String(link?.getAttribute('href') || link?.href || '');
+
+            if (href) {
+                const url = new URL(href, window.location.origin);
+                const udm = url.searchParams.get('udm') || '';
+                const tbm = url.searchParams.get('tbm') || '';
+                const source = url.searchParams.get('source') || '';
+                if (udm === '14') return 'web';
+                if (udm === '2' || tbm === 'isch') return 'images';
+                if (udm === '7' || tbm === 'vid') return 'videos';
+                if (tbm === 'fin') return 'finance';
+                if (!udm && !tbm && source === 'lnms') return 'all';
+            }
+
+            if (/^(?:verkkohaku|web|web search)$/.test(exactLabel)) return 'web';
+            if (/^(?:kuvahaku|kuvat|images?)$/.test(exactLabel)) return 'images';
+            if (/^(?:videot|videos?)$/.test(exactLabel)) return 'videos';
+            if (/^(?:kaikki|kaikki tulokset|virikkeinen haku|all|all results)$/.test(exactLabel)) return 'all';
+            if (/^(?:talous|finance)$/.test(exactLabel)) return 'finance';
+            if (/^(?:lisää|more)$/.test(exactLabel)) return 'more';
+            if (/^(?:työkalut|hakutyökalut|tools|search tools)$/.test(exactLabel)) return 'tools';
+        } catch (e) {}
+        return '';
+    }
+
+    function getFirefoxAndroidNativeTabRow(nativeStrip) {
+        if (!nativeStrip) return null;
+        const candidates = new Set([nativeStrip]);
+
+        try {
+            nativeStrip.querySelectorAll('[role="list"], [role="tablist"]').forEach(row => candidates.add(row));
+            nativeStrip.querySelectorAll('a[href], button, summary, [role="tab"], [role="button"]').forEach(control => {
+                if (!classifyFirefoxAndroidNativeTab(control)) return;
+                let parent = control.parentElement;
+                for (let depth = 0; parent && depth < 5; depth++, parent = parent.parentElement) {
+                    candidates.add(parent);
+                    if (parent === nativeStrip) break;
+                }
+            });
+        } catch (e) {}
+
+        let bestRow = null;
+        let bestScore = -1;
+        candidates.forEach(row => {
+            try {
+                const children = Array.from(row.children || []);
+                if (children.length < 2) return;
+                const modes = children.map(classifyFirefoxAndroidNativeTab).filter(Boolean);
+                const distinct = new Set(modes);
+                if (distinct.size < 2) return;
+
+                let score = distinct.size * 10;
+                if (distinct.has('web')) score += 8;
+                if (distinct.has('images')) score += 4;
+                if (distinct.has('videos')) score += 3;
+                if (distinct.has('all')) score += 2;
+                // Prefer the narrow/deep row whose direct children are the actual tab items.
+                score -= Math.min(20, Math.max(0, children.length - distinct.size));
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestRow = row;
+                }
+            } catch (e) {}
+        });
+
+        return bestRow;
+    }
+
+    function clearFirefoxAndroidNativeTabOrder(keepRow) {
+        try {
+            document.querySelectorAll(`[${FIREFOX_ANDROID_NATIVE_TAB_ROW_ATTR}="true"]`).forEach(row => {
+                if (row === keepRow) return;
+                row.removeAttribute(FIREFOX_ANDROID_NATIVE_TAB_ROW_ATTR);
+                row.querySelectorAll(`[${FIREFOX_ANDROID_NATIVE_TAB_MODE_ATTR}]`).forEach(item => {
+                    item.removeAttribute(FIREFOX_ANDROID_NATIVE_TAB_MODE_ATTR);
+                });
+            });
+        } catch (e) {}
+    }
+
+    function ensureFirefoxAndroidNativeWebTabFirst() {
+        if (!isFirefoxAndroid) return;
+        if (!isFirefoxGoogleResultsPage()) {
+            clearFirefoxAndroidNativeTabOrder(null);
+            return;
+        }
+
+        ensureFirefoxAndroidNativeTabsStyle();
+        const nativeStrip = findFirefoxNativeSearchTabStrip();
+        const row = getFirefoxAndroidNativeTabRow(nativeStrip);
+        clearFirefoxAndroidNativeTabOrder(row);
+        if (!row) return;
+
+        let foundWeb = false;
+        try {
+            Array.from(row.children || []).forEach(item => {
+                const mode = classifyFirefoxAndroidNativeTab(item);
+                if (!mode) {
+                    item.removeAttribute(FIREFOX_ANDROID_NATIVE_TAB_MODE_ATTR);
+                    return;
+                }
+                item.setAttribute(FIREFOX_ANDROID_NATIVE_TAB_MODE_ATTR, mode);
+                if (mode === 'web') foundWeb = true;
+            });
+
+            // Do not force layout semantics onto Google's row. `order` is applied only when its native
+            // layout already supports it; if Google omits Web Search in an experiment, leave the row alone.
+            if (foundWeb) row.setAttribute(FIREFOX_ANDROID_NATIVE_TAB_ROW_ATTR, 'true');
+            else row.removeAttribute(FIREFOX_ANDROID_NATIVE_TAB_ROW_ATTR);
+        } catch (e) {}
+    }
+
     function ensureFirefoxSearchTabsResizeHook() {
         if (!isFirefox || window.__googlejsFirefoxTabsResizeHooked) return;
         window.__googlejsFirefoxTabsResizeHooked = true;
@@ -2755,6 +2869,20 @@
     }
 
     function ensureFirefoxSearchTabs() {
+        // Firefox Android uses Google's native mobile search-mode strip. Keep the synthetic replacement
+        // strictly desktop-only; restore any native controls hidden by an older injected copy, then apply
+        // the isolated CSS-only Android order marker.
+        if (isFirefoxAndroid) {
+            document.getElementById(FIREFOX_SEARCH_TABS_HOST_ID)?.remove();
+            document.getElementById(FIREFOX_SEARCH_TABS_ID)?.remove();
+            document.getElementById(FIREFOX_SEARCH_TABS_STYLE_ID)?.remove();
+            clearFirefoxDesktopChipShifts(null);
+            clearFirefoxDesktopResultSpacing(null);
+            restoreFirefoxNativeSearchControls();
+            ensureFirefoxAndroidNativeWebTabFirst();
+            return;
+        }
+
         if (!isFirefoxGoogleResultsPage()) {
             document.getElementById(FIREFOX_SEARCH_TABS_HOST_ID)?.remove();
             document.getElementById(FIREFOX_SEARCH_TABS_ID)?.remove();
@@ -3938,69 +4066,9 @@ function cleanGoogleUrl() {
     }
 
 function swapSearchTabs() {
-        if (isRedirecting) return;
-        // Firefox PC/Android now use Google's own tab order and labels. The old Android DOM swap
-        // renamed and physically moved tabs, which made alternate filters disappear or collapse.
-        if (isFirefox) return;
+        if (isRedirecting || isFirefox) return;
         try {
-            if (isFirefoxAndroid) {
-                // ANDROID FIREFOX LOGIC: Physically swap the tabs and rename 'Kaikki'
-                let kaikkiSpan = null;
-                let verkkoSpan = null;
-
-                const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
-                let node;
-                while ((node = walker.nextNode())) {
-                    const txt = node.nodeValue.trim();
-                    const parent = node.parentElement;
-                    if (!parent || parent.hasAttribute('data-swapped-android')) continue;
-                    
-                    if (!parent.closest('#hdtb, div[role="list"], .EDblX, .crJ18e, .T3mIbg, header, nav')) continue;
-
-                    if (txt === 'Kaikki') kaikkiSpan = parent;
-                    else if (txt === 'Verkkohaku') verkkoSpan = parent;
-                }
-
-                if (kaikkiSpan && verkkoSpan) {
-                    const getTabNode = (el) => el.closest('div[role="listitem"]') || el.closest('a') || el;
-                    const kaikkiTab = getTabNode(kaikkiSpan);
-                    const verkkoTab = getTabNode(verkkoSpan);
-
-                    if (kaikkiTab && verkkoTab && kaikkiTab !== verkkoTab) {
-                        const parentK = kaikkiTab.parentNode;
-                        const parentV = verkkoTab.parentNode;
-                        
-                        // Physically swap the actual elements in the DOM if they share the same wrapper
-                        if (parentK && parentV && parentK === parentV) {
-                            const temp = document.createElement('div');
-                            parentK.insertBefore(temp, kaikkiTab);
-                            parentK.insertBefore(kaikkiTab, verkkoTab);
-                            parentK.insertBefore(verkkoTab, temp);
-                            temp.remove();
-                        }
-
-                        // Rename the text now that they are swapped
-                        kaikkiSpan.textContent = 'Virikkeinen haku';
-
-                        kaikkiSpan.setAttribute('data-swapped-android', '1');
-                        verkkoSpan.setAttribute('data-swapped-android', '1');
-                    }
-                }
-
-                // Fallback for other tab text elements
-                document.querySelectorAll('[data-target-text]').forEach(tab => {
-                    const targetText = tab.getAttribute('data-target-text');
-                    const span = tab.querySelector('span.R1QWuf') || tab.querySelector('div.mXwfNd span') || Array.from(tab.querySelectorAll('*')).find(n => n.childNodes.length === 1 && n.firstChild.nodeType === 3);
-                    
-                    if (span && span.textContent.trim() === 'Kaikki') {
-                        span.textContent = 'Virikkeinen haku';
-                    } else if (!span && tab.textContent.trim() === 'Kaikki') {
-                        tab.textContent = 'Virikkeinen haku';
-                    }
-                });
-
-            } else {
-                // EXACT PC LOGIC FROM BASE FILE
+            // EXACT NON-FIREFOX/PC LOGIC FROM BASE FILE
                 const kaikkiSpan = Array.from(document.querySelectorAll('span.R1QWuf:not([data-swapped])')).find(el => el.textContent.trim() === 'Kaikki');
                 const verkkoSpan = Array.from(document.querySelectorAll('span.R1QWuf:not([data-swapped])')).find(el => el.textContent.trim() === 'Verkkohaku');
 
@@ -4024,7 +4092,6 @@ function swapSearchTabs() {
                         verkkoSpan.setAttribute('data-swapped', '1');
                     }
                 }
-            }
         } catch(e) {}
     }
 
@@ -4732,7 +4799,10 @@ function swapSearchTabs() {
         });
 
         const observerOptions = isFirefoxAndroid
-            ? { childList: true, subtree: true, characterData: true, attributes: true }
+            // Attribute watching fed our own tab/style mutations back into mainFiltering(), repeatedly
+            // re-running Android layout while the user tried to scroll. Text changes are still watched,
+            // and the existing periodic Android scanner continues to catch late Google suggestions.
+            ? { childList: true, subtree: true, characterData: true }
             : { childList: true, subtree: true };
 
         try { domObserver.observe(container, observerOptions); } catch (e) {}
