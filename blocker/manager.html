@@ -90,7 +90,7 @@
       <header class="sync-dialog-header">
         <div>
           <h2 id="syncDialogTitle">GitHub Blocklist Sync</h2>
-          <p>Synchronize blocked terms and links between Firefox PC and Firefox Android.</p>
+          <p>Synchronize blocked terms and links between Chrome, Firefox PC and Firefox Android.</p>
         </div>
         <button id="closeSyncDialog" class="dialog-close" type="button" aria-label="Close sync dialog">×</button>
       </header>
@@ -101,15 +101,27 @@
         <div class="sync-link-list">
           <a id="termsRawLink" target="_blank" rel="noreferrer">blockedTerms.csv</a>
           <a id="linksRawLink" target="_blank" rel="noreferrer">blockedLinks.csv</a>
+          <a id="trustedSitesRawLink" target="_blank" rel="noreferrer">TrustedSites.csv</a>
         </div>
+      </section>
+
+      <section class="sync-dialog-section">
+        <h3>Sync Profile</h3>
+        <label class="field-label" for="syncProfileSelect">Blocked terms profile</label>
+        <select id="syncProfileSelect">
+          <option value="haukkis">Haukkis — blockedTerms.csv</option>
+          <option value="tapsa">Tapsa — blockedTermsDad.csv</option>
+        </select>
+        <p id="syncProfileHelp" class="field-help">Blocked links and TrustedSites.csv are global. Changing profile does not replace the current terms until you manually Download or Upload.</p>
+        <p id="detectedProfileStatus" class="field-help" aria-live="polite"></p>
       </section>
 
       <section class="sync-dialog-section">
         <label class="field-label" for="githubTokenInput">Fine-grained GitHub token</label>
         <input id="githubTokenInput" type="password" autocomplete="off" spellcheck="false" placeholder="Token with repository Contents: read/write">
-        <p class="field-help">Stored only in Firefox local extension storage. Never bundled into the XPI or synchronized through Firefox storage.</p>
+        <p class="field-help">Stored only in this browser profile’s local extension storage. Never bundled into the extension package or uploaded to the list repository.</p>
         <label class="checkbox-line sync-auto-line"><input id="automaticSyncToggle" type="checkbox" checked> Automatic Sync</label>
-        <p class="field-help">Checks every 15 minutes and shortly after a term or link changes. Uploading sends only the blocked terms, blocked links and GitHub token to GitHub, and requires Firefox data-transmission consent.</p>
+        <p class="field-help">Checks every 15 minutes and shortly after changes. Terms use the selected Sync Profile; links are global. TrustedSites.csv is centrally managed and download-only.</p>
         <button id="clearGithubToken" class="secondary-button danger-lite" type="button">Forget saved token</button>
       </section>
 
@@ -201,7 +213,7 @@
 
   <section class="setting-card">
     <h2>Synchronization</h2>
-    <p>Open the GitHub sync controls to upload, download or change automatic PC ↔ Android synchronization.</p>
+    <p>Open the GitHub sync controls to upload, download or change automatic cross-browser synchronization.</p>
     <div class="button-row">
       <button class="secondary-button" type="button" data-open-sync-dialog>Open GitHub Sync</button>
     </div>

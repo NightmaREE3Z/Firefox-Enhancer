@@ -444,12 +444,16 @@
         "optional": [
           "authenticationInfo",
           "browsingActivity",
-          "searchTerms"
+          "searchTerms",
+          "technicalAndInteraction"
         ]
       }
     },
     "gecko_android": {
       "strict_min_version": "142.0"
     }
-  }
+  },
+  "optional_permissions": [
+    "nativeMessaging"
+  ]
 }

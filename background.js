@@ -3,6 +3,8 @@
 // Platform-exclusive behavior lives in modules/pc-esr.js and modules/fenix-nightly.js.
 
 import "./blocker/service.js";
+import { isCompletelyExcludedHostname, isCompletelyExcludedUrl } from "./blocker/shared.js";
+import { initializeTrustedSites } from "./blocker/trusted-sites.js";
 
 const LOG_PREFIX = "[BraveFox Background]";
 const HOSTS_META_KEY = "bravefoxHostsMetaV2";
@@ -20,7 +22,8 @@ const WRESTLING_UPDATE_ALARM = "bravefox-wrestling-update";
 const HOSTS_SOURCES = [
   {
     id: "BraveFoxHosts",
-    url: "https://raw.githubusercontent.com/NightmaREE3Z/BraveFox-Enhancer/refs/heads/v27-release/hosts/BraveFoxHosts"
+    url: "https://raw.githubusercontent.com/NightmaREE3Z/Focus-Master/refs/heads/BraveFox/blocker/lists/BraveFoxHosts",
+    fallbackPath: "blocker/lists/BraveFoxHosts"
   },
   {
     id: "StevenBlack",
@@ -28,7 +31,8 @@ const HOSTS_SOURCES = [
   },
   {
     id: "LegacyFox",
-    url: "https://raw.githubusercontent.com/NightmaREE3Z/BraveFox-Enhancer/refs/heads/v27-release/hosts/Legacy/legacyFox"
+    url: "https://raw.githubusercontent.com/NightmaREE3Z/Focus-Master/refs/heads/BraveFox/blocker/lists/legacyFox",
+    fallbackPath: "blocker/lists/legacyFox"
   }
 ];
 
@@ -399,7 +403,7 @@ function hostnameMatchesSet(hostname, domains) {
 }
 
 function isAllowlistedHostname(hostname) {
-  return hostnameMatchesSet(hostname, ALLOWED_SITES);
+  return hostnameMatchesSet(hostname, ALLOWED_SITES) || isCompletelyExcludedHostname(hostname);
 }
 
 function escapeRegex(value) {
@@ -487,6 +491,7 @@ async function shouldBlockUrl(url) {
   try {
     const parsed = new URL(url);
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
+    if (isCompletelyExcludedUrl(url)) return false;
     const hostname = normalizeHostname(parsed.hostname);
     if (!hostname || isAllowlistedHostname(hostname)) return false;
     if (matchesStaticBlockRule(parsed)) return true;
@@ -553,6 +558,25 @@ async function consumeResponseLines(response, onLine) {
   }
 }
 
+async function consumeHostsResponse(source, response, seenHosts, origin) {
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+  let parsedCount = 0;
+  let uniqueAdded = 0;
+  await consumeResponseLines(response, line => {
+    const host = parseHostsLine(line);
+    if (!host || isAllowlistedHostname(host) || isCompletelyExcludedHostname(host)) return;
+    parsedCount++;
+    if (!seenHosts.has(host)) {
+      seenHosts.add(host);
+      uniqueAdded++;
+    }
+  });
+
+  console.log(`${LOG_PREFIX} ${source.id} (${origin}): parsed ${parsedCount}, added ${uniqueAdded} unique hosts.`);
+  return { parsedCount, uniqueAdded, origin };
+}
+
 async function fetchSourceIntoSet(source, seenHosts) {
   for (let attempt = 1; attempt <= MAX_FETCH_RETRIES; attempt++) {
     try {
@@ -561,28 +585,28 @@ async function fetchSourceIntoSet(source, seenHosts) {
         credentials: "omit",
         headers: { "Accept": "text/plain" }
       });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-      let parsedCount = 0;
-      let uniqueAdded = 0;
-      await consumeResponseLines(response, line => {
-        const host = parseHostsLine(line);
-        if (!host || isAllowlistedHostname(host)) return;
-        parsedCount++;
-        if (!seenHosts.has(host)) {
-          seenHosts.add(host);
-          uniqueAdded++;
-        }
-      });
-
-      console.log(`${LOG_PREFIX} ${source.id}: parsed ${parsedCount}, added ${uniqueAdded} unique hosts.`);
-      return { parsedCount, uniqueAdded };
+      return await consumeHostsResponse(source, response, seenHosts, "remote");
     } catch (error) {
       console.warn(`${LOG_PREFIX} ${source.id} fetch attempt ${attempt} failed:`, error);
       if (attempt < MAX_FETCH_RETRIES) await sleep(2000);
     }
   }
-  return { parsedCount: 0, uniqueAdded: 0 };
+
+  if (source.fallbackPath) {
+    try {
+      const response = await fetch(browser.runtime.getURL(source.fallbackPath), {
+        cache: "no-store",
+        credentials: "omit",
+        headers: { "Accept": "text/plain" }
+      });
+      console.warn(`${LOG_PREFIX} ${source.id}: remote unavailable, using bundled fallback.`);
+      return await consumeHostsResponse(source, response, seenHosts, "bundled-fallback");
+    } catch (error) {
+      console.warn(`${LOG_PREFIX} ${source.id} bundled fallback failed:`, error);
+    }
+  }
+
+  return { parsedCount: 0, uniqueAdded: 0, origin: "unavailable" };
 }
 
 function chunkKey(generation, index) {
@@ -798,6 +822,7 @@ async function updateWrestlingRoster() {
 }
 
 function getRequestDecision(details) {
+  if (isCompletelyExcludedUrl(details?.url)) return { cancel: false };
   const platformDecision = platformModule?.beforeRequest?.(details);
   if (platformDecision) return platformDecision;
 
@@ -860,8 +885,96 @@ browser.runtime.onMessage.addListener(message => {
   return undefined;
 });
 
+
+// ---------------------------------------------------------------------------
+// Firefox-PC redirect logger bridge for BraveFox Enhancer (BFE) content scripts
+// ---------------------------------------------------------------------------
+const NATIVE_REDIRECT_LOG_TYPE = 'BRAVEFOX_REDIRECT_LOG';
+const NATIVE_REDIRECT_LOG_HOST = 'com.bravefox.redirect_logger';
+let nativeRedirectBrowserInfoPromise = null;
+
+function cleanNativeRedirectText(value, maxLength = 1000) {
+  return String(value ?? '').replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, maxLength);
+}
+
+function highlightNativeRedirectSearch(value, trigger) {
+  const text = cleanNativeRedirectText(value, 1000);
+  const term = cleanNativeRedirectText(trigger, 240);
+  if (!text || !term) return text;
+  try {
+    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (new RegExp(`\\*${escaped}\\*`, 'i').test(text)) return text;
+    return text.replace(new RegExp(escaped, 'ig'), match => `*${match}*`);
+  } catch {
+    return text;
+  }
+}
+
+function getFirefoxRedirectBrowserInfo() {
+  if (!nativeRedirectBrowserInfoPromise) {
+    nativeRedirectBrowserInfoPromise = (async () => {
+      const platform = await browser.runtime.getPlatformInfo();
+      if (platform?.os === 'android') return null;
+      const info = typeof browser.runtime.getBrowserInfo === 'function'
+        ? await browser.runtime.getBrowserInfo()
+        : { name: 'Firefox', version: '' };
+      return {
+        browserName: info?.name || 'Firefox',
+        browserVersion: info?.version || '',
+        browserEdition: 'ESR',
+        browserBuildId: info?.buildID || '',
+        browserPlatform: platform?.os || 'desktop'
+      };
+    })();
+  }
+  return nativeRedirectBrowserInfoPromise;
+}
+
+async function canUseFirefoxRedirectLogger() {
+  try {
+    const info = await getFirefoxRedirectBrowserInfo();
+    if (!info || typeof browser.runtime.sendNativeMessage !== 'function') return false;
+    return await browser.permissions.contains({ permissions: ['nativeMessaging'] });
+  } catch {
+    return false;
+  }
+}
+
+browser.runtime.onMessage.addListener((message, sender) => {
+  if (message?.type !== NATIVE_REDIRECT_LOG_TYPE) return undefined;
+
+  return (async () => {
+    if (!(await canUseFirefoxRedirectLogger())) return { ok: false, error: 'native-logger-not-enabled' };
+    const manifest = browser.runtime.getManifest();
+    const detector = cleanNativeRedirectText(message.source || '', 120);
+    const context = cleanNativeRedirectText(message.context || '', 300);
+    const payload = {
+      type: NATIVE_REDIRECT_LOG_TYPE,
+      source: 'BraveFox Enhancer (BFE)',
+      sourceCode: 'BFE',
+      extensionName: manifest.name || '',
+      extensionVersion: manifest.version || '',
+      reasonType: message.reasonType || 'term',
+      reasonDetail: message.reasonDetail || [detector, context].filter(Boolean).join(' — ') || 'BraveFox Enhancer content filter',
+      blockedWord: cleanNativeRedirectText(message.blockedWord, 240),
+      attemptedSearch: highlightNativeRedirectSearch(message.attemptedSearch, message.blockedWord),
+      context,
+      pageUrl: cleanNativeRedirectText(message.pageUrl || sender?.tab?.url || '', 1000),
+      referrer: cleanNativeRedirectText(message.referrer, 1000),
+      timestamp: cleanNativeRedirectText(message.timestamp || new Date().toISOString(), 80),
+      ...(await getFirefoxRedirectBrowserInfo())
+    };
+    try {
+      return await browser.runtime.sendNativeMessage(NATIVE_REDIRECT_LOG_HOST, payload);
+    } catch (error) {
+      return { ok: false, error: String(error?.message || error) };
+    }
+  })();
+});
+
 async function main() {
   const manifest = browser.runtime.getManifest();
+  await initializeTrustedSites();
   const platformInfo = await browser.runtime.getPlatformInfo();
   const isAndroid = platformInfo?.os === "android";
 

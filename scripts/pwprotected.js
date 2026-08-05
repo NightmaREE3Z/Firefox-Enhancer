@@ -9,6 +9,7 @@
   const BRAND_NAME = 'BraveFox Enhancer';
   const ICON_PATH = 'icons/48.png';
   const FIXED_PASSWORD = '5u89asyadhy2adhg9uh3572y1';
+  const AMO_LISTING_URL = 'https://addons.mozilla.org/firefox/addon/bravefox-enhancer/';
   const PAGE_PARAMS = new URLSearchParams(window.location.search);
   const BLOCKER_MANAGER_TARGET = PAGE_PARAMS.get('target') === 'blocker-manager';
   const BLOCKER_TARGET = BLOCKER_MANAGER_TARGET;
@@ -110,6 +111,43 @@
       .bf-btn-submit {
         background: #2563eb;
         color: #fff;
+      }
+      .bf-update-area {
+        margin-top: 18px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+      }
+      .bf-update-btn {
+        appearance: none;
+        border: 1px solid #cbd5e1;
+        border-radius: 10px;
+        background: #f8fafc;
+        color: #0f172a;
+        min-height: 42px;
+        padding: 10px 16px;
+        font: inherit;
+        font-size: 14px;
+        font-weight: 800;
+        cursor: pointer;
+      }
+      .bf-update-btn:hover { background: #f1f5f9; }
+      .bf-update-btn:disabled { cursor: wait; opacity: 0.68; }
+      .bf-update-status {
+        min-height: 18px;
+        color: #64748b;
+        font-size: 12px;
+        font-weight: 650;
+        text-align: center;
+      }
+      .bf-update-status[data-state="success"] { color: #047857; }
+      .bf-update-status[data-state="error"] { color: #b91c1c; }
+      .bf-version { margin-top: 12px; text-align: center; color: #94a3b8; font-size: 12px; font-weight: 700; }
+      @media (max-width: 600px) {
+        .bf-card { width: min(720px, 92vw); padding: 22px 18px; }
+        .bf-title { font-size: 28px; }
+        .bf-update-btn { width: 100%; }
       }
       .bf-error {
         margin-top: 10px;
@@ -213,8 +251,117 @@
     form.appendChild(inputRow);
     form.appendChild(error);
 
+    const api = globalThis.browser ?? globalThis.chrome;
+    let installedVersion = '';
+    try {
+      installedVersion = api?.runtime?.getManifest?.().version || '';
+    } catch {
+      installedVersion = '';
+    }
+
+    const updateArea = document.createElement('div');
+    updateArea.className = 'bf-update-area';
+
+    const updateButton = document.createElement('button');
+    updateButton.type = 'button';
+    updateButton.className = 'bf-update-btn';
+    updateButton.textContent = 'Check for extension update';
+
+    const updateStatus = document.createElement('div');
+    updateStatus.className = 'bf-update-status';
+    updateStatus.setAttribute('role', 'status');
+    updateStatus.setAttribute('aria-live', 'polite');
+    updateStatus.textContent = installedVersion ? `Installed version: ${installedVersion}` : '';
+
+    const setUpdateStatus = (message, state = '') => {
+      updateStatus.textContent = message;
+      if (state) updateStatus.dataset.state = state;
+      else delete updateStatus.dataset.state;
+    };
+
+    const openAmoListing = async () => {
+      try {
+        if (api?.tabs?.create) {
+          await api.tabs.create({ url: AMO_LISTING_URL });
+          return;
+        }
+      } catch {
+        // Fall through to normal navigation.
+      }
+      window.location.href = AMO_LISTING_URL;
+    };
+
+    let updateButtonMode = 'check';
+
+    updateButton.addEventListener('click', async () => {
+      if (updateButtonMode === 'amo') {
+        await openAmoListing();
+        return;
+      }
+
+      if (!api?.runtime?.requestUpdateCheck) {
+        setUpdateStatus('Direct update checks are unavailable here. Opening the AMO page…');
+        await openAmoListing();
+        return;
+      }
+
+      updateButton.disabled = true;
+      updateButton.textContent = 'Checking for update…';
+      setUpdateStatus(installedVersion ? `Checking from version ${installedVersion}…` : 'Checking for an update…');
+
+      try {
+        const result = await api.runtime.requestUpdateCheck();
+        const status = result?.status || 'no_update';
+
+        if (status === 'update_available') {
+          const nextVersion = result?.version ? ` ${result.version}` : '';
+          setUpdateStatus(`Update${nextVersion} found. Applying it now…`, 'success');
+          updateButton.textContent = 'Applying update…';
+          setTimeout(() => {
+            try {
+              api.runtime.reload();
+            } catch {
+              void openAmoListing();
+            }
+          }, 900);
+          return;
+        }
+
+        if (status === 'throttled') {
+          setUpdateStatus('Firefox throttled the update check. Try again later or open the AMO page.', 'error');
+          updateButtonMode = 'amo';
+          updateButton.textContent = 'Open BraveFox on AMO';
+          updateButton.disabled = false;
+          return;
+        }
+
+        setUpdateStatus(installedVersion
+          ? `BraveFox Enhancer ${installedVersion} is up to date.`
+          : 'BraveFox Enhancer is up to date.', 'success');
+        updateButton.textContent = 'Check again';
+        updateButton.disabled = false;
+      } catch (checkError) {
+        const message = checkError?.message || 'Firefox could not complete the update check.';
+        setUpdateStatus(`${message} Opening the AMO page is still available.`, 'error');
+        updateButtonMode = 'amo';
+        updateButton.textContent = 'Open BraveFox on AMO';
+        updateButton.disabled = false;
+      }
+    });
+
+    const version = document.createElement('div');
+    version.className = 'bf-version';
+    version.textContent = installedVersion
+      ? `Via BraveFox Enhancer v${installedVersion}`
+      : 'Powered by BraveFox Enhancer';
+
+    updateArea.appendChild(updateButton);
+    updateArea.appendChild(updateStatus);
+
     card.appendChild(title);
     card.appendChild(form);
+    card.appendChild(updateArea);
+    card.appendChild(version);
 
     container.appendChild(card);
 

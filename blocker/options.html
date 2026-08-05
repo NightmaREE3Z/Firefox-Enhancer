@@ -222,8 +222,52 @@
       max-width: 330px;
     }
 
+    .options-update-area {
+      display: grid;
+      gap: 7px;
+      margin-top: 16px;
+      justify-items: center;
+    }
+
+    .options-update-button {
+      min-height: 42px;
+      border: 1px solid #cbd4e2;
+      border-radius: 11px;
+      padding: 10px 16px;
+      background: #f7f9fd;
+      color: #26354f;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 900;
+      cursor: pointer;
+    }
+
+    .options-update-button:hover,
+    .options-update-button:focus-visible {
+      background: #eef3fb;
+      color: #172033;
+    }
+
+    .options-update-button:disabled {
+      cursor: wait;
+      opacity: .65;
+    }
+
+    .options-update-status {
+      min-height: 17px;
+      margin: 0;
+      color: #747f91;
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1.4;
+      text-align: center;
+    }
+
+    .options-update-status[data-state="success"] { color: #167257; }
+    .options-update-status[data-state="error"] { color: #c83e48; }
+
     .options-note {
-      margin: 14px 0 0;
+      margin: 10px 0 0;
       font-size: .9rem;
       opacity: .8;
       text-align: center;
@@ -327,6 +371,14 @@
         </form>
 
         <p class="hint">You can also open this password launcher from Firefox’s Add-ons menu.</p>
+        <div class="options-update-area">
+          <button id="checkExtensionUpdate" class="options-update-button" type="button">Check for extension update</button>
+          <p id="extensionUpdateStatus" class="options-update-status" role="status" aria-live="polite"></p>
+        </div>
+        <div id="redirectLoggerArea" class="options-update-area" hidden>
+          <button id="enableRedirectLogger" class="options-update-button" type="button">Enable PC Redirect Logger</button>
+          <p id="redirectLoggerStatus" class="options-update-status" role="status" aria-live="polite"></p>
+        </div>
         <p id="enhancerVersion" class="options-note">Via BraveFox Enhancer</p>
       </section>
     </div>

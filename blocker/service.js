@@ -31,6 +31,7 @@ import {
   synchronizeNow,
   updateSettings
 } from './storage.js';
+import { initializeTrustedSites } from './trusted-sites.js';
 import {
   isCompletelyExcludedUrl,
   isIncognitoSender,
@@ -46,10 +47,114 @@ const redirectLandingBypass = new Map();
 const EXTENSION_ORIGIN = new URL(browser.runtime.getURL('/')).origin;
 
 // ---------------------------------------------------------------------------
-// Optional native block logging is disabled in the unified Firefox build.
-// This keeps the same package compatible with Firefox Android, where native messaging is unavailable.
+// Optional Firefox-PC native redirect logging
 // ---------------------------------------------------------------------------
-function sendNativeBlockLog() {}
+const NATIVE_LOGGER_HOST = 'com.bravefox.redirect_logger';
+const NATIVE_LOG_SOURCE = 'BraveFox Focus Master (BFFM)';
+const NATIVE_LOG_SOURCE_CODE = 'BFFM';
+const recentNativeLogKeys = new Map();
+let nativeBrowserInfoPromise = null;
+
+function cleanNativeLogText(value, maxLength = 1000) {
+  return String(value ?? '')
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, maxLength);
+}
+
+function escapeNativeLogRegex(value) {
+  return String(value ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function highlightNativeLogSearch(value, trigger) {
+  let output = cleanNativeLogText(value, 1000);
+  const tokens = [...new Set(
+    cleanNativeLogText(trigger, 240)
+      .split(/\s+/)
+      .map(token => token.trim())
+      .filter(Boolean)
+  )].sort((a, b) => b.length - a.length);
+
+  for (const token of tokens) {
+    try {
+      output = output.replace(new RegExp(escapeNativeLogRegex(token), 'ig'), match => `*${match}*`);
+    } catch {}
+  }
+  return output;
+}
+
+function pruneNativeLogKeys() {
+  const cutoff = Date.now() - 10_000;
+  for (const [key, timestamp] of recentNativeLogKeys.entries()) {
+    if (timestamp < cutoff) recentNativeLogKeys.delete(key);
+  }
+}
+
+function getFirefoxNativeBrowserInfo() {
+  if (!nativeBrowserInfoPromise) {
+    nativeBrowserInfoPromise = (async () => {
+      const platform = await browser.runtime.getPlatformInfo();
+      if (platform?.os === 'android') return null;
+      const info = typeof browser.runtime.getBrowserInfo === 'function'
+        ? await browser.runtime.getBrowserInfo()
+        : { name: 'Firefox', version: '' };
+      return {
+        browserName: info?.name || 'Firefox',
+        browserVersion: info?.version || '',
+        browserEdition: 'ESR',
+        browserBuildId: info?.buildID || '',
+        browserPlatform: platform?.os || 'desktop'
+      };
+    })();
+  }
+  return nativeBrowserInfoPromise;
+}
+
+async function hasFirefoxNativeLoggerPermission() {
+  try {
+    return await browser.permissions.contains({ permissions: ['nativeMessaging'] });
+  } catch {
+    return false;
+  }
+}
+
+async function sendNativeBlockLog(reason, sourceUrl, redirectTarget = '') {
+  if (!reason || typeof browser.runtime?.sendNativeMessage !== 'function') return;
+  const browserInfo = await getFirefoxNativeBrowserInfo();
+  if (!browserInfo || !(await hasFirefoxNativeLoggerPermission())) return;
+
+  const blockedWord = cleanNativeLogText(reason.trigger, 240);
+  const attemptedSearch = highlightNativeLogSearch(reason.attemptedSearch, blockedWord);
+  const pageUrl = cleanNativeLogText(sourceUrl, 1000);
+  const key = `${reason.type || ''}::${blockedWord}::${attemptedSearch}::${pageUrl}`;
+
+  pruneNativeLogKeys();
+  if (recentNativeLogKeys.has(key)) return;
+  recentNativeLogKeys.set(key, Date.now());
+
+  const manifest = browser.runtime.getManifest();
+  const payload = {
+    type: 'BRAVEFOX_REDIRECT_LOG',
+    source: NATIVE_LOG_SOURCE,
+    sourceCode: NATIVE_LOG_SOURCE_CODE,
+    extensionName: manifest.name || '',
+    extensionVersion: manifest.version || '',
+    reasonType: reason.type || (blockedWord ? 'term' : 'unknown'),
+    reasonDetail: reason.type === 'link' ? 'Focus Master blocked-link matcher' : 'Focus Master blocked-term matcher',
+    blockedWord,
+    attemptedSearch,
+    context: reason.type === 'link' ? 'blocked-link' : 'blocked-term',
+    pageUrl,
+    referrer: cleanNativeLogText(redirectTarget, 1000),
+    timestamp: new Date().toISOString(),
+    ...browserInfo
+  };
+
+  try {
+    await browser.runtime.sendNativeMessage(NATIVE_LOGGER_HOST, payload);
+  } catch {}
+}
 
 function senderUrl(sender) { return String(sender?.url || sender?.tab?.url || ''); }
 function senderTabId(sender) { return Number.isInteger(sender?.tab?.id) ? sender.tab.id : null; }
@@ -433,7 +538,10 @@ browser.runtime.onMessage.addListener((message, sender) => {
           githubSync: await saveGitHubSyncConfig({
             autoSync: message.autoSync,
             token: message.token,
-            clearToken: Boolean(message.clearToken)
+            clearToken: Boolean(message.clearToken),
+            activeProfile: message.activeProfile,
+            confirmProfileSwitch: Boolean(message.confirmProfileSwitch),
+            profileExplicit: Boolean(message.profileExplicit)
           })
         };
       case MESSAGE.downloadGitHubLists: {
@@ -468,6 +576,13 @@ browser.runtime.onMessage.addListener((message, sender) => {
 });
 
 void browser.storage.sync.remove(STORAGE_KEYS.auth).catch(() => {});
-void loadDataset({ force: true }).catch(error => console.warn('[BraveFox Focus Master] Initial dataset load failed:', error));
-void initializeGitHubSync().catch(error => console.warn('[BraveFox Focus Master] GitHub sync initialization failed:', error));
+void (async () => {
+  try {
+    await initializeTrustedSites();
+    await initializeGitHubSync();
+    await loadDataset({ force: true });
+  } catch (error) {
+    console.warn('[BraveFox Focus Master] Startup initialization failed:', error);
+  }
+})();
 console.log(`[BraveFox Focus Master] Module ${BLOCKER_VERSION} initialized with ordered local lists, Firefox profile mirroring, GitHub PC/Android sync, and bundled fallbacks.`);

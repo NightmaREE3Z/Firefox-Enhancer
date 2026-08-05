@@ -167,3 +167,5 @@ html[data-platform="android"] .sync-dialog-section,
 html[data-platform="android"] .sync-dialog-actions { padding-left: 16px; padding-right: 16px; }
 html[data-platform="android"] .sync-dialog-actions { display: grid; grid-template-columns: 1fr; }
 html[data-platform="android"] .sync-dialog-actions button { min-height: 46px; }
+
+.sync-dialog select { width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid #cfd7e6; border-radius: 10px; background: #fff; color: #172033; font: inherit; }

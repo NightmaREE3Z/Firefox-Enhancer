@@ -274,11 +274,15 @@ const GITHUB_DATA_COLLECTION = Object.freeze(['authenticationInfo', 'browsingAct
 function syncStatusText(sync = state.githubSync) {
   if (!sync) return 'GitHub sync has not been configured yet.';
   const lines = [];
+  lines.push(`Sync Profile: ${sync.activeProfileLabel || sync.activeProfile || 'Haukkis'} (${sync.target?.files?.terms?.path?.split('/').pop() || 'blockedTerms.csv'})`);
+  if (sync.profileSwitchPending) lines.push(`Profile switch pending: local terms are still ${sync.termsProfileLabel || sync.termsProfile}; use manual Download or Upload to commit the switch.`);
   lines.push(sync.autoSync ? 'Automatic Sync: enabled' : 'Automatic Sync: disabled');
   lines.push(sync.hasToken ? 'GitHub token: saved locally' : 'GitHub token: not saved (downloads still work)');
   lines.push(`Pending changes: ${Number(sync.pendingCount) || 0}`);
   if (sync.lastSyncAt) lines.push(`Last sync: ${new Date(sync.lastSyncAt).toLocaleString()} — ${sync.lastAction || 'completed'}`);
   else lines.push('Last sync: never');
+  if (sync.trustedSites) lines.push(`Trusted sites: ${sync.trustedSites.count || 0} (${sync.trustedSites.source || 'unknown'})`);
+  if (sync.suggestedProfileLabel) lines.push(`Detected browser account suggests ${sync.suggestedProfileLabel}.`);
   if (sync.lastError) lines.push(`Last error: ${sync.lastError}`);
   return lines.join('\n');
 }
@@ -294,6 +298,17 @@ async function refreshGithubSyncStatus() {
   const response = await message({ type: MESSAGE.getGitHubSyncStatus });
   applyResponse(response);
   if (elements.automaticSyncToggle) elements.automaticSyncToggle.checked = response.githubSync.autoSync !== false;
+  if (elements.syncProfileSelect) elements.syncProfileSelect.value = response.githubSync.activeProfile || 'haukkis';
+  if (elements.detectedProfileStatus) {
+    if (response.githubSync.detectedEmail) {
+      const suggestion = response.githubSync.suggestedProfileLabel ? ` Suggested profile: ${response.githubSync.suggestedProfileLabel}.` : '';
+      elements.detectedProfileStatus.textContent = `Detected Chrome profile account: ${response.githubSync.detectedEmail}.${suggestion}`;
+    } else if (response.githubSync.detectionAvailable) {
+      elements.detectedProfileStatus.textContent = 'No recognized Chrome profile email was detected. Choose a Sync Profile manually.';
+    } else {
+      elements.detectedProfileStatus.textContent = 'Automatic email detection is unavailable on this browser; choose a Sync Profile manually.';
+    }
+  }
   if (elements.githubTokenInput) {
     elements.githubTokenInput.value = '';
     elements.githubTokenInput.placeholder = response.githubSync.hasToken
@@ -303,33 +318,66 @@ async function refreshGithubSyncStatus() {
   const files = response.githubSync.target?.files;
   if (files?.terms?.rawUrl && elements.termsRawLink) elements.termsRawLink.href = files.terms.rawUrl;
   if (files?.links?.rawUrl && elements.linksRawLink) elements.linksRawLink.href = files.links.rawUrl;
+  if (files?.trustedSites?.rawUrl && elements.trustedSitesRawLink) elements.trustedSitesRawLink.href = files.trustedSites.rawUrl;
+  if (files?.terms?.path && elements.termsRawLink) elements.termsRawLink.textContent = files.terms.path.split('/').pop();
   renderGithubSyncDialogStatus(response.githubSync);
   return response.githubSync;
 }
 
-async function ensureGithubUploadConsent() {
-  const permissions = await browser.permissions.getAll();
-  const granted = new Set(Array.isArray(permissions.data_collection) ? permissions.data_collection : []);
-  if (GITHUB_DATA_COLLECTION.every(item => granted.has(item))) return true;
-  if (!Array.isArray(permissions.data_collection)) {
+function startGithubUploadConsentRequest({ requireToken = false } = {}) {
+  const token = elements.githubTokenInput.value.trim();
+  const hasUsableToken = Boolean(token || state.githubSync?.hasToken);
+  if (requireToken && !hasUsableToken) {
+    throw new Error('Enter a fine-grained GitHub token before uploading.');
+  }
+
+  const shouldRequest = requireToken || (hasUsableToken && elements.automaticSyncToggle.checked);
+  if (!shouldRequest) return null;
+  if (!browser.permissions?.request) {
     throw new Error('This Firefox version cannot request the required GitHub data-transmission consent.');
   }
-  const accepted = await browser.permissions.request({ data_collection: [...GITHUB_DATA_COLLECTION] });
+
+  // Fenix requires permissions.request() to be invoked synchronously from the
+  // actual tap/click handler. Return the promise without awaiting anything first.
+  return browser.permissions.request({ data_collection: [...GITHUB_DATA_COLLECTION] });
+}
+
+async function finishGithubUploadConsent(consentRequest) {
+  if (!consentRequest) return true;
+  const accepted = await consentRequest;
   if (!accepted) throw new Error('GitHub upload consent was declined. Download-only sync remains available.');
   return true;
 }
 
-async function saveGithubSettings({ requireConsent = false } = {}) {
+async function saveGithubSettings({ requireConsent = false, consentRequest = null } = {}) {
   const token = elements.githubTokenInput.value.trim();
   const hasUsableToken = Boolean(token || state.githubSync?.hasToken);
   if (requireConsent && !hasUsableToken) {
     throw new Error('Enter a fine-grained GitHub token before uploading.');
   }
-  if (requireConsent || (hasUsableToken && elements.automaticSyncToggle.checked)) await ensureGithubUploadConsent();
+  await finishGithubUploadConsent(consentRequest);
+  const requestedProfile = elements.syncProfileSelect?.value || state.githubSync?.activeProfile || 'haukkis';
+  const changingProfile = Boolean(state.githubSync?.activeProfile && requestedProfile !== state.githubSync.activeProfile);
+  let confirmProfileSwitch = false;
+  if (changingProfile) {
+    const from = state.githubSync.activeProfileLabel || state.githubSync.activeProfile;
+    const selected = state.githubSync.profiles?.find(item => item.id === requestedProfile);
+    const to = selected?.label || requestedProfile;
+    if (!window.confirm(`Switch Sync Profile from ${from} to ${to}?
+
+The current local terms will NOT be replaced now. Automatic term sync pauses until you manually choose Download from GitHub or Upload to GitHub.`)) {
+      elements.syncProfileSelect.value = state.githubSync.activeProfile;
+      throw new Error('Sync Profile change cancelled.');
+    }
+    confirmProfileSwitch = true;
+  }
   const response = await message({
     type: MESSAGE.saveGitHubSyncConfig,
     autoSync: elements.automaticSyncToggle.checked,
-    token
+    token,
+    activeProfile: requestedProfile,
+    confirmProfileSwitch,
+    profileExplicit: true
   });
   applyResponse(response);
   renderGithubSyncDialogStatus(response.githubSync);
@@ -349,14 +397,14 @@ async function openGithubSyncDialog() {
   }
 }
 
-async function runGithubAction(button, action) {
+async function runGithubAction(button, action, consentRequest = null) {
   const original = button.textContent;
   button.disabled = true;
   button.textContent = action === 'upload' ? 'Uploading…' : 'Downloading…';
   try {
     if (action === 'upload') {
-      await saveGithubSettings({ requireConsent: true });
-    } else if (!window.confirm('Download the public GitHub lists and replace the current local term/link lists?')) {
+      await saveGithubSettings({ requireConsent: true, consentRequest });
+    } else if (!window.confirm(`Download ${state.githubSync?.activeProfileLabel || 'the selected profile'} terms plus the global links from GitHub and replace the current local lists?`)) {
       return;
     }
 
@@ -395,11 +443,21 @@ function bindGithubSyncDialog() {
     if (event.target === elements.syncDialog) elements.syncDialog.close();
   });
   elements.saveGithubSyncSettings.addEventListener('click', async () => {
+    let consentRequest = null;
+    try {
+      // Start the permission request before the click handler yields. Firefox
+      // Android rejects it after any preceding await, even though desktop does not.
+      consentRequest = startGithubUploadConsentRequest();
+    } catch (error) {
+      if (!lockingOut) toast(error.message);
+      return;
+    }
+
     const original = elements.saveGithubSyncSettings.textContent;
     elements.saveGithubSyncSettings.disabled = true;
     elements.saveGithubSyncSettings.textContent = 'Saving…';
     try {
-      await saveGithubSettings();
+      await saveGithubSettings({ consentRequest });
       toast('GitHub sync settings saved.');
     } catch (error) {
       if (!lockingOut) toast(error.message);
@@ -424,7 +482,17 @@ function bindGithubSyncDialog() {
     } catch (error) { toast(error.message); }
   });
   elements.downloadFromGithub.addEventListener('click', () => void runGithubAction(elements.downloadFromGithub, 'download'));
-  elements.uploadToGithub.addEventListener('click', () => void runGithubAction(elements.uploadToGithub, 'upload'));
+  elements.uploadToGithub.addEventListener('click', () => {
+    let consentRequest;
+    try {
+      // Same user-gesture rule applies to manual Upload on Fenix.
+      consentRequest = startGithubUploadConsentRequest({ requireToken: true });
+    } catch (error) {
+      if (!lockingOut) toast(error.message);
+      return;
+    }
+    void runGithubAction(elements.uploadToGithub, 'upload', consentRequest);
+  });
 }
 
 function bindAdminControls() {
@@ -540,6 +608,7 @@ function bind() {
     lockButton: $('#lockButton'), toast: $('#toast'), syncLabel: $('#syncLabel'), syncDialog: $('#syncDialog'),
     closeSyncDialog: $('#closeSyncDialog'), githubTokenInput: $('#githubTokenInput'), automaticSyncToggle: $('#automaticSyncToggle'),
     clearGithubToken: $('#clearGithubToken'), githubSyncStatus: $('#githubSyncStatus'), termsRawLink: $('#termsRawLink'), linksRawLink: $('#linksRawLink'),
+    trustedSitesRawLink: $('#trustedSitesRawLink'), syncProfileSelect: $('#syncProfileSelect'), syncProfileHelp: $('#syncProfileHelp'), detectedProfileStatus: $('#detectedProfileStatus'),
     saveGithubSyncSettings: $('#saveGithubSyncSettings'), downloadFromGithub: $('#downloadFromGithub'), uploadToGithub: $('#uploadToGithub')
   });
 

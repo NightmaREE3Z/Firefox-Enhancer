@@ -13,22 +13,54 @@ import {
 } from './shared.js';
 
 
-export async function loadBundledFallbackLists() {
+const GITHUB_CONFIG_KEY = 'bfb:github-sync-config';
+const VALID_PROFILES = new Set(['haukkis', 'tapsa']);
+const REMOTE_BASE = 'https://raw.githubusercontent.com/NightmaREE3Z/Focus-Master/refs/heads/BraveFox/blocker/lists/';
+
+function normalizeProfileId(value) { return VALID_PROFILES.has(value) ? value : 'haukkis'; }
+function termsFilename(profileId) { return normalizeProfileId(profileId) === 'tapsa' ? 'blockedTermsDad.csv' : 'blockedTerms.csv'; }
+
+async function readConfiguredProfileId() {
+  try {
+    const result = await browser.storage.local.get(GITHUB_CONFIG_KEY);
+    return normalizeProfileId(result[GITHUB_CONFIG_KEY]?.activeProfile);
+  } catch { return 'haukkis'; }
+}
+
+export async function loadBundledFallbackLists(profileId = 'haukkis') {
+  const termFile = termsFilename(profileId);
   const [termsResponse, linksResponse] = await Promise.all([
-    fetch(browser.runtime.getURL('blocker/lists/blockedTerms.csv'), { cache: 'no-store' }),
+    fetch(browser.runtime.getURL(`blocker/lists/${termFile}`), { cache: 'no-store' }),
     fetch(browser.runtime.getURL('blocker/lists/blockedLinks.csv'), { cache: 'no-store' })
   ]);
-  if (!termsResponse.ok || !linksResponse.ok) {
-    throw new Error('Bundled BraveFox Focus Master lists could not be loaded.');
+  if (!termsResponse.ok || !linksResponse.ok) throw new Error('Bundled BraveFox Focus Master lists could not be loaded.');
+  const [termsText, linksText] = await Promise.all([termsResponse.text(), linksResponse.text()]);
+  return { terms: parseListText(termsText, 'terms'), links: parseListText(linksText, 'links'), profile: normalizeProfileId(profileId) };
+}
+
+async function fetchRemoteList(kind, profileId) {
+  const filename = kind === 'terms' ? termsFilename(profileId) : 'blockedLinks.csv';
+  const url = `${REMOTE_BASE}${filename}`;
+  const response = await fetch(`${url}?bravefox_refresh=${Date.now()}`, {
+    cache: 'no-store', credentials: 'omit', headers: { Accept: 'text/plain' }
+  });
+  if (!response.ok) throw new Error(`Remote Focus Master ${kind} list failed (HTTP ${response.status}).`);
+  return parseListText(await response.text(), kind);
+}
+
+export async function loadRemoteFirstLists(profileId = null) {
+  const profile = normalizeProfileId(profileId || await readConfiguredProfileId());
+  const results = await Promise.allSettled([fetchRemoteList('terms', profile), fetchRemoteList('links', profile)]);
+  let terms = results[0].status === 'fulfilled' ? results[0].value : null;
+  let links = results[1].status === 'fulfilled' ? results[1].value : null;
+  let usedBundledFallback = false;
+  if (terms === null || links === null) {
+    const bundled = await loadBundledFallbackLists(profile);
+    if (terms === null) terms = bundled.terms;
+    if (links === null) links = bundled.links;
+    usedBundledFallback = true;
   }
-  const [termsText, linksText] = await Promise.all([
-    termsResponse.text(),
-    linksResponse.text()
-  ]);
-  return {
-    terms: parseListText(termsText, 'terms'),
-    links: parseListText(linksText, 'links')
-  };
+  return { terms, links, profile, usedBundledFallback };
 }
 
 const encoder = new TextEncoder();
@@ -73,11 +105,13 @@ function normalizeDatasetSnapshot(value) {
   const links = uniqueInOrder(value.links, normalizeLinkForStorage);
   const updatedAt = Number(value.updatedAt) || 0;
   const revision = String(value.revision || '');
+  const profile = normalizeProfileId(value.profile);
   if (!revision && !terms.length && !links.length && !updatedAt) return null;
   return {
     terms,
     links,
     revision,
+    profile,
     updatedAt,
     syncPending: Boolean(value.syncPending),
     syncError: String(value.syncError || '')
@@ -120,6 +154,7 @@ async function readSyncVersion(version) {
     terms,
     links,
     revision: version.revision,
+    profile: normalizeProfileId(version.profile),
     updatedAt: version.updatedAt || 0,
     syncPending: false,
     syncError: ''
@@ -156,6 +191,7 @@ async function writeSyncDataset(snapshot) {
   const oldMeta = oldResult[STORAGE_KEYS.datasetMeta] || { versions: [] };
   const currentVersion = {
     revision: clean.revision,
+    profile: clean.profile,
     termChunks: termChunks.length,
     linkChunks: linkChunks.length,
     termCount: clean.terms.length,
@@ -189,6 +225,8 @@ async function writeSyncDataset(snapshot) {
 function chooseNewest(local, synced) {
   if (!local) return synced;
   if (!synced) return local;
+  // Never let a profile-sync snapshot for Haukkis replace a local Tapsa list, or vice versa.
+  if (local.profile !== synced.profile) return local;
   if (local.updatedAt > synced.updatedAt) return local;
   if (synced.updatedAt > local.updatedAt) return synced;
   if (local.revision === synced.revision) return local;
@@ -218,21 +256,29 @@ function scheduleDatasetRepair(snapshot) {
 export async function loadDataset({ force = false } = {}) {
   if (!force && cachedDataset) return cachedDataset;
 
-  const [local, synced] = await Promise.all([
+  const [local, synced, activeProfile] = await Promise.all([
     readLocalDataset(),
-    readSyncDataset().catch(() => null)
+    readSyncDataset().catch(() => null),
+    readConfiguredProfileId()
   ]);
-  let chosen = chooseNewest(local, synced);
+  // A fresh install must not inherit the other person's terms merely because
+  // browser profile-sync happened to contain a snapshot from that profile.
+  const usableSynced = (!local && synced?.profile !== activeProfile) ? null : synced;
+  let chosen = chooseNewest(local, usableSynced);
   if (!chosen) {
     try {
-      const bundled = await loadBundledFallbackLists();
-      chosen = await saveDataset(bundled);
+      const initial = await loadRemoteFirstLists(activeProfile);
+      chosen = await saveDataset({ terms: initial.terms, links: initial.links, profile: initial.profile });
+      if (initial.usedBundledFallback) {
+        console.warn('[BraveFox Focus Master] One or more remote lists failed; bundled fallback data was used.');
+      }
     } catch (error) {
-      console.warn('[BraveFox Focus Master] Bundled list fallback failed:', error);
+      console.warn('[BraveFox Focus Master] Remote and bundled initial list loading failed:', error);
       chosen = {
         terms: [],
         links: [],
         revision: '',
+        profile: activeProfile,
         updatedAt: 0,
         syncPending: false,
         syncError: String(error?.message || error)
@@ -240,9 +286,9 @@ export async function loadDataset({ force = false } = {}) {
     }
   }
 
-  if (synced && (!local || synced.updatedAt > local.updatedAt || synced.revision !== local.revision)) {
-    await writeLocalDataset(synced, { syncPending: false, syncError: '' });
-  } else if (local && (!synced || local.updatedAt > synced.updatedAt || local.syncPending)) {
+  if (usableSynced && (!local || usableSynced.updatedAt > local.updatedAt || usableSynced.revision !== local.revision) && (!local || usableSynced.profile === local.profile)) {
+    await writeLocalDataset(usableSynced, { syncPending: false, syncError: '' });
+  } else if (local && (!usableSynced || local.updatedAt > usableSynced.updatedAt || local.syncPending)) {
     scheduleDatasetRepair(local);
   }
 
@@ -250,10 +296,13 @@ export async function loadDataset({ force = false } = {}) {
   return cachedDataset;
 }
 
-export async function saveDataset({ terms, links }) {
+export async function saveDataset({ terms, links, profile = '' }) {
+  const existing = await readLocalDataset();
+  const snapshotProfile = normalizeProfileId(profile || existing?.profile || await readConfiguredProfileId());
   const snapshot = {
     terms: uniqueInOrder(terms, normalizeTerm),
     links: uniqueInOrder(links, normalizeLinkForStorage),
+    profile: snapshotProfile,
     revision: makeRevision(),
     updatedAt: Date.now(),
     syncPending: true,
@@ -402,7 +451,8 @@ export async function synchronizeNow() {
   if (!currentDataset.revision) {
     dataset = await saveDataset({
       terms: currentDataset.terms,
-      links: currentDataset.links
+      links: currentDataset.links,
+      profile: currentDataset.profile
     });
   } else {
     try {
