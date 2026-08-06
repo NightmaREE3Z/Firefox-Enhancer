@@ -14,6 +14,7 @@ if (versionLabel) {
 
 
 const AMO_LISTING_URL = 'https://addons.mozilla.org/firefox/addon/bravefox-enhancer/';
+const AMO_API_URL = 'https://addons.mozilla.org/api/v5/addons/addon/bravefox-enhancer/';
 const updateButton = document.querySelector('#checkExtensionUpdate');
 const updateStatus = document.querySelector('#extensionUpdateStatus');
 let updateButtonMode = 'check';
@@ -23,6 +24,37 @@ function showUpdateStatus(message, state = '') {
   updateStatus.textContent = message;
   if (state) updateStatus.dataset.state = state;
   else delete updateStatus.dataset.state;
+}
+
+function compareVersions(left, right) {
+  const leftParts = String(left || '').split('.').map(part => Number.parseInt(part, 10) || 0);
+  const rightParts = String(right || '').split('.').map(part => Number.parseInt(part, 10) || 0);
+  const length = Math.max(leftParts.length, rightParts.length);
+
+  for (let index = 0; index < length; index += 1) {
+    const leftPart = leftParts[index] || 0;
+    const rightPart = rightParts[index] || 0;
+    if (leftPart > rightPart) return 1;
+    if (leftPart < rightPart) return -1;
+  }
+  return 0;
+}
+
+async function fetchLatestAmoVersion() {
+  const response = await fetch(AMO_API_URL, {
+    cache: 'no-store',
+    credentials: 'omit',
+    headers: { Accept: 'application/json' }
+  });
+
+  if (!response.ok) {
+    throw new Error(`AMO returned HTTP ${response.status}.`);
+  }
+
+  const addon = await response.json();
+  const latestVersion = String(addon?.current_version?.version || '').trim();
+  if (!latestVersion) throw new Error('AMO did not return a current version.');
+  return latestVersion;
 }
 
 async function openAmoListing() {
@@ -43,43 +75,42 @@ if (updateButton) {
       return;
     }
 
-    if (typeof browser.runtime.requestUpdateCheck !== 'function') {
-      showUpdateStatus('Direct update checks are unavailable here. Opening the AMO page…');
-      await openAmoListing();
-      return;
-    }
-
     updateButton.disabled = true;
-    updateButton.textContent = 'Checking for update…';
-    showUpdateStatus(`Checking from version ${installedVersion}…`);
+    updateButton.textContent = 'Checking AMO…';
+    showUpdateStatus(`Comparing installed ${installedVersion} with AMO…`);
 
     try {
-      const result = await browser.runtime.requestUpdateCheck();
-      const resultStatus = result?.status || 'no_update';
+      const latestVersion = await fetchLatestAmoVersion();
+      const comparison = compareVersions(installedVersion, latestVersion);
 
-      if (resultStatus === 'update_available') {
-        const nextVersion = result?.version ? ` ${result.version}` : '';
-        showUpdateStatus(`Update${nextVersion} found. Applying it now…`, 'success');
-        updateButton.textContent = 'Applying update…';
-        setTimeout(() => browser.runtime.reload(), 900);
-        return;
-      }
-
-      if (resultStatus === 'throttled') {
-        showUpdateStatus('Firefox throttled the update check. You can open the AMO page instead.', 'error');
+      if (comparison < 0) {
+        showUpdateStatus(
+          `AMO version ${latestVersion} is available. Firefox will install approved updates automatically.`,
+          'success'
+        );
         updateButtonMode = 'amo';
         updateButton.textContent = 'Open BraveFox on AMO';
-        updateButton.disabled = false;
         return;
       }
 
-      showUpdateStatus(`BraveFox Enhancer ${installedVersion} is up to date.`, 'success');
+      if (comparison > 0) {
+        showUpdateStatus(
+          `Installed ${installedVersion} is newer than AMO version ${latestVersion}.`,
+          'success'
+        );
+      } else {
+        showUpdateStatus(`BraveFox Enhancer ${installedVersion} is up to date on AMO.`, 'success');
+      }
+
       updateButton.textContent = 'Check again';
-      updateButton.disabled = false;
     } catch (updateError) {
-      showUpdateStatus(`${updateError?.message || 'Firefox could not complete the update check.'} Open the AMO page instead.`, 'error');
+      showUpdateStatus(
+        `${updateError?.message || 'The AMO version check failed.'} You can open the listing instead.`,
+        'error'
+      );
       updateButtonMode = 'amo';
       updateButton.textContent = 'Open BraveFox on AMO';
+    } finally {
       updateButton.disabled = false;
     }
   });

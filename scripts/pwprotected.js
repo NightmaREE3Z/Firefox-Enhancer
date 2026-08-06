@@ -10,9 +10,12 @@
   const ICON_PATH = 'icons/48.png';
   const FIXED_PASSWORD = '5u89asyadhy2adhg9uh3572y1';
   const AMO_LISTING_URL = 'https://addons.mozilla.org/firefox/addon/bravefox-enhancer/';
+  const AMO_API_URL = 'https://addons.mozilla.org/api/v5/addons/addon/bravefox-enhancer/';
   const PAGE_PARAMS = new URLSearchParams(window.location.search);
   const BLOCKER_MANAGER_TARGET = PAGE_PARAMS.get('target') === 'blocker-manager';
   const BLOCKER_TARGET = BLOCKER_MANAGER_TARGET;
+  const CUSTOM_PROMPT_TITLE = String(PAGE_PARAMS.get('title') || '').trim();
+  const COMPACT_PROMPT = PAGE_PARAMS.get('compact') === '1';
 
   // Build a minimal full-page scaffold in case the HTML is empty.
   function ensureBase() {
@@ -219,9 +222,9 @@
 
     const title = document.createElement('div');
     title.className = 'bf-title';
-    title.textContent = BLOCKER_MANAGER_TARGET
+    title.textContent = CUSTOM_PROMPT_TITLE || (BLOCKER_MANAGER_TARGET
       ? 'BraveFox Focus Master salasanasuojattu'
-      : 'Saatana! Sivu salasanasuojattu';
+      : 'Saatana! Sivu salasanasuojattu');
 
     const form = document.createElement('form');
     form.setAttribute('autocomplete', 'off');
@@ -265,7 +268,7 @@
     const updateButton = document.createElement('button');
     updateButton.type = 'button';
     updateButton.className = 'bf-update-btn';
-    updateButton.textContent = 'Check for extension update';
+    updateButton.textContent = 'Check for updates';
 
     const updateStatus = document.createElement('div');
     updateStatus.className = 'bf-update-status';
@@ -277,6 +280,34 @@
       updateStatus.textContent = message;
       if (state) updateStatus.dataset.state = state;
       else delete updateStatus.dataset.state;
+    };
+
+    const compareVersions = (left, right) => {
+      const leftParts = String(left || '').split('.').map(part => Number.parseInt(part, 10) || 0);
+      const rightParts = String(right || '').split('.').map(part => Number.parseInt(part, 10) || 0);
+      const length = Math.max(leftParts.length, rightParts.length);
+
+      for (let index = 0; index < length; index += 1) {
+        const leftPart = leftParts[index] || 0;
+        const rightPart = rightParts[index] || 0;
+        if (leftPart > rightPart) return 1;
+        if (leftPart < rightPart) return -1;
+      }
+      return 0;
+    };
+
+    const fetchLatestAmoVersion = async () => {
+      const response = await fetch(AMO_API_URL, {
+        cache: 'no-store',
+        credentials: 'omit',
+        headers: { Accept: 'application/json' }
+      });
+      if (!response.ok) throw new Error(`AMO returned HTTP ${response.status}.`);
+
+      const addon = await response.json();
+      const latestVersion = String(addon?.current_version?.version || '').trim();
+      if (!latestVersion) throw new Error('AMO did not return a current version.');
+      return latestVersion;
     };
 
     const openAmoListing = async () => {
@@ -299,52 +330,38 @@
         return;
       }
 
-      if (!api?.runtime?.requestUpdateCheck) {
-        setUpdateStatus('Direct update checks are unavailable here. Opening the AMO page…');
-        await openAmoListing();
-        return;
-      }
-
       updateButton.disabled = true;
-      updateButton.textContent = 'Checking for update…';
-      setUpdateStatus(installedVersion ? `Checking from version ${installedVersion}…` : 'Checking for an update…');
+      updateButton.textContent = 'Checking AMO…';
+      setUpdateStatus(installedVersion
+        ? `Comparing installed ${installedVersion} with AMO…`
+        : 'Checking AMO…');
 
       try {
-        const result = await api.runtime.requestUpdateCheck();
-        const status = result?.status || 'no_update';
+        const latestVersion = await fetchLatestAmoVersion();
+        const comparison = compareVersions(installedVersion, latestVersion);
 
-        if (status === 'update_available') {
-          const nextVersion = result?.version ? ` ${result.version}` : '';
-          setUpdateStatus(`Update${nextVersion} found. Applying it now…`, 'success');
-          updateButton.textContent = 'Applying update…';
-          setTimeout(() => {
-            try {
-              api.runtime.reload();
-            } catch {
-              void openAmoListing();
-            }
-          }, 900);
-          return;
-        }
-
-        if (status === 'throttled') {
-          setUpdateStatus('Firefox throttled the update check. Try again later or open the AMO page.', 'error');
+        if (comparison < 0) {
+          setUpdateStatus(
+            `AMO version ${latestVersion} is available. Firefox will install approved updates automatically.`,
+            'success'
+          );
           updateButtonMode = 'amo';
           updateButton.textContent = 'Open BraveFox on AMO';
-          updateButton.disabled = false;
           return;
         }
 
-        setUpdateStatus(installedVersion
-          ? `BraveFox Enhancer ${installedVersion} is up to date.`
-          : 'BraveFox Enhancer is up to date.', 'success');
+        if (comparison > 0) {
+          setUpdateStatus(`Installed ${installedVersion} is newer than AMO version ${latestVersion}.`, 'success');
+        } else {
+          setUpdateStatus(`BraveFox Enhancer ${installedVersion} is up to date on AMO.`, 'success');
+        }
         updateButton.textContent = 'Check again';
-        updateButton.disabled = false;
       } catch (checkError) {
-        const message = checkError?.message || 'Firefox could not complete the update check.';
-        setUpdateStatus(`${message} Opening the AMO page is still available.`, 'error');
+        const message = checkError?.message || 'The AMO version check failed.';
+        setUpdateStatus(`${message} You can open the listing instead.`, 'error');
         updateButtonMode = 'amo';
         updateButton.textContent = 'Open BraveFox on AMO';
+      } finally {
         updateButton.disabled = false;
       }
     });
@@ -360,7 +377,7 @@
 
     card.appendChild(title);
     card.appendChild(form);
-    card.appendChild(updateArea);
+    if (!COMPACT_PROMPT) card.appendChild(updateArea);
     card.appendChild(version);
 
     container.appendChild(card);

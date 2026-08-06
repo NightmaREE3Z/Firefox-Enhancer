@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "BraveFox Enhancer",
-  "version": "27.0.0",
+  "version": "27.1.0",
   "description": "Unified for Firefox PC and Android personal use, for more peaceful Interwebs experience",
   "background": {
     "scripts": [
@@ -347,8 +347,9 @@
         "https://chatgpt.com/*"
       ],
       "js": [
-        "scripts/chatgpt.js"
-      ]
+        "scripts/ChatGPT.js"
+      ],
+      "run_at": "document_start"
     },
     {
       "matches": [
@@ -408,7 +409,8 @@
   ],
   "web_accessible_resources": [
     "icons/*",
-    "blocker/blocked.html"
+    "blocker/blocked.html",
+    "html/password-protected.html"
   ],
   "icons": {
     "16": "icons/16.png",
