@@ -16,7 +16,32 @@
 (() => {
   'use strict';
 
-  const api = globalThis.browser ?? globalThis.chrome;
+  // Resolve the actual WebExtension API by capability. Some installed-app/PWA
+  // environments may expose a non-extension `browser` global, so blindly
+  // preferring `browser` can hide Chrome's real `chrome.runtime` object.
+  const api = resolveExtensionApi();
+  const PASSWORD_PAGE_URL = getExtensionUrl('html/password-protected.html');
+
+  function resolveExtensionApi() {
+    for (const candidate of [globalThis.browser, globalThis.chrome]) {
+      try {
+        if (typeof candidate?.runtime?.getURL === 'function') return candidate;
+      } catch {
+        // Keep trying the next API candidate.
+      }
+    }
+    return null;
+  }
+
+  function getExtensionUrl(path) {
+    try {
+      return typeof api?.runtime?.getURL === 'function'
+        ? api.runtime.getURL(path)
+        : '';
+    } catch {
+      return '';
+    }
+  }
   const STYLE_ID = 'bravefox-chatgpt-style';
   const GATED_CLASS = 'bravefox-chatgpt-gated';
   const PERSONALIZATION_CLASS = 'bravefox-chatgpt-personalization';
@@ -367,8 +392,12 @@
 
   function showPasswordGate({ kind, title, onSuccess }) {
     if (activeGate) return false;
-    if (!api?.runtime?.getURL) {
-      console.warn('[BraveFox Enhancer] Password page URL is unavailable.');
+    // Cache the extension URL at content-script startup. This keeps the gate
+    // usable in long-lived PWA windows even if Chrome later reloads/updates the
+    // extension context while the app window remains open.
+    const passwordPageUrl = PASSWORD_PAGE_URL || getExtensionUrl('html/password-protected.html');
+    if (!passwordPageUrl) {
+      console.warn('[BraveFox Enhancer] Password page URL is unavailable. Reload the PWA window once.');
       return false;
     }
 
@@ -409,7 +438,7 @@
       compact: '1',
       title
     });
-    iframe.src = `${api.runtime.getURL('html/password-protected.html')}?${params}`;
+    iframe.src = `${passwordPageUrl}?${params}`;
     iframe.title = title;
     iframe.setAttribute('allow', 'clipboard-read; clipboard-write');
 

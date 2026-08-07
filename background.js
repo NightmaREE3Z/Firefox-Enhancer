@@ -17,6 +17,10 @@ const WRESTLING_UPDATE_INTERVAL_MINUTES = 12 * 60;
 const MAX_FETCH_RETRIES = 3;
 const HOSTS_UPDATE_ALARM = "bravefox-hosts-update";
 const WRESTLING_UPDATE_ALARM = "bravefox-wrestling-update";
+const BRAVEFOX_AMO_API_URL = "https://addons.mozilla.org/api/v5/addons/addon/bravefox-enhancer/";
+const BRAVEFOX_UPDATE_RECEIPT_KEY = "bravefoxExtensionUpdateReceiptV1";
+const BRAVEFOX_AMO_CACHE_MS = 60 * 1000;
+let braveFoxAmoVersionCache = { version: "", checkedAt: 0 };
 
 // Canonical source priority. First source wins when a hostname appears more than once.
 const HOSTS_SOURCES = [
@@ -845,6 +849,57 @@ function installRequestListener() {
   requestListenerInstalled = true;
 }
 
+function compareExtensionVersions(left, right) {
+  const leftParts = String(left || "").split(".").map(part => Number.parseInt(part, 10) || 0);
+  const rightParts = String(right || "").split(".").map(part => Number.parseInt(part, 10) || 0);
+  const length = Math.max(leftParts.length, rightParts.length);
+
+  for (let index = 0; index < length; index += 1) {
+    const leftPart = leftParts[index] || 0;
+    const rightPart = rightParts[index] || 0;
+    if (leftPart > rightPart) return 1;
+    if (leftPart < rightPart) return -1;
+  }
+  return 0;
+}
+
+async function fetchLatestBraveFoxAmoVersion(force = false) {
+  const now = Date.now();
+  if (!force && braveFoxAmoVersionCache.version && now - braveFoxAmoVersionCache.checkedAt < BRAVEFOX_AMO_CACHE_MS) {
+    return braveFoxAmoVersionCache.version;
+  }
+
+  const response = await fetch(BRAVEFOX_AMO_API_URL, {
+    cache: "no-store",
+    credentials: "omit",
+    headers: { Accept: "application/json" }
+  });
+  if (!response.ok) throw new Error(`AMO returned HTTP ${response.status}.`);
+
+  const addon = await response.json();
+  const latestVersion = String(addon?.current_version?.version || "").trim();
+  if (!latestVersion) throw new Error("AMO did not return a current BraveFox version.");
+
+  braveFoxAmoVersionCache = { version: latestVersion, checkedAt: now };
+  return latestVersion;
+}
+
+async function getBraveFoxExtensionUpdateStatus(force = false) {
+  const installedVersion = browser.runtime.getManifest().version;
+  const latestVersion = await fetchLatestBraveFoxAmoVersion(force);
+  const comparison = compareExtensionVersions(installedVersion, latestVersion);
+  const stored = await browser.storage.local.get(BRAVEFOX_UPDATE_RECEIPT_KEY);
+  const receipt = stored?.[BRAVEFOX_UPDATE_RECEIPT_KEY] || null;
+
+  return {
+    ok: true,
+    installedVersion,
+    latestVersion,
+    state: comparison < 0 ? "update_available" : comparison > 0 ? "ahead" : "latest",
+    receipt
+  };
+}
+
 function setupAlarms() {
   browser.alarms.create(HOSTS_UPDATE_ALARM, { periodInMinutes: HOSTS_UPDATE_INTERVAL_MINUTES });
   browser.alarms.create(WRESTLING_UPDATE_ALARM, { periodInMinutes: WRESTLING_UPDATE_INTERVAL_MINUTES });
@@ -863,9 +918,20 @@ browser.alarms.onAlarm.addListener(alarm => {
   if (alarm.name === WRESTLING_UPDATE_ALARM) void updateWrestlingRoster();
 });
 
-browser.runtime.onInstalled.addListener(() => {
+browser.runtime.onInstalled.addListener(details => {
   setupAlarms();
   void runStartupUpdates(true);
+
+  if (details?.reason === "update") {
+    const currentVersion = browser.runtime.getManifest().version;
+    void browser.storage.local.set({
+      [BRAVEFOX_UPDATE_RECEIPT_KEY]: {
+        previousVersion: String(details.previousVersion || ""),
+        currentVersion,
+        updatedAt: Date.now()
+      }
+    });
+  }
 });
 
 browser.runtime.onStartup.addListener(() => {
@@ -881,6 +947,12 @@ browser.runtime.onMessage.addListener(message => {
       lastUpdated: hostsMeta?.lastUpdated || 0,
       sourceStats: hostsMeta?.sourceStats || null
     });
+  }
+  if (message?.type === "bravefox:extension-update-status") {
+    return getBraveFoxExtensionUpdateStatus(Boolean(message.force)).catch(error => ({
+      ok: false,
+      error: String(error?.message || error)
+    }));
   }
   return undefined;
 });

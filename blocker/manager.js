@@ -278,6 +278,12 @@ function syncStatusText(sync = state.githubSync) {
   if (sync.profileSwitchPending) lines.push(`Profile switch pending: local terms are still ${sync.termsProfileLabel || sync.termsProfile}; use manual Download or Upload to commit the switch.`);
   lines.push(sync.autoSync ? 'Automatic Sync: enabled' : 'Automatic Sync: disabled');
   lines.push(sync.hasToken ? 'GitHub token: saved locally' : 'GitHub token: not saved (downloads still work)');
+  if (sync.tokenRecovery) {
+    if (sync.recoveryReady) lines.push(sync.recoveredFromBrowserSync ? 'Reinstall recovery: restored from Firefox extension sync storage' : 'Reinstall recovery: copy ready in Firefox extension sync storage');
+    else if (!sync.recoverySupported) lines.push('Reinstall recovery: browser sync storage unavailable');
+    else if (sync.recoveryError) lines.push(`Reinstall recovery: ${sync.recoveryError}`);
+    else lines.push('Reinstall recovery: waiting for a saved token');
+  } else lines.push('Reinstall recovery: disabled');
   lines.push(`Pending changes: ${Number(sync.pendingCount) || 0}`);
   if (sync.lastSyncAt) lines.push(`Last sync: ${new Date(sync.lastSyncAt).toLocaleString()} — ${sync.lastAction || 'completed'}`);
   else lines.push('Last sync: never');
@@ -298,6 +304,7 @@ async function refreshGithubSyncStatus() {
   const response = await message({ type: MESSAGE.getGitHubSyncStatus });
   applyResponse(response);
   if (elements.automaticSyncToggle) elements.automaticSyncToggle.checked = response.githubSync.autoSync !== false;
+  if (elements.tokenRecoveryToggle) elements.tokenRecoveryToggle.checked = response.githubSync.tokenRecovery !== false;
   if (elements.syncProfileSelect) elements.syncProfileSelect.value = response.githubSync.activeProfile || 'haukkis';
   if (elements.detectedProfileStatus) {
     if (response.githubSync.detectedEmail) {
@@ -374,6 +381,7 @@ The current local terms will NOT be replaced now. Automatic term sync pauses unt
   const response = await message({
     type: MESSAGE.saveGitHubSyncConfig,
     autoSync: elements.automaticSyncToggle.checked,
+    tokenRecovery: elements.tokenRecoveryToggle.checked,
     token,
     activeProfile: requestedProfile,
     confirmProfileSwitch,
@@ -472,6 +480,7 @@ function bindGithubSyncDialog() {
       const response = await message({
         type: MESSAGE.saveGitHubSyncConfig,
         autoSync: elements.automaticSyncToggle.checked,
+        tokenRecovery: elements.tokenRecoveryToggle.checked,
         clearToken: true
       });
       applyResponse(response);
@@ -606,7 +615,7 @@ function bind() {
     adminLocked: $('#adminLocked'), adminUnlockForm: $('#adminUnlockForm'), adminPasswordInput: $('#adminPasswordInput'),
     adminUnlockButton: $('#adminUnlockButton'), adminError: $('#adminError'), adminControlsMount: $('#adminControlsMount'),
     lockButton: $('#lockButton'), toast: $('#toast'), syncLabel: $('#syncLabel'), syncDialog: $('#syncDialog'),
-    closeSyncDialog: $('#closeSyncDialog'), githubTokenInput: $('#githubTokenInput'), automaticSyncToggle: $('#automaticSyncToggle'),
+    closeSyncDialog: $('#closeSyncDialog'), githubTokenInput: $('#githubTokenInput'), tokenRecoveryToggle: $('#tokenRecoveryToggle'), automaticSyncToggle: $('#automaticSyncToggle'),
     clearGithubToken: $('#clearGithubToken'), githubSyncStatus: $('#githubSyncStatus'), termsRawLink: $('#termsRawLink'), linksRawLink: $('#linksRawLink'),
     trustedSitesRawLink: $('#trustedSitesRawLink'), syncProfileSelect: $('#syncProfileSelect'), syncProfileHelp: $('#syncProfileHelp'), detectedProfileStatus: $('#detectedProfileStatus'),
     saveGithubSyncSettings: $('#saveGithubSyncSettings'), downloadFromGithub: $('#downloadFromGithub'), uploadToGithub: $('#uploadToGithub')

@@ -6,6 +6,10 @@ import { getTrustedSitesStatus, initializeTrustedSites, refreshTrustedSites } fr
 const browser = globalThis.browser ?? globalThis.chrome;
 const LOG_PREFIX = '[BraveFox Focus Master GitHub Sync]';
 const CONFIG_KEY = 'bfb:github-sync-config';
+const TOKEN_VAULT_KEY = 'bfb:github-token-vault-v1';
+const TOKEN_VAULT_VERSION = 1;
+const TOKEN_RECOVERY_KEY = 'bfb:github-token-recovery-v1';
+const TOKEN_RECOVERY_VERSION = 1;
 const STATE_KEY = 'bfb:github-sync-state';
 const AUTO_SYNC_ALARM = 'bfb-github-auto-sync';
 const DEBOUNCED_SYNC_ALARM = 'bfb-github-debounced-sync';
@@ -33,7 +37,7 @@ export const GITHUB_SYNC_TARGET = Object.freeze({
 });
 
 const DEFAULT_CONFIG = Object.freeze({
-  autoSync: true, token: '', activeProfile: 'haukkis', profileExplicit: false,
+  autoSync: true, token: '', tokenRecovery: true, activeProfile: 'haukkis', profileExplicit: false,
   profileSwitchPending: false, previousProfile: '', detectedEmail: '',
   suggestedProfile: '', detectionAvailable: false
 });
@@ -65,6 +69,7 @@ function normalizeConfig(value) {
   return {
     autoSync: source.autoSync !== false,
     token: String(source.token || '').trim(),
+    tokenRecovery: source.tokenRecovery !== false,
     activeProfile: normalizeProfile(source.activeProfile),
     profileExplicit: Boolean(source.profileExplicit),
     profileSwitchPending: Boolean(source.profileSwitchPending),
@@ -113,13 +118,120 @@ function normalizeState(value, activeProfile = 'haukkis') {
   };
 }
 
+function normalizeToken(value) { return String(value || '').trim(); }
+function tokenVaultRecord(token) {
+  return {
+    version: TOKEN_VAULT_VERSION,
+    token: normalizeToken(token),
+    updatedAt: Date.now()
+  };
+}
+function tokenRecoveryRecord(token) {
+  return {
+    version: TOKEN_RECOVERY_VERSION,
+    token: normalizeToken(token),
+    updatedAt: Date.now(),
+    extensionId: String(browser.runtime?.id || '')
+  };
+}
+function syncStorageArea() {
+  const area = browser.storage?.sync;
+  return area && typeof area.get === 'function' && typeof area.set === 'function' && typeof area.remove === 'function'
+    ? area
+    : null;
+}
+async function restrictRecoveryStorage(area) {
+  if (!area || typeof area.setAccessLevel !== 'function') return;
+  try { await area.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' }); } catch {}
+}
+async function readTokenRecovery() {
+  const area = syncStorageArea();
+  if (!area) return { supported: false, hasRecord: false, token: '', error: '' };
+  try {
+    await restrictRecoveryStorage(area);
+    const result = await area.get(TOKEN_RECOVERY_KEY);
+    const record = result?.[TOKEN_RECOVERY_KEY];
+    const hasRecord = Boolean(record && typeof record === 'object' && Object.hasOwn(record, 'token'));
+    return { supported: true, hasRecord, token: hasRecord ? normalizeToken(record.token) : '', error: '' };
+  } catch (error) {
+    return { supported: true, hasRecord: false, token: '', error: String(error?.message || error) };
+  }
+}
+async function writeTokenRecovery(token) {
+  const area = syncStorageArea();
+  if (!area) return { supported: false, ready: false, error: 'Browser sync storage is unavailable.' };
+  try {
+    await restrictRecoveryStorage(area);
+    await area.set({ [TOKEN_RECOVERY_KEY]: tokenRecoveryRecord(token) });
+    return { supported: true, ready: Boolean(normalizeToken(token)), error: '' };
+  } catch (error) {
+    return { supported: true, ready: false, error: String(error?.message || error) };
+  }
+}
+async function clearTokenRecovery() {
+  const area = syncStorageArea();
+  if (!area) return { supported: false, ready: false, error: '' };
+  try {
+    await restrictRecoveryStorage(area);
+    await area.remove(TOKEN_RECOVERY_KEY);
+    return { supported: true, ready: false, error: '' };
+  } catch (error) {
+    return { supported: true, ready: false, error: String(error?.message || error) };
+  }
+}
+
 async function readConfigRecord() {
-  const result = await browser.storage.local.get(CONFIG_KEY);
+  const [result, recovery] = await Promise.all([
+    browser.storage.local.get([CONFIG_KEY, TOKEN_VAULT_KEY]),
+    readTokenRecovery()
+  ]);
   const raw = result[CONFIG_KEY];
-  return { config: normalizeConfig(raw || DEFAULT_CONFIG), hasProfileSetting: Boolean(raw && Object.hasOwn(raw, 'activeProfile')) };
+  const vault = result[TOKEN_VAULT_KEY];
+  const hasVaultRecord = Boolean(vault && typeof vault === 'object' && Object.hasOwn(vault, 'token'));
+  const legacyToken = normalizeToken(raw?.token);
+  const vaultToken = hasVaultRecord ? normalizeToken(vault.token) : '';
+  const recoveryEnabled = raw?.tokenRecovery !== false;
+  const recoveryToken = recoveryEnabled && recovery.hasRecord ? normalizeToken(recovery.token) : '';
+  const recoveredFromBrowserSync = !hasVaultRecord && !legacyToken && Boolean(recoveryToken);
+  const resolvedToken = hasVaultRecord ? vaultToken : (legacyToken || recoveryToken);
+  const config = normalizeConfig({ ...(raw || DEFAULT_CONFIG), token: resolvedToken, tokenRecovery: recoveryEnabled });
+  const repairs = {};
+
+  // Local storage remains authoritative while the extension is installed. The
+  // browser-sync copy is only a reinstall recovery layer for the same add-on ID.
+  // An intentionally empty local vault also clears a stale recovery copy.
+  if (!hasVaultRecord && resolvedToken) repairs[TOKEN_VAULT_KEY] = tokenVaultRecord(resolvedToken);
+  if (normalizeToken(raw?.token) !== resolvedToken || raw?.tokenRecovery !== config.tokenRecovery) repairs[CONFIG_KEY] = config;
+  if (Object.keys(repairs).length) await browser.storage.local.set(repairs);
+
+  let recoveryState = recovery;
+  if (config.tokenRecovery) {
+    if (resolvedToken && recovery.token !== resolvedToken) recoveryState = await writeTokenRecovery(resolvedToken);
+    else if (!resolvedToken && recovery.hasRecord) recoveryState = await clearTokenRecovery();
+  } else if (recovery.hasRecord) recoveryState = await clearTokenRecovery();
+
+  return {
+    config,
+    hasProfileSetting: Boolean(raw && Object.hasOwn(raw, 'activeProfile')),
+    tokenVaultReady: hasVaultRecord || Boolean(resolvedToken),
+    recoveredFromBrowserSync,
+    recoverySupported: recoveryState.supported !== false,
+    recoveryReady: Boolean(config.tokenRecovery && resolvedToken && (recoveryState.ready || recoveryState.hasRecord || recovery.token === resolvedToken)),
+    recoveryError: String(recoveryState.error || '')
+  };
 }
 async function readConfig() { return (await readConfigRecord()).config; }
-async function writeConfig(config) { const clean = normalizeConfig(config); await browser.storage.local.set({ [CONFIG_KEY]: clean }); return clean; }
+async function writeConfig(config, { persistToken = false, reconcileRecovery = false } = {}) {
+  const clean = normalizeConfig(config);
+  const changes = { [CONFIG_KEY]: clean };
+  if (persistToken) changes[TOKEN_VAULT_KEY] = tokenVaultRecord(clean.token);
+  await browser.storage.local.set(changes);
+  if (persistToken || reconcileRecovery) {
+    if (clean.tokenRecovery && clean.token) await writeTokenRecovery(clean.token);
+    else await clearTokenRecovery();
+  }
+  return clean;
+}
 async function readState(config = null) { const current = config || await readConfig(); const result = await browser.storage.local.get(STATE_KEY); return normalizeState(result[STATE_KEY] || DEFAULT_STATE, current.activeProfile); }
 async function writeState(state, config = null) { const current = config || await readConfig(); const clean = normalizeState(state, current.activeProfile); await browser.storage.local.set({ [STATE_KEY]: clean }); return clean; }
 
@@ -141,7 +253,7 @@ async function detectBrowserProfileEmail() {
   return { available: true, email, profile: profileForEmail(email) };
 }
 
-async function refreshProfileDetection({ allowInitialSelection = false } = {}) {
+async function refreshProfileDetection({ allowInitialSelection = false, includeRecord = false } = {}) {
   const record = await readConfigRecord();
   let config = record.config;
   const detected = await detectBrowserProfileEmail();
@@ -154,7 +266,7 @@ async function refreshProfileDetection({ allowInitialSelection = false } = {}) {
     else patch.suggestedProfile = '';
   } else patch.suggestedProfile = '';
   config = await writeConfig(patch);
-  return config;
+  return includeRecord ? { config, record } : config;
 }
 
 function apiUrl(kind, profileId) {
@@ -225,9 +337,9 @@ async function uploadMergedKind(kind,token,current,state,profile){for(let attemp
 async function setStatus(state,{action='',error='',synced=false}={}){return writeState({...state,lastAction:action||state.lastAction,lastError:String(error||''),lastSyncAt:synced?Date.now():state.lastSyncAt});}
 
 export async function getGitHubSyncStatus(){
-  const config=await refreshProfileDetection(); const state=await readState(config); const profile=SYNC_PROFILES[config.activeProfile]; const trusted=getTrustedSitesStatus();
+  const refreshed=await refreshProfileDetection({includeRecord:true}); const config=refreshed.config; const record=refreshed.record; const state=await readState(config); const profile=SYNC_PROFILES[config.activeProfile]; const trusted=getTrustedSitesStatus();
   return {
-    autoSync:config.autoSync,hasToken:Boolean(config.token),activeProfile:config.activeProfile,activeProfileLabel:profile.label,
+    autoSync:config.autoSync,hasToken:Boolean(config.token),tokenRecovery:config.tokenRecovery,recoverySupported:record.recoverySupported,recoveryReady:record.recoveryReady,recoveredFromBrowserSync:record.recoveredFromBrowserSync,recoveryError:record.recoveryError,activeProfile:config.activeProfile,activeProfileLabel:profile.label,
     termsProfile:state.termsProfile,termsProfileLabel:SYNC_PROFILES[state.termsProfile].label,
     profileSwitchPending:config.profileSwitchPending,suggestedProfile:config.suggestedProfile,
     suggestedProfileLabel:config.suggestedProfile?SYNC_PROFILES[config.suggestedProfile].label:'',
@@ -244,7 +356,11 @@ export async function saveGitHubSyncConfig(patch={}){
   let config=await readConfig();
   const next={...config};
   if(Object.hasOwn(patch,'autoSync'))next.autoSync=patch.autoSync!==false;
-  if(patch.clearToken)next.token='';else if(String(patch.token||'').trim())next.token=String(patch.token).trim();
+  const tokenRecoveryChanged=Object.hasOwn(patch,'tokenRecovery')&&Boolean(patch.tokenRecovery)!==config.tokenRecovery;
+  if(Object.hasOwn(patch,'tokenRecovery'))next.tokenRecovery=Boolean(patch.tokenRecovery);
+  let tokenChanged=false;
+  if(patch.clearToken){next.token='';tokenChanged=true;}
+  else if(String(patch.token||'').trim()){next.token=String(patch.token).trim();tokenChanged=true;}
   if(Object.hasOwn(SYNC_PROFILES, patch.activeProfile)){
     const requested=normalizeProfile(patch.activeProfile);
     if(requested!==config.activeProfile){
@@ -252,7 +368,7 @@ export async function saveGitHubSyncConfig(patch={}){
       next.previousProfile=config.activeProfile; next.activeProfile=requested; next.profileSwitchPending=true; next.profileExplicit=true; next.suggestedProfile='';
     } else if(patch.profileExplicit) next.profileExplicit=true;
   }
-  config=await writeConfig(next); setupGitHubSyncAlarms(config); return getGitHubSyncStatus();
+  config=await writeConfig(next,{persistToken:tokenChanged,reconcileRecovery:tokenChanged||tokenRecoveryChanged}); setupGitHubSyncAlarms(config); return getGitHubSyncStatus();
 }
 
 export async function queueRemoteOperation(kind,action,value){

@@ -9,8 +9,6 @@
   const BRAND_NAME = 'BraveFox Enhancer';
   const ICON_PATH = 'icons/48.png';
   const FIXED_PASSWORD = '5u89asyadhy2adhg9uh3572y1';
-  const AMO_LISTING_URL = 'https://addons.mozilla.org/firefox/addon/bravefox-enhancer/';
-  const AMO_API_URL = 'https://addons.mozilla.org/api/v5/addons/addon/bravefox-enhancer/';
   const PAGE_PARAMS = new URLSearchParams(window.location.search);
   const BLOCKER_MANAGER_TARGET = PAGE_PARAMS.get('target') === 'blocker-manager';
   const BLOCKER_TARGET = BLOCKER_MANAGER_TARGET;
@@ -254,7 +252,9 @@
     form.appendChild(inputRow);
     form.appendChild(error);
 
-    const api = globalThis.browser ?? globalThis.chrome;
+    const api = [globalThis.browser, globalThis.chrome].find(candidate =>
+      candidate?.runtime?.getManifest && candidate?.runtime?.sendMessage
+    ) || null;
     let installedVersion = '';
     try {
       installedVersion = api?.runtime?.getManifest?.().version || '';
@@ -274,7 +274,7 @@
     updateStatus.className = 'bf-update-status';
     updateStatus.setAttribute('role', 'status');
     updateStatus.setAttribute('aria-live', 'polite');
-    updateStatus.textContent = installedVersion ? `Installed version: ${installedVersion}` : '';
+    updateStatus.textContent = installedVersion ? `Version ${installedVersion}. Checking AMO…` : '';
 
     const setUpdateStatus = (message, state = '') => {
       updateStatus.textContent = message;
@@ -282,89 +282,110 @@
       else delete updateStatus.dataset.state;
     };
 
-    const compareVersions = (left, right) => {
-      const leftParts = String(left || '').split('.').map(part => Number.parseInt(part, 10) || 0);
-      const rightParts = String(right || '').split('.').map(part => Number.parseInt(part, 10) || 0);
-      const length = Math.max(leftParts.length, rightParts.length);
-
-      for (let index = 0; index < length; index += 1) {
-        const leftPart = leftParts[index] || 0;
-        const rightPart = rightParts[index] || 0;
-        if (leftPart > rightPart) return 1;
-        if (leftPart < rightPart) return -1;
-      }
-      return 0;
+    const recentMatchingReceipt = (receipt, currentVersion) => {
+      if (!receipt || receipt.currentVersion !== currentVersion) return null;
+      const age = Date.now() - Number(receipt.updatedAt || 0);
+      return age >= 0 && age <= 7 * 24 * 60 * 60 * 1000 ? receipt : null;
     };
 
-    const fetchLatestAmoVersion = async () => {
-      const response = await fetch(AMO_API_URL, {
-        cache: 'no-store',
-        credentials: 'omit',
-        headers: { Accept: 'application/json' }
+    const requestExtensionUpdateStatus = async (force = false) => {
+      if (!api?.runtime?.sendMessage) throw new Error('Firefox extension runtime is unavailable.');
+      const response = await api.runtime.sendMessage({
+        type: 'bravefox:extension-update-status',
+        force
       });
-      if (!response.ok) throw new Error(`AMO returned HTTP ${response.status}.`);
-
-      const addon = await response.json();
-      const latestVersion = String(addon?.current_version?.version || '').trim();
-      if (!latestVersion) throw new Error('AMO did not return a current version.');
-      return latestVersion;
+      if (!response?.ok) throw new Error(response?.error || 'Firefox could not check AMO.');
+      return response;
     };
 
-    const openAmoListing = async () => {
-      try {
-        if (api?.tabs?.create) {
-          await api.tabs.create({ url: AMO_LISTING_URL });
-          return;
+    let updateCheckRunning = false;
+    let updateWatchTimer = 0;
+    let reloadScheduled = false;
+
+    const scheduleReloadForAppliedUpdate = () => {
+      if (reloadScheduled) return;
+      reloadScheduled = true;
+      setUpdateStatus('Update installed. Reloading this page to apply the new BraveFox scripts…', 'success');
+      window.setTimeout(() => window.location.reload(), 900);
+    };
+
+    const stopUpdateWatcher = () => {
+      if (!updateWatchTimer) return;
+      window.clearInterval(updateWatchTimer);
+      updateWatchTimer = 0;
+    };
+
+    const startUpdateWatcher = (targetVersion) => {
+      if (updateWatchTimer || !targetVersion) return;
+      updateWatchTimer = window.setInterval(async () => {
+        try {
+          const result = await requestExtensionUpdateStatus(false);
+          if (result.installedVersion !== installedVersion || result.installedVersion === targetVersion) {
+            stopUpdateWatcher();
+            scheduleReloadForAppliedUpdate();
+          }
+        } catch {
+          // Firefox invalidates old content-script runtimes when the extension is
+          // replaced. Once an update was known to exist, that is our signal to
+          // refresh the page and load the newly installed BraveFox scripts.
+          stopUpdateWatcher();
+          scheduleReloadForAppliedUpdate();
         }
-      } catch {
-        // Fall through to normal navigation.
-      }
-      window.location.href = AMO_LISTING_URL;
+      }, 5000);
     };
 
-    let updateButtonMode = 'check';
+    const renderExtensionUpdateStatus = (result) => {
+      const receipt = recentMatchingReceipt(result.receipt, result.installedVersion);
+      const updatePrefix = receipt?.previousVersion
+        ? `Updated successfully from ${receipt.previousVersion} to ${receipt.currentVersion}. `
+        : '';
 
-    updateButton.addEventListener('click', async () => {
-      if (updateButtonMode === 'amo') {
-        await openAmoListing();
+      if (result.state === 'update_available') {
+        setUpdateStatus(
+          `Update available! Firefox will install version ${result.latestVersion} automatically. Installed version: ${result.installedVersion}.`,
+          'success'
+        );
+        startUpdateWatcher(result.latestVersion);
         return;
       }
 
+      stopUpdateWatcher();
+      if (result.state === 'ahead') {
+        setUpdateStatus(
+          `Installed version ${result.installedVersion} is newer than AMO version ${result.latestVersion}.`,
+          'success'
+        );
+        return;
+      }
+
+      setUpdateStatus(
+        `${updatePrefix}You are on the latest version. Version ${result.installedVersion}.`,
+        'success'
+      );
+    };
+
+    const checkForExtensionUpdate = async ({ automatic = false } = {}) => {
+      if (updateCheckRunning) return;
+      updateCheckRunning = true;
       updateButton.disabled = true;
-      updateButton.textContent = 'Checking AMO…';
-      setUpdateStatus(installedVersion
-        ? `Comparing installed ${installedVersion} with AMO…`
-        : 'Checking AMO…');
+      updateButton.textContent = automatic ? 'Checking automatically…' : 'Checking for updates…';
+      setUpdateStatus(installedVersion ? `Version ${installedVersion}. Checking AMO…` : 'Checking AMO…');
 
       try {
-        const latestVersion = await fetchLatestAmoVersion();
-        const comparison = compareVersions(installedVersion, latestVersion);
-
-        if (comparison < 0) {
-          setUpdateStatus(
-            `AMO version ${latestVersion} is available. Firefox will install approved updates automatically.`,
-            'success'
-          );
-          updateButtonMode = 'amo';
-          updateButton.textContent = 'Open BraveFox on AMO';
-          return;
-        }
-
-        if (comparison > 0) {
-          setUpdateStatus(`Installed ${installedVersion} is newer than AMO version ${latestVersion}.`, 'success');
-        } else {
-          setUpdateStatus(`BraveFox Enhancer ${installedVersion} is up to date on AMO.`, 'success');
-        }
+        const result = await requestExtensionUpdateStatus(!automatic);
+        renderExtensionUpdateStatus(result);
         updateButton.textContent = 'Check again';
       } catch (checkError) {
-        const message = checkError?.message || 'The AMO version check failed.';
-        setUpdateStatus(`${message} You can open the listing instead.`, 'error');
-        updateButtonMode = 'amo';
-        updateButton.textContent = 'Open BraveFox on AMO';
+        setUpdateStatus(`Update check failed: ${checkError?.message || checkError}`, 'error');
+        updateButton.textContent = 'Check again';
       } finally {
+        updateCheckRunning = false;
         updateButton.disabled = false;
       }
-    });
+    };
+
+    updateButton.addEventListener('click', () => checkForExtensionUpdate());
+    if (!COMPACT_PROMPT) void checkForExtensionUpdate({ automatic: true });
 
     const version = document.createElement('div');
     version.className = 'bf-version';

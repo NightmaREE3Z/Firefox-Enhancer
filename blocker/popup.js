@@ -13,107 +13,86 @@ if (versionLabel) {
 }
 
 
-const AMO_LISTING_URL = 'https://addons.mozilla.org/firefox/addon/bravefox-enhancer/';
-const AMO_API_URL = 'https://addons.mozilla.org/api/v5/addons/addon/bravefox-enhancer/';
 const updateButton = document.querySelector('#checkExtensionUpdate');
 const updateStatus = document.querySelector('#extensionUpdateStatus');
-let updateButtonMode = 'check';
+const installedVersion = browser.runtime.getManifest().version;
+let updateCheckRunning = false;
 
 function showUpdateStatus(message, state = '') {
   if (!updateStatus) return;
   updateStatus.textContent = message;
+  updateStatus.hidden = !message;
   if (state) updateStatus.dataset.state = state;
   else delete updateStatus.dataset.state;
 }
 
-function compareVersions(left, right) {
-  const leftParts = String(left || '').split('.').map(part => Number.parseInt(part, 10) || 0);
-  const rightParts = String(right || '').split('.').map(part => Number.parseInt(part, 10) || 0);
-  const length = Math.max(leftParts.length, rightParts.length);
-
-  for (let index = 0; index < length; index += 1) {
-    const leftPart = leftParts[index] || 0;
-    const rightPart = rightParts[index] || 0;
-    if (leftPart > rightPart) return 1;
-    if (leftPart < rightPart) return -1;
-  }
-  return 0;
+function recentMatchingReceipt(receipt, currentVersion) {
+  if (!receipt || receipt.currentVersion !== currentVersion) return null;
+  const age = Date.now() - Number(receipt.updatedAt || 0);
+  return age >= 0 && age <= 7 * 24 * 60 * 60 * 1000 ? receipt : null;
 }
 
-async function fetchLatestAmoVersion() {
-  const response = await fetch(AMO_API_URL, {
-    cache: 'no-store',
-    credentials: 'omit',
-    headers: { Accept: 'application/json' }
+async function requestExtensionUpdateStatus(force = false) {
+  const response = await browser.runtime.sendMessage({
+    type: 'bravefox:extension-update-status',
+    force
   });
-
-  if (!response.ok) {
-    throw new Error(`AMO returned HTTP ${response.status}.`);
-  }
-
-  const addon = await response.json();
-  const latestVersion = String(addon?.current_version?.version || '').trim();
-  if (!latestVersion) throw new Error('AMO did not return a current version.');
-  return latestVersion;
+  if (!response?.ok) throw new Error(response?.error || 'Firefox could not check AMO.');
+  return response;
 }
 
-async function openAmoListing() {
+function renderExtensionUpdateStatus(result) {
+  const receipt = recentMatchingReceipt(result.receipt, result.installedVersion);
+  const updatePrefix = receipt?.previousVersion
+    ? `Updated successfully from ${receipt.previousVersion} to ${receipt.currentVersion}. `
+    : '';
+
+  if (result.state === 'update_available') {
+    showUpdateStatus(
+      `Update available! Firefox will install version ${result.latestVersion} automatically. Installed version: ${result.installedVersion}.`,
+      'success'
+    );
+    return;
+  }
+
+  if (result.state === 'ahead') {
+    showUpdateStatus(
+      `Installed version ${result.installedVersion} is newer than AMO version ${result.latestVersion}.`,
+      'success'
+    );
+    return;
+  }
+
+  showUpdateStatus(
+    `${updatePrefix}You are on the latest version. Version ${result.installedVersion}.`,
+    'success'
+  );
+}
+
+async function checkForExtensionUpdate() {
+  if (!updateButton || updateCheckRunning) return;
+
+  updateCheckRunning = true;
+  updateButton.disabled = true;
+  updateButton.textContent = 'Checking for updates…';
+  showUpdateStatus(`Version ${installedVersion}. Checking AMO…`);
+
   try {
-    await browser.tabs.create({ url: AMO_LISTING_URL });
-  } catch {
-    window.location.href = AMO_LISTING_URL;
+    const result = await requestExtensionUpdateStatus(true);
+    renderExtensionUpdateStatus(result);
+  } catch (error) {
+    showUpdateStatus(`Update check failed: ${error?.message || error}`, 'error');
+  } finally {
+    updateCheckRunning = false;
+    updateButton.disabled = false;
+    updateButton.textContent = 'Check for updates';
   }
 }
 
 if (updateButton) {
-  const installedVersion = browser.runtime.getManifest().version;
-  showUpdateStatus(`Installed version: ${installedVersion}`);
-
-  updateButton.addEventListener('click', async () => {
-    if (updateButtonMode === 'amo') {
-      await openAmoListing();
-      return;
-    }
-
-    updateButton.disabled = true;
-    updateButton.textContent = 'Checking AMO…';
-    showUpdateStatus(`Comparing installed ${installedVersion} with AMO…`);
-
-    try {
-      const latestVersion = await fetchLatestAmoVersion();
-      const comparison = compareVersions(installedVersion, latestVersion);
-
-      if (comparison < 0) {
-        showUpdateStatus(
-          `AMO version ${latestVersion} is available. Firefox will install approved updates automatically.`,
-          'success'
-        );
-        updateButtonMode = 'amo';
-        updateButton.textContent = 'Open BraveFox on AMO';
-        return;
-      }
-
-      if (comparison > 0) {
-        showUpdateStatus(
-          `Installed ${installedVersion} is newer than AMO version ${latestVersion}.`,
-          'success'
-        );
-      } else {
-        showUpdateStatus(`BraveFox Enhancer ${installedVersion} is up to date on AMO.`, 'success');
-      }
-
-      updateButton.textContent = 'Check again';
-    } catch (updateError) {
-      showUpdateStatus(
-        `${updateError?.message || 'The AMO version check failed.'} You can open the listing instead.`,
-        'error'
-      );
-      updateButtonMode = 'amo';
-      updateButton.textContent = 'Open BraveFox on AMO';
-    } finally {
-      updateButton.disabled = false;
-    }
-  });
+  showUpdateStatus('');
+  updateButton.textContent = 'Check for updates';
+  updateButton.addEventListener('click', () => checkForExtensionUpdate());
 }
 
 async function send(payload) {
