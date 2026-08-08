@@ -1,6 +1,6 @@
 /* pwprotected.js
  * Controls the overlay displayed on your internal password-protected.html.
- * Smart enough to handle both Top-Level Redirections and Iframe injections.
+ * Supports native top-level protection flows; legacy iframe callers remain compatible.
  */
 
 (() => {
@@ -11,6 +11,8 @@
   const FIXED_PASSWORD = '5u89asyadhy2adhg9uh3572y1';
   const PAGE_PARAMS = new URLSearchParams(window.location.search);
   const BLOCKER_MANAGER_TARGET = PAGE_PARAMS.get('target') === 'blocker-manager';
+  const CHATGPT_AUTH_TARGET = PAGE_PARAMS.get('target') === 'chatgpt';
+  const CHATGPT_AUTH_REQUEST_ID = String(PAGE_PARAMS.get('request') || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 96);
   const BLOCKER_TARGET = BLOCKER_MANAGER_TARGET;
   const CUSTOM_PROMPT_TITLE = String(PAGE_PARAMS.get('title') || '').trim();
   const COMPACT_PROMPT = PAGE_PARAMS.get('compact') === '1';
@@ -430,6 +432,33 @@
 
       if (input.value !== FIXED_PASSWORD) {
         showIncorrectPassword();
+        return;
+      }
+
+      // ChatGPT Personalization/actions use this page as a real top-level extension
+      // page. The background owns a one-time return grant, so ChatGPT cannot dismiss
+      // or bypass its own password prompt.
+      if (CHATGPT_AUTH_TARGET) {
+        if (!CHATGPT_AUTH_REQUEST_ID || window !== window.parent || !api?.runtime?.sendMessage) {
+          showIncorrectPassword('ChatGPT password request is invalid or expired.');
+          return;
+        }
+
+        submit.disabled = true;
+        input.disabled = true;
+        error.textContent = '';
+
+        Promise.resolve(api.runtime.sendMessage({
+          type: 'BRAVEFOX_CHATGPT_AUTH_APPROVE',
+          requestId: CHATGPT_AUTH_REQUEST_ID
+        })).then(response => {
+          if (!response?.ok) throw new Error(response?.error || 'ChatGPT password request expired.');
+          // On success the background navigates this tab back to ChatGPT.
+        }).catch(authError => {
+          submit.disabled = false;
+          input.disabled = false;
+          showIncorrectPassword(authError?.message || 'ChatGPT password request failed.');
+        });
         return;
       }
 

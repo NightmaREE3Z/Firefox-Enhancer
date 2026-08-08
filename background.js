@@ -959,6 +959,186 @@ browser.runtime.onMessage.addListener(message => {
 
 
 // ---------------------------------------------------------------------------
+// ChatGPT secondary-browser route closure + native password-page bridge
+// ---------------------------------------------------------------------------
+const BRAVEFOX_CHATGPT_AUTH_TTL_MS = 2 * 60 * 1000;
+const braveFoxChatGptAuthRequests = new Map();
+const braveFoxChatGptTabsClosing = new Set();
+
+function braveFoxNormalizeChatGptPath(pathname) {
+  const path = String(pathname || "/").toLowerCase().replace(/\/+$/, "");
+  return path || "/";
+}
+
+function braveFoxIsRestrictedChatGptUrl(rawUrl) {
+  try {
+    const url = new URL(String(rawUrl || ""));
+    if (url.protocol !== "https:" || url.hostname.toLowerCase() !== "chatgpt.com") return false;
+    const path = braveFoxNormalizeChatGptPath(url.pathname);
+    return ["/plugins", "/gpts", "/images"].some(base => path === base || path.startsWith(`${base}/`));
+  } catch (_) {
+    return false;
+  }
+}
+
+function braveFoxChatGptProtectedRouteKey(rawUrl) {
+  try {
+    const url = new URL(String(rawUrl || ""));
+    if (url.protocol !== "https:" || url.hostname.toLowerCase() !== "chatgpt.com") return "";
+    const hash = decodeURIComponent(url.hash || "").toLowerCase();
+    return hash.startsWith("#settings/personalization") ? "personalization" : "";
+  } catch (_) {
+    return "";
+  }
+}
+
+function braveFoxPruneChatGptAuthRequests() {
+  const now = Date.now();
+  for (const [id, request] of braveFoxChatGptAuthRequests.entries()) {
+    if (!request || Number(request.expiresAt) <= now) braveFoxChatGptAuthRequests.delete(id);
+  }
+}
+
+function braveFoxIsChatGptPasswordPage(sender, requestId = "") {
+  try {
+    const url = new URL(String(sender?.url || sender?.tab?.url || ""));
+    const extensionOrigin = new URL(browser.runtime.getURL("/")).origin;
+    return url.origin === extensionOrigin &&
+      url.pathname === "/html/password-protected.html" &&
+      url.searchParams.get("target") === "chatgpt" &&
+      (!requestId || url.searchParams.get("request") === requestId);
+  } catch (_) {
+    return false;
+  }
+}
+
+async function braveFoxCloseChatGptTab(tabId) {
+  if (!Number.isInteger(tabId) || tabId < 0 || braveFoxChatGptTabsClosing.has(tabId)) return false;
+  braveFoxChatGptTabsClosing.add(tabId);
+  try {
+    await browser.tabs.remove(tabId);
+    return true;
+  } catch (_) {
+    return false;
+  } finally {
+    braveFoxChatGptTabsClosing.delete(tabId);
+  }
+}
+
+function braveFoxHandleRestrictedChatGptNavigation(details) {
+  if (details?.frameId !== 0 || details?.tabId < 0 || !braveFoxIsRestrictedChatGptUrl(details.url)) return;
+  void braveFoxCloseChatGptTab(details.tabId);
+}
+
+if (browser.webNavigation?.onCommitted) {
+  browser.webNavigation.onCommitted.addListener(braveFoxHandleRestrictedChatGptNavigation);
+}
+if (browser.webNavigation?.onHistoryStateUpdated) {
+  browser.webNavigation.onHistoryStateUpdated.addListener(braveFoxHandleRestrictedChatGptNavigation);
+}
+
+browser.runtime.onMessage.addListener((message, sender) => {
+  if (!message || typeof message !== "object") return undefined;
+
+  if (message.type === "BRAVEFOX_CHATGPT_CLOSE_RESTRICTED") {
+    const tabId = sender?.tab?.id;
+    const targetUrl = String(message.targetUrl || sender?.tab?.url || sender?.url || "");
+    if (!Number.isInteger(tabId) || !braveFoxIsRestrictedChatGptUrl(targetUrl)) {
+      return Promise.resolve({ ok: false, error: "Restricted ChatGPT close request denied." });
+    }
+    return braveFoxCloseChatGptTab(tabId).then(ok => ({ ok, error: ok ? "" : "Firefox could not close the tab." }));
+  }
+
+  if (!String(message.type || "").startsWith("BRAVEFOX_CHATGPT_AUTH_")) return undefined;
+
+  return (async () => {
+    braveFoxPruneChatGptAuthRequests();
+    const tabId = sender?.tab?.id;
+    if (!Number.isInteger(tabId)) throw new Error("ChatGPT auth tab could not be identified.");
+
+    if (message.type === "BRAVEFOX_CHATGPT_AUTH_BEGIN") {
+      const senderUrl = String(sender?.tab?.url || sender?.url || "");
+      if (!senderUrl.startsWith("https://chatgpt.com/")) throw new Error("ChatGPT auth request denied.");
+
+      const returnUrl = String(message.returnUrl || "").trim();
+      const routeKey = braveFoxChatGptProtectedRouteKey(returnUrl);
+      if (routeKey !== "personalization") throw new Error("ChatGPT auth return route is not protected.");
+
+      const requestId = String(message.requestId || "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 96);
+      if (!requestId) throw new Error("ChatGPT auth request id is missing.");
+
+      const kind = message.kind === "memory-summary" ? "memory-summary" : "protected-route";
+      const title = String(message.title || "ChatGPT page is password protected").slice(0, 180);
+      braveFoxChatGptAuthRequests.set(requestId, {
+        requestId,
+        tabId,
+        returnUrl,
+        routeKey,
+        kind,
+        title,
+        approved: false,
+        createdAt: Date.now(),
+        expiresAt: Date.now() + BRAVEFOX_CHATGPT_AUTH_TTL_MS
+      });
+
+      const params = new URLSearchParams({
+        target: "chatgpt",
+        request: requestId,
+        compact: "1",
+        title
+      });
+      await browser.tabs.update(tabId, {
+        url: browser.runtime.getURL(`html/password-protected.html?${params.toString()}`)
+      });
+      return { ok: true };
+    }
+
+    if (message.type === "BRAVEFOX_CHATGPT_AUTH_APPROVE") {
+      const requestId = String(message.requestId || "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 96);
+      if (!requestId || !braveFoxIsChatGptPasswordPage(sender, requestId)) {
+        throw new Error("ChatGPT auth approval denied.");
+      }
+
+      const request = braveFoxChatGptAuthRequests.get(requestId);
+      if (!request || request.tabId !== tabId) throw new Error("ChatGPT auth request expired.");
+      request.approved = true;
+      request.expiresAt = Date.now() + 60 * 1000;
+      braveFoxChatGptAuthRequests.set(requestId, request);
+      await browser.tabs.update(tabId, { url: request.returnUrl });
+      return { ok: true };
+    }
+
+    if (message.type === "BRAVEFOX_CHATGPT_AUTH_CONSUME") {
+      const currentUrl = String(sender?.tab?.url || sender?.url || "");
+      const routeKey = braveFoxChatGptProtectedRouteKey(currentUrl);
+      if (routeKey !== "personalization") return { ok: true, unlocked: false };
+
+      let matchId = "";
+      let match = null;
+      for (const [id, request] of braveFoxChatGptAuthRequests.entries()) {
+        if (!request?.approved || request.tabId !== tabId || request.routeKey !== routeKey) continue;
+        if (!match || Number(request.createdAt) > Number(match.createdAt)) {
+          matchId = id;
+          match = request;
+        }
+      }
+      if (!match) return { ok: true, unlocked: false };
+
+      braveFoxChatGptAuthRequests.delete(matchId);
+      return {
+        ok: true,
+        unlocked: true,
+        routeKey: match.routeKey,
+        kind: match.kind
+      };
+    }
+
+    return { ok: false, error: "Unknown ChatGPT auth message." };
+  })().catch(error => ({ ok: false, error: String(error?.message || error) }));
+});
+
+
+// ---------------------------------------------------------------------------
 // Firefox-PC redirect logger bridge for BraveFox Enhancer (BFE) content scripts
 // ---------------------------------------------------------------------------
 const NATIVE_REDIRECT_LOG_TYPE = 'BRAVEFOX_REDIRECT_LOG';

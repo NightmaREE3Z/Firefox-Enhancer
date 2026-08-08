@@ -1,56 +1,36 @@
 /* ChatGPT.js
- * BraveFox Enhancer — ChatGPT SPA/sub-page protection and UI cleanup.
+ * BraveFox Enhancer — lean Firefox ChatGPT cleanup for PC/ESR and Android/Fenix Nightly.
  *
- * Protects ChatGPT Personalization settings with the extension's existing
- * password page, adds a second confirmation gate before opening
- * "Muistiyhteenveto", and removes sensitive memory controls without a flash.
+ * Firefox is intentionally the secondary-browser lane:
+ * - Plugins, GPT directory and Images are hidden and their routes auto-close.
+ * - More/Lisää, Plugins/Lisäosat, GPTs and Kuvat/Images entry points stay gone.
+ * - ChatGPT sign-in is Google-only (Apple, phone, email and signup stay hidden).
+ * - Personalization remains password protected, but uses BraveFox's real top-level
+ *   password page rather than an iframe overlay.
+ * - Sensitive memory controls and the existing lightweight presentation cleanup remain.
  *
- * Performance notes:
- * - Critical controls are hidden by CSS at document_start.
- * - DOM work is mutation-driven and batched instead of repeatedly scanning
- *   the whole page or polling the URL.
- * - Added subtrees are processed in small idle-time batches, with a stricter
- *   queue cap and gentler timing on Firefox for Android.
+ * Performance model:
+ * - Paint-time CSS handles deterministic hiding.
+ * - Normal conversations have no permanent whole-page MutationObserver.
+ * - Personalization gets one route-specific batched observer only while that route is open.
+ * - Late Radix/settings portals get a short-lived observer after relevant interactions.
  */
 
 (() => {
   'use strict';
 
-  // Resolve the actual WebExtension API by capability. Some installed-app/PWA
-  // environments may expose a non-extension `browser` global, so blindly
-  // preferring `browser` can hide Chrome's real `chrome.runtime` object.
+  if (window.top !== window) return;
+
   const api = resolveExtensionApi();
-  const PASSWORD_PAGE_URL = getExtensionUrl('html/password-protected.html');
-
-  function resolveExtensionApi() {
-    for (const candidate of [globalThis.browser, globalThis.chrome]) {
-      try {
-        if (typeof candidate?.runtime?.getURL === 'function') return candidate;
-      } catch {
-        // Keep trying the next API candidate.
-      }
-    }
-    return null;
-  }
-
-  function getExtensionUrl(path) {
-    try {
-      return typeof api?.runtime?.getURL === 'function'
-        ? api.runtime.getURL(path)
-        : '';
-    } catch {
-      return '';
-    }
-  }
   const STYLE_ID = 'bravefox-chatgpt-style';
+  const HIDDEN_CLASS = 'bravefox-chatgpt-hidden';
   const GATED_CLASS = 'bravefox-chatgpt-gated';
   const PERSONALIZATION_CLASS = 'bravefox-chatgpt-personalization';
-  const HIDDEN_CLASS = 'bravefox-chatgpt-hidden';
-  const PASSWORD_HOST_ID = 'bravefox-chatgpt-password-host';
 
   const PERSONALIZATION_PROMPT = 'ChatGPT Personalization settings are password protected';
   const MEMORY_SUMMARY_PROMPT = 'Are you sure you want to do this? Enter password';
 
+  const RESTRICTED_PATHS = ['/plugins', '/gpts', '/images'];
   const MEMORY_ENABLE_LABELS = new Set(['ota muisti käyttöön', 'enable memory']);
   const MEMORY_SUMMARY_LABELS = ['muistiyhteenveto', 'memory summary', 'saved memories'];
   const MANAGE_LABELS = new Set(['hallitse', 'manage']);
@@ -66,7 +46,6 @@
     'poista kaikki muistot',
     'delete all memories'
   ]);
-
   const MODELS_TO_REMOVE = new Set([
     'gpt-5 instant',
     'gpt-5 thinking mini',
@@ -76,39 +55,58 @@
   ]);
 
   const IS_ANDROID = /Android/i.test(navigator.userAgent);
-  const MAX_PENDING_ROOTS = IS_ANDROID ? 18 : 36;
-  const IDLE_TIMEOUT = IS_ANDROID ? 420 : 220;
-  const FALLBACK_DELAY = IS_ANDROID ? 90 : 35;
-  const RELEVANT_MUTATION_SELECTOR = [
-    '[role="menuitem"]',
-    'button[role="switch"]',
-    'button[aria-haspopup="menu"][aria-label]',
-    'button.btn-secondary',
-    'button.bg-token-text-primary',
-    'button[aria-label="Päivitä"]',
-    'button.flex.items-center.gap-1.bg-transparent',
-    'div.truncate[dir="auto"]',
-    'div.flex.items-center.gap-1.text-sm.font-semibold.opacity-70',
-    'div.border-token-border-light.bg-token-bg-elevated-secondary'
-  ].join(',');
+  const PORTAL_WATCH_MS = IS_ANDROID ? 1500 : 1100;
+  const PERSONALIZATION_MAINTENANCE_MS = IS_ANDROID ? 110 : 70;
 
-  let observer = null;
-  let scanHandle = null;
-  let scanHandleType = null;
-  let fullScanPending = false;
-  let activeGate = null;
-  let personalizationVisitActive = false;
-  let personalizationUnlocked = false;
   let lastUrl = location.href;
+  let routeCheckQueued = false;
+  let routeAuthCheckInProgress = false;
+  let authRedirectRequested = false;
+  let protectedRouteUnlocked = false;
+  let personalizationVisitActive = false;
+  let pendingApprovedAction = null;
+  let personalizationObserver = null;
+  let personalizationMaintenanceTimer = 0;
+  let portalObserver = null;
+  let portalObserverTimer = 0;
+  let uiScanTimer = 0;
+  let uiScanRetryTimer = 0;
 
-  const pendingRoots = new Set();
   const replayAllowedButtons = new WeakSet();
 
+  // Direct navigation to a secondary-only ChatGPT surface should never paint.
+  if (isRestrictedChatGptPath(location.pathname)) {
+    setInlinePaintGate(true);
+    void requestRestrictedTabClose(location.href);
+    return;
+  }
+
+  // Direct Personalization loads are paint-gated until a one-time native password
+  // grant is consumed or the background moves the tab to the BraveFox password page.
+  if (isPersonalizationRoute()) {
+    document.documentElement.classList.add(GATED_CLASS, PERSONALIZATION_CLASS);
+    setInlinePaintGate(true);
+  }
+
   injectStyles();
-  synchronizeRoute();
-  installEventGuards();
-  startObserver();
-  scheduleFullScan(true);
+  installNavigationGuards();
+  installInteractionGuards();
+  void synchronizeRoute();
+  scheduleGeneralUiScan(true);
+  scheduleGoogleOnlyLoginCleanupRetries();
+
+  function resolveExtensionApi() {
+    for (const candidate of [globalThis.browser, globalThis.chrome]) {
+      try {
+        if (typeof candidate?.runtime?.getURL === 'function' && typeof candidate?.runtime?.sendMessage === 'function') {
+          return candidate;
+        }
+      } catch {
+        // Keep trying.
+      }
+    }
+    return null;
+  }
 
   function normalizeText(value) {
     return String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
@@ -119,6 +117,56 @@
       if (text.includes(value)) return true;
     }
     return false;
+  }
+
+  function normalizePathname(value = location.pathname) {
+    const path = String(value || '/').toLowerCase().replace(/\/+$/, '');
+    return path || '/';
+  }
+
+  function isRestrictedChatGptPath(pathname = location.pathname) {
+    const path = normalizePathname(pathname);
+    return RESTRICTED_PATHS.some(base => path === base || path.startsWith(`${base}/`));
+  }
+
+  function isRestrictedChatGptUrl(rawUrl) {
+    try {
+      const url = new URL(String(rawUrl || ''), location.href);
+      return url.protocol === 'https:' && url.hostname.toLowerCase() === 'chatgpt.com' && isRestrictedChatGptPath(url.pathname);
+    } catch {
+      return false;
+    }
+  }
+
+  function isPersonalizationRoute() {
+    let hash = location.hash || '';
+    try {
+      hash = decodeURIComponent(hash);
+    } catch {
+      // Malformed hashes should not break the extension.
+    }
+    return normalizeText(hash).startsWith('#settings/personalization');
+  }
+
+  function setInlinePaintGate(active) {
+    const root = document.documentElement;
+    if (!root) return;
+
+    if (active) {
+      root.setAttribute('data-bravefox-inline-gated', 'true');
+      root.style.setProperty('visibility', 'hidden', 'important');
+      root.style.setProperty('opacity', '0', 'important');
+      root.style.setProperty('pointer-events', 'none', 'important');
+      root.style.setProperty('background', '#ffffff', 'important');
+      return;
+    }
+
+    if (root.getAttribute('data-bravefox-inline-gated') !== 'true') return;
+    root.removeAttribute('data-bravefox-inline-gated');
+    root.style.removeProperty('visibility');
+    root.style.removeProperty('opacity');
+    root.style.removeProperty('pointer-events');
+    root.style.removeProperty('background');
   }
 
   function injectStyles() {
@@ -139,12 +187,6 @@
         pointer-events: none !important;
       }
 
-      #${PASSWORD_HOST_ID} {
-        visibility: visible !important;
-        opacity: 1 !important;
-        pointer-events: auto !important;
-      }
-
       .${HIDDEN_CLASS} {
         display: none !important;
         visibility: hidden !important;
@@ -152,33 +194,59 @@
         pointer-events: none !important;
       }
 
-      /* Hide the legacy-memory upgrade nag before ChatGPT can paint it. */
-      html.${PERSONALIZATION_CLASS}
-      div.border-token-border-light.bg-token-bg-elevated-secondary.flex.min-h-20.flex-col.items-start.gap-3.rounded-2xl.border.px-4.py-4 {
+      /* Firefox secondary-browser navigation: these surfaces simply do not exist. */
+      a[data-testid="plugins-button"][data-sidebar-item="true"],
+      a[href="/plugins"],
+      a[href="/gpts"],
+      a[href="/images"],
+      a[href="/plugins"]:has(use[href*="#all-products"]),
+      div[data-sidebar-item="true"][aria-haspopup="menu"]:has(use[href$="#dots-horizontal"]) {
         display: none !important;
         visibility: hidden !important;
         opacity: 0 !important;
         pointer-events: none !important;
       }
 
-      /* Hide the About-you menu button before it can paint. */
+      /* Account menu Personalization / Yksilöinti — paint-time no-glimpse. */
+      [role="menuitem"]:has(use[href*="#face"]) {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+
+      /* Google-only ChatGPT sign-in lane. */
+      [data-testid="signup-button"],
+      input#email,
+      input[name="email"][type="email"],
+      label:has(> input#email),
+      div:has(> input#email),
+      div:has(> label > input#email),
+      button:has(use[href$="#f5a288"]),
+      button:has(use[href$="#d6f274"]),
+      body:has(input#email) button[type="submit"][class*="btn-primary"][class*="h-13"][class*="w-full"],
+      body:has(input#email) div[class*="grid-cols-[1fr_max-content_1fr]"][class~="my-2"]:has(> div.h-px),
+      body:has(input#email) div.flex.flex-col.gap-3:has(button use[href$="#8e7aa4"]) > button:not(:has(use[href$="#8e7aa4"])) {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+
+      /* Sensitive Personalization controls remain no-glimpse protected. */
+      html.${PERSONALIZATION_CLASS}
+      div.border-token-border-light.bg-token-bg-elevated-secondary.flex.min-h-20.flex-col.items-start.gap-3.rounded-2xl.border.px-4.py-4,
+      html.${PERSONALIZATION_CLASS} [role="menuitem"][data-color="danger"] {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+
       button[aria-label="Tietoja sinusta -valikko"],
       button[aria-label^="Tietoja sinusta"][aria-haspopup="menu"],
       button[aria-label="About you menu"],
       button[aria-label^="About you"][aria-haspopup="menu"] {
-        display: none !important;
-        visibility: hidden !important;
-        opacity: 0 !important;
-        pointer-events: none !important;
-      }
-
-      /*
-       * The memory-summary overflow menu is rendered in a portal. Its delete
-       * command is the danger-coloured menu item, so suppress it at paint time.
-       * JavaScript then verifies the exact text and removes the item entirely.
-       */
-      html.${PERSONALIZATION_CLASS}
-      [role="menuitem"][data-color="danger"] {
         display: none !important;
         visibility: hidden !important;
         opacity: 0 !important;
@@ -245,72 +313,198 @@
     (document.head || document.documentElement).appendChild(style);
   }
 
-  function isPersonalizationRoute() {
-    let hash = location.hash || '';
+  async function sendRuntimeMessage(message) {
+    if (!api?.runtime?.sendMessage) return { ok: false, error: 'Extension runtime unavailable.' };
     try {
-      hash = decodeURIComponent(hash);
-    } catch {
-      // A malformed hash should not break the extension.
+      const result = api.runtime.sendMessage(message);
+      if (result && typeof result.then === 'function') return await result;
+      return await new Promise(resolve => {
+        api.runtime.sendMessage(message, response => {
+          const runtimeError = api.runtime.lastError;
+          resolve(runtimeError
+            ? { ok: false, error: runtimeError.message }
+            : (response || { ok: false, error: 'No response from BraveFox background.' }));
+        });
+      });
+    } catch (error) {
+      return { ok: false, error: error?.message || String(error) };
     }
-    return normalizeText(hash).startsWith('#settings/personalization');
   }
 
-  function synchronizeRoute() {
-    const onPersonalization = isPersonalizationRoute();
-    document.documentElement.classList.toggle(PERSONALIZATION_CLASS, onPersonalization);
+  function makeAuthRequestId() {
+    try {
+      if (globalThis.crypto?.randomUUID) return crypto.randomUUID();
+      const bytes = new Uint8Array(16);
+      globalThis.crypto?.getRandomValues?.(bytes);
+      return Array.from(bytes, value => value.toString(16).padStart(2, '0')).join('');
+    } catch {
+      return `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    }
+  }
 
-    if (onPersonalization && !personalizationVisitActive) {
-      personalizationVisitActive = true;
-      personalizationUnlocked = false;
+  async function requestRestrictedTabClose(targetUrl = location.href) {
+    const response = await sendRuntimeMessage({
+      type: 'BRAVEFOX_CHATGPT_CLOSE_RESTRICTED',
+      targetUrl
+    });
+    if (!response?.ok) {
+      console.warn('[BraveFox Enhancer] Firefox could not close restricted ChatGPT route:', response?.error || response);
+    }
+    return Boolean(response?.ok);
+  }
 
-      const gateOpened = showPasswordGate({
-        kind: 'personalization-route',
-        title: PERSONALIZATION_PROMPT,
-        onSuccess: () => {
-          personalizationUnlocked = true;
-          hideSensitiveMemoryControls(document);
-        }
-      });
+  async function beginNativePasswordFlow({ kind = 'protected-route', title, returnUrl = location.href }) {
+    if (authRedirectRequested) return false;
+    authRedirectRequested = true;
+    document.documentElement.classList.add(GATED_CLASS, PERSONALIZATION_CLASS);
+    setInlinePaintGate(true);
 
-      if (!gateOpened) {
-        personalizationVisitActive = false;
-      }
+    const response = await sendRuntimeMessage({
+      type: 'BRAVEFOX_CHATGPT_AUTH_BEGIN',
+      requestId: makeAuthRequestId(),
+      kind,
+      routeKey: 'personalization',
+      title,
+      returnUrl
+    });
+
+    if (!response?.ok) {
+      authRedirectRequested = false;
+      console.warn('[BraveFox Enhancer] Could not open native ChatGPT password page:', response?.error || response);
+      return false;
+    }
+    return true;
+  }
+
+  async function consumeNativePasswordGrant() {
+    const response = await sendRuntimeMessage({ type: 'BRAVEFOX_CHATGPT_AUTH_CONSUME' });
+    return response?.ok && response?.unlocked ? response : null;
+  }
+
+  async function synchronizeRoute() {
+    if (routeAuthCheckInProgress) return;
+
+    if (isRestrictedChatGptPath(location.pathname)) {
+      setInlinePaintGate(true);
+      void requestRestrictedTabClose(location.href);
       return;
     }
 
-    if (!onPersonalization && personalizationVisitActive) {
+    const onPersonalization = isPersonalizationRoute();
+    document.documentElement.classList.toggle(PERSONALIZATION_CLASS, onPersonalization);
+
+    if (!onPersonalization) {
       personalizationVisitActive = false;
-      personalizationUnlocked = false;
-      if (activeGate?.kind === 'personalization-route') {
-        closePasswordGate(false);
-      }
+      protectedRouteUnlocked = false;
+      authRedirectRequested = false;
+      pendingApprovedAction = null;
+      document.documentElement.classList.remove(GATED_CLASS);
+      setInlinePaintGate(false);
+      configurePersonalizationObserver(false);
+      return;
     }
+
+    configurePersonalizationObserver(true);
+    if (personalizationVisitActive && protectedRouteUnlocked) return;
+
+    personalizationVisitActive = true;
+    routeAuthCheckInProgress = true;
+    document.documentElement.classList.add(GATED_CLASS);
+    setInlinePaintGate(true);
+
+    try {
+      const grant = await consumeNativePasswordGrant();
+      if (grant) {
+        protectedRouteUnlocked = true;
+        authRedirectRequested = false;
+        pendingApprovedAction = grant.kind === 'memory-summary' ? grant : null;
+        hideSensitiveMemoryControls(document);
+        cleanChatGptUi(document);
+        document.documentElement.classList.remove(GATED_CLASS);
+        setInlinePaintGate(false);
+
+        if (pendingApprovedAction) {
+          pendingApprovedAction = null;
+          resumeMemorySummaryAfterUnlock();
+        }
+        return;
+      }
+
+      await beginNativePasswordFlow({
+        kind: 'protected-route',
+        title: PERSONALIZATION_PROMPT,
+        returnUrl: location.href
+      });
+    } finally {
+      routeAuthCheckInProgress = false;
+    }
+  }
+
+  function queueRouteCheck() {
+    if (routeCheckQueued) return;
+    routeCheckQueued = true;
+    queueMicrotask(() => {
+      routeCheckQueued = false;
+      checkForRouteChange();
+    });
   }
 
   function checkForRouteChange() {
     if (location.href === lastUrl) return false;
     lastUrl = location.href;
-    synchronizeRoute();
-    scheduleFullScan(true);
+    void synchronizeRoute();
+    scheduleGeneralUiScan(true);
+    if (normalizeText(location.hash).startsWith('#settings')) armPortalWatcher();
     return true;
   }
 
-  function installEventGuards() {
+  function installNavigationGuards() {
     const handleNavigation = () => {
       lastUrl = location.href;
-      synchronizeRoute();
-      scheduleFullScan(true);
+      void synchronizeRoute();
+      scheduleGeneralUiScan(true);
+      if (normalizeText(location.hash).startsWith('#settings')) armPortalWatcher();
     };
 
     window.addEventListener('hashchange', handleNavigation, true);
     window.addEventListener('popstate', handleNavigation, true);
     window.addEventListener('pageshow', handleNavigation, true);
-
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') checkForRouteChange();
     }, true);
 
+    try {
+      if (globalThis.navigation?.addEventListener) {
+        globalThis.navigation.addEventListener('navigate', event => {
+          const destinationUrl = event?.destination?.url;
+          if (!destinationUrl || !isRestrictedChatGptUrl(destinationUrl)) return;
+          setInlinePaintGate(true);
+          void requestRestrictedTabClose(destinationUrl);
+        });
+        globalThis.navigation.addEventListener('currententrychange', queueRouteCheck);
+      }
+    } catch {
+      // Firefox versions without Navigation API are covered by click guards + background webNavigation.
+    }
+  }
+
+  function installInteractionGuards() {
     document.addEventListener('click', event => {
+      if (event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
+        const anchor = getElementFromEvent(event, 'a[href]');
+        if (anchor) {
+          const targetUrl = new URL(anchor.getAttribute('href'), location.href);
+          if (isRestrictedChatGptUrl(targetUrl.href)) {
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation();
+            setInlinePaintGate(true);
+            void requestRestrictedTabClose(targetUrl.href);
+            return;
+          }
+        }
+      }
+
       const menuItem = getElementFromEvent(event, '[role="menuitem"]');
       if (menuItem && isDeleteAllMemoriesItem(menuItem)) {
         event.preventDefault();
@@ -321,18 +515,30 @@
       }
 
       const button = getButtonFromEvent(event);
-      if (!button || replayAllowedButtons.has(button)) return;
-      if (!isMemorySummaryManageButton(button)) return;
+      if (button && !replayAllowedButtons.has(button) && isMemorySummaryManageButton(button)) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        void beginNativePasswordFlow({
+          kind: 'memory-summary',
+          title: MEMORY_SUMMARY_PROMPT,
+          returnUrl: location.href
+        });
+        return;
+      }
 
-      event.preventDefault();
-      event.stopPropagation();
-      event.stopImmediatePropagation();
+      if (menuItem || isLikelyMenuTrigger(event.target) || isLikelySettingsInteraction(event.target)) {
+        armPortalWatcher();
+        scheduleGeneralUiScan(false);
+      }
+    }, true);
 
-      showPasswordGate({
-        kind: 'memory-summary',
-        title: MEMORY_SUMMARY_PROMPT,
-        onSuccess: () => replayManageClick(button)
-      });
+    document.addEventListener('keydown', event => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      if (isLikelyMenuTrigger(event.target) || isLikelySettingsInteraction(event.target)) {
+        armPortalWatcher();
+        scheduleGeneralUiScan(false);
+      }
     }, true);
   }
 
@@ -349,12 +555,223 @@
     return element instanceof HTMLButtonElement ? element : null;
   }
 
+  function isLikelyMenuTrigger(target) {
+    if (!(target instanceof Element)) return false;
+    return Boolean(target.closest(
+      'button[aria-haspopup="menu"], button[aria-haspopup="listbox"], [role="button"][aria-haspopup="menu"], [role="button"][aria-haspopup="listbox"]'
+    ));
+  }
+
+  function isLikelySettingsInteraction(target) {
+    if (!(target instanceof Element)) return false;
+    return Boolean(target.closest(
+      '[role="menuitem"], [role="dialog"] button, [role="dialog"] [role="tab"], [role="dialog"] a'
+    ));
+  }
+
+  function armPortalWatcher(duration = PORTAL_WATCH_MS) {
+    const start = () => {
+      if (!document.documentElement) return;
+
+      if (!portalObserver) {
+        portalObserver = new MutationObserver(mutations => {
+          for (const mutation of mutations) {
+            for (const node of mutation.addedNodes) {
+              if (!(node instanceof Element)) continue;
+              const relevant =
+                node.matches('[role="menu"], [role="dialog"], [role="menuitem"], a[href="/plugins"], a[href="/gpts"], a[href="/images"]') ||
+                node.querySelector('[role="menu"], [role="dialog"], [role="menuitem"], a[href="/plugins"], a[href="/gpts"], a[href="/images"]');
+              if (!relevant) continue;
+              cleanChatGptUi(node);
+            }
+          }
+        });
+        portalObserver.observe(document.documentElement, { childList: true, subtree: true });
+      }
+
+      if (portalObserverTimer) clearTimeout(portalObserverTimer);
+      portalObserverTimer = window.setTimeout(() => {
+        portalObserverTimer = 0;
+        portalObserver?.disconnect();
+        portalObserver = null;
+      }, Math.max(300, Number(duration) || PORTAL_WATCH_MS));
+    };
+
+    if (document.documentElement) start();
+    else document.addEventListener('DOMContentLoaded', start, { once: true });
+  }
+
+  function configurePersonalizationObserver(enable) {
+    if (!enable) {
+      personalizationObserver?.disconnect();
+      personalizationObserver = null;
+      if (personalizationMaintenanceTimer) {
+        clearTimeout(personalizationMaintenanceTimer);
+        personalizationMaintenanceTimer = 0;
+      }
+      return;
+    }
+
+    if (personalizationObserver || !document.documentElement) return;
+    personalizationObserver = new MutationObserver(() => {
+      queueRouteCheck();
+      if (personalizationMaintenanceTimer) clearTimeout(personalizationMaintenanceTimer);
+      personalizationMaintenanceTimer = window.setTimeout(() => {
+        personalizationMaintenanceTimer = 0;
+        if (!isPersonalizationRoute()) return;
+        hideSensitiveMemoryControls(document);
+        cleanChatGptUi(document);
+      }, PERSONALIZATION_MAINTENANCE_MS);
+    });
+    personalizationObserver.observe(document.documentElement, { childList: true, subtree: true });
+  }
+
+  function scheduleGeneralUiScan(immediate = false) {
+    if (uiScanTimer) clearTimeout(uiScanTimer);
+    if (uiScanRetryTimer) clearTimeout(uiScanRetryTimer);
+
+    uiScanTimer = window.setTimeout(() => {
+      uiScanTimer = 0;
+      cleanChatGptUi(document);
+      if (isPersonalizationRoute()) hideSensitiveMemoryControls(document);
+    }, immediate ? 0 : 25);
+
+    if (!immediate) {
+      uiScanRetryTimer = window.setTimeout(() => {
+        uiScanRetryTimer = 0;
+        cleanChatGptUi(document);
+        if (isPersonalizationRoute()) hideSensitiveMemoryControls(document);
+      }, IS_ANDROID ? 220 : 150);
+    }
+  }
+
+  function scheduleGoogleOnlyLoginCleanupRetries() {
+    // CSS is authoritative for no-glimpse; finite retries collapse React wrappers.
+    for (const delay of [0, 90, 280, 800, 1800]) {
+      window.setTimeout(() => applyGoogleOnlyLoginPolicy(document), delay);
+    }
+  }
+
+  function forEachMatch(scope, selector, callback) {
+    if (!scope) return;
+    if (scope instanceof Element && scope.matches(selector)) callback(scope);
+    if (typeof scope.querySelectorAll !== 'function') return;
+    for (const element of scope.querySelectorAll(selector)) callback(element);
+  }
+
+  function hardHide(element) {
+    if (!(element instanceof Element)) return;
+    hideElement(element);
+    element.style.setProperty('display', 'none', 'important');
+    element.style.setProperty('visibility', 'hidden', 'important');
+    element.style.setProperty('opacity', '0', 'important');
+    element.style.setProperty('pointer-events', 'none', 'important');
+  }
+
+  function hideElement(element) {
+    if (!(element instanceof Element)) return;
+    element.classList.add(HIDDEN_CLASS);
+    element.setAttribute('aria-hidden', 'true');
+  }
+
+  function applySecondaryBrowserNavigationCleanup(scope = document) {
+    forEachMatch(scope, 'a[href="/plugins"], a[href="/gpts"], a[href="/images"]', hardHide);
+
+    forEachMatch(scope, '[data-sidebar-item="true"]', item => {
+      const text = normalizeText(item.textContent);
+      const href = normalizeText(item.getAttribute?.('href'));
+      const isMore =
+        Boolean(item.querySelector?.('use[href$="#dots-horizontal"]')) ||
+        text === 'lisää' ||
+        text === 'more';
+      const isExtraDestination =
+        href === '/plugins' || href === '/gpts' || href === '/images' ||
+        text === 'lisäosat' || text === 'plugins' ||
+        text === 'gpt:t' || text === 'gpts' ||
+        text === 'kuvat' || text === 'images';
+      if (isMore || isExtraDestination) hardHide(item);
+    });
+  }
+
+  function applyAccountAndSettingsCleanup(scope = document) {
+    forEachMatch(scope, '[role="menuitem"]', item => {
+      const text = normalizeText(item.textContent);
+      const hasFaceIcon = Boolean(item.querySelector('use[href*="#face"]'));
+      if (hasFaceIcon || text === 'yksilöinti' || text === 'personalization') hardHide(item);
+    });
+
+    // Settings > Plugins/Browse addons. Hide the exact link always; collapse its row only
+    // when the small settings-row structure is positively identified.
+    forEachMatch(scope, 'a[href="/plugins"]', link => {
+      hardHide(link);
+      const text = normalizeText(link.textContent);
+      const isBrowseAddons =
+        Boolean(link.querySelector('use[href*="#all-products"]')) ||
+        text === 'selaa lisäosia' ||
+        text === 'browse addons' ||
+        text === 'browse add-ons';
+      if (!isBrowseAddons) return;
+
+      const wrapper = link.parentElement;
+      const row = wrapper?.parentElement;
+      const wrapperIsExact =
+        wrapper instanceof HTMLElement &&
+        wrapper.children.length === 1 &&
+        wrapper.firstElementChild === link &&
+        wrapper.classList.contains('w-full');
+      const rowIsExact =
+        row instanceof HTMLElement &&
+        row.children.length === 1 &&
+        row.firstElementChild === wrapper &&
+        row.classList.contains('border-token-border-light') &&
+        row.classList.contains('flex') &&
+        row.classList.contains('items-center') &&
+        row.classList.contains('border-b');
+      if (wrapperIsExact && rowIsExact) hardHide(row);
+    });
+  }
+
+  function applyGoogleOnlyLoginPolicy(scope = document) {
+    if (!scope || typeof scope.querySelectorAll !== 'function') return;
+
+    forEachMatch(scope, '[data-testid="signup-button"]', hideElement);
+    forEachMatch(scope, 'button:has(use[href$="#f5a288"]), button:has(use[href$="#d6f274"])', hideElement);
+
+    const email = document.querySelector('input#email, input[name="email"][type="email"]');
+    if (!email) return;
+
+    hideElement(email);
+    const fieldWrapper = email.closest('label') || email.parentElement;
+    if (fieldWrapper && !fieldWrapper.matches('form, main, body')) hideElement(fieldWrapper);
+
+    const form = email.closest('form');
+    if (form) {
+      for (const submit of form.querySelectorAll('button[type="submit"]')) hideElement(submit);
+    } else {
+      for (const submit of document.querySelectorAll('button[type="submit"][class*="btn-primary"][class*="h-13"][class*="w-full"]')) {
+        hideElement(submit);
+      }
+    }
+
+    for (const divider of document.querySelectorAll('div[class*="grid-cols-[1fr_max-content_1fr]"]')) {
+      const text = normalizeText(divider.textContent);
+      if ((text === 'tai' || text === 'or') && divider.querySelector('.h-px')) hideElement(divider);
+    }
+
+    for (const group of document.querySelectorAll('div.flex.flex-col.gap-3')) {
+      if (!group.querySelector('button use[href$="#8e7aa4"]')) continue;
+      for (const button of group.querySelectorAll(':scope > button')) {
+        if (!button.querySelector('use[href$="#8e7aa4"]')) hideElement(button);
+      }
+    }
+  }
+
   function isDeleteAllMemoriesItem(menuItem) {
     return DELETE_ALL_MEMORY_LABELS.has(normalizeText(menuItem.textContent));
   }
 
   function isMemorySummaryManageButton(button) {
-    if (!isPersonalizationRoute() || !personalizationUnlocked) return false;
+    if (!isPersonalizationRoute() || !protectedRouteUnlocked) return false;
     if (!MANAGE_LABELS.has(normalizeText(button.textContent))) return false;
 
     let node = button;
@@ -365,22 +782,9 @@
     return false;
   }
 
-  function replayManageClick(originalButton) {
-    const button = originalButton?.isConnected ? originalButton : findMemorySummaryManageButton();
-    if (!button) return;
-
-    replayAllowedButtons.add(button);
-    try {
-      button.click();
-    } finally {
-      queueMicrotask(() => replayAllowedButtons.delete(button));
-    }
-  }
-
   function findMemorySummaryManageButton() {
     for (const button of document.querySelectorAll('button')) {
       if (!MANAGE_LABELS.has(normalizeText(button.textContent))) continue;
-
       let node = button;
       for (let depth = 0; node && depth < 9; depth += 1, node = node.parentElement) {
         const context = normalizeText(node.textContent);
@@ -390,212 +794,22 @@
     return null;
   }
 
-  function showPasswordGate({ kind, title, onSuccess }) {
-    if (activeGate) return false;
-    // Cache the extension URL at content-script startup. This keeps the gate
-    // usable in long-lived PWA windows even if Chrome later reloads/updates the
-    // extension context while the app window remains open.
-    const passwordPageUrl = PASSWORD_PAGE_URL || getExtensionUrl('html/password-protected.html');
-    if (!passwordPageUrl) {
-      console.warn('[BraveFox Enhancer] Password page URL is unavailable. Reload the PWA window once.');
-      return false;
-    }
-
-    document.documentElement.classList.add(GATED_CLASS);
-
-    const host = document.createElement('div');
-    host.id = PASSWORD_HOST_ID;
-    host.style.cssText = [
-      'all: initial !important',
-      'position: fixed !important',
-      'inset: 0 !important',
-      'width: 100vw !important',
-      'height: 100vh !important',
-      'z-index: 2147483647 !important',
-      'display: block !important',
-      'visibility: visible !important',
-      'opacity: 1 !important',
-      'pointer-events: auto !important',
-      'background: #ffffff !important'
-    ].join(';');
-
-    const shadow = host.attachShadow({ mode: 'closed' });
-    const reset = document.createElement('style');
-    reset.textContent = [
-      ':host { all: initial; }',
-      'iframe {',
-      '  width: 100%;',
-      '  height: 100%;',
-      '  border: 0;',
-      '  display: block;',
-      '  background: #fff;',
-      '}'
-    ].join(' ');
-
-    const iframe = document.createElement('iframe');
-    const params = new URLSearchParams({
-      embedded: '1',
-      compact: '1',
-      title
-    });
-    iframe.src = `${passwordPageUrl}?${params}`;
-    iframe.title = title;
-    iframe.setAttribute('allow', 'clipboard-read; clipboard-write');
-
-    shadow.append(reset, iframe);
-    (document.documentElement || document.body).appendChild(host);
-
-    const messageListener = event => {
-      if (event.source !== iframe.contentWindow) return;
-      const unlocked = event.data === 'BraveFox-Unlock' || event.data?.type === 'BraveFox-Unlock';
-      if (!unlocked) return;
-
-      const callback = activeGate?.onSuccess;
-      closePasswordGate(true);
+  function resumeMemorySummaryAfterUnlock(attempt = 0) {
+    const button = findMemorySummaryManageButton();
+    if (button) {
+      replayAllowedButtons.add(button);
       try {
-        callback?.();
-      } catch (error) {
-        console.error('[BraveFox Enhancer] ChatGPT protected action failed:', error);
+        button.click();
+      } finally {
+        queueMicrotask(() => replayAllowedButtons.delete(button));
       }
-    };
-
-    window.addEventListener('message', messageListener, true);
-    activeGate = { kind, host, iframe, onSuccess, messageListener };
-    return true;
-  }
-
-  function closePasswordGate(unlocked) {
-    if (!activeGate) return;
-    const gate = activeGate;
-    activeGate = null;
-
-    window.removeEventListener('message', gate.messageListener, true);
-    gate.host.remove();
-
-    if (unlocked) {
-      hideSensitiveMemoryControls(document);
-      cleanChatGptUi(document);
-    }
-
-    document.documentElement.classList.remove(GATED_CLASS);
-  }
-
-  function startObserver() {
-    observer = new MutationObserver(mutations => {
-      checkForRouteChange();
-      const onPersonalization = isPersonalizationRoute();
-
-      for (const mutation of mutations) {
-        for (const node of mutation.addedNodes) {
-          if (node.nodeType !== Node.ELEMENT_NODE) continue;
-          if (!isRelevantMutationRoot(node)) continue;
-
-          // Sensitive settings stay synchronous so they never flash after a rerender.
-          if (onPersonalization) hideSensitiveMemoryControls(node);
-          queueScanRoot(node);
-        }
-      }
-    });
-
-    observer.observe(document.documentElement, {
-      childList: true,
-      subtree: true
-    });
-  }
-
-  function isRelevantMutationRoot(root) {
-    return root.matches(RELEVANT_MUTATION_SELECTOR) ||
-      root.querySelector(RELEVANT_MUTATION_SELECTOR) !== null;
-  }
-
-  function queueScanRoot(root) {
-    if (!(root instanceof Element) || fullScanPending) return;
-
-    if (pendingRoots.size >= MAX_PENDING_ROOTS) {
-      scheduleFullScan(false);
       return;
     }
-
-    for (const existing of pendingRoots) {
-      if (existing.contains(root)) return;
-      if (root.contains(existing)) pendingRoots.delete(existing);
-    }
-
-    pendingRoots.add(root);
-    scheduleScan(false);
-  }
-
-  function scheduleFullScan(urgent = false) {
-    fullScanPending = true;
-    pendingRoots.clear();
-    scheduleScan(urgent);
-  }
-
-  function scheduleScan(urgent) {
-    if (scanHandle !== null) {
-      if (!urgent) return;
-      cancelScheduledScan();
-    }
-
-    if (!urgent && typeof requestIdleCallback === 'function') {
-      scanHandleType = 'idle';
-      scanHandle = requestIdleCallback(flushScans, { timeout: IDLE_TIMEOUT });
-      return;
-    }
-
-    scanHandleType = 'timeout';
-    scanHandle = setTimeout(flushScans, urgent ? 0 : FALLBACK_DELAY);
-  }
-
-  function cancelScheduledScan() {
-    if (scanHandle === null) return;
-
-    if (scanHandleType === 'idle' && typeof cancelIdleCallback === 'function') {
-      cancelIdleCallback(scanHandle);
-    } else {
-      clearTimeout(scanHandle);
-    }
-
-    scanHandle = null;
-    scanHandleType = null;
-  }
-
-  function flushScans() {
-    scanHandle = null;
-    scanHandleType = null;
-
-    if (fullScanPending) {
-      fullScanPending = false;
-      pendingRoots.clear();
-      hideSensitiveMemoryControls(document);
-      cleanChatGptUi(document);
-      return;
-    }
-
-    const roots = Array.from(pendingRoots);
-    pendingRoots.clear();
-
-    for (const root of roots) {
-      if (!root.isConnected) continue;
-      hideSensitiveMemoryControls(root);
-      cleanChatGptUi(root);
-    }
-  }
-
-  function forEachMatch(scope, selector, callback) {
-    if (!scope) return;
-
-    if (scope instanceof Element && scope.matches(selector)) {
-      callback(scope);
-    }
-
-    if (typeof scope.querySelectorAll !== 'function') return;
-    for (const element of scope.querySelectorAll(selector)) {
-      callback(element);
-    }
+    if (attempt < 24) window.setTimeout(() => resumeMemorySummaryAfterUnlock(attempt + 1), 125);
   }
 
   function hideSensitiveMemoryControls(scope = document) {
+    if (!isPersonalizationRoute()) return;
     hideMemoryEnableRows(scope);
     hideEnhancedMemoryBanners(scope);
     hideAboutYouMenus(scope);
@@ -606,27 +820,19 @@
     forEachMatch(scope, 'button[role="switch"]', switchButton => {
       const container = switchButton.closest('.flex.justify-between.gap-2') || switchButton.parentElement;
       if (!container) return;
-
       const context = normalizeText(container.textContent);
       if (!includesAny(context, MEMORY_ENABLE_LABELS)) return;
-
       const row = findSettingRow(switchButton);
-      if (!row) return;
-      hideElement(row);
+      if (row) hideElement(row);
     });
   }
 
   function findSettingRow(startNode) {
     let node = startNode;
     let outermostSwitchContainer = null;
-
     for (let depth = 0; node && depth < 8; depth += 1, node = node.parentElement) {
-      if (node.querySelector?.('button[role="switch"]')) {
-        outermostSwitchContainer = node;
-      }
-      if (node.classList?.contains('border-token-border-light')) {
-        return node;
-      }
+      if (node.querySelector?.('button[role="switch"]')) outermostSwitchContainer = node;
+      if (node.classList?.contains('border-token-border-light')) return node;
     }
     return outermostSwitchContainer;
   }
@@ -639,26 +845,23 @@
 
     forEachMatch(scope, cardSelector, card => {
       const context = normalizeText(card.textContent);
-      const hasLegacyText = includesAny(context, LEGACY_MEMORY_BANNER_TEXT);
-      const hasUpgradeButton = includesAny(context, ENHANCED_MEMORY_BUTTON_LABELS);
-      if (hasLegacyText && hasUpgradeButton) hideElement(card);
+      if (includesAny(context, LEGACY_MEMORY_BANNER_TEXT) && includesAny(context, ENHANCED_MEMORY_BUTTON_LABELS)) {
+        hideElement(card);
+      }
     });
 
     forEachMatch(scope, 'button[type="button"]', button => {
       if (!ENHANCED_MEMORY_BUTTON_LABELS.has(normalizeText(button.textContent))) return;
-
       let card = button.closest('div.border-token-border-light.bg-token-bg-elevated-secondary');
       if (!card) {
         let node = button.parentElement;
         for (let depth = 0; node && depth < 6; depth += 1, node = node.parentElement) {
-          const context = normalizeText(node.textContent);
-          if (includesAny(context, LEGACY_MEMORY_BANNER_TEXT)) {
+          if (includesAny(normalizeText(node.textContent), LEGACY_MEMORY_BANNER_TEXT)) {
             card = node;
             break;
           }
         }
       }
-
       if (card) hideElement(card);
     });
   }
@@ -669,7 +872,6 @@
       const isFinnish = label.includes('tietoja sinusta') && label.includes('valikko');
       const isEnglish = label.includes('about you') && label.includes('menu');
       if (!isFinnish && !isEnglish) return;
-
       hideElement(button);
       button.tabIndex = -1;
     });
@@ -683,12 +885,11 @@
     });
   }
 
-  function hideElement(element) {
-    element.classList.add(HIDDEN_CLASS);
-    element.setAttribute('aria-hidden', 'true');
-  }
-
   function cleanChatGptUi(scope = document) {
+    applyGoogleOnlyLoginPolicy(scope);
+    applySecondaryBrowserNavigationCleanup(scope);
+    applyAccountAndSettingsCleanup(scope);
+
     forEachMatch(scope, 'div[role="menuitem"]', item => {
       const firstLine = normalizeText(String(item.textContent || '').split('\n')[0]);
       if (MODELS_TO_REMOVE.has(firstLine)) item.remove();
@@ -717,6 +918,6 @@
   }
 
   console.log(
-    `[BraveFox Enhancer] ChatGPT SPA protection active (${IS_ANDROID ? 'Android-optimized' : 'desktop-optimized'}).`
+    `[BraveFox Enhancer] Firefox ChatGPT lean mode active (${IS_ANDROID ? 'Fenix Nightly' : 'PC/ESR'}; route-specific observers only).`
   );
 })();
