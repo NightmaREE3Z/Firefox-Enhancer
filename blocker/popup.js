@@ -165,6 +165,7 @@ setTimeout(() => input.focus(), 0);
 const redirectLoggerArea = document.querySelector('#redirectLoggerArea');
 const redirectLoggerButton = document.querySelector('#enableRedirectLogger');
 const redirectLoggerStatus = document.querySelector('#redirectLoggerStatus');
+const isAndroidContext = document.documentElement.dataset.platform === 'android' || /Android/i.test(navigator.userAgent);
 
 function showRedirectLoggerStatus(message, state = '') {
   if (!redirectLoggerStatus) return;
@@ -174,7 +175,7 @@ function showRedirectLoggerStatus(message, state = '') {
 }
 
 (async () => {
-  if (!redirectLoggerArea || !redirectLoggerButton) return;
+  if (!redirectLoggerArea || !redirectLoggerButton || isAndroidContext) return;
   try {
     const platform = await browser.runtime.getPlatformInfo();
     if (platform?.os === 'android') return;
@@ -191,7 +192,7 @@ function showRedirectLoggerStatus(message, state = '') {
   }
 })();
 
-if (redirectLoggerButton) {
+if (redirectLoggerButton && !isAndroidContext) {
   redirectLoggerButton.addEventListener('click', async () => {
     // Start both requests directly inside the click handler so Fenix/Firefox does
     // not discard the user-gesture context before the permission prompt opens.

@@ -303,6 +303,196 @@
       grid-template-columns: 1fr;
     }
 
+    .android-brand,
+    .quick-copy-android,
+    .android-lock-illustration,
+    .lock-title-android,
+    .lock-copy-android {
+      display: none;
+    }
+
+    html[data-platform="android"] body {
+      padding: 0 0 36px;
+      background: #fff;
+    }
+
+    html[data-platform="android"] .popup-shell {
+      width: 100%;
+      max-width: none;
+      margin: 0;
+      overflow: visible;
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
+    }
+
+    html[data-platform="android"] .topbar {
+      min-height: 76px;
+      padding: 16px 24px;
+      border-bottom: 1px solid #e2e6ed;
+      background: #fff;
+    }
+
+    html[data-platform="android"] .desktop-brand {
+      display: none;
+    }
+
+    html[data-platform="android"] .android-brand {
+      display: block;
+      color: #0b0b0d;
+      font-size: clamp(22px, 5.8vw, 26px);
+      font-weight: 800;
+      line-height: 1.06;
+      letter-spacing: -0.025em;
+    }
+
+    html[data-platform="android"] .status-pill {
+      min-width: 52px;
+      height: 38px;
+      font-size: 27px;
+    }
+
+    html[data-platform="android"] .settings-stack {
+      gap: 18px;
+      padding: 16px 14px 28px;
+    }
+
+    html[data-platform="android"] .quick-card,
+    html[data-platform="android"] .lock-panel {
+      border: 1px solid #d9e0e9;
+      border-radius: 20px;
+      background: #fff;
+    }
+
+    html[data-platform="android"] .quick-toggle {
+      min-height: 104px;
+      grid-template-columns: 74px minmax(0, 1fr) 26px;
+      gap: 14px;
+      padding: 18px 22px;
+    }
+
+    html[data-platform="android"] .quick-icon {
+      width: 60px;
+      height: 60px;
+      border-radius: 18px;
+      font-size: 42px;
+    }
+
+    html[data-platform="android"] .quick-heading {
+      gap: 5px;
+    }
+
+    html[data-platform="android"] .quick-heading strong {
+      color: #16233c;
+      font-size: clamp(20px, 5.2vw, 24px);
+      line-height: 1.05;
+    }
+
+    html[data-platform="android"] .quick-copy-desktop {
+      display: none;
+    }
+
+    html[data-platform="android"] .quick-copy-android {
+      display: block;
+      color: #111;
+      font-size: clamp(11px, 3vw, 14px);
+      font-weight: 400;
+      line-height: 1.35;
+    }
+
+    html[data-platform="android"] .quick-chevron {
+      font-size: 28px;
+    }
+
+    html[data-platform="android"] .lock-panel {
+      min-height: 0;
+      padding: 24px 28px 26px;
+    }
+
+    html[data-platform="android"] .desktop-lock-disc,
+    html[data-platform="android"] .lock-title-desktop,
+    html[data-platform="android"] .lock-copy-desktop,
+    html[data-platform="android"] .options-launcher-hint {
+      display: none;
+    }
+
+    html[data-platform="android"] .android-lock-illustration {
+      display: block;
+      width: 132px;
+      height: 132px;
+      margin: 0 auto 6px;
+      object-fit: contain;
+    }
+
+    html[data-platform="android"] .lock-title-android {
+      display: inline;
+    }
+
+    html[data-platform="android"] .lock-panel h1 {
+      margin: 4px 0 0;
+      color: #102752;
+      font-size: clamp(24px, 6.2vw, 28px);
+      line-height: 1.08;
+      letter-spacing: -0.025em;
+    }
+
+    html[data-platform="android"] .lock-copy-android {
+      display: block;
+      margin: 7px 0 0;
+      max-width: none;
+      color: #111;
+      font-size: clamp(15px, 4vw, 18px);
+      line-height: 1.3;
+    }
+
+    html[data-platform="android"] #unlockForm {
+      width: 100%;
+      margin-top: 18px;
+    }
+
+    html[data-platform="android"] .input-row {
+      min-height: 54px;
+      grid-template-columns: 1fr 56px;
+      border-radius: 14px;
+    }
+
+    html[data-platform="android"] #passwordInput {
+      padding: 14px 15px;
+      font-size: 16px;
+    }
+
+    html[data-platform="android"] .error {
+      margin-top: 6px;
+    }
+
+    html[data-platform="android"] .options-update-area {
+      margin-top: 18px;
+    }
+
+    html[data-platform="android"] .options-update-button {
+      min-width: 180px;
+      min-height: 48px;
+      padding: 10px 22px;
+      border-radius: 14px;
+      font-size: 16px;
+    }
+
+    html[data-platform="android"] #extensionUpdateStatus {
+      max-width: 300px;
+    }
+
+    html[data-platform="android"] #redirectLoggerArea {
+      display: none !important;
+    }
+
+    html[data-platform="android"] .options-note {
+      margin-top: 14px;
+      color: #161616;
+      font-size: 12.5px;
+      font-weight: 700;
+      opacity: 1;
+    }
+
     @media (max-width: 380px) {
       html[data-platform="android"] body { padding: 0; background: #fff; }
       html[data-platform="android"] .popup-shell { border: 0; border-radius: 0; box-shadow: none; }
@@ -315,10 +505,11 @@
 <body data-page="options" data-bravefox-launcher="options">
   <main class="popup-shell">
     <header class="topbar">
-      <div class="brand">
+      <div class="brand desktop-brand">
         <img src="../icons/48.png" alt="" class="brand-icon">
         <div><strong>BraveFox</strong><span>Focus Master</span></div>
       </div>
+      <div class="android-brand">BraveFox Focus Master</div>
       <span class="status-pill" title="Blocking remains active while the manager is locked">✓</span>
     </header>
 
@@ -328,7 +519,8 @@
           <span class="quick-icon" aria-hidden="true">+</span>
           <span class="quick-heading">
             <strong id="quickBlockTitle">Quick Block</strong>
-            <small>Add one term or link without unlocking the manager.</small>
+            <small class="quick-copy-desktop">Add one term or link without unlocking the manager.</small>
+            <small class="quick-copy-android">Add a term or link here, without needing to unlock settings.</small>
           </span>
           <span class="quick-chevron" aria-hidden="true">›</span>
         </button>
@@ -352,13 +544,18 @@
       </section>
 
       <section class="lock-panel" aria-labelledby="popupTitle">
-        <div class="lock-disc" aria-hidden="true">
+        <div class="lock-disc desktop-lock-disc" aria-hidden="true">
           <svg viewBox="0 0 24 24" role="img">
             <path d="M7 10V7a5 5 0 0 1 10 0v3h1a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h1zm2 0h6V7a3 3 0 0 0-6 0v3z"/>
           </svg>
         </div>
-        <h1 id="popupTitle">BraveFox Focus Master is locked</h1>
-        <p>Lists, removals, imports, exports, GitHub sync and settings remain password-protected.</p>
+        <img class="android-lock-illustration" src="../icons/Locked.png" alt="Focus Master locked">
+        <h1 id="popupTitle">
+          <span class="lock-title-desktop">BraveFox Focus Master is locked</span>
+          <span class="lock-title-android">Focus Master is locked</span>
+        </h1>
+        <p class="lock-copy-desktop">Lists, removals, imports, exports, GitHub sync and settings remain password-protected.</p>
+        <p class="lock-copy-android">Enter password to unlock</p>
 
         <form id="unlockForm" autocomplete="off" spellcheck="false">
           <div class="input-row">
@@ -370,7 +567,7 @@
           <p id="errorText" class="error" aria-live="polite"></p>
         </form>
 
-        <p class="hint">You can also open this password launcher from Firefox’s Add-ons menu.</p>
+        <p class="hint options-launcher-hint">You can also open this password launcher from Firefox’s Add-ons menu.</p>
         <div class="options-update-area">
           <button id="checkExtensionUpdate" class="options-update-button" type="button">Check for updates</button>
           <p id="extensionUpdateStatus" class="options-update-status" role="status" aria-live="polite"></p>

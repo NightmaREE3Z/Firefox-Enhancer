@@ -3,157 +3,169 @@
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color: #172033;
   background: #ffffff;
-  --popup-width: 360px;
-  --popup-min-height: 535px;
-  --lock-panel-padding: 28px 26px 24px;
-  --lock-disc-size: 70px;
-  --lock-disc-icon-size: 34px;
+  --popup-width: 354px;
+  --popup-min-height: 560px;
 }
 
 :root[data-platform="android"] {
-  --popup-width: min(340px, 100vw);
-  --popup-min-height: 500px;
-  --lock-panel-padding: 48px 28px 28px;
-  --lock-disc-size: 88px;
-  --lock-disc-icon-size: 42px;
+  --popup-width: 100vw;
+  --popup-min-height: 100vh;
 }
 
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+}
 
-html, body {
+html,
+body {
   margin: 0;
   width: var(--popup-width);
   min-height: var(--popup-min-height);
   background: #ffffff;
 }
 
-body { overflow-x: hidden; overflow-y: auto; }
+body {
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: wait;
+  opacity: .58;
+}
 
 .popup-shell {
+  width: 100%;
   min-height: var(--popup-min-height);
-  display: grid;
-  grid-template-rows: auto 1fr;
 }
 
 .topbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 13px 15px;
-  border-bottom: 1px solid #e4e7ed;
-  box-shadow: 0 2px 8px rgba(17, 24, 39, .08);
+  min-height: 55px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #dfe4ec;
+  background: #fbfbfc;
 }
 
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 9px;
+.brand-wordmark {
+  color: #0f1420;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.025em;
 }
-
-.brand-icon {
-  width: 30px;
-  height: 30px;
-}
-
-.brand div {
-  display: grid;
-  line-height: 1.08;
-}
-
-.brand strong { font-size: 15px; }
-.brand span { margin-top: 3px; color: #6c7586; font-size: 11px; }
 
 .status-pill {
-  min-width: 42px;
-  height: 25px;
+  min-width: 43px;
+  height: 28px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  background: #83dfc3;
-  color: white;
-  font-size: 17px;
+  background: #8ddfc7;
+  color: #ffffff;
+  font-size: 21px;
   font-weight: 900;
+  line-height: 1;
+}
+
+.popup-content {
+  position: relative;
+  padding: 10px 14px 12px;
 }
 
 .lock-panel {
   display: flex;
+  min-height: 492px;
   flex-direction: column;
   align-items: center;
-  padding: var(--lock-panel-padding);
   text-align: center;
 }
 
-.lock-disc {
-  width: var(--lock-disc-size);
-  height: var(--lock-disc-size);
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  background: #ff5e64;
-  color: #fff;
-  box-shadow: 0 12px 25px rgba(255, 94, 100, .22);
-}
-
-.lock-disc svg {
-  width: var(--lock-disc-icon-size);
-  height: var(--lock-disc-icon-size);
-  fill: currentColor;
+.lock-illustration {
+  display: block;
+  width: 112px;
+  height: 112px;
+  margin: 6px auto 0;
+  object-fit: contain;
+  image-rendering: auto;
 }
 
 h1 {
-  margin: 18px 0 8px;
+  margin: 14px 0 0;
+  color: #0f2348;
   font-size: 20px;
-  line-height: 1.2;
+  line-height: 1.18;
+  letter-spacing: -0.02em;
 }
 
-.lock-panel > p {
-  margin: 0;
-  max-width: 250px;
-  color: #7a8495;
-  font-size: 14px;
-  line-height: 1.45;
+.subtitle {
+  margin: 5px 0 0;
+  color: #111111;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.subtitle-android {
+  display: none;
 }
 
 form {
   width: 100%;
-  margin-top: 20px;
+  margin-top: 18px;
 }
 
 .input-row {
   display: grid;
-  grid-template-columns: 1fr 38px;
+  grid-template-columns: 1fr 42px;
   align-items: center;
+  min-height: 43px;
   border: 1.5px solid #4388ff;
   border-radius: 10px;
   overflow: hidden;
-  background: #fff;
+  background: #ffffff;
 }
 
 input {
   min-width: 0;
   border: 0;
   outline: 0;
-  padding: 12px 13px;
+  padding: 11px 13px;
   color: #172033;
-  font: inherit;
+  background: transparent;
   font-size: 13px;
 }
 
-input::placeholder { color: #a1a9b8; }
+input::placeholder {
+  color: #a1a9b8;
+}
 
-button {
+#unlockButton {
   align-self: stretch;
+  display: grid;
+  place-items: center;
   border: 0;
   background: transparent;
   color: #cbd1dc;
-  cursor: pointer;
 }
 
-button:hover { color: #4388ff; }
-button:disabled { cursor: wait; opacity: .55; }
+#unlockButton:hover,
+#unlockButton:focus-visible {
+  color: #4388ff;
+  outline: none;
+}
 
-button svg {
+#unlockButton svg {
   width: 24px;
   height: 24px;
   fill: none;
@@ -165,34 +177,38 @@ button svg {
 
 .error {
   min-height: 18px;
-  margin: 8px 0 0;
+  margin: 7px 0 0;
   color: #c83e48;
   font-size: 12px;
 }
 
 .hint {
-  margin-top: 14px !important;
-  color: #9aa3b2 !important;
-  font-size: 11px !important;
+  margin: 0;
+  color: #9aa3b2;
+  font-size: 11px;
+  line-height: 1.45;
 }
 
-@media (max-height: 560px) {
-  :root[data-platform="android"] .lock-panel { padding-top: 24px; }
-  :root[data-platform="android"] .lock-disc { width: 72px; height: 72px; }
+.unlock-hint {
+  max-width: 275px;
 }
 
 .quick-block-link {
-  align-self: center;
-  min-height: 38px;
-  margin-top: 14px;
-  padding: 8px 12px;
+  position: absolute;
+  top: 16px;
+  right: 4px;
+  z-index: 2;
+  width: auto;
+  min-height: 32px;
+  padding: 7px 9px;
   border: 1px solid #d6deea;
   border-radius: 10px;
   background: #f7f9fc;
   color: #356fcf;
-  font: inherit;
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .quick-block-link:hover,
@@ -200,12 +216,18 @@ button svg {
   border-color: #4388ff;
   background: #eef5ff;
   color: #246be8;
+  outline: none;
 }
 
+.quick-block-mobile-icon,
+.quick-block-mobile-copy,
+.quick-block-mobile-chevron {
+  display: none;
+}
 
 .extension-update-area {
   width: 100%;
-  margin-top: 14px;
+  margin-top: 12px;
   padding-top: 14px;
   border-top: 1px solid #e4e7ed;
 }
@@ -218,26 +240,280 @@ button svg {
   border-radius: 10px;
   background: #f8fafc;
   color: #245fc5;
-  font: inherit;
   font-size: 12px;
   font-weight: 800;
 }
 
 .extension-update-button:hover,
-.extension-update-button:focus-visible {
+.extension-update-button:focus-visible,
+.redirect-logger-button:hover,
+.redirect-logger-button:focus-visible {
   border-color: #4388ff;
   background: #eef5ff;
   color: #246be8;
+  outline: none;
 }
 
 .extension-update-status {
-  min-height: 18px;
   margin: 8px 2px 0;
   color: #7a8495;
   font-size: 11px;
   line-height: 1.35;
 }
 
-.extension-update-status[data-state="success"] { color: #047857; }
-.extension-update-status[data-state="error"] { color: #b91c1c; }
+.extension-update-status[data-state="success"] {
+  color: #047857;
+}
 
+.extension-update-status[data-state="error"] {
+  color: #b91c1c;
+}
+
+.redirect-logger-area {
+  width: 100%;
+  margin-top: 12px;
+  text-align: center;
+}
+
+.redirect-logger-button {
+  min-height: 38px;
+  padding: 8px 12px;
+  border: 1px solid #d6deea;
+  border-radius: 10px;
+  background: #f7f9fc;
+  color: #356fcf;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.redirect-logger-status {
+  max-width: 300px;
+  margin: 12px auto 0;
+}
+
+.redirect-logger-status[data-state="success"] {
+  color: #047857;
+}
+
+.redirect-logger-status[data-state="error"] {
+  color: #b91c1c;
+}
+
+.enhancer-version {
+  margin: 12px 0 0;
+  color: #a3acbb;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+:root[data-platform="android"] body {
+  width: 100vw;
+  min-height: 100vh;
+}
+
+:root[data-platform="android"] .popup-shell {
+  min-height: 100vh;
+}
+
+:root[data-platform="android"] .topbar {
+  min-height: 70px;
+  padding: 14px 24px;
+  background: #ffffff;
+}
+
+:root[data-platform="android"] .brand-wordmark {
+  font-size: clamp(28px, 6.8vw, 40px);
+  line-height: 1.06;
+}
+
+:root[data-platform="android"] .status-pill {
+  min-width: 50px;
+  height: 36px;
+  font-size: 26px;
+}
+
+:root[data-platform="android"] .popup-content {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 14px 14px 28px;
+  background: #ffffff;
+}
+
+:root[data-platform="android"] .quick-block-link {
+  position: static;
+  order: 0;
+  display: grid;
+  grid-template-columns: 86px 1fr 26px;
+  align-items: center;
+  width: 100%;
+  min-height: 118px;
+  padding: 18px 22px;
+  border: 1px solid #d9e0e9;
+  border-radius: 18px;
+  background: #ffffff;
+  color: #172033;
+  text-align: left;
+  white-space: normal;
+}
+
+:root[data-platform="android"] .quick-block-desktop-label {
+  display: none;
+}
+
+:root[data-platform="android"] .quick-block-mobile-icon {
+  display: grid;
+  width: 66px;
+  height: 66px;
+  place-items: center;
+  border-radius: 18px;
+  background: #8ddfc7;
+  color: #24695d;
+  font-size: 48px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+:root[data-platform="android"] .quick-block-mobile-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+:root[data-platform="android"] .quick-block-mobile-copy strong {
+  font-size: clamp(24px, 5.7vw, 31px);
+  line-height: 1.05;
+}
+
+:root[data-platform="android"] .quick-block-mobile-copy small {
+  color: #111111;
+  font-size: clamp(12px, 3.2vw, 15px);
+  font-weight: 400;
+  line-height: 1.35;
+}
+
+:root[data-platform="android"] .quick-block-mobile-chevron {
+  display: block;
+  justify-self: end;
+  color: #172033;
+  font-size: 28px;
+  font-weight: 800;
+  transform: translateY(-1px);
+}
+
+:root[data-platform="android"] .lock-panel {
+  order: 1;
+  min-height: auto;
+  padding: 20px 28px 24px;
+  border: 1px solid #d9e0e9;
+  border-radius: 18px;
+  background: #ffffff;
+}
+
+:root[data-platform="android"] .lock-illustration {
+  width: 150px;
+  height: 150px;
+  margin: 0 auto 2px;
+}
+
+:root[data-platform="android"] h1 {
+  margin-top: 8px;
+  font-size: clamp(28px, 7.1vw, 40px);
+  line-height: 1.08;
+}
+
+:root[data-platform="android"] .subtitle-desktop {
+  display: none;
+}
+
+:root[data-platform="android"] .subtitle-android {
+  display: block;
+  margin-top: 5px;
+  font-size: clamp(17px, 4.4vw, 24px);
+}
+
+:root[data-platform="android"] form {
+  margin-top: 18px;
+}
+
+:root[data-platform="android"] .input-row {
+  min-height: 58px;
+  grid-template-columns: 1fr 56px;
+  border-radius: 14px;
+}
+
+:root[data-platform="android"] input {
+  padding: 15px 16px;
+  font-size: 18px;
+}
+
+:root[data-platform="android"] .error {
+  margin-top: 6px;
+}
+
+:root[data-platform="android"] .unlock-hint {
+  display: none;
+}
+
+:root[data-platform="android"] .extension-update-area {
+  width: auto;
+  margin-top: 18px;
+  padding-top: 0;
+  border-top: 0;
+}
+
+:root[data-platform="android"] .extension-update-button {
+  width: auto;
+  min-width: 194px;
+  min-height: 52px;
+  padding: 11px 24px;
+  border-radius: 14px;
+  font-size: 18px;
+}
+
+:root[data-platform="android"] .extension-update-status {
+  max-width: 300px;
+  margin-top: 10px;
+}
+
+:root[data-platform="android"] .redirect-logger-area {
+  display: none !important;
+}
+
+:root[data-platform="android"] .enhancer-version {
+  margin-top: 14px;
+  color: #161616;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+@media (max-width: 370px) {
+  :root[data-platform="android"] .popup-content {
+    padding-inline: 10px;
+  }
+
+  :root[data-platform="android"] .lock-panel {
+    padding-inline: 20px;
+  }
+
+  :root[data-platform="android"] .quick-block-link {
+    grid-template-columns: 64px 1fr 22px;
+    padding-inline: 16px;
+  }
+
+  :root[data-platform="android"] .quick-block-mobile-icon {
+    width: 54px;
+    height: 54px;
+    font-size: 40px;
+  }
+
+  :root[data-platform="android"] .lock-panel {
+    padding-inline: 18px;
+  }
+
+  :root[data-platform="android"] .lock-illustration {
+    width: 128px;
+    height: 128px;
+  }
+}
