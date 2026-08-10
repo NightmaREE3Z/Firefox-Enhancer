@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "BraveFox Enhancer",
-  "version": "27.1.5",
+  "version": "27.1.6",
   "description": "Unified for Firefox PC and Android personal use, for more peaceful Interwebs experience",
   "background": {
     "scripts": [
@@ -357,16 +357,17 @@
         "https://chatgpt.com/*"
       ],
       "js": [
-        "scripts/ChatGPT.js"
+        "scripts/chatgpt.js"
       ],
       "run_at": "document_start"
     },
     {
       "matches": [
-        "https://www.xvideos.com/*"
+        "https://www.xvideos.com/*",
+        "https://www.tenor.com/*"
       ],
       "js": [
-        "scripts/adult.js"
+        "*://*/*"
       ],
       "run_at": "document_start"
     },

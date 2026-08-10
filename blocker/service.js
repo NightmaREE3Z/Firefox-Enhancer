@@ -13,7 +13,8 @@ import {
   unlockAdminTab,
   verifyPassword
 } from './auth.js';
-import { findBlockReason } from './matcher.js';
+import { findBlockReason, hasScopedLinkRulesForUrl } from './matcher.js';
+import { findBlockedHost, initializeHosts } from './hosts.js';
 import {
   downloadGitHubLists,
   getGitHubSyncStatus,
@@ -354,28 +355,56 @@ function blockedPageUrl(reason, sourceUrl) {
 
 async function evaluateNavigation(tabId, url, title = '') {
   if (!Number.isInteger(tabId) || tabId < 0) return;
-  if (!isSupportedWebUrl(url) || isCompletelyExcludedUrl(url)) return;
+  if (!isSupportedWebUrl(url)) return;
+  await initializeTrustedSites();
   if (shouldBypassRedirect(tabId, url) || redirectInFlight.has(tabId)) return;
   const last = recentlyRedirected.get(tabId);
   if (last && last.url === url && Date.now() - last.at < 1500) return;
 
   const [dataset, settings] = await Promise.all([loadDataset(), getSettings()]);
-  const reason = findBlockReason({ url, title }, dataset, settings);
-  if (!reason) return;
 
+  // Priority 1: manual Blocker Terms / Links always win, even on TrustedSites.
+  const reason = findBlockReason({ url, title }, dataset, settings);
+  if (reason) {
+    redirectInFlight.add(tabId);
+    recentlyRedirected.set(tabId, { url, at: Date.now() });
+    try {
+      const directTarget = configuredRedirectTarget(reason, settings, url);
+      sendNativeBlockLog(reason, url, directTarget);
+      if (directTarget) {
+        redirectLandingBypass.set(tabId, { url: directTarget, expiresAt: Date.now() + 15_000 });
+        await browser.tabs.update(tabId, { url: directTarget });
+      } else {
+        await browser.tabs.update(tabId, { url: blockedPageUrl(reason, url) });
+      }
+    } catch (error) {
+      console.warn('[BraveFox Focus Master] Redirect failed:', error);
+    } finally {
+      redirectInFlight.delete(tabId);
+    }
+    return;
+  }
+
+  // Priority 2: TrustedSites only exempts the broad fetched-hosts fallback.
+  if (isCompletelyExcludedUrl(url)) return;
+
+  // Path/query-specific link rules mean this host is intentionally controlled
+  // surgically; fetchedHosts must not turn it into an accidental whole-host ban.
+  if (settings.enabled && settings.blockLinks && hasScopedLinkRulesForUrl(url, dataset.links)) return;
+
+  // Priority 3: fetchedHosts is the blunt fallback. Close the tab instead of
+  // redirecting to a blocker page. A bare blockedLinks host would have matched above.
+  const blockedHost = await findBlockedHost(url);
+  if (!blockedHost) return;
+
+  const hostReason = { type: 'host', trigger: blockedHost, attemptedSearch: '' };
   redirectInFlight.add(tabId);
   recentlyRedirected.set(tabId, { url, at: Date.now() });
   try {
-    const directTarget = configuredRedirectTarget(reason, settings, url);
-    sendNativeBlockLog(reason, url, directTarget);
-    if (directTarget) {
-      redirectLandingBypass.set(tabId, { url: directTarget, expiresAt: Date.now() + 15_000 });
-      await browser.tabs.update(tabId, { url: directTarget });
-    } else {
-      await browser.tabs.update(tabId, { url: blockedPageUrl(reason, url) });
-    }
+    sendNativeBlockLog(hostReason, url, '');
+    await browser.tabs.remove(tabId);
   } catch (error) {
-    console.warn('[BraveFox Focus Master] Redirect failed:', error);
+    console.warn('[BraveFox Focus Master] Fetched-host tab close failed:', error);
   } finally {
     redirectInFlight.delete(tabId);
   }
@@ -586,4 +615,5 @@ void (async () => {
     console.warn('[BraveFox Focus Master] Startup initialization failed:', error);
   }
 })();
-console.log(`[BraveFox Focus Master] Module ${BLOCKER_VERSION} initialized with ordered local lists, Firefox profile mirroring, GitHub PC/Android sync, and bundled fallbacks.`);
+void initializeHosts().catch(error => console.warn('[BraveFox Focus Master] Hosts initialization failed:', error));
+console.log(`[BraveFox Focus Master] Module ${BLOCKER_VERSION} initialized with ordered local lists, Firefox profile mirroring, GitHub PC/Android sync, surgical link matching, and fetched-host fallback.`);

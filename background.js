@@ -230,6 +230,7 @@ const STATIC_BLOCK_PATTERNS = [
   "*://virtualbox.org/*",
   "*://virtualbox.net/*",
   "*://vmware.com/*",
+  "*://xvideos.com/*",
   "*://osboxes.org/*",
   "*://horizonmw.org/*",
   "*://reddit.com/answers*",
@@ -500,7 +501,9 @@ async function shouldBlockUrl(url) {
     if (!hostname || isAllowlistedHostname(hostname)) return false;
     if (matchesStaticBlockRule(parsed)) return true;
     if (isBlockedTld(hostname)) return true;
-    return isBlockedByHosts(hostname);
+    // Focus Master 1.0.1 owns fetched-host enforcement in blocker/service.js so
+    // manual Blocker rules and TrustedSites can outrank the blunt host fallback.
+    return false;
   } catch (_) {
     return false;
   }
@@ -901,20 +904,16 @@ async function getBraveFoxExtensionUpdateStatus(force = false) {
 }
 
 function setupAlarms() {
-  browser.alarms.create(HOSTS_UPDATE_ALARM, { periodInMinutes: HOSTS_UPDATE_INTERVAL_MINUTES });
+  // Focus Master 1.0.1 owns fetched-host refresh/enforcement via blocker/hosts.js.
+  // Keep only the Firefox Enhancer wrestling-roster alarm here.
   browser.alarms.create(WRESTLING_UPDATE_ALARM, { periodInMinutes: WRESTLING_UPDATE_INTERVAL_MINUTES });
 }
 
-async function runStartupUpdates(forceHosts = false) {
-  const hostsAge = Date.now() - Number(hostsMeta?.lastUpdated || 0);
-  if (forceHosts || !hostsCache.length || hostsAge >= HOSTS_UPDATE_INTERVAL_MINUTES * 60 * 1000) {
-    void updateBlocklist();
-  }
+async function runStartupUpdates(_forceHosts = false) {
   void updateWrestlingRoster();
 }
 
 browser.alarms.onAlarm.addListener(alarm => {
-  if (alarm.name === HOSTS_UPDATE_ALARM) void updateBlocklist();
   if (alarm.name === WRESTLING_UPDATE_ALARM) void updateWrestlingRoster();
 });
 
