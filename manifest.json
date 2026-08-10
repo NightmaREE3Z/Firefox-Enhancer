@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "BraveFox Enhancer",
-  "version": "27.1.6",
+  "version": "27.1.8",
   "description": "Unified for Firefox PC and Android personal use, for more peaceful Interwebs experience",
   "background": {
     "scripts": [
@@ -363,11 +363,11 @@
     },
     {
       "matches": [
-        "https://www.xvideos.com/*",
-        "https://www.tenor.com/*"
+        "http://*/*",
+        "https://*/*"
       ],
       "js": [
-        "*://*/*"
+        "scripts/filtering.js"
       ],
       "run_at": "document_start"
     },
