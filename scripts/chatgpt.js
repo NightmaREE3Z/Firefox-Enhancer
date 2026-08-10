@@ -72,6 +72,15 @@
   const MEMORY_ENABLE_LABELS = new Set(['ota muisti käyttöön', 'enable memory']);
   const MEMORY_SUMMARY_LABELS = ['muistiyhteenveto', 'memory summary', 'saved memories'];
   const MANAGE_LABELS = new Set(['hallitse', 'manage']);
+  // ChatGPT renders the per-message memory status as an imperative React button
+  // (for example "Muisti päivitetty" / "Memory updated"). Clicking it opens
+  // saved memories without navigating through the protected Personalization route.
+  const MEMORY_STATUS_TRIGGER_LABELS = new Set([
+    'muisti päivitetty',
+    'muisti tallennettu',
+    'memory updated',
+    'memory saved'
+  ]);
   const ENHANCED_MEMORY_BUTTON_LABELS = new Set([
     'kokeile parannettua muistia',
     'try enhanced memory'
@@ -1067,6 +1076,30 @@
       }
 
       const button = getButtonFromEvent(event);
+      const memoryStatusControl = getMemoryStatusEscapeControl(event);
+
+      // The memory-status button in a normal chat opens saved memories directly and
+      // therefore bypasses the protected #settings/personalization navigation lane.
+      // Catch the React action in capture phase and deliberately send it through the
+      // existing native BraveFox password page instead.
+      if (memoryStatusControl && isMemoryStatusEscapeControl(memoryStatusControl)) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+
+        const returnUrl = new URL(location.href);
+        returnUrl.hash = '#settings/personalization';
+
+        preArmProtectedRoute({ key: 'personalization', path: null, title: PERSONALIZATION_PROMPT });
+        void beginNativePasswordFlow({
+          kind: 'protected-route',
+          routeKey: 'personalization',
+          title: PERSONALIZATION_PROMPT,
+          returnUrl: returnUrl.href
+        });
+        return;
+      }
+
       if (button && !replayAllowedButtons.has(button) && isMemorySummaryManageButton(button)) {
         event.preventDefault();
         event.stopPropagation();
@@ -1120,6 +1153,20 @@
 
   function isDeleteAllMemoriesItem(menuItem) {
     return DELETE_ALL_MEMORY_LABELS.has(normalizeText(menuItem.textContent));
+  }
+
+  function getMemoryStatusEscapeControl(event) {
+    return getElementFromEvent(event, 'button, [role="button"], a');
+  }
+
+  function isMemoryStatusEscapeControl(control) {
+    if (!(control instanceof Element)) return false;
+    if (!MEMORY_STATUS_TRIGGER_LABELS.has(normalizeText(control.textContent))) return false;
+
+    // Personalization is already protected by the route gate. Never interfere with
+    // legitimate memory controls after that lane has been explicitly unlocked.
+    if (isPersonalizationRoute() && protectedRouteUnlocked) return false;
+    return true;
   }
 
   function isMemorySummaryManageButton(button) {
