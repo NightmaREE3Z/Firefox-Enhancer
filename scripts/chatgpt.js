@@ -93,6 +93,14 @@
     'poista kaikki muistot',
     'delete all memories'
   ]);
+  const DELETE_SINGLE_MEMORY_LABELS = new Set([
+    'poista',
+    'delete'
+  ]);
+  const SAVED_MEMORIES_DIALOG_LABELS = [
+    'tallennetut muistot',
+    'saved memories'
+  ];
 
   const MODELS_TO_REMOVE = new Set([
     'gpt-5 instant',
@@ -1067,10 +1075,11 @@
       }
 
       const menuItem = getElementFromEvent(event, '[role="menuitem"]');
-      if (menuItem && isDeleteAllMemoriesItem(menuItem)) {
+      if (menuItem && isForbiddenMemoryDeleteItem(menuItem)) {
         event.preventDefault();
         event.stopPropagation();
         event.stopImmediatePropagation();
+        hideElement(menuItem);
         menuItem.remove();
         return;
       }
@@ -1153,6 +1162,47 @@
 
   function isDeleteAllMemoriesItem(menuItem) {
     return DELETE_ALL_MEMORY_LABELS.has(normalizeText(menuItem.textContent));
+  }
+
+  function isSingleMemoryDeleteItem(menuItem) {
+    const label = normalizeText(menuItem?.textContent);
+    if (!DELETE_SINGLE_MEMORY_LABELS.has(label)) return false;
+
+    // The per-memory overflow menu is Radix/React portal-mounted under document.body,
+    // not inside the Saved Memories modal. Scope it by requiring the real saved-memory
+    // dialog to be open and at least one per-memory options trigger to exist there.
+    // That avoids globally murdering every generic "Poista" / "Delete" menu item in ChatGPT.
+    if (!hasSavedMemoriesDialogOpen()) return false;
+    if (menuItem.getAttribute('data-color') === 'danger') return true;
+
+    return Boolean(document.querySelector(
+      'button[aria-label^="Lisää vaihtoehtoja muistille:"], button[aria-label^="More options for memory:"]'
+    ));
+  }
+
+  function isForbiddenMemoryDeleteItem(menuItem) {
+    return isDeleteAllMemoriesItem(menuItem) || isSingleMemoryDeleteItem(menuItem);
+  }
+
+  function hasSavedMemoriesDialogOpen() {
+    for (const dialog of document.querySelectorAll('[role="dialog"][data-state="open"], [role="dialog"]')) {
+      if (!(dialog instanceof Element)) continue;
+
+      if (dialog.querySelector('#memories-search, input[name="memories-search"]')) return true;
+
+      const title = dialog.querySelector('h1, h2, [id^="radix-"]');
+      const titleText = normalizeText(title?.textContent);
+      if (SAVED_MEMORIES_DIALOG_LABELS.some(label => titleText.includes(label))) return true;
+
+      const dialogText = normalizeText(dialog.textContent);
+      if (SAVED_MEMORIES_DIALOG_LABELS.some(label => dialogText.includes(label))) {
+        const hasMemoryOptions = dialog.querySelector(
+          'button[aria-label^="Lisää vaihtoehtoja muistille:"], button[aria-label^="More options for memory:"]'
+        );
+        if (hasMemoryOptions) return true;
+      }
+    }
+    return false;
   }
 
   function getMemoryStatusEscapeControl(event) {
@@ -1262,6 +1312,7 @@
             if (!relevant) continue;
 
             applyAccountAndSettingsCleanup(node);
+            if (isPersonalizationRoute()) hideSensitiveMemoryControls(node);
           }
         }
       });
@@ -1350,7 +1401,7 @@
     if (!isPersonalizationRoute()) return;
     hideMemoryEnableRows(scope);
     hideEnhancedMemoryBanners(scope);
-    removeDeleteAllMemoriesItems(scope);
+    removeForbiddenMemoryDeleteItems(scope);
   }
 
   function hideMemoryEnableRows(scope = document) {
@@ -1412,9 +1463,9 @@
     });
   }
 
-  function removeDeleteAllMemoriesItems(scope = document) {
+  function removeForbiddenMemoryDeleteItems(scope = document) {
     forEachMatch(scope, '[role="menuitem"]', item => {
-      if (!isDeleteAllMemoriesItem(item)) return;
+      if (!isForbiddenMemoryDeleteItem(item)) return;
       hideElement(item);
       item.remove();
     });
