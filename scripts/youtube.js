@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         YTClean
-// @version      2026-07-28
+// @version      2026-08-15
 // @description  Enhances my YouTube experience by blocking trackers and hiding garbage, such as shorts.
 // @match        https://*.youtube.com/*
 // @grant        none
@@ -87,7 +87,7 @@
 
 	// Names and nicknames
 	/\balexa\b/i, /Bliss/i, /Alexa Bliss/i, /lex kauf/i, /lex cabr/i, /lex carbr/i, /Liv Morgan/i, /Tiffany/i, /Tiffy/i, /Stratton/i, /Chelsea Green/i, /Dua Lipa/i, /Dualipa/i,
-        /Jordynne/i, /Maryse/i, /Women's/i, /Woman's/i, /Summer Rae/i, /Naomi/i, /Bianca Belair/i, /Charlotte/i, /Jessika Carr/i, /Mercedes/i, /cabrera/i, /leks bl/i, /leks kauf/i,
+        /Jordynne/i, /Maryse/i, /Stephanie McMahon/i, /Steph McMahon/i, /Women's/i, /Woman's/i, /Summer Rae/i, /Naomi/i, /Bianca Belair/i, /Charlotte/i, /Jessika Carr/i, /Mercedes/i, /cabrera/i, /leks bl/i, /leks kauf/i,
         /Carr WWE/i, /Jessica Karr/i, /bikini/i, /Kristen Stewart/i, /Sydney Sweeney/i, /Nia Jax/i, /Young Bucks/i, /Vice WWE/i, /Candice LeRae/i, /Trish/i, /Stratus/i, /lex kaufman/i,
 	/Lola Vice/i, /Velvet Sky/i, /deviantart/i, /leks cabr/i, /leks carbr/i, /Elyina/i, /Elyna WWE/i, /Tiffy Time/i, /Steward/i, /Roxanne/i, /Joanie/i, /Stewart/i, /Isla Dawn/i, 
         /Alexa WWE/i, /AJ Lee/i, /deepfake/i, /ring gear/i, /Lexi/i, /Aleksa/i, /Giulia/i, /Paige/i, /Chyna/i, /\bToni\b/i, /\bLin\b/i, /\blana\b/i, /Jackson/i, /Lash Legend/i, 
@@ -392,10 +392,233 @@
     ];
 
     // === Safe Channels Whitelist ===
-    const safeChannels = [
-        /chrissmoove/i,
-        /NerosCinema/i
+    // A whitelisted channel's OWN videos bypass title/keyword filtering everywhere they appear.
+    // This does NOT whitelist the surrounding page: recommendations beside a whitelisted watch
+    // page are still scanned normally and only inherit the whitelist if the recommended video
+    // itself belongs to one of these channels.
+    const safeChannelDefinitions = [
+        { key: 'MavenKHuffman', paths: ['/@mavenkhuffman'], names: ['MavenKHuffman'] },
+        { key: 'NerosCinema', paths: ['/@neroscinema'], names: ['NerosCinema'] },
+        { key: 'MarkJindrakOfficial', paths: ['/@markjindrakofficial'], names: ['MarkJindrakOfficial'] },
+        { key: 'Hardwareunboxed', paths: ['/@hardwareunboxed'], names: ['Hardwareunboxed', 'Hardware Unboxed'] },
+        { key: 'WrestlingFlashback', paths: ['/@wrestlingflashback'], names: ['WrestlingFlashback', 'Wrestling Flashback'] },
+        { key: 'whatever57010', paths: ['/@whatever57010'], names: ['whatever57010'] },
+        { key: 'TGDonFPS', paths: ['/@tgdonfps'], names: ['TGDonFPS'] },
+        { key: 'rSlash', paths: ['/@rslash'], names: ['rSlash'] },
+        { key: 'LinusTechTips', paths: ['/@linustechtips'], names: ['LinusTechTips', 'Linus Tech Tips'] },
+        { key: 'TH14PRODUCTIONS', paths: ['/@th14productions'], names: ['TH14PRODUCTIONS'] },
+        { key: 'JANTSUU', paths: ['/@jantsuu'], names: ['JANTSUU'] },
+        { key: 'OldSchoolRuneScape', paths: ['/oldschoolrunescape', '/@oldschoolrunescape'], names: ['OldSchoolRuneScape', 'Old School RuneScape'] },
+        { key: 'GamersNexus', paths: ['/@gamersnexus'], names: ['GamersNexus', 'Gamers Nexus'] },
+        { key: 'datastream_yt', paths: ['/@datastream_yt'], names: ['datastream_yt', 'datastream yt'] },
+        { key: 'iotech', paths: ['/@iotech'], names: ['iotech'] },
+        { key: 'chrissmoove', paths: ['/@chrissmoove'], names: ['chrissmoove', 'Chris Smoove'] },
+        { key: 'Haiskales', paths: ['/@haiskales'], names: ['Haiskales'] },
+        { key: 'ColonelloRS', paths: ['/@colonellors'], names: ['ColonelloRS'] },
+        { key: 'LuumiJuhani', paths: ['/@luumijuhani'], names: ['LuumiJuhani', 'Luumi Juhani'] },
+        { key: 'OneOfTheMillionss', paths: ['/@oneofthemillionss'], names: ['OneOfTheMillionss'] },
+        { key: 'TheGamingDefinition', paths: ['/@thegamingdefinition'], names: ['TheGamingDefinition', 'The Gaming Definition'] },
+        { key: 'UnpragmaticCovers', paths: ['/@unpragmaticcovers'], names: ['UnpragmaticCovers', 'Unpragmatic Covers'] },
+        { key: 'Jayztwocents', paths: ['/@jayztwocents'], names: ['Jayztwocents', 'JayzTwoCents'] },
+        { key: 'CVVCLIPS', paths: ['/@cvvclips'], names: ['CVVCLIPS', 'CVV Clips'] },
+        { key: 'TheXclusiveAce', paths: ['/@thexclusiveace'], names: ['TheXclusiveAce', 'The Xclusive Ace'] },
+        { key: 'TapOutCorner', paths: ['/@tapoutcorner'], names: ['TapOutCorner', 'Tap Out Corner'] },
+        { key: 'wrestlingbest1', paths: ['/@wrestlingbest1'], names: ['wrestlingbest1'] },
+        { key: 'wrestlingspremier', paths: ['/@wrestlingspremier'], names: ['wrestlingspremier'] },
+        { key: 'TheSandyRavage', paths: ['/@thesandyravage'], names: ['TheSandyRavage', 'The Sandy Ravage'] },
+        { key: 'ORTONISGOD', paths: ['/@ortonisgod'], names: ['ORTONISGOD'] },
+        { key: 'gaminginvestigators', paths: ['/@gaminginvestigators'], names: ['gaminginvestigators', 'Gaming Investigators'] },
+        { key: 'TheManlnBlack', paths: ['/@themanlnblack'], names: ['TheManlnBlack'] },
+        { key: 'TestingGames', paths: ['/@testinggames'], names: ['TestingGames', 'Testing Games'] },
+        { key: 'YannVids', paths: ['/@yannvids'], names: ['YannVids'] },
+        { key: 'edbassmaster', paths: ['/@edbassmaster'], names: ['edbassmaster', 'Ed Bassmaster'] },
+        { key: 'OzerecYT', paths: ['/@ozerecyt'], names: ['OzerecYT'] },
+        { key: 'NVIDIA', paths: ['/@nvidia'], names: ['NVIDIA'] },
+        { key: 'AMD', paths: ['/user/amd', '/@amd'], names: ['AMD'] },
+        { key: 'Intel', paths: ['/@intel'], names: ['Intel'] },
+        { key: 'PCBuilderChannel', paths: ['/@pcbuilderchannel'], names: ['PCBuilderChannel', 'PC Builder'] },
+        { key: 'BenBuja', paths: ['/@benbuja'], names: ['BenBuja', 'Ben Buja'] },
+        { key: 'BudgetBuildsOfficial', paths: ['/@budgetbuildsofficial'], names: ['BudgetBuildsOfficial', 'Budget Builds Official'] },
+        { key: 'Sabaton', paths: ['/@sabaton'], names: ['Sabaton'] },
+        { key: 'MooresLawIsDead', paths: ['/@mooreslawisdead'], names: ["Moore's Law Is Dead", 'MooresLawIsDead'] },
+        { key: 'HealthyGamerGG', paths: ['/@healthygamergg'], names: ['HealthyGamerGG', 'Healthy Gamer GG'] },
+        { key: 'GregSalazar', paths: ['/@gregsalazar'], names: ['GregSalazar', 'Greg Salazar'] },
+        { key: 'IcebergTech', paths: ['/@icebergtech'], names: ['IcebergTech', 'Iceberg Tech'] },
+        { key: 'NTtoNow', paths: ['/@nttonow'], names: ['NTtoNow'] },
+        { key: 'SomeOrdinaryGamers', paths: ['/@someordinarygamers'], names: ['SomeOrdinaryGamers', 'Some Ordinary Gamers'] }
     ];
+
+    function normalizeYTChannelPath(value) {
+        try {
+            const raw = String(value || '').trim();
+            if (!raw) return '';
+
+            let pathname = raw;
+            if (/^https?:\/\//i.test(raw) || raw.startsWith('//')) {
+                const url = new URL(raw.startsWith('//') ? ('https:' + raw) : raw);
+                if (!/(^|\.)youtube\.com$/i.test(url.hostname)) return '';
+                pathname = url.pathname || '';
+            } else if (!raw.startsWith('/')) {
+                const url = new URL(raw, window.location.origin);
+                if (!/(^|\.)youtube\.com$/i.test(url.hostname)) return '';
+                pathname = url.pathname || '';
+            }
+
+            pathname = pathname.split('?')[0].split('#')[0];
+            try { pathname = decodeURIComponent(pathname); } catch (e) {}
+            pathname = pathname.replace(/\/{2,}/g, '/').replace(/\/+$/, '');
+            return (pathname || '/').toLowerCase();
+        } catch (e) {
+            return '';
+        }
+    }
+
+    function normalizeYTChannelName(value) {
+        try {
+            return String(value || '')
+                .replace(/[\u200B-\u200D\uFEFF]/g, '')
+                .replace(/^@+/, '')
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, '')
+                .trim();
+        } catch (e) {
+            return '';
+        }
+    }
+
+    const safeChannelPathToKey = new Map();
+    const safeChannelNameToKey = new Map();
+
+    safeChannelDefinitions.forEach(entry => {
+        (entry.paths || []).forEach(path => {
+            const normalized = normalizeYTChannelPath(path);
+            if (normalized) safeChannelPathToKey.set(normalized, entry.key);
+        });
+        (entry.names || []).forEach(name => {
+            const normalized = normalizeYTChannelName(name);
+            if (normalized) safeChannelNameToKey.set(normalized, entry.key);
+        });
+    });
+
+    function getSafeChannelKeyFromPath(value) {
+        try {
+            const path = normalizeYTChannelPath(value);
+            if (!path) return '';
+
+            for (const [basePath, key] of safeChannelPathToKey.entries()) {
+                if (path === basePath || path.startsWith(basePath + '/')) return key;
+            }
+        } catch (e) {}
+        return '';
+    }
+
+    function isLikelyYTChannelPath(value) {
+        const path = normalizeYTChannelPath(value);
+        if (!path) return false;
+        if (getSafeChannelKeyFromPath(path)) return true;
+        return /^\/(?:@[^/]+|channel\/[^/]+|user\/[^/]+|c\/[^/]+)(?:\/|$)/i.test(path);
+    }
+
+    function getSafeChannelKeyFromLink(link) {
+        try {
+            if (!link) return '';
+            const href = link.href || link.getAttribute?.('href') || '';
+            const pathKey = getSafeChannelKeyFromPath(href);
+            if (pathKey) return pathKey;
+
+            // If YouTube exposes a /channel/UC... URL instead of the handle, verify the
+            // DISPLAYED channel name, but only on a link that is actually channel-shaped.
+            if (!isLikelyYTChannelPath(href)) return '';
+            const nameCandidates = [
+                link.textContent || '',
+                link.getAttribute?.('aria-label') || '',
+                link.getAttribute?.('title') || ''
+            ];
+            for (const value of nameCandidates) {
+                const key = safeChannelNameToKey.get(normalizeYTChannelName(value));
+                if (key) return key;
+            }
+        } catch (e) {}
+        return '';
+    }
+
+    function getSafeChannelKeyFromRoot(root) {
+        try {
+            if (!root) return '';
+            if (root.matches?.('a[href]')) {
+                const direct = getSafeChannelKeyFromLink(root);
+                if (direct) return direct;
+            }
+
+            const links = root.querySelectorAll?.('a[href]') || [];
+            for (const link of links) {
+                const key = getSafeChannelKeyFromLink(link);
+                if (key) return key;
+            }
+        } catch (e) {}
+        return '';
+    }
+
+    function getCurrentWatchChannelState() {
+        try {
+            if (!window.location.pathname.startsWith('/watch')) {
+                return { resolved: false, safe: false, key: '' };
+            }
+
+            const scopes = document.querySelectorAll([
+                'ytd-video-owner-renderer',
+                'ytm-slim-owner-renderer',
+                'ytm-video-owner-renderer',
+                'ytd-watch-metadata #owner',
+                'ytm-watch-metadata #owner'
+            ].join(', '));
+
+            let sawChannelLink = false;
+            for (const scope of scopes) {
+                const links = scope.querySelectorAll?.('a[href]') || [];
+                for (const link of links) {
+                    const href = link.href || link.getAttribute?.('href') || '';
+                    if (!isLikelyYTChannelPath(href)) continue;
+                    sawChannelLink = true;
+                    const key = getSafeChannelKeyFromLink(link);
+                    if (key) return { resolved: true, safe: true, key };
+                }
+            }
+
+            return { resolved: sawChannelLink, safe: false, key: '' };
+        } catch (e) {
+            return { resolved: false, safe: false, key: '' };
+        }
+    }
+
+    function isCurrentSafeChannelPage() {
+        try {
+            if (window.location.pathname.startsWith('/watch')) return false;
+            return !!getSafeChannelKeyFromPath(window.location.pathname);
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function isVideoCardFromSafeChannel(target) {
+        try {
+            const directKey = getSafeChannelKeyFromRoot(target);
+            if (directKey) return true;
+
+            // Channel video grids often omit the channel link because every card obviously belongs
+            // to the page owner. Only apply that inheritance on an actual whitelisted CHANNEL page,
+            // never on /watch, so side recommendations remain independently filterable.
+            if (isCurrentSafeChannelPage()) {
+                const related = target?.closest?.([
+                    'ytd-watch-next-secondary-results-renderer',
+                    '#related',
+                    'ytm-item-section-renderer[section-identifier="related-items"]'
+                ].join(', '));
+                if (!related) return true;
+            }
+        } catch (e) {}
+        return false;
+    }
 
     const adblockWarningPatterns = [
         /mainostenestoa ei sallita/i,
@@ -449,6 +672,7 @@
         "ytd-rich-grid-media",
         "ytd-rich-grid-slim-media",
         "ytd-reel-item-renderer",
+        "ytm-reel-item-renderer",
         "ytd-miniplayer"                      
     ];
 
@@ -895,12 +1119,14 @@
     }
 
     // === THE ULTIMATE SANITY ENFORCER ===
-    // Strictly scans the fully decoded URL parameters and Watch page details
+    // Strictly scans decoded search queries and the CURRENT watch video's own metadata.
+    // Safe-channel immunity is based on the watch-owner channel link, never title text.
     function enforceSanity() {
         try {
             if (isRedirecting) return;
 
             let textToScan = '';
+            const isWatch = window.location.pathname.startsWith('/watch');
 
             // 1. Get query directly from URL parameters (automatically handles special chars, +, %20)
             const urlParams = new URLSearchParams(window.location.search);
@@ -909,18 +1135,25 @@
                 textToScan += ' ' + query;
             }
 
-            // 2. Get Watch Page Title and Channel
-            if (window.location.pathname.startsWith('/watch')) {
+            // 2. On watch pages, resolve the actual owner BEFORE judging the title.
+            // YouTube is an SPA and the title can update before the owner renderer arrives. Redirecting
+            // during that gap would defeat the whitelist, so unresolved watch pages simply retry on the
+            // next mutation/navigation/interval pass.
+            if (isWatch) {
+                const ownerState = getCurrentWatchChannelState();
+                if (ownerState.safe) {
+                    devLog(`Whitelisted channel video allowed: ${ownerState.key}`);
+                    return;
+                }
+                if (!ownerState.resolved) return;
+
                 textToScan += ' ' + (document.title || '');
-                const channelLink = document.querySelector('ytd-video-owner-renderer a.yt-simple-endpoint, ytm-slim-owner-renderer a');
-                if (channelLink) textToScan += ' ' + (channelLink.textContent || '');
             }
 
             textToScan = textToScan.toLowerCase().trim();
             if (!textToScan) return;
 
-            // Check Whitelists exclusively against the clean text
-            if (safeChannels.some(sc => sc.test(textToScan))) return;
+            // Generic contextual allows preserve the existing behavior for non-whitelisted content.
             if (allowedWords.some(aw => aw.test(textToScan))) return;
 
             // Check Blocklist
@@ -956,6 +1189,8 @@
                     push(node.getAttribute?.('alt') || '');
                     push(node.getAttribute?.('data-title') || '');
                     push(node.getAttribute?.('data-tooltip-text') || '');
+                    push(node.getAttribute?.('aria-description') || '');
+                    push(node.getAttribute?.('data-content') || '');
                     push(node.href || node.getAttribute?.('href') || '');
                 } catch (e) {}
             };
@@ -1021,6 +1256,8 @@
                 'ytm-video-with-context-renderer',
                 'ytm-compact-video-renderer',
                 'ytm-rich-item-renderer',
+                'ytd-reel-item-renderer',
+                'ytm-reel-item-renderer',
                 '.ytLockupViewModelWrapper',
                 '.ytLockupViewModelHost',
                 '[class*="ytLockupViewModel"]'
@@ -1042,6 +1279,21 @@
             target.style.removeProperty('opacity');
             target.style.removeProperty('pointer-events');
             target.style.removeProperty('content-visibility');
+        } catch (e) {}
+    }
+
+    function restorePreviouslyBannedVideoCard(target) {
+        try {
+            if (!target || !target.style) return;
+            const wasOurs = target.classList?.contains('ytclean-card-banned') || target.getAttribute?.('data-ytcleaner-banned-card') === '1';
+            if (!wasOurs) return;
+
+            target.classList?.remove('ytclean-card-banned');
+            target.removeAttribute?.('data-ytcleaner-banned-card');
+            [
+                'display', 'visibility', 'opacity', 'pointer-events', 'height', 'min-height',
+                'max-height', 'margin', 'padding', 'overflow', 'content-visibility'
+            ].forEach(prop => target.style.removeProperty(prop));
         } catch (e) {}
     }
 
@@ -1098,23 +1350,23 @@
                 if (!target || seen.has(target)) return;
                 seen.add(target);
 
-                if (target.style.display === "none" || target.classList?.contains('ytclean-card-banned')) return;
-
                 const combinedText = getVideoCardSignal(target);
                 if (!combinedText) return;
 
                 const isBlocked = blockKeywords.some(keyword => keyword.test(combinedText));
+                const isSafeChannelVideo = isVideoCardFromSafeChannel(target);
 
-                // Safe channels are still allowed, but generic allowedWords must NOT rescue a card
-                // whose own title/metadata contains a banned term. That was the "Stephanie survives"
-                // goblin, especially when titles had harmless punctuation or other allowed fragments.
-                const isSafeChannel = safeChannels.some(sc => sc.test(combinedText));
-
-                if (isBlocked && !isSafeChannel) {
+                // IMPORTANT: only the recommended/card video's OWN channel gets immunity.
+                // Being on a whitelisted watch page never exempts unrelated sidebar recommendations.
+                if (isBlocked && !isSafeChannelVideo) {
                     collapseBannedVideoCard(target);
                     hiddenCount++;
                     return;
                 }
+
+                // YouTube can recycle SPA card nodes. If a node we hid now represents a safe/clean
+                // video, undo only OUR prior collapse before approving it again.
+                restorePreviouslyBannedVideoCard(target);
 
                 // v35 search softgate: once scanned and not banned, explicitly approve it.
                 approveVideoCardTarget(target);
