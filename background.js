@@ -4,7 +4,7 @@
 
 import "./blocker/service.js";
 import { isCompletelyExcludedHostname, isCompletelyExcludedUrl } from "./blocker/shared.js";
-import { initializeTrustedSites } from "./blocker/trusted-sites.js";
+import { loadDataset } from "./blocker/storage.js";
 
 const LOG_PREFIX = "[BraveFox Background]";
 const HOSTS_META_KEY = "bravefoxHostsMetaV2";
@@ -45,69 +45,8 @@ const ALLOWED_SITES = new Set([
   "sieni.es"
 ]);
 
-// Canonical union of the former PC and Android TLD lists so both platforms enforce the same policy.
-const BLOCKED_TLDS = [
-  ".ai",
-  ".art",
-  ".io",
-  ".makeup",
-  ".off",
-  ".club",
-  ".id",
-  ".it",
-  ".best",
-  ".cc",
-  ".cn",
-  ".click",
-  ".you",
-  ".to",
-  ".top",
-  ".me",
-  ".us",
-  ".ru",
-  ".vip",
-  ".online",
-  ".hot",
-  ".her",
-  ".sex",
-  ".xxx",
-  ".nsfw",
-  ".porn",
-  ".show",
-  ".work",
-  ".fit",
-  ".tool",
-  ".tools",
-  ".system",
-  ".systems",
-  ".surf",
-  ".review",
-  ".asia",
-  ".tokyo",
-  ".monster",
-  ".info",
-  ".机构",
-  ".xn--nqv7f",
-  ".one",
-  ".ee",
-  ".in",
-  ".gf",
-  ".fox",
-  ".fun",
-  ".exposed",
-  ".fyi",
-  ".fr",
-  ".life",
-  ".now",
-  ".today",
-  ".world",
-  ".xyz",
-  ".zone",
-  ".nude",
-  ".cat",
-  ".bot",
-  ".moe"
-];
+// Editable TLD enforcement is owned by the built-in Focus Master blockedTLDs.csv dataset.
+// Keep this background layer focused on the Enhancer's legacy static URL rules.
 
 // Existing PC static URL policy, now shared by both Firefox platforms.
 const STATIC_BLOCK_PATTERNS = [
@@ -463,10 +402,6 @@ function matchesStaticBlockRule(urlObject) {
   return false;
 }
 
-function isBlockedTld(hostname) {
-  return BLOCKED_TLDS.some(tld => hostname.endsWith(tld));
-}
-
 function binarySearch(sortedValues, target) {
   let low = 0;
   let high = sortedValues.length - 1;
@@ -500,8 +435,7 @@ async function shouldBlockUrl(url) {
     const hostname = normalizeHostname(parsed.hostname);
     if (!hostname || isAllowlistedHostname(hostname)) return false;
     if (matchesStaticBlockRule(parsed)) return true;
-    if (isBlockedTld(hostname)) return true;
-    // Focus Master 1.0.1 owns fetched-host enforcement in blocker/service.js so
+    // Focus Master 1.1.0 owns fetched-host enforcement in blocker/service.js so
     // manual Blocker rules and TrustedSites can outrank the blunt host fallback.
     return false;
   } catch (_) {
@@ -1225,7 +1159,9 @@ browser.runtime.onMessage.addListener((message, sender) => {
 
 async function main() {
   const manifest = browser.runtime.getManifest();
-  await initializeTrustedSites();
+  // Load the unified Focus Master dataset before request interception so
+  // TrustedSites DOMAIN/PATH exceptions are live from the first request.
+  await loadDataset({ force: true });
   const platformInfo = await browser.runtime.getPlatformInfo();
   const isAndroid = platformInfo?.os === "android";
 

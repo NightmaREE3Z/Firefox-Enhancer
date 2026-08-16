@@ -1,4 +1,4 @@
-export const BLOCKER_VERSION = '1.0.0-rc.1';
+export const BLOCKER_VERSION = '1.1.0';
 
 export const STORAGE_KEYS = Object.freeze({
   datasetMeta: 'bfb:dataset-meta',
