@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name         FBCleaner 26.3.5
-// @date      	 2026-08-02
+// @name         FBCleaner 27.3.2
+// @date      	 2026-08-18
 // @description  Makes my Facebook experience less terrible.
 // @match        *://*.facebook.com/*
 // @grant        none
@@ -918,6 +918,7 @@ const FB_PROFILE_POLICY = {
     maxKeys: 3000,
     syncChunkSize: 120,
     savePending: false,
+    sanitizePending: false,
     loaded: false
 };
 
@@ -969,6 +970,30 @@ const getFBProfileKeysFromUrl = (inputUrl = window.location.href) => {
         }
     } catch (e) {}
     return keys;
+};
+
+// v57: explicit high-risk/specific surfaces must never be promoted into the
+// learned trusted-profile pool. This is intentionally key-based as well as route-based so
+// /posts and /timeline subroutes cannot inherit a stale trusted alias from storage.
+const FB_NEVER_TRUSTED_PROFILE_KEYS = (() => {
+    const keys = new Set();
+    try {
+        FB_SPECIFIC_URL_SURFACES.forEach(surfaceUrl => {
+            getFBProfileKeysFromUrl(surfaceUrl).forEach(key => keys.add(normalizeFBProfileKey(key)));
+        });
+        FB_SPECIFIC_PROFILE_IDS.forEach(profileId => {
+            const raw = String(profileId || '').trim();
+            if (!raw) return;
+            const key = normalizeFBProfileKey(/^\d{5,}$/.test(raw) ? ('id:' + raw) : ('user:' + raw));
+            if (key) keys.add(key);
+        });
+    } catch (e) {}
+    return keys;
+})();
+
+const isFBNeverTrustedProfileKey = (key) => {
+    try { return FB_NEVER_TRUSTED_PROFILE_KEYS.has(normalizeFBProfileKey(key)); }
+    catch (e) { return false; }
 };
 
 const getFBProfileKeysFromElement = (element) => {
@@ -1045,7 +1070,14 @@ const mergeFBProfilePolicyPayload = (payload) => {
         const aliases = Array.isArray(payload?.[FB_PROFILE_POLICY.isolatedAliasStorageKey]) ? payload[FB_PROFILE_POLICY.isolatedAliasStorageKey] : [];
         trusted.slice(0, FB_PROFILE_POLICY.maxKeys).forEach(key => {
             const normalized = normalizeFBProfileKey(key);
-            if (normalized) __fbTrustedProfileKeys.add(normalized);
+            if (!normalized) return;
+            if (isFBNeverTrustedProfileKey(normalized)) {
+                // v57: ignore stale learned trust for explicitly protected/high-risk surfaces
+                // and rewrite storage once loading has completed.
+                FB_PROFILE_POLICY.sanitizePending = true;
+                return;
+            }
+            __fbTrustedProfileKeys.add(normalized);
         });
         aliases.slice(0, FB_PROFILE_POLICY.maxKeys).forEach(key => {
             const normalized = normalizeFBProfileKey(key);
@@ -1067,6 +1099,12 @@ const loadFBProfilePolicyCache = () => {
         pending--;
         if (pending > 0) return;
         FB_PROFILE_POLICY.loaded = true;
+        try {
+            if (FB_PROFILE_POLICY.sanitizePending) {
+                FB_PROFILE_POLICY.sanitizePending = false;
+                saveFBProfilePolicyCache();
+            }
+        } catch (e) {}
         try { updateFBHomeFeedGateClass(); } catch (e) {}
         try { scheduleRunAllFilters(); } catch (e) {}
     };
@@ -1130,7 +1168,9 @@ const saveFBProfilePolicyCache = () => {
         FB_PROFILE_POLICY.savePending = true;
         addTimeout(() => {
             FB_PROFILE_POLICY.savePending = false;
-            const trusted = Array.from(__fbTrustedProfileKeys).slice(0, FB_PROFILE_POLICY.maxKeys);
+            const trusted = Array.from(__fbTrustedProfileKeys)
+                .filter(key => !isFBNeverTrustedProfileKey(key))
+                .slice(0, FB_PROFILE_POLICY.maxKeys);
             const aliases = Array.from(__fbIsolatedAliasKeys).slice(0, FB_PROFILE_POLICY.maxKeys);
             const localPayload = {
                 [FB_PROFILE_POLICY.storageKey]: trusted,
@@ -1191,8 +1231,13 @@ const isFBProfileUrlIsolatedForCurrentAccount = (inputUrl = window.location.href
 
 const isFBTrustedProfileRoute = (inputUrl = window.location.href) => {
     try {
+        // v57: explicit protected/high-risk surfaces always beat learned or built-in trust.
+        // This prevents pages such as /four3four from bypassing the post/link scanner.
+        if (isCurrentSpecificUrlSurface(inputUrl) || isCurrentSpecificProfileSurface(inputUrl)) return false;
+
         const keys = getFBProfileKeysFromUrl(inputUrl);
         if (!keys.size) return false;
+        for (const key of keys) if (isFBNeverTrustedProfileKey(key)) return false;
         for (const key of keys) if (FB_BUILTIN_TRUSTED_PROFILE_KEYS.has(key)) return true;
 
         // Unknown logged-in account at document-start: fail closed for learned profiles.
@@ -1350,6 +1395,8 @@ const learnFBTrustedProfilesFromFriendsSurface = (root = document) => {
                 });
             }
             keys.forEach(key => {
+                // v57: never learn explicit high-risk/specific pages as trusted friends.
+                if (isFBNeverTrustedProfileKey(key)) return;
                 if (!__fbTrustedProfileKeys.has(key)) {
                     __fbTrustedProfileKeys.add(key);
                     changed++;
@@ -8725,6 +8772,7 @@ const hookHistoryAPI = () => {
             try {
                 if (previousProfileRoute !== getFBProfileRouteKey()) updateFBProfileScreening(true);
             } catch (e) {}
+            try { refreshFBSpecificSurfaceHydrationObserverV58(); } catch (e) {}
             if (isFBMessengerPath(window.location.href)) {
                 try { runFBMessengerNativeMaintenance(true); } catch (e) {}
             } else {
@@ -8743,6 +8791,7 @@ const hookHistoryAPI = () => {
             try {
                 if (previousProfileRoute !== getFBProfileRouteKey()) updateFBProfileScreening(true);
             } catch (e) {}
+            try { refreshFBSpecificSurfaceHydrationObserverV58(); } catch (e) {}
             if (isFBMessengerPath(window.location.href)) {
                 try { runFBMessengerNativeMaintenance(true); } catch (e) {}
             } else {
@@ -8756,6 +8805,7 @@ const hookHistoryAPI = () => {
 
         onWindowEvent(window, 'popstate', () => {
             try { updateFBProfileScreening(true); } catch (e) {}
+            try { refreshFBSpecificSurfaceHydrationObserverV58(); } catch (e) {}
             if (isFBMessengerPath(window.location.href)) {
                 try { runFBMessengerNativeMaintenance(true); } catch (e) {}
             } else {
@@ -8846,6 +8896,148 @@ const runFBObserverMaintenance = createThrottle(() => {
         protectFBCommentSurfaces(document);
     } catch (e) {}
 }, 360);
+
+// ===== v58: SPECIFIC-SURFACE LIVE HYDRATION WATCH =====
+// Facebook can finish a TimelineFeedUnit after the initial child insertion by changing an
+// existing link's href/labels or a text node. The main observer intentionally ignores attribute
+// and characterData churn for performance, so explicit high-risk pages get a narrow observer of
+// their own. It is attached ONLY while one of those configured surfaces is active.
+let __fbSpecificSurfaceHydrationObserverV58 = null;
+let __fbSpecificSurfaceHydrationObserverActiveV58 = false;
+const __fbSpecificApprovedRecheckPendingV58 = new WeakSet();
+
+const isFBSpecificSafetySurfaceV58 = () => {
+    try {
+        return isCurrentSpecificUrlSurface(window.location.href) ||
+               isCurrentSpecificProfileSurface(window.location.href);
+    } catch (e) {
+        return false;
+    }
+};
+
+const getFBPostFromHydrationMutationV58 = (seed) => {
+    try {
+        const element = seed?.nodeType === 1 ? seed : seed?.parentElement;
+        if (!element?.closest) return null;
+        if (isFBInsideEmbeddedChatSurfaceV56(element) || isFBEmbeddedChatMutationNodeV56(element)) return null;
+        if (isNotificationPanelElement(element) || isInsideComment(element) || isFBCommentSurfaceElement(element)) return null;
+        const post = getFBFeedUnitWrapper(element) ||
+            element.closest('div[data-pagelet^="FeedUnit_"], div[data-pagelet^="TimelineFeedUnit_"], [role="feed"] [role="article"], [role="article"]');
+        if (!post?.isConnected || isFBInsideEmbeddedChatSurfaceV56(post)) return null;
+        if (isNotificationPanelElement(post) || isInsideComment(post) || isFBCommentSurfaceElement(post)) return null;
+        if (post.closest?.('[role="dialog"], [role="menu"], [role="listbox"], [role="tooltip"]')) return null;
+        if (isProfileHeaderProtectedArea(post) || isTopLeftSearchDropdownElement(post)) return null;
+        return post;
+    } catch (e) {
+        return null;
+    }
+};
+
+const scheduleFBSpecificApprovedPostRecheckV58 = (post) => {
+    try {
+        if (!post?.isConnected || __fbSpecificApprovedRecheckPendingV58.has(post)) return;
+        __fbSpecificApprovedRecheckPendingV58.add(post);
+        addTimeout(() => {
+            __fbSpecificApprovedRecheckPendingV58.delete(post);
+            try {
+                if (!isFBSpecificSafetySurfaceV58() || document.hidden || !post.isConnected) return;
+                if (isFBMessengerPath(window.location.href) || isFBTrustedProfileTimelineSurface()) return;
+                if (post.classList.contains('fb-post-banned') || post.classList.contains('fb-element-banned')) return;
+
+                // Only late-hydrated posts that were already terminally approved need this audit.
+                // Unapproved/recycled units stay in the ordinary one-shot hydration scanner below.
+                if (!(post.getAttribute('data-fb-v25-scan-complete') === '1' && post.classList.contains('fb-post-approved'))) {
+                    markUnapprovedPostScreens(post);
+                    queueFBPostForSingleScan(post, 20);
+                    return;
+                }
+
+                if (postHasAIInfoTag(post)) {
+                    banPostAfterScan(post, 'late-hydrated Facebook AI-info disclosure tag');
+                    return;
+                }
+                if (hasRestrictedFeedCTAOrReels(post)) {
+                    banPostAfterScan(post, 'late-hydrated restricted CTA or verified Reels carousel');
+                    return;
+                }
+
+                const fullPostText = collectPostTextForScan(post);
+                if (matchesAnyActiveRegex(fullPostText)) {
+                    banPostAfterScan(post, 'late-hydrated blocked words/regex');
+                    return;
+                }
+                if (postHasBlockedLinksOrFbids(post)) {
+                    banPostAfterScan(post, 'late-hydrated blocked FBID/URL');
+                }
+            } catch (e) {}
+        }, 45);
+    } catch (e) {}
+};
+
+const handleFBSpecificSurfaceHydrationMutationsV58 = (mutations) => {
+    try {
+        if (!isFBSpecificSafetySurfaceV58() || document.hidden || isFBMessengerPath(window.location.href)) return;
+        const posts = new Set();
+        const collect = (seed) => {
+            if (posts.size >= 24) return;
+            const post = getFBPostFromHydrationMutationV58(seed);
+            if (post) posts.add(post);
+        };
+
+        for (let i = 0; i < mutations.length && posts.size < 24; i++) {
+            const mutation = mutations[i];
+            collect(mutation.target);
+            if (mutation.type === 'childList') {
+                const added = mutation.addedNodes || [];
+                for (let n = 0; n < added.length && posts.size < 24; n++) collect(added[n]);
+            }
+        }
+
+        posts.forEach(post => {
+            try {
+                if (post.classList.contains('fb-post-banned') || post.classList.contains('fb-element-banned')) return;
+                if (post.getAttribute('data-fb-v25-scan-complete') === '1' && post.classList.contains('fb-post-approved')) {
+                    scheduleFBSpecificApprovedPostRecheckV58(post);
+                } else {
+                    // High-risk timeline posts should never wait for the home-feed-only fast lane.
+                    markUnapprovedPostScreens(post);
+                    queueFBPostForSingleScan(post, 20);
+                }
+            } catch (e) {}
+        });
+    } catch (e) {}
+};
+
+const refreshFBSpecificSurfaceHydrationObserverV58 = () => {
+    try {
+        const shouldObserve = isFBSpecificSafetySurfaceV58() && !isFBMessengerPath(window.location.href);
+        if (!shouldObserve) {
+            if (__fbSpecificSurfaceHydrationObserverV58 && __fbSpecificSurfaceHydrationObserverActiveV58) {
+                try { __fbSpecificSurfaceHydrationObserverV58.disconnect(); } catch (e) {}
+            }
+            __fbSpecificSurfaceHydrationObserverActiveV58 = false;
+            return false;
+        }
+
+        if (!document.documentElement) return false;
+        if (!__fbSpecificSurfaceHydrationObserverV58) {
+            __fbSpecificSurfaceHydrationObserverV58 = trackObserver(new MutationObserver(handleFBSpecificSurfaceHydrationMutationsV58));
+        }
+        if (!__fbSpecificSurfaceHydrationObserverActiveV58) {
+            __fbSpecificSurfaceHydrationObserverV58.observe(document.documentElement, {
+                childList: true,
+                subtree: true,
+                characterData: true,
+                attributes: true,
+                attributeFilter: ['href', 'src', 'srcset', 'alt', 'aria-label', 'title']
+            });
+            __fbSpecificSurfaceHydrationObserverActiveV58 = true;
+        }
+        return true;
+    } catch (e) {
+        return false;
+    }
+};
 
 const observeDOMChanges = () => {
     try {
@@ -10729,6 +10921,7 @@ const scheduleFBHeavyFilterPassV53 = () => {
 
 const runAllFilters = () => {
     try {
+        refreshFBSpecificSurfaceHydrationObserverV58();
         if (runFBMessengerNativeMaintenance()) return;
         releaseFBEmbeddedChatPostScannerStateV56(document);
         scrubFBIsolatedIdentityCarriersNowV56(document);
@@ -10799,7 +10992,8 @@ const ensureDOMReady = () => {
 
 // [SPA-RUNTIME] v50 canonical one-pass initialization.
 const initializeFacebookCleaner = () => {
-    devLog('Initializing BraveFox Facebook policy engine v50');
+    devLog('Initializing BraveFox Facebook policy engine v58');
+    refreshFBSpecificSurfaceHydrationObserverV58();
     installFBUserInteractionQuietLaneV53();
     updateFBProfileScreening(true);
     updateFBSearchPageClass();
