@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Content hiding and filtering
-// @version      2026-07-29
+// @version      2026-08-20
 // @description  Filter out stuff on the internet (Targeted Enforcer)
 // @match        *://xvideos.com/*
 // @match        *://*.xvideos.com/*
@@ -28,6 +28,194 @@
         BRAVEFOX_FILTERING_HOST.endsWith('.tenor.com');
 
     if (!BRAVEFOX_IS_XVIDEOS && !BRAVEFOX_IS_TENOR) return;
+
+    // === FOCUS MASTER REMOTE TERMS ===
+    // Keep this remote layer semantically aligned with Focus Master's blockedTerms.csv handling:
+    // cache-busted no-store fetch, plain-line CSV parsing, Focus Master normalization/matching, and
+    // no bundled fallback in filtering.js. The existing static regex list below remains independent.
+    const FOCUS_MASTER_BLOCKED_TERMS_URL = 'https://raw.githubusercontent.com/NightmaREE3Z/Focus-Master/refs/heads/BraveFox/blocker/lists/blockedTerms.csv';
+    const FOCUS_MASTER_BLOCKED_TERMS_REFRESH_MS = 15 * 60 * 1000;
+    const FOCUS_MASTER_BLOCKED_TERMS_UPDATED_EVENT = 'bravefoxFocusMasterBlockedTermsUpdated';
+    let focusMasterBlockedTerms = [];
+    let focusMasterBlockedTermMatchers = [];
+    let focusMasterBlockedTermsSignature = '';
+    let focusMasterBlockedTermsRefreshInterval = null;
+    let focusMasterBlockedTermsFetchInFlight = null;
+
+    function focusMasterNormalizeWhitespace(value) {
+        return String(value ?? '').replace(/\s+/g, ' ').trim();
+    }
+
+    function focusMasterSafeDecode(value) {
+        let output = String(value ?? '');
+        for (let i = 0; i < 2; i += 1) {
+            try {
+                const decoded = decodeURIComponent(output.replace(/\+/g, ' '));
+                if (decoded === output) break;
+                output = decoded;
+            } catch (e) {
+                break;
+            }
+        }
+        return output;
+    }
+
+    function focusMasterNormalizeSearchable(value) {
+        return focusMasterNormalizeWhitespace(
+            focusMasterSafeDecode(value)
+                .normalize('NFKC')
+                .toLocaleLowerCase('en-US')
+                .replace(/[\u0000-\u001f\u007f]/g, ' ')
+                .replace(/[\/_|.,:;!?&=+%#@()[\]{}<>"'`~\\-]+/g, ' ')
+        );
+    }
+
+    function focusMasterNormalizeTerm(value) {
+        return focusMasterNormalizeWhitespace(
+            String(value ?? '')
+                .replace(/^\uFEFF/, '')
+                .normalize('NFKC')
+                .toLocaleLowerCase('en-US')
+                .replace(/[\u0000-\u001f\u007f]/g, ' ')
+        );
+    }
+
+    function focusMasterUniqueInOrder(values, normalizer) {
+        const seen = new Set();
+        const output = [];
+        for (const value of Array.isArray(values) ? values : []) {
+            const normalized = normalizer(value);
+            if (!normalized || seen.has(normalized)) continue;
+            seen.add(normalized);
+            output.push(normalized);
+        }
+        return output;
+    }
+
+    function parseFocusMasterBlockedTerms(text) {
+        const lines = String(text ?? '')
+            .replace(/^\uFEFF/, '')
+            .split(/\r?\n/)
+            .map(line => line.trim())
+            .filter(Boolean)
+            .filter(line => !line.startsWith('#'));
+
+        return focusMasterUniqueInOrder(lines, focusMasterNormalizeTerm);
+    }
+
+    function focusMasterTokenMatches(candidate, token, strictShortToken) {
+        if (strictShortToken && token.length <= 2) {
+            return candidate.split(' ').includes(token);
+        }
+        return candidate.includes(token);
+    }
+
+    function buildFocusMasterBlockedTermMatchers(terms) {
+        const matchers = [];
+        (Array.isArray(terms) ? terms : []).forEach(stored => {
+            const term = focusMasterNormalizeSearchable(stored);
+            if (!term) return;
+            matchers.push({
+                stored,
+                term,
+                tokens: term.split(' ').filter(Boolean)
+            });
+        });
+        return matchers;
+    }
+
+    function focusMasterTermMatchesNormalizedCandidate(candidate, matcher) {
+        if (!candidate || !matcher || !matcher.term) return false;
+
+        if (candidate.includes(matcher.term)) return true;
+
+        const tokens = matcher.tokens || [];
+        if (tokens.length > 1) {
+            return tokens.every(token => focusMasterTokenMatches(candidate, token, true));
+        }
+        return tokens.length === 1 && focusMasterTokenMatches(candidate, tokens[0], false);
+    }
+
+    function containsFocusMasterBlockedTerm(value) {
+        const text = String(value || '');
+        if (!text || !focusMasterBlockedTermMatchers.length) return false;
+
+        const candidate = focusMasterNormalizeSearchable(text);
+        if (!candidate) return false;
+
+        return focusMasterBlockedTermMatchers.some(matcher =>
+            focusMasterTermMatchesNormalizedCandidate(candidate, matcher)
+        );
+    }
+
+    async function fetchFocusMasterBlockedTerms() {
+        const response = await fetch(`${FOCUS_MASTER_BLOCKED_TERMS_URL}?bravefox_refresh=${Date.now()}`, {
+            cache: 'no-store',
+            credentials: 'omit',
+            headers: { Accept: 'text/plain' }
+        });
+        if (!response.ok) {
+            const error = new Error(`Focus Master blockedTerms.csv download failed (HTTP ${response.status}).`);
+            error.status = response.status;
+            throw error;
+        }
+        return parseFocusMasterBlockedTerms(await response.text());
+    }
+
+    function installFocusMasterBlockedTerms(terms) {
+        const normalizedTerms = Array.isArray(terms) ? terms : [];
+        const signature = normalizedTerms.join('\n');
+        if (signature === focusMasterBlockedTermsSignature) return false;
+
+        focusMasterBlockedTerms = normalizedTerms;
+        focusMasterBlockedTermMatchers = buildFocusMasterBlockedTermMatchers(normalizedTerms);
+        focusMasterBlockedTermsSignature = signature;
+
+        try {
+            window.dispatchEvent(new CustomEvent(FOCUS_MASTER_BLOCKED_TERMS_UPDATED_EVENT, {
+                detail: { count: focusMasterBlockedTerms.length }
+            }));
+        } catch (e) {}
+        return true;
+    }
+
+    function refreshFocusMasterBlockedTerms() {
+        if (focusMasterBlockedTermsFetchInFlight) return focusMasterBlockedTermsFetchInFlight;
+
+        focusMasterBlockedTermsFetchInFlight = fetchFocusMasterBlockedTerms()
+            .then(terms => {
+                const changed = installFocusMasterBlockedTerms(terms);
+                if (changed) {
+                    console.log(`Loaded ${focusMasterBlockedTerms.length} Focus Master blocked terms from GitHub.`);
+                }
+                return terms;
+            })
+            .catch(error => {
+                // No bundled fallback by design. Keep the last successfully fetched in-memory list,
+                // or the empty list if this page has never completed a successful remote fetch.
+                try { console.debug('BraveFox: Focus Master blockedTerms.csv fetch failed.', error); } catch (e) {}
+                return focusMasterBlockedTerms;
+            })
+            .finally(() => {
+                focusMasterBlockedTermsFetchInFlight = null;
+            });
+
+        return focusMasterBlockedTermsFetchInFlight;
+    }
+
+    refreshFocusMasterBlockedTerms();
+    focusMasterBlockedTermsRefreshInterval = setInterval(
+        refreshFocusMasterBlockedTerms,
+        FOCUS_MASTER_BLOCKED_TERMS_REFRESH_MS
+    );
+
+    window.addEventListener('pagehide', event => {
+        if (event.persisted) return;
+        if (focusMasterBlockedTermsRefreshInterval !== null) {
+            clearInterval(focusMasterBlockedTermsRefreshInterval);
+            focusMasterBlockedTermsRefreshInterval = null;
+        }
+    });
 
     // One authoritative static filter list shared by XVideos and Tenor.
     // Keep every entry as an ordinary regex literal for direct auditing and editing.
@@ -208,7 +396,9 @@
 
         const blockQuery = (query, event) => {
             const text = String(query || '').trim();
-            if (!text || !tenorBlockedRegexWords.some(regex => regexMatches(regex, text))) return false;
+            const blockedByStaticRegex = tenorBlockedRegexWords.some(regex => regexMatches(regex, text));
+            const blockedByFocusMaster = containsFocusMasterBlockedTerm(text);
+            if (!text || (!blockedByStaticRegex && !blockedByFocusMaster)) return false;
             if (event) {
                 try { event.preventDefault(); } catch (e) {}
                 try { event.stopImmediatePropagation(); } catch (e) {}
@@ -282,6 +472,7 @@
         });
         window.addEventListener('popstate', checkCurrentUrl, true);
         window.addEventListener('pageshow', checkCurrentUrl, true);
+        window.addEventListener(FOCUS_MASTER_BLOCKED_TERMS_UPDATED_EVENT, checkCurrentUrl, true);
         checkCurrentUrl();
     }
 
@@ -1454,7 +1645,8 @@
         if (!text) return false;
 
         return blockedRegexWords.some(regex => regexMatches(regex, text)) ||
-               dynamicWrestlerRegexWords.some(regex => regexMatches(regex, text));
+               dynamicWrestlerRegexWords.some(regex => regexMatches(regex, text)) ||
+               containsFocusMasterBlockedTerm(text);
     }
 
     function resetProcessedCaches() {
@@ -1567,6 +1759,13 @@
 
     // Fallback for environments where storage change events are unavailable or unreliable.
     dynamicWrestlerRefreshInterval = setInterval(applyDynamicWrestlerBans, 15000);
+
+    window.addEventListener(FOCUS_MASTER_BLOCKED_TERMS_UPDATED_EVENT, function() {
+        videoFilterRevision++;
+        resetVideoLookaheadPipeline('focus-master-blocklist-revision');
+        resetProcessedCaches();
+        scheduleFullFilterPass();
+    }, true);
 
     // --- SAFE REDIRECT HELPER ---
     function safeRedirectToHome() {
@@ -2125,7 +2324,7 @@ ${searchableValue}`);
     function getVideoVerdictRevisionKey() {
         try {
             const staticSignature = blockedRegexWords.map(regex => String(regex)).join('\n');
-            return simpleTextHash(`${staticSignature}\n${dynamicWrestlerSignature || ''}`);
+            return simpleTextHash(`${staticSignature}\n${dynamicWrestlerSignature || ''}\n${focusMasterBlockedTermsSignature || ''}`);
         } catch (e) {
             return String(videoFilterRevision);
         }
