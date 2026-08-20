@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "BraveFox Enhancer",
-  "version": "27.3.3",
+  "version": "27.3.4",
   "description": "Unified for Firefox PC and Android personal use, for more peaceful Interwebs experience",
   "background": {
     "scripts": [
@@ -345,6 +345,9 @@
         "https://gemini.google.com/*",
         "https://nextdns.io/*",
         "https://my.nextdns.io/*",
+        "https://spotify.com/*",
+        "https://www.spotify.com/*",
+        "https://open.spotify.com/*",
         "https://www.snapchat.com/web*"
       ],
       "js": [

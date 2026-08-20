@@ -210,6 +210,35 @@
 	'button[data-test-id="menu-copy-button"]'
     ];
 
+    // Spotify opaque-user guard (no display-name dependency)
+    const spotifyOpaqueUserPath = '/user/3ws1lu2bwli971gvhv28yemrm';
+    const spotifyHomeURL = 'https://open.spotify.com/';
+    const spotifySearchURL = 'https://open.spotify.com/search';
+    const spotifyUserReferenceHiddenClass = 'bravefox-spotify-user-reference-hidden';
+    const spotifyUserRowHiddenClass = 'bravefox-spotify-no-glimpse';
+    const spotifySearchResultHiddenClass = 'bravefox-spotify-search-result-hidden';
+    const spotifyNoGlimpseSelectors = [
+        `a[href$="${spotifyOpaqueUserPath}"]`,
+        `.${spotifyUserReferenceHiddenClass}`,
+        `.${spotifyUserRowHiddenClass}`,
+        `.${spotifySearchResultHiddenClass}`
+    ];
+    const spotifyNoGlimpseHasSelectors = [
+        `.Root__right-sidebar [role="listitem"]:has(a[href$="${spotifyOpaqueUserPath}"])`,
+        `[data-testid="right-sidebar"] [role="listitem"]:has(a[href$="${spotifyOpaqueUserPath}"])`,
+        `[role="dialog"]:has(a[href*="/user/"]:not([href$="${spotifyOpaqueUserPath}"])) [role="row"]:has(a[href$="${spotifyOpaqueUserPath}"])`,
+        `[role="dialog"]:has(a[href*="/user/"]:not([href$="${spotifyOpaqueUserPath}"])) [role="listitem"]:has(a[href$="${spotifyOpaqueUserPath}"])`,
+        `[role="dialog"]:has(a[href*="/user/"]:not([href$="${spotifyOpaqueUserPath}"])) [data-encore-id="listRow"]:has(a[href$="${spotifyOpaqueUserPath}"])`,
+        `[aria-modal="true"]:has(a[href*="/user/"]:not([href$="${spotifyOpaqueUserPath}"])) [role="row"]:has(a[href$="${spotifyOpaqueUserPath}"])`,
+        `[aria-modal="true"]:has(a[href*="/user/"]:not([href$="${spotifyOpaqueUserPath}"])) [role="listitem"]:has(a[href$="${spotifyOpaqueUserPath}"])`,
+        `[aria-modal="true"]:has(a[href*="/user/"]:not([href$="${spotifyOpaqueUserPath}"])) [data-encore-id="listRow"]:has(a[href$="${spotifyOpaqueUserPath}"])`
+    ];
+
+    // Spotify Search Filter list
+    const spotifySearchBannedRegex = [
+        /3ws1lu2bwli971gvhv28yemrm/i, /rabran/i, /bränn/i, /brann/i, /wikma/i, /vikman/i, /erika/i, /eerika/i, 
+    ];
+
     // NEW: Snapchat Camera selector to expand to fill available space (not full screen)
     const snapchatCameraSelector = '.G3Z4U.Xg7U0';
 
@@ -744,6 +773,39 @@
                     'pointer-events: none !important;' +
                 '}' : '';
 
+            const hostLower = window.location.hostname.toLowerCase();
+            const spotifyHostActive = hostLower === 'spotify.com' || hostLower.endsWith('.spotify.com');
+            const spotifyHideDeclarations =
+                    'display: none !important;' +
+                    'visibility: hidden !important;' +
+                    'opacity: 0 !important;' +
+                    'height: 0 !important;' +
+                    'width: 0 !important;' +
+                    'max-height: 0 !important;' +
+                    'max-width: 0 !important;' +
+                    'overflow: hidden !important;' +
+                    'position: absolute !important;' +
+                    'left: -9999px !important;' +
+                    'top: -9999px !important;' +
+                    'margin: 0 !important;' +
+                    'padding: 0 !important;' +
+                    'border: none !important;' +
+                    'transition: none !important;' +
+                    'pointer-events: none !important;';
+
+            let spotifyHasSelectorSupported = false;
+            try {
+                spotifyHasSelectorSupported = typeof CSS !== 'undefined' &&
+                    typeof CSS.supports === 'function' &&
+                    CSS.supports('selector(:has(*))');
+            } catch {}
+
+            const spotifyNoGlimpseCSS = spotifyHostActive ?
+                spotifyNoGlimpseSelectors.join(',\n') + ' {' + spotifyHideDeclarations + '}' +
+                (spotifyHasSelectorSupported && spotifyNoGlimpseHasSelectors.length ?
+                    '\n' + spotifyNoGlimpseHasSelectors.join(',\n') + ' {' + spotifyHideDeclarations + '}' : '')
+                : '';
+
             // The NO GLIMPSE fix for the "Poista" button specifically on Gems.
             // When html has gemini-gem-menu-active, CSS will instantly hide the button before painting.
             const geminiGemMenuCSS = window.location.hostname.includes('gemini.google.com') ? `
@@ -772,6 +834,8 @@
             ${snapchatUnwantedCSS}
             /* Gemini unwanted elements pre-hide CSS */
             ${geminiUnwantedCSS}
+            /* Spotify no-glimpse hiding (opaque user path only) */
+            ${spotifyNoGlimpseCSS}
             /* Gemini No-Glimpse Gem Delete Button CSS */
             ${geminiGemMenuCSS}
             `;
@@ -807,6 +871,374 @@
             element.style.setProperty('top', '-9999px', 'important');
             hiddenElements.add(element);
         }
+    }
+
+    function isSpotifyHost() {
+        const host = window.location.hostname.toLowerCase();
+        return host === 'spotify.com' || host.endsWith('.spotify.com');
+    }
+
+    function isSpotifyOpaqueUserRoute(pathname = window.location.pathname) {
+        try {
+            const normalized = decodeURIComponent(pathname || '').replace(/\/+$/, '') || '/';
+            return normalized.toLowerCase() === spotifyOpaqueUserPath.toLowerCase();
+        } catch {
+            return String(pathname || '').replace(/\/+$/, '').toLowerCase() === spotifyOpaqueUserPath.toLowerCase();
+        }
+    }
+
+    function testSpotifySearchBannedRegex(text) {
+        const value = String(text || '').trim();
+        if (!value) return false;
+
+        for (const rx of spotifySearchBannedRegex) {
+            if (!(rx instanceof RegExp)) continue;
+            try {
+                rx.lastIndex = 0;
+                if (rx.test(value)) return rx.toString();
+            } catch {}
+        }
+        return false;
+    }
+
+    function decodeSpotifySearchPart(value) {
+        let out = String(value || '').replace(/\+/g, ' ');
+        for (let i = 0; i < 2; i++) {
+            try {
+                const decoded = decodeURIComponent(out);
+                if (decoded === out) break;
+                out = decoded;
+            } catch {
+                break;
+            }
+        }
+        return out.trim();
+    }
+
+    function getSpotifySearchTextFromLocation(pathname = window.location.pathname, search = window.location.search) {
+        const path = String(pathname || '');
+        if (!/^\/search(?:\/|$)/i.test(path)) return '';
+
+        const rest = path.replace(/^\/search\/?/i, '');
+        if (rest) {
+            const firstSegment = rest.split('/')[0] || '';
+            const decoded = decodeSpotifySearchPart(firstSegment);
+            if (decoded) return decoded;
+        }
+
+        try {
+            const params = new URLSearchParams(String(search || ''));
+            for (const key of ['q', 'query', 'search']) {
+                const decoded = decodeSpotifySearchPart(params.get(key) || '');
+                if (decoded) return decoded;
+            }
+        } catch {}
+
+        return '';
+    }
+
+    function getSpotifyBannedSearchMatch(pathname = window.location.pathname, search = window.location.search) {
+        return testSpotifySearchBannedRegex(getSpotifySearchTextFromLocation(pathname, search));
+    }
+
+    function getSpotifySearchInput(target) {
+        const element = target instanceof Element ? target : null;
+        if (!element) return null;
+
+        const selector = 'input[data-testid="search-input"], input[data-top-bar-search="true"]';
+        const input = element.matches?.(selector) ? element : element.closest?.(selector);
+        return input && input.tagName === 'INPUT' ? input : null;
+    }
+
+    function buildSpotifySearchResultSignal(row) {
+        if (!row) return '';
+        const parts = [String(row.textContent || '')];
+
+        try {
+            row.querySelectorAll('a[href]').forEach(link => {
+                parts.push(link.getAttribute('href') || '');
+                parts.push(link.getAttribute('aria-label') || '');
+                parts.push(link.getAttribute('title') || '');
+            });
+            row.querySelectorAll('img[alt], [aria-label], [title]').forEach(node => {
+                parts.push(node.getAttribute('alt') || '');
+                parts.push(node.getAttribute('aria-label') || '');
+                parts.push(node.getAttribute('title') || '');
+            });
+        } catch {}
+
+        return parts.join(' ').replace(/\s+/g, ' ').trim();
+    }
+
+    function hideSpotifyBannedSearchDropdownResults(root = document) {
+        if (!isSpotifyHost()) return;
+
+        const dropdownSelector = '[data-testid="search-dropdown"], #search-dropdown';
+        const rowSelector = '[data-encore-id="listRow"], [role="row"]';
+        const fullRowSelector = [
+            '[data-testid="search-dropdown"] [data-encore-id="listRow"]',
+            '[data-testid="search-dropdown"] [role="row"]',
+            '#search-dropdown [data-encore-id="listRow"]',
+            '#search-dropdown [role="row"]'
+        ].join(', ');
+        const rows = new Set();
+
+        try {
+            if (root === document) {
+                document.querySelectorAll(fullRowSelector).forEach(row => rows.add(row));
+            } else {
+                const element = root && root.nodeType === 1 ? root : null;
+                if (!element) return;
+
+                const dropdowns = new Set();
+                if (element.matches?.(dropdownSelector)) dropdowns.add(element);
+                const containingDropdown = element.closest?.(dropdownSelector);
+                if (containingDropdown) dropdowns.add(containingDropdown);
+                element.querySelectorAll?.(dropdownSelector).forEach(dropdown => dropdowns.add(dropdown));
+                if (!dropdowns.size) return;
+
+                dropdowns.forEach(dropdown => {
+                    if (element.matches?.(rowSelector) && dropdown.contains(element)) rows.add(element);
+                    dropdown.querySelectorAll?.(rowSelector).forEach(row => rows.add(row));
+                });
+            }
+
+            rows.forEach(row => {
+                const signal = buildSpotifySearchResultSignal(row);
+                const match = testSpotifySearchBannedRegex(signal);
+                if (!match) {
+                    row.classList.remove(spotifySearchResultHiddenClass);
+                    try { row.removeAttribute('inert'); } catch {}
+                    if (!row.classList.contains(spotifyUserRowHiddenClass)) {
+                        row.removeAttribute('aria-hidden');
+                    }
+                    return;
+                }
+
+                row.classList.add(spotifySearchResultHiddenClass);
+                row.setAttribute('aria-hidden', 'true');
+                try { row.setAttribute('inert', ''); } catch {}
+            });
+        } catch {}
+    }
+
+    function isSpotifyActivelyEditingSearch() {
+        try {
+            return !!getSpotifySearchInput(document.activeElement);
+        } catch {
+            return false;
+        }
+    }
+
+    function clearSpotifySearchInput(input) {
+        if (!input || input.tagName !== 'INPUT') return;
+        try {
+            const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+            if (setter) setter.call(input, '');
+            else input.value = '';
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+        } catch {
+            try { input.value = ''; } catch {}
+        }
+    }
+
+    function blockSpotifyCommittedSearch(text, event = null, input = null) {
+        if (!isSpotifyHost()) return false;
+        const match = testSpotifySearchBannedRegex(text);
+        if (!match) return false;
+
+        if (event) {
+            try { event.preventDefault(); } catch {}
+            try { event.stopPropagation(); } catch {}
+            try { event.stopImmediatePropagation(); } catch {}
+        }
+
+        // Commit-only behavior: ordinary typing is never punished. Once Enter/submit
+        // commits a banned query, clear it and return to Spotify's clean Search root.
+        clearSpotifySearchInput(input);
+        fastRedirect(spotifySearchURL);
+        return true;
+    }
+
+    function blockSpotifySearchRouteIfNeeded(pathname = window.location.pathname, search = window.location.search, options = {}) {
+        if (!isSpotifyHost()) return false;
+        const match = getSpotifyBannedSearchMatch(pathname, search);
+        if (!match) return false;
+
+        // Spotify can mutate its search route while the user is still typing. Do not
+        // treat that as a committed search. Initial/direct URL checks may opt in.
+        if (!options.allowWhileEditing && isSpotifyActivelyEditingSearch()) return false;
+
+        fastRedirect(spotifySearchURL);
+        return true;
+    }
+
+    function normalizeSpotifyPath(pathname = window.location.pathname) {
+        try {
+            return (decodeURIComponent(String(pathname || '')).replace(/\/+$/, '') || '/').toLowerCase();
+        } catch {
+            return (String(pathname || '').replace(/\/+$/, '') || '/').toLowerCase();
+        }
+    }
+
+    function isSpotifyPlaylistRoute(pathname = window.location.pathname) {
+        const path = normalizeSpotifyPath(pathname);
+        return path === '/playlist' || path.startsWith('/playlist/');
+    }
+
+    const spotifyPlaylistContextSelector = [
+        '[data-testid*="playlist" i]',
+        '[data-testid*="tracklist" i]',
+        '[aria-label*="playlist" i]',
+        '[aria-label*="soittolista" i]',
+        '[role="row"]',
+        '[aria-rowindex]'
+    ].join(', ');
+
+    const spotifyRightSidebarSelector = '.Root__right-sidebar, [data-testid="right-sidebar"]';
+
+    function findSpotifyPlaylistUsersDialogRow(anchor) {
+        if (!anchor) return null;
+
+        const dialog = anchor.closest?.(
+            '[role="dialog"], [aria-modal="true"], [data-testid*="modal" i], [data-testid*="dialog" i]'
+        );
+        if (!dialog) return null;
+
+        // A real playlist-users/collaborators dialog contains several profile routes. That
+        // gives us a safe context for removing the whole matching row instead of merely
+        // hiding the individual account reference inside ordinary playlist metadata.
+        let profileLinkCount = 0;
+        try {
+            profileLinkCount = dialog.querySelectorAll('a[href^="/user/"], a[href*="/user/"]').length;
+        } catch {}
+        if (profileLinkCount < 2) return null;
+
+        const explicitRow = anchor.closest?.(
+            '[role="row"], [role="listitem"], li, [data-encore-id="listRow"]'
+        );
+        if (explicitRow && explicitRow !== dialog && dialog.contains(explicitRow)) return explicitRow;
+
+        let node = anchor.parentElement;
+        let candidate = null;
+        let hops = 0;
+        const anchorSelector = `a[href$="${spotifyOpaqueUserPath}"]`;
+
+        while (node && node !== dialog && hops < 7) {
+            const blockedLinks = node.querySelectorAll?.(anchorSelector)?.length || 0;
+            const allLinks = node.querySelectorAll?.('a[href]')?.length || 0;
+            const text = String(node.textContent || '').replace(/\s+/g, ' ').trim();
+            const directChildren = Array.from(node.children || []).length;
+
+            if (
+                blockedLinks === 1 &&
+                allLinks <= 2 &&
+                directChildren <= 8 &&
+                text.length > 0 &&
+                text.length <= 220
+            ) {
+                candidate = node;
+            }
+
+            node = node.parentElement;
+            hops++;
+        }
+
+        return candidate;
+    }
+
+    function isSpotifyPlaylistMetadataReference(anchor) {
+        if (!anchor) return false;
+
+        // On a playlist route, default to reference-only hiding. The dedicated playlist-users
+        // dialog is handled first by findSpotifySafeUserRow() and is the narrow exception.
+        if (isSpotifyPlaylistRoute()) return true;
+
+        try {
+            return !!anchor.closest(spotifyPlaylistContextSelector);
+        } catch {
+            return false;
+        }
+    }
+
+    function findSpotifySafeUserRow(anchor) {
+        if (!anchor) return null;
+
+        const playlistUsersDialogRow = findSpotifyPlaylistUsersDialogRow(anchor);
+        if (playlistUsersDialogRow) return playlistUsersDialogRow;
+
+        if (isSpotifyPlaylistMetadataReference(anchor)) return null;
+
+        const sidebar = anchor.closest?.(spotifyRightSidebarSelector);
+        if (sidebar) {
+            const explicit = anchor.closest?.(
+                '[role="listitem"], li, [data-testid*="friend" i], [data-testid*="user-row" i], [data-testid*="user-item" i]'
+            );
+            if (explicit && explicit !== sidebar && sidebar.contains(explicit)) return explicit;
+
+            const anchorSelector = `a[href$="${spotifyOpaqueUserPath}"]`;
+            let row = anchor.parentElement;
+            let hops = 0;
+            while (row && row !== sidebar && hops < 7) {
+                const directChildren = Array.from(row.children || []);
+                const blockedLinks = row.querySelectorAll?.(anchorSelector)?.length || 0;
+                const allLinks = row.querySelectorAll?.('a[href]')?.length || 0;
+                const textSpans = row.querySelectorAll?.('span[data-encore-id="text"]')?.length || 0;
+
+                if (
+                    blockedLinks === 1 &&
+                    allLinks <= 2 &&
+                    directChildren.length <= 5 &&
+                    textSpans <= 4
+                ) {
+                    return row;
+                }
+
+                row = row.parentElement;
+                hops++;
+            }
+        }
+
+        const explicitUserRow = anchor.closest?.(
+            '[data-testid*="friend-activity" i], [data-testid*="friends-activity" i], ' +
+            '[data-testid*="user-row" i], [data-testid*="user-item" i], [data-testid*="profile-row" i]'
+        );
+        if (explicitUserRow && !explicitUserRow.closest?.(spotifyPlaylistContextSelector)) return explicitUserRow;
+
+        return null;
+    }
+
+    function hideSpotifySingleReference(anchor) {
+        if (!anchor) return;
+        anchor.classList.add(spotifyUserReferenceHiddenClass);
+        anchor.setAttribute('aria-hidden', 'true');
+        anchor.setAttribute('tabindex', '-1');
+    }
+
+    function handleSpotifyNoGlimpseHiding(root = document) {
+        if (!isSpotifyHost()) return;
+
+        try {
+            const selector = `a[href$="${spotifyOpaqueUserPath}"]`;
+            const anchors = [];
+
+            if (root && root.nodeType === 1 && root.matches && root.matches(selector)) {
+                anchors.push(root);
+            }
+            if (root && root.querySelectorAll) {
+                root.querySelectorAll(selector).forEach(anchor => anchors.push(anchor));
+            }
+
+            anchors.forEach(anchor => {
+                hideSpotifySingleReference(anchor);
+
+                const row = findSpotifySafeUserRow(anchor);
+                if (row) {
+                    row.classList.add(spotifyUserRowHiddenClass);
+                    row.setAttribute('aria-hidden', 'true');
+                }
+            });
+        } catch {}
     }
 
     function handleIRCGalleriaThumbDeletion() {
@@ -1067,6 +1499,17 @@
             const hrefLower = location.href.toLowerCase();
             const hostLower = location.hostname.toLowerCase();
 
+            if (hostLower === 'spotify.com' || hostLower.endsWith('.spotify.com')) {
+                if (blockSpotifySearchRouteIfNeeded(location.pathname, location.search, { allowWhileEditing: true })) {
+                    return true;
+                }
+
+                if (isSpotifyOpaqueUserRoute(location.pathname)) {
+                    fastRedirect(spotifyHomeURL);
+                    return true;
+                }
+            }
+
             if (hostLower.includes('irc-galleria.net') && hrefLower.includes('/user/irpp4')) {
                 for (let i = 0; i < ircGalleriaBannedPatterns.length; i++) {
                     if (hrefLower.includes(ircGalleriaBannedPatterns[i].toLowerCase())) {
@@ -1093,9 +1536,58 @@
 
     injectInlineCSS();
 
+    // Capture target profile clicks before Spotify's SPA router can paint the profile.
+    onEvent(document, 'click', function(e) {
+        if (!isSpotifyHost()) return;
+        const target = e.target instanceof Element ? e.target : null;
+        const link = target?.closest?.(`a[href$="${spotifyOpaqueUserPath}"]`);
+        if (!link) return;
+        e.preventDefault();
+        e.stopPropagation();
+        try { e.stopImmediatePropagation(); } catch {}
+        fastRedirect(spotifyHomeURL);
+    }, true);
+
+    // Dropdown-result filtering is allowed while typing: it never redirects. It only removes
+    // individual autocomplete rows whose own text/links match the Spotify banned-regex list.
+    onEvent(document, 'input', function(e) {
+        if (!isSpotifyHost()) return;
+        const input = getSpotifySearchInput(e.target);
+        if (!input) return;
+        hideSpotifyBannedSearchDropdownResults();
+        addTimeout(() => hideSpotifyBannedSearchDropdownResults(), 0);
+        addTimeout(() => hideSpotifyBannedSearchDropdownResults(), 35);
+    }, true);
+
+    // Commit-only Spotify search interception. Delegated capture listeners survive React remounts.
+    // Ordinary typing never redirects; only Enter/form submit is policy-checked.
+    onEvent(document, 'keydown', function(e) {
+        if (!isSpotifyHost() || e.key !== 'Enter') return;
+        const input = getSpotifySearchInput(e.target) || getSpotifySearchInput(document.activeElement);
+        if (!input) return;
+        blockSpotifyCommittedSearch(input.value || '', e, input);
+    }, true);
+
+    onEvent(document, 'submit', function(e) {
+        if (!isSpotifyHost()) return;
+        const form = e.target instanceof Element ? e.target : null;
+        const input = form?.querySelector?.('input[data-testid="search-input"], input[data-top-bar-search="true"]');
+        if (!input) return;
+        blockSpotifyCommittedSearch(input.value || '', e, input);
+    }, true);
+
     function handleRedirectionsAndContentHiding() {
         if (__isRedirectingFast) return;
         currentURL = window.location.href;
+
+        if (isSpotifyHost()) {
+            if (blockSpotifySearchRouteIfNeeded(window.location.pathname, window.location.search)) return;
+
+            if (isSpotifyOpaqueUserRoute(window.location.pathname)) {
+                fastRedirect(spotifyHomeURL);
+                return;
+            }
+        }
 
         if (currentURL.toLowerCase().includes('irc-galleria.net/user/irpp4')) {
             for (let pattern of ircGalleriaBannedPatterns) {
@@ -1110,6 +1602,8 @@
         handleIRCGalleriaThumbDeletion();
         handleSnapchatUnwantedHiding();  
         handleGeminiUnwantedHiding();    
+        handleSpotifyNoGlimpseHiding();
+        hideSpotifyBannedSearchDropdownResults();
         handleSnapchatSpotlightAutoMinimize();  
         handleSnapchatCameraExpansion();  
 
@@ -1148,12 +1642,27 @@
 
     let observerScheduled = false;
     function observerCallback(mutationsList) {
+        // Spotify gets a synchronous pass on newly inserted DOM so the target row is
+        // classed before the normal debounced cleanup pass.
+        if (isSpotifyHost()) {
+            for (const mutation of mutationsList) {
+                mutation.addedNodes.forEach(node => {
+                    if (node && node.nodeType === 1) {
+                        handleSpotifyNoGlimpseHiding(node);
+                        hideSpotifyBannedSearchDropdownResults(node);
+                    }
+                });
+            }
+        }
+
         if (observerScheduled) return;
         observerScheduled = true;
         addTimeout(() => {
             observerScheduled = false;
             handleIRCGalleriaThumbDeletion();
             handleGeminiUnwantedHiding();
+            handleSpotifyNoGlimpseHiding();
+            hideSpotifyBannedSearchDropdownResults();
             
             // Re-check and inject NextDNS UI if React dynamically loaded the form
             if (NextDNSManager.isTargetPage()) {
@@ -1225,6 +1734,12 @@
         };
         history.pushState = _wr('pushState');
         history.replaceState = _wr('replaceState');
+        onEvent(window, 'pushState', function() {
+            window.dispatchEvent(new Event('locationchange'));
+        }, false);
+        onEvent(window, 'replaceState', function() {
+            window.dispatchEvent(new Event('locationchange'));
+        }, false);
         onEvent(window, 'popstate', function() {
             window.dispatchEvent(new Event('locationchange'));
         }, false);
