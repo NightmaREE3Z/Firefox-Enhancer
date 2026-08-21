@@ -13,6 +13,7 @@ import {
   uniqueInOrder
 } from './shared.js';
 import { applyTrustedSiteEntries, normalizeTrustedSiteEntry } from './trusted-sites.js';
+import { normalizeQuotaRules, normalizeScheduledRules } from './timers.js';
 
 const DATASET_SCHEMA = 3;
 const GITHUB_CONFIG_KEY = 'bfb:github-sync-config';
@@ -411,7 +412,9 @@ function normalizeSettingsRecord(value, fallbackUpdatedAt = 0) {
       redirectTerms: Boolean(source.redirectTerms) && Boolean(redirectTermsUrl),
       redirectTermsUrl,
       redirectLinks: Boolean(source.redirectLinks) && Boolean(redirectLinksUrl),
-      redirectLinksUrl
+      redirectLinksUrl,
+      scheduledRules: normalizeScheduledRules(source.scheduledRules),
+      quotaRules: normalizeQuotaRules(source.quotaRules)
     },
     updatedAt: Number(wrapped.updatedAt) || 0,
     syncPending: Boolean(wrapped.syncPending),
@@ -472,6 +475,8 @@ export async function updateSettings(patch) {
   next.redirectLinksUrl = normalizeRedirectUrl(next.redirectLinksUrl);
   next.redirectTerms = Boolean(next.redirectTerms) && Boolean(next.redirectTermsUrl);
   next.redirectLinks = Boolean(next.redirectLinks) && Boolean(next.redirectLinksUrl);
+  next.scheduledRules = normalizeScheduledRules(next.scheduledRules);
+  next.quotaRules = normalizeQuotaRules(next.quotaRules);
   delete next.redirectUrl;
 
   const record = { value: next, updatedAt: Date.now(), syncPending: true, syncError: '' };

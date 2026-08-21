@@ -4,7 +4,8 @@
 
 import "./blocker/service.js";
 import { isCompletelyExcludedHostname, isCompletelyExcludedUrl } from "./blocker/shared.js";
-import { loadDataset } from "./blocker/storage.js";
+import { getSettings, loadDataset } from "./blocker/storage.js";
+import { findTimeRuleBlock } from "./blocker/timers.js";
 
 const LOG_PREFIX = "[BraveFox Background]";
 const HOSTS_META_KEY = "bravefoxHostsMetaV2";
@@ -435,7 +436,7 @@ async function shouldBlockUrl(url) {
     const hostname = normalizeHostname(parsed.hostname);
     if (!hostname || isAllowlistedHostname(hostname)) return false;
     if (matchesStaticBlockRule(parsed)) return true;
-    // Focus Master 1.1.0 owns fetched-host enforcement in blocker/service.js so
+    // Focus Master 1.2.0 owns fetched-host enforcement in blocker/service.js so
     // manual Blocker rules and TrustedSites can outrank the blunt host fallback.
     return false;
   } catch (_) {
@@ -762,18 +763,58 @@ async function updateWrestlingRoster() {
   return wrestlingUpdatePromise;
 }
 
-function getRequestDecision(details) {
+function focusMasterEffectiveSettings(settings, incognito = false) {
+  if (!incognito) return settings;
+  return { ...settings, enabled: true };
+}
+
+function focusMasterTimeBlockedPage(reason, sourceUrl) {
+  const params = new URLSearchParams({
+    type: reason.type,
+    trigger: reason.trigger || '',
+    source: sourceUrl || '',
+    attempted: reason.attemptedSearch || ''
+  });
+  if (reason?.type === 'schedule' && reason?.rule?.endTime) params.set('until', reason.rule.endTime);
+  return browser.runtime.getURL(`blocker/blocked.html?${params.toString()}`);
+}
+
+async function getFocusMasterTimeRuleRequestDecision(details) {
+  if (details?.type !== 'main_frame') return null;
+  const url = String(details?.url || '');
+  if (!/^https?:\/\//i.test(url)) return null;
+
+  const [dataset, storedSettings] = await Promise.all([loadDataset(), getSettings()]);
+  const settings = focusMasterEffectiveSettings(storedSettings, Boolean(details?.incognito));
+  const reason = await findTimeRuleBlock(url, settings, dataset.profile);
+  if (!reason) return null;
+
+  return { redirectUrl: focusMasterTimeBlockedPage(reason, url) };
+}
+
+async function getRequestDecision(details) {
+  try {
+    // Focus Master Priority 2 Time Rules intentionally outrank Trusted Sites.
+    // Firefox's blocking webRequest API lets us redirect before the destination
+    // document renders, which is stronger than the Chromium pre-paint fallback.
+    const timeDecision = await getFocusMasterTimeRuleRequestDecision(details);
+    if (timeDecision) return timeDecision;
+  } catch (error) {
+    console.warn(`${LOG_PREFIX} Focus Master Time Rule request check failed:`, error);
+  }
+
   if (isCompletelyExcludedUrl(details?.url)) return { cancel: false };
   const platformDecision = platformModule?.beforeRequest?.(details);
   if (platformDecision) return platformDecision;
 
-  return shouldBlockUrl(details.url).then(blocked => {
+  try {
+    const blocked = await shouldBlockUrl(details.url);
     if (!blocked) return { cancel: false };
     return platformModule?.blockedResponse?.(details) || { cancel: true };
-  }).catch(error => {
+  } catch (error) {
     console.warn(`${LOG_PREFIX} Request decision failed:`, error);
     return { cancel: false };
-  });
+  }
 }
 
 function installRequestListener() {
