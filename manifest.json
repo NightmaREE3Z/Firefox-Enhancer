@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "BraveFox Enhancer",
-  "version": "27.4.0",
+  "version": "27.4.1",
   "description": "Unified for Firefox PC and Android personal use, for more peaceful Interwebs experience",
   "background": {
     "scripts": [
@@ -27,7 +27,11 @@
       "js": [
         "scripts/pwa-navigation.js"
       ],
-      "run_at": "document_start"
+      "run_at": "document_start",
+      "exclude_matches": [
+        "*://twitch.tv/*",
+        "*://*.twitch.tv/*"
+      ]
     },
     {
       "matches": [
@@ -37,7 +41,11 @@
       "js": [
         "scripts/pwprotection.js"
       ],
-      "run_at": "document_start"
+      "run_at": "document_start",
+      "exclude_matches": [
+        "*://twitch.tv/*",
+        "*://*.twitch.tv/*"
+      ]
     },
     {
       "matches": [
@@ -321,7 +329,11 @@
       "js": [
         "scripts/google.js"
       ],
-      "run_at": "document_start"
+      "run_at": "document_start",
+      "exclude_matches": [
+        "*://twitch.tv/*",
+        "*://*.twitch.tv/*"
+      ]
     },
     {
       "matches": [
@@ -331,7 +343,11 @@
       "js": [
         "scripts/youtube.js"
       ],
-      "run_at": "document_start"
+      "run_at": "document_start",
+      "exclude_matches": [
+        "*://twitch.tv/*",
+        "*://*.twitch.tv/*"
+      ]
     },
     {
       "matches": [
@@ -353,7 +369,11 @@
       "js": [
         "scripts/extra.js"
       ],
-      "run_at": "document_start"
+      "run_at": "document_start",
+      "exclude_matches": [
+        "*://twitch.tv/*",
+        "*://*.twitch.tv/*"
+      ]
     },
     {
       "matches": [
@@ -362,7 +382,11 @@
       "js": [
         "scripts/chatgpt.js"
       ],
-      "run_at": "document_start"
+      "run_at": "document_start",
+      "exclude_matches": [
+        "*://twitch.tv/*",
+        "*://*.twitch.tv/*"
+      ]
     },
     {
       "matches": [
@@ -372,7 +396,11 @@
       "js": [
         "scripts/filtering.js"
       ],
-      "run_at": "document_start"
+      "run_at": "document_start",
+      "exclude_matches": [
+        "*://twitch.tv/*",
+        "*://*.twitch.tv/*"
+      ]
     },
     {
       "matches": [
@@ -381,7 +409,11 @@
       "js": [
         "scripts/wrestling.js"
       ],
-      "run_at": "document_start"
+      "run_at": "document_start",
+      "exclude_matches": [
+        "*://twitch.tv/*",
+        "*://*.twitch.tv/*"
+      ]
     },
     {
       "matches": [
@@ -395,7 +427,11 @@
       "css": [
         "css/reddit.css"
       ],
-      "run_at": "document_start"
+      "run_at": "document_start",
+      "exclude_matches": [
+        "*://twitch.tv/*",
+        "*://*.twitch.tv/*"
+      ]
     },
     {
       "matches": [
@@ -406,7 +442,11 @@
       "js": [
         "scripts/blogger.js"
       ],
-      "run_at": "document_start"
+      "run_at": "document_start",
+      "exclude_matches": [
+        "*://twitch.tv/*",
+        "*://*.twitch.tv/*"
+      ]
     },
     {
       "matches": [
@@ -418,7 +458,11 @@
       "js": [
         "scripts/archive.js"
       ],
-      "run_at": "document_start"
+      "run_at": "document_start",
+      "exclude_matches": [
+        "*://twitch.tv/*",
+        "*://*.twitch.tv/*"
+      ]
     }
   ],
   "web_accessible_resources": [

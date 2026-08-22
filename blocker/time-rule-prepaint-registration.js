@@ -81,6 +81,7 @@ async function applyRegistration(settings) {
 
   registeredScript = await browser.contentScripts.register({
     matches,
+    excludeMatches: ['*://twitch.tv/*', '*://*.twitch.tv/*'],
     js: [{ file: SCRIPT_FILE }],
     runAt: 'document_start',
     allFrames: false

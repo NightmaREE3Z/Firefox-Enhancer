@@ -322,6 +322,15 @@ let hostsUpdatePromise = null;
 let wrestlingUpdatePromise = null;
 let requestListenerInstalled = false;
 
+function braveFoxIsTwitchUrl(value) {
+  try {
+    const host = new URL(String(value || '')).hostname.toLowerCase();
+    return host === 'twitch.tv' || host.endsWith('.twitch.tv');
+  } catch (_) {
+    return false;
+  }
+}
+
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -1000,6 +1009,7 @@ async function braveFoxCloseChatGptTab(tabId) {
 }
 
 function braveFoxHandleRestrictedChatGptNavigation(details) {
+  if (braveFoxIsTwitchUrl(details?.url)) return;
   if (details?.frameId !== 0 || details?.tabId < 0 || !braveFoxIsRestrictedChatGptUrl(details.url)) return;
   void braveFoxCloseChatGptTab(details.tabId);
 }
