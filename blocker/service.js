@@ -14,7 +14,6 @@ import {
   verifyPassword
 } from './auth.js';
 import { findBlockReason, hasScopedLinkRulesForUrl } from './matcher.js';
-import { HARD_CODED_LINKS } from './hardcoded-blocks.js';
 import { findTimeRuleBlock, initializeTimeRuleTracking, sampleTimeRuleUsageNow } from './timers.js';
 import { expandWrappedWebUrls, extractWrappedTargetUrls, isUnsupportedArchiveUrl } from './url-wrappers.js';
 import { refreshTimeRulePrepaintRegistration } from './time-rule-prepaint-registration.js';
@@ -46,6 +45,102 @@ import {
   normalizeTldForStorage,
   uniqueInOrder
 } from './shared.js';
+
+// ---------------------------------------------------------------------------
+// Immutable hardcoded link enforcement
+// ---------------------------------------------------------------------------
+// These rules are compiled directly into service.js in addition to
+// blocker/lists/blockedLinks.csv. Removing a matching row from the physical,
+// synchronized or imported CSV does not remove this enforcement layer.
+// TrustedSites.csv remains the explicit allow-list and is evaluated first.
+const HARD_CODED_LINKS = Object.freeze(
+[
+  "theredtool.com",
+  "lightxeditor.com",
+  "picwish.com",
+  "snapedit.app",
+  "snapedit.ai",
+  "twitter.com",
+  "x.com",
+  "ask.fm",
+  "tiktokcelebrities.com",
+  "photocut.ai",
+  "tiktokus.info",
+  "aitoolfor.org",
+  "reddit.com/r/BayleyBooty",
+  "xvideos.com/c/AI-239",
+  "xvideos.com?k=3d",
+  "xvideos.com?k=WWE",
+  "xvideos.com?k=TNA",
+  "xvideos.com?k=AEW",
+  "deepnude.to",
+  "nudify.me",
+  "deepnudeai.org",
+  "onlyfans.com",
+  "justforfans.com",
+  "fanso.io",
+  "okfans.com",
+  "sourceforge.net/projects/dreamtime.mirror",
+  "reddit.com/r/extramile",
+  "wrestlingffp.forumcommunity.net",
+  "xvideos.com?k=3d&top",
+  "xvideos.com?k=Stephanie+McMahon",
+  "redtube.com",
+  "remove.bg",
+  "removex.io",
+  "removebg.club",
+  "reddit.com/r/GeniusOfTheSky",
+  "starryai.com",
+  "undressher.app",
+  "nudifyonline.tech",
+  "vanice.ai",
+  "venice.ai",
+  "vanice-ai.com",
+  "venice-ai.com",
+  "venice-ai.net",
+  "venice-ai.org",
+  "vanice-ai.org",
+  "thesmackdownhotel.com/wrestlers/red-velvet",
+  "thesmackdownhotel.com/wrestlers/riho",
+  "thesmackdownhotel.com/wrestlers/ava-raine",
+  "thesmackdownhotel.com/wrestlers/delta",
+  "arxiv.org",
+  "ira-amanda.blogspot.com",
+  "ira-amanda.blogspot.fi",
+  "irpp4.blogspot.com",
+  "irpp4.blogspot.fi",
+  "perttas.blogspot.com",
+  "perttas.blogspot.fi",
+  "jiujau.blogspot.com",
+  "jiujau.blogspot.fi",
+  "multicorewareinc.com",
+  "gemini.google.com",
+  "user/3ws1lu2bwli971gvhv28yemrm",
+  "instagram.com/taijamaarit",
+  "upskirt.tv",
+  "celeb.gate.cc",
+  "pullpush.io",
+  "search.pullpush.io",
+  "search.yahoo.com",
+  "duckduckgo.com",
+  "celebgate.cc",
+  "bing.com",
+  "nubee.ai",
+  "tiktokwood.com",
+  "tiktok-for-business.co.jp",
+  "arvin.chat",
+  "xvideos.com?k=Tegan+Nox",
+  "insmind.com",
+  "picwish.ai",
+  "xvideos.com?k=Liv+Morgan",
+  "xvideos.com?k=Steph+McMahon",
+  "web.archive.org/web/20230913153255",
+  "microsoft.com/fi-fi/edge",
+  "explore.microsoft.com/fi-fi/edge",
+  "explore.microsoft.com/en-us/edge/download?form=MA14LQ&cs=3404660611",
+  "explore.microsoft.com"
+]
+);
 
 const recentlyRedirected = new Map();
 const redirectInFlight = new Set();

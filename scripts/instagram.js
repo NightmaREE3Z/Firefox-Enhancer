@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         IGCleaner
-// @version      2026-07-06
+// @version      2026-08-23
 // @description  Trying to make my Instagram experience tolerable.
 // @match        *://www.instagram.com/*
 // @match        *://www.instagram.com/?next=%2F/*
@@ -548,7 +548,7 @@ const bannedKeywords = [
    "Karmen Petrovic", "Ava Raine", "Yulisa Leon", "Cora Jade", "Gina Adams", "Jacy Jayne", "Gigi Dolin", "Thea Hail", "Tatum WWE", "Fallon", "Valentina Feroz", "Wilma", 
    "wondershare", "filmora", "Kelani Jordan", "Electra Lopez", "Wendy Choo", "lottapupu", "m1ska", "m1sk4", "Milli", "Niina", "Jasmin", "Saana", "Veera", "Saya Kamitani", 
    "misk4", "misk3", "m1sk3", "m1ske", "m1mmuska", "misk33waaa", "misk33waa", "misk33wa", "misk3waa", "misk3waaa", "miskaawq9", "misk3wa", "Matilda", "Malla", "Kamitani", 
-   "Nikkita", "linktr.ee", "vsco.co", "Sinulle ehdotettua", "Sinulle ehdotettu", "Suggested for you", "Myös Metalta", 
+   "Nikkita", "linktr.ee", "vsco.co", "Sinulle ehdotettua", "Sinulle ehdotettu", "Suggested for you", "Myös Metalta", "@lovable.dev", "@lovable.ai"
 
 // String hashtags
    "#perse", "#pylly", "#tissit", "#takapuoli", "#takamus", "#boobs", "#boobies", "#boobie", "#booty", "#butt", "#babe", "#aigen", "#aigenerated", "#aigeneration", "#artificial",  
@@ -568,13 +568,14 @@ const bannedRegexes = [
    /Saya Kamitani/i, /Kamitani/i, /Ansku/i, /Crowley/i, /Ruby Soho/i, /Monica/i, /Castillo/i, /Matsumoto/i, /Shino Suzuki/i, /Yamashita/i, /Adriana/i, /Nia Jax/i, /McQueen/i, /5uck/i, 
    /Lash Legend/i, /motionai/i, /Dolli/i, /Dolly/i, /Aliisa/i, /maarit/i, /taija/i, /saija/i, /seija/i, /tiina/i, /teija/i, /Miska/i, /Saara/i, /Saaru/i,  /Lumikki/i, /Laura/i, /Noora/i,
    /Lumiikki/i, /Noora/i, /Elina/i,  /Nooru/i, /Camila/i, /Tiinu/i, /Henni/i, /Jasmin/i, /Katherin/i, /Janita/i, /Susan/i, /Sirja/i, /Venla/i, /Jenn/i, /Irene/i, /Milana/i, /Milena/i, 
-   /Milene/i, /Minea/i, /Anette/i, /Tytti/i, /Elisa/i, /Elise/i, /Johanna/i, /Jossu/i, /Rebecca/i, /Jonna/i, /Janna/i, /Janet/i, /Aleksiina/i, /Alexiina/i, /Maria/i, /Marie/i, /Katja/i,  
-   /Minna/i, /Janika/i, /Janica/i, /Janissa/i, /Pauliina/i, /Janisa/i, /Miisa/i, /Vilma/i, /Kaisa/i, /Pinj/i, /Jemina/i, /Moona/i, /Viivi/i, /Annika/i, /Marissa/i, /Jutta/i, /Amalia/i, 
-   /Nelli/i, /Anniina/i, /Marjut/i, /Siiri/i, /Kamila/i, /Kamilla/i, /Kamilia/i, /Lauren/i, /Janika/i, /Camilla/i, /Camilia/i, /Krisse/i, /Malla/i, /Miina/i, /Merja/i, /Alina/i, /Alina/i,
-   /Mirkku/i, /Irkku/i, /zelina/i,  /Aliina/i, /Shirai/i, /Vilhel/i, /Wilhel/i, /Aurora/i, /Joana/i, /Iiris/i, /Erika/i, /Janina/i, /Kasie Cay/i, /Lisa Varon/i, /Marie Varon/i, /Takaichi/i, 
-   /With Grok/i, /By Grok/i, /minja/i,  /Grok's/i, /Elon Musk/i, /ElonMusk/i, /Sam Altman/i, /SamAltman/i, /changemotion/i, /swapmotion/i, /Huuska/i, /Sakurai/i, /Cargill/i, /Nikkita/i, 
-   /Lyons/i, /IYO SKY/i, /AI creative/i, /AI created/i, /Tekoäly/i, /Teko äly/i, /Teko-äly/i, /Teko_äly/i, /gener/i, /generoiva/i, /generoitu/i, /generated/i, /generative/i, /AI create/i, 
-   /seksi/i, /anaali/i, /pillu/i, /pimppi/i, /kyrpä/i, /kulli/i, /sexual/i, /sensuel/i, /seksuaali/i, /Kairi's/i, /Kairii/i, /Sexxy/i, /Sexy/i, /Sexx/i, /Sexi/i,
+   /Milene/i, /Minea/i, /Anette/i, /Tytti/i, /Elisa/i, /Elise/i, /Rebecca/i, /Jonna/i, /Janna/i, /Janet/i, /Aleksiina/i, /Alexiina/i, /Maria/i, /Marie/i, /Katja/i, /Minna/i, /Janika/i, 
+   /Janissa/i, /Pauliina/i, /Janisa/i, /Miisa/i, /Vilma/i, /Kaisa/i, /Pinj/i, /Jemina/i, /Moona/i, /Viivi/i, /Annika/i, /Marissa/i, /Jutta/i, /Amalia/i, /Nelli/i, /Anniina/i, /Marjut/i, 
+   /Siiri/i, /Kamila/i, /Kamilla/i, /Kamilia/i, /Lauren/i, /Janika/i, /Camilla/i, /Camilia/i, /Krisse/i, /Malla/i, /Miina/i, /Merja/i, /Alina/i, /Alina/i, /Mirkku/i, /Irkku/i, /zelina/i,  
+   /Aliina/i, /Shirai/i, /Vilhel/i, /Wilhel/i, /Aurora/i, /Joana/i, /Iiris/i, /Erika/i, /Janina/i, /Kasie Cay/i, /Lisa Varon/i, /Marie Varon/i, /Takaichi/i, /With Grok/i, /By Grok/i,
+   /heidih/i, /Grok's/i, /Elon Musk/i, /ElonMusk/i, /Sam Altman/i, /SamAltman/i, /changemotion/i, /swapmotion/i, /Huuska/i, /Sakurai/i, /Cargill/i, /Nikkita/i, /Lyons/i, /IYO SKY/i, 
+   /AI creative/i, /AI created/i, /Tekoäly/i, /Teko äly/i, /Teko-äly/i, /Teko_äly/i, /gener/i, /generoiva/i, /generoitu/i, /generated/i, /generative/i, /AI create/i, /seksi/i, 
+   /minja/i, /anaali/i, /pillu/i, /pimppi/i, /kyrpä/i, /kulli/i, /sexual/i, /sensuel/i, /seksuaali/i, /Kairi's/i, /Kairii/i, /Sexxy/i, /Sexy/i, /Sexx/i, /Sexi/i, /@lovable.dev/i,
+   /@lovable.ai/i, /lovable.dev/i, /lovable.ai/i, /lovable ai/i,
 
 // Literal regex hashtags
    /\b#ass\b/i, /\b#tit\b/i, /\b#tits\b/i, /\b#boob\b/i, /\b#AI\b/i, /\b#Nox\b/i,
@@ -605,34 +606,19 @@ const allowedWords = [
 
 // Instagram accounts to hide
 const instagramAccountsToHide = [
-  'karabrannbacka', 'piia_oksanen', 'wiikmaaan', 'julmakira', 'yaonlylivvonce', 'alexa_bliss_wwe_',
-  'samanthathebomb', 'tiffanywwe', 'beckylynchwwe', 'charlottewwe', 'biancabelairwwe', 'thetrishstratuscom',
-  'thebriebella', 'thenikkibella', 'niajaxwwe', 'mandysacs', 'sonyadevillewwe', 'natbynature',
-  'zelinavegawwe', 'carmellawwe', 'itsmebayley', 'sashabankswwe', 'mercedesmone', 'saraya',
-  'theajmendez', 'livmorganwwe', 'candicelerae', 'indihartwell', 'raquelwwe', 'dakotakaiwwe',
-  'kairi_sane_wwe', 'asuka_wwe', 'meiko_satomura', 'roxanne_wwe', 'pipernivenwwe', 'nikki_cross_wwe',
-  'jacyjaynewwe', 'gigidxdolinnxt', 'avawwe_', 'blairdavenportwwe', 'lyravalkyria', 'katana_chance',
-  'kaydenwwe', 'maxxinedupri', 'chelseaagreen', 'fallonhenleywwe', 'karmenpetrovicwwe', 'danabrookewwe',
-  'valhallawwe', 'laceyevanswwe', 'shotziwwe', 'dejwujs_', 'dejwujs', 'tegan_nox_wwe', 'mia_yim',
-  'candicewwe', 'emmalution', 'tenille_dashwood', 'brittbaker', 'jaderedeww', 'taijamaarit',
-  'krisstatlander', 'jamiehayter', 'thunderrosa22', 'serenadeeb', 'nylarosebeast', 'lashlegendwwe',
-  'thepenelopeford', 'sylviliukkonen', 'sylviorvokki', 'willowwrestles', 'skye_by_wrestling', 'redvelvett',
-  'anna_jay_aew', 'tayconti_', 'tayconti', 'taymelo', 'heidika', 'heidik', 'heidih', 'heidit',
-  'grok', 'erikavikman', 'erika.helin', 'hikaru_shida', 'jjuliakristiina_', 'mafiaprinsessa',
-  'riho_ringstar', 'gailkimitsme', 'deonnapurrazzo', 'jordynnegrace', 'mickiejames', 'trinity_fatu',
-  'm1mmuska', 'mimmi', 'juliaerikaaz', 'dvondivawwe', 'suyung', 'madisonraynewrestling',
-  'katariinapohjoiskangas', 'angelinalove', 'velvet_sky', 'brookeadams', 'tessblanchard',
-  'thetayavalkyrie', 'havokdeathmachine', 'killerkellywrestling', 'kierahogan', 'diamante_lax',
-  'ladyfrost', 'taryn_terrell', 'rebeltanea', 'martimichellewwe', 'alishawrestling',
-  'savannah_evanswrestling', 'jazzygabert', 'masha_slamovich', 'paigewwe', 'kayfabe_kayla',
-  'roxanne_perez', 'cora.jade', 'piia_barlund', 'lottapupu', 'giuliawrestler', 'starkz_wrestler',
-  'thedollhousewrestling', 'holidead', 'tessafblanchard', 'thealliebunny', 'taya_valkyrie',
-  'thedemonbunny', 'rhearipley_wwe', 'rosemarythehive', 'siennawrestling', 'madisonrayne',
-  'kimber_lee90', 'kiera_hogan', 'diamantelax', 'realtenille', 'stephaniemcmahon',
-  'stephanie_buttermore', 'stephanie.vaquer', 'julianarasikannas', 'wwe_asuka', 'kairi_sane_wwe',
-  'wwe_mandyrose', 'stephaniesanzo', 'shaqwrestling', 'jadecargill', 'emimatsumoto',
-  'yukisakazaki', 'mizuki_wrestler', 'gina.adams', 'miskaawq9', 'misk33', 'misk33waaa',
-  'misk33waa', 'misk33wa', 'misk3waa', 'misk3waaa', 'misk3wa', 'misk4',
+  'yaonlylivvonce', 'alexa_bliss_wwe_', 'samanthathebomb', 'tiffanywwe', 'beckylynchwwe', 'charlottewwe', 'biancabelairwwe', 'thetrishstratuscom', 'thebriebella', 'thenikkibella', 'niajaxwwe', 'sonyadevillewwe', 
+  'mandysacs', 'natbynature', 'zelinavegawwe', 'carmellawwe', 'itsmebayley', 'sashabankswwe', 'mercedesmone', 'saraya', 'theajmendez', 'livmorganwwe', 'candicelerae', 'indihartwell', 'raquelwwe', 'dakotakaiwwe',
+  'kairi_sane_wwe', 'asuka_wwe', 'meiko_satomura', 'roxanne_wwe', 'pipernivenwwe', 'nikki_cross_wwe', 'jacyjaynewwe', 'gigidxdolinnxt', 'avawwe_', 'blairdavenportwwe', 'lyravalkyria', 'katana_chance', 'serenadeeb', 
+  'kaydenwwe', 'maxxinedupri', 'chelseaagreen', 'fallonhenleywwe', 'karmenpetrovicwwe', 'danabrookewwe', 'valhallawwe', 'laceyevanswwe', 'shotziwwe', 'dejwujs_', 'dejwujs', 'tegan_nox_wwe', 'mia_yim', 'sylviorvokki',
+  'candicewwe', 'emmalution', 'tenille_dashwood', 'lashlegendwwe', 'karabrannbacka', 'julmakira', 'piia_oksanen', 'wiikmaaan', 'taijamaarit', 'riituskavaanhoi', 'heidisofia_agneta', 'nylarosebeast', 'krisstatlander', 
+  'jamiehayter', 'thunderrosa22', 'brittbaker', 'thepenelopeford', 'sylviliukkonen',  'willowwrestles', 'skye_by_wrestling', 'redvelvett', 'anna_jay_aew', 'tayconti_', 'tayconti', 'taymelo', 'heidika', 'heidik', 
+  'heidih', 'heidit', 'grok', 'erikavikman', 'erika.helin', 'hikaru_shida', 'jjuliakristiina_', 'mafiaprinsessa', 'riho_ringstar', 'gailkimitsme', 'deonnapurrazzo', 'jordynnegrace', 'mickiejames', 'trinity_fatu',
+  'm1mmuska', 'mimmi', 'juliaerikaaz', 'dvondivawwe', 'suyung', 'madisonraynewrestling', 'katariinapohjoiskangas', 'angelinalove', 'velvet_sky', 'brookeadams', 'tessblanchard', 'thetayavalkyrie', 'havokdeathmachine', 
+  'killerkellywrestling', 'kierahogan', 'diamante_lax', 'ladyfrost', 'taryn_terrell', 'rebeltanea', 'martimichellewwe', 'jaderedeww',  'alishawrestling', 'savannah_evanswrestling', 'jazzygabert', 'masha_slamovich', 
+  'paigewwe', 'kayfabe_kayla', 'roxanne_perez', 'cora.jade', 'piia_barlund', 'lottapupu', 'giuliawrestler', 'starkz_wrestler', 'thedollhousewrestling', 'holidead', 'tessafblanchard', 'thealliebunny', 'taya_valkyrie',
+  'thedemonbunny', 'rhearipley_wwe', 'rosemarythehive', 'siennawrestling', 'madisonrayne', 'kimber_lee90', 'kiera_hogan', 'diamantelax', 'realtenille', 'stephaniemcmahon', 'stephanie_buttermore', 'stephanie.vaquer', 
+  'julianarasikannas', 'wwe_asuka', 'kairi_sane_wwe', 'wwe_mandyrose', 'stephaniesanzo', 'shaqwrestling', 'jadecargill', 'emimatsumoto', 'yukisakazaki', 'gina.adams', 'mizuki_wrestler',
+  'miskaawq9', 'misk33', 'misk33waaa', 'misk33waa', 'misk33wa', 'misk3waa', 'misk3waaa', 'misk3wa', 'misk4', 'misaaqw', 'lovable.dev', 'lovable', 'lovable.ai', 
 ];
 
     const instagramBannedPaths = [
@@ -2464,6 +2450,45 @@ overflow: visible !important;
             margin-top: -16px !important; 
         }
 
+        /* Persistent story-account hiding. Instagram can re-apply inline styles
+           during hydration; keep banned story tiles out of the flex layout. */
+        div[data-pagelet="story_tray"] li[data-ig-story-account-banned],
+        div[data-pagelet="story_tray"] [data-ig-story-account-banned] {
+            display: none !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+            width: 0 !important;
+            min-width: 0 !important;
+            max-width: 0 !important;
+            height: 0 !important;
+            min-height: 0 !important;
+            max-height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            flex: 0 0 0 !important;
+            overflow: hidden !important;
+            transition: none !important;
+            transform-origin: left center !important;
+        }
+
+        /* Persistent followed/following-row hiding. */
+        [data-ig-account-list-banned] {
+            display: none !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+            width: 0 !important;
+            min-width: 0 !important;
+            max-width: 0 !important;
+            height: 0 !important;
+            min-height: 0 !important;
+            max-height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: hidden !important;
+        }
+
         ${searchBanCSS}
         ${approveGateCSS}
         `;
@@ -2645,6 +2670,226 @@ injectInlineCSS();
 
     if (isReelsPage()) {
         injectReelsCSS();
+    }
+
+    // ===== Story tray account hider =====
+    // Hide story tiles when the account username is explicitly listed in
+    // instagramAccountsToHide or matches one of bannedRegexes.
+    // Important: only the username is tested here, not the whole story tile
+    // text, so unrelated UI text cannot accidentally ban the story.
+    const IG_STORY_BAN_MARKER = 'data-ig-story-account-banned';
+
+    function normalizeInstagramStoryUsername(value = '') {
+        try {
+            return String(value || '')
+                .replace(/[\u200B-\u200D\uFEFF]/g, '')
+                .replace(/^@+/, '')
+                .trim()
+                .toLowerCase();
+        } catch {
+            return '';
+        }
+    }
+
+    function extractInstagramStoryUsername(story) {
+        try {
+            if (!story || story.nodeType !== 1) return '';
+
+            // Best source: Instagram's accessible story label.
+            const aria = story.getAttribute('aria-label') || '';
+            let match = aria.match(/(?:käyttäjän|user(?:name)?)[\s:]+(.+?)(?:\s+tarina(?:,|\s|$)|[\s']+story(?:,|\s|$))/i);
+            if (match && match[1]) {
+                const username = normalizeInstagramStoryUsername(match[1]);
+                if (username) return username;
+            }
+
+            // Second source: profile-picture alt text.
+            const img = story.querySelector('img[alt]');
+            if (img) {
+                const alt = img.getAttribute('alt') || '';
+                match = alt.match(/(?:käyttäjän|user(?:name)?)[\s:]+(.+?)(?:\s+profiilikuva|[\s']+profile(?:\s+picture|\s+photo))/i);
+                if (match && match[1]) {
+                    const username = normalizeInstagramStoryUsername(match[1]);
+                    if (username) return username;
+                }
+            }
+
+            // Final fallback: a story tile normally contains a short username
+            // label under the avatar. Avoid using the whole tile text.
+            const usernameNode = story.querySelector('span[dir="auto"] span[dir="auto"]');
+            if (usernameNode) {
+                const username = normalizeInstagramStoryUsername(usernameNode.textContent);
+                if (username && !/[\s]/.test(username)) return username;
+            }
+        } catch {}
+        return '';
+    }
+
+    function isInstagramStoryUsernameBanned(username) {
+        const value = normalizeInstagramStoryUsername(username);
+        if (!value) return false;
+
+        // Exact account match.
+        if (instagramAccountsSet.has(value)) return true;
+
+        // Username-only regex match. Reset lastIndex for safety in case a
+        // future regex is changed to use the global/sticky flags.
+        for (const rx of bannedRegexes) {
+            try {
+                if (rx.global || rx.sticky) rx.lastIndex = 0;
+                if (rx.test(value)) return true;
+                if (rx.global || rx.sticky) rx.lastIndex = 0;
+            } catch {}
+        }
+
+        return false;
+    }
+
+
+    // Instagram's story carousel virtualizes/positions its <li> items with
+    // explicit translateX() values. display:none removes the banned item itself,
+    // but the later items can retain their old translated positions, leaving a
+    // visual hole. Re-compact those positions based on the original X values.
+    function compactBannedInstagramStorySlots() {
+        try {
+            if (!location.hostname.includes('instagram.com')) return 0;
+            if (isReelsPage()) return 0;
+
+            const tray = document.querySelector('div[data-pagelet="story_tray"]');
+            if (!tray) return 0;
+
+            const items = Array.from(tray.querySelectorAll('li'));
+            if (!items.length) return 0;
+
+            const parsed = [];
+            for (const item of items) {
+                if (!item || item.nodeType !== 1) continue;
+
+                const current = item.style.transform || '';
+                const lastApplied = item.getAttribute('data-ig-story-last-transform');
+
+                // If Instagram has changed the transform since our last pass,
+                // treat that as the new source position instead of fighting it.
+                if (lastApplied !== null && current !== lastApplied) {
+                    item.setAttribute('data-ig-story-original-transform', current);
+                    item.removeAttribute('data-ig-story-last-transform');
+                }
+
+                let original = item.getAttribute('data-ig-story-original-transform');
+                if (original === null) {
+                    original = current;
+                    item.setAttribute('data-ig-story-original-transform', original);
+                }
+
+                const match = original.match(/translateX\(\s*(-?\d+(?:\.\d+)?)px\s*\)/i);
+                if (!match) continue;
+
+                parsed.push({
+                    item,
+                    x: parseFloat(match[1]),
+                    original
+                });
+            }
+
+            if (parsed.length < 2) return 0;
+
+            // Restore the original inline transforms before calculating the
+            // compacted positions for this pass.
+            for (const entry of parsed) {
+                entry.item.style.setProperty('transform', entry.original, 'important');
+                entry.item.removeAttribute('data-ig-story-last-transform');
+            }
+
+            const hidden = parsed
+                .filter(entry => entry.item.hasAttribute(IG_STORY_BAN_MARKER))
+                .sort((a, b) => a.x - b.x);
+
+            if (!hidden.length) return 0;
+
+            // Infer the carousel slot spacing from the smallest positive
+            // translateX gap. This avoids hard-coding Instagram's current
+            // avatar width/gap.
+            const uniqueX = [...new Set(parsed.map(entry => entry.x))].sort((a, b) => a - b);
+            let slotStep = 0;
+            for (let i = 1; i < uniqueX.length; i++) {
+                const diff = uniqueX[i] - uniqueX[i - 1];
+                if (diff > 0 && (slotStep === 0 || diff < slotStep)) slotStep = diff;
+            }
+            if (!slotStep) return 0;
+
+            let adjusted = 0;
+
+            for (const entry of parsed) {
+                if (entry.item.hasAttribute(IG_STORY_BAN_MARKER)) {
+                    entry.item.setAttribute('data-ig-story-last-transform', entry.original);
+                    continue;
+                }
+
+                const hiddenBefore = hidden.reduce((count, banned) => {
+                    return count + (banned.x < entry.x ? 1 : 0);
+                }, 0);
+
+                if (!hiddenBefore) {
+                    entry.item.setAttribute('data-ig-story-last-transform', entry.original);
+                    continue;
+                }
+
+                const delta = hiddenBefore * slotStep;
+                const compacted = entry.original.replace(
+                    /translateX\(\s*(-?\d+(?:\.\d+)?)px\s*\)/i,
+                    (_, value) => `translateX(${parseFloat(value) - delta}px)`
+                );
+
+                entry.item.style.setProperty('transform', compacted, 'important');
+                entry.item.setAttribute('data-ig-story-last-transform', compacted);
+                adjusted++;
+            }
+
+            return adjusted;
+        } catch {
+            return 0;
+        }
+    }
+
+    function hideBannedInstagramStoryAccounts(root = document) {
+        try {
+            if (!location.hostname.includes('instagram.com')) return 0;
+            if (isReelsPage()) return 0;
+
+            const scope = root && root.nodeType === 1 ? root : document;
+            const selector = 'div[data-pagelet="story_tray"] div[role="button"][aria-label*="tarina" i], div[data-pagelet="story_tray"] div[role="button"][aria-label*="story" i]';
+            const stories = [];
+
+            const addStory = (el) => {
+                if (el && el.nodeType === 1 && !stories.includes(el)) stories.push(el);
+            };
+
+            if (scope.matches?.(selector)) addStory(scope);
+            scope.querySelectorAll?.(selector).forEach(addStory);
+
+            let hidden = 0;
+            for (const story of stories) {
+                if (story.hasAttribute(IG_STORY_BAN_MARKER)) continue;
+
+                const username = extractInstagramStoryUsername(story);
+                if (!username) continue;
+
+                if (isInstagramStoryUsernameBanned(username)) {
+                    // Mark both the story button and its real carousel item.
+                    // The marker CSS keeps the item collapsed even when Instagram
+                    // rehydrates or rewrites its inline styles.
+                    const layoutItem = story.closest('li') || story;
+                    layoutItem.setAttribute(IG_STORY_BAN_MARKER, username);
+                    story.setAttribute(IG_STORY_BAN_MARKER, username);
+                    collapseElement(layoutItem);
+                    hidden++;
+                }
+            }
+
+            return hidden;
+        } catch {
+            return 0;
+        }
     }
 
     function collapseElement(element) {
@@ -2942,7 +3187,99 @@ injectInlineCSS();
         scanPermalinkArticleAndAct();
     }
 
-    function hideInstagramAccountsFromList() {}
+    function isInstagramAccountUsernameBanned(username) {
+        const value = normalizeInstagramStoryUsername(username);
+        if (!value) return false;
+        if (instagramAccountsSet.has(value)) return true;
+
+        for (const rx of bannedRegexes) {
+            try {
+                if (rx.global || rx.sticky) rx.lastIndex = 0;
+                if (rx.test(value)) {
+                    if (rx.global || rx.sticky) rx.lastIndex = 0;
+                    return true;
+                }
+                if (rx.global || rx.sticky) rx.lastIndex = 0;
+            } catch {}
+        }
+        return false;
+    }
+
+    function findInstagramAccountListRow(anchor) {
+        try {
+            if (!anchor || anchor.nodeType !== 1) return null;
+
+            let node = anchor;
+            for (let depth = 0; node && depth < 14; depth++, node = node.parentElement) {
+                if (node.tagName === 'MAIN' || node.tagName === 'BODY') break;
+
+                const links = node.querySelectorAll?.('a[href^="/"]') || [];
+                const avatar = node.querySelector?.('div[role="button"] img[alt*="profiilikuva" i], div[role="button"] img[alt*="profile picture" i], div[role="button"] img[alt*="profile photo" i]');
+
+                // A real user row has the target profile link plus its avatar
+                // branch. Avoid climbing into the entire dialog/list container.
+                if (avatar && links.length <= 4) {
+                    return node;
+                }
+            }
+        } catch {}
+        return anchor.parentElement || null;
+    }
+
+    function hideInstagramAccountsFromList(root = document) {
+        try {
+            if (!location.hostname.includes('instagram.com')) return 0;
+            if (!location.pathname.match(/\/(followers|following)/)) return 0;
+            if (isReelsPage()) return 0;
+
+            const scope = root && root.nodeType === 1 ? root : document;
+            const anchors = [];
+            const selector = 'a[data-ig-row="1"][href^="/"]';
+
+            const addAnchor = (el) => {
+                if (el && el.nodeType === 1 && !anchors.includes(el)) anchors.push(el);
+            };
+
+            if (scope.matches?.(selector)) addAnchor(scope);
+            scope.querySelectorAll?.(selector).forEach(addAnchor);
+
+            // Fallback for a row whose data marker is absent but still has a
+            // profile-style href. Only use this inside followers/following.
+            if (!anchors.length) {
+                scope.querySelectorAll?.('[role="dialog"] a[href^="/"] , main a[href^="/"]')
+                    .forEach(addAnchor);
+            }
+
+            let hidden = 0;
+            const seenRows = new Set();
+
+            for (const anchor of anchors) {
+                const href = anchor.getAttribute('href') || '';
+                const match = href.match(/^\/([^/?#]+)\/?(?:[?#].*)?$/);
+                if (!match) continue;
+
+                const reserved = new Set([
+                    'p', 'reel', 'tv', 'stories', 'explore', 'reels', 'accounts',
+                    'direct', 'about', 'help', 'legal', 'privacy', 'terms', 'web'
+                ]);
+                const username = normalizeInstagramStoryUsername(match[1]);
+                if (!username || reserved.has(username)) continue;
+                if (!isInstagramAccountUsernameBanned(username)) continue;
+
+                const row = findInstagramAccountListRow(anchor);
+                if (!row || seenRows.has(row)) continue;
+                seenRows.add(row);
+
+                row.setAttribute('data-ig-account-list-banned', username);
+                collapseElement(row);
+                hidden++;
+            }
+
+            return hidden;
+        } catch {
+            return 0;
+        }
+    }
 
     function hideInstagramBannedContent() {
         if (!location.hostname.includes('instagram.com')) return;
@@ -3248,6 +3585,8 @@ injectInlineCSS();
                 hideAllIGSuggestedLabelsV40();
                 hideIGAccountEditSectionsV43();
                 hideUnwantedUIButtons();
+                hideBannedInstagramStoryAccounts();
+                compactBannedInstagramStorySlots();
                 if (isSearchSurfacePresent()) {
                     hideInstagramSearchResults();
                 }
@@ -3303,6 +3642,8 @@ injectInlineCSS();
             hideAllIGSuggestedLabelsV40();
             hideIGAccountEditSectionsV43();
             hideUnwantedUIButtons();
+            hideBannedInstagramStoryAccounts();
+            compactBannedInstagramStorySlots();
             if (isSearchSurfacePresent()) {
                 hideInstagramSearchResults();
             }

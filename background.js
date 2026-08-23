@@ -128,6 +128,7 @@ const STATIC_BLOCK_PATTERNS = [
   "*://theworld-browser.uptodown.com/*",
   "*://theworld-browser.en.uptodown.com/*",
   "*://uptodown.com/windows/avant-browser*",
+  "*://gemini.google.com*",
   "*://avant-browser.uptodown.com/*",
   "*://avant-browser.en.uptodown.com/*",
   "*://uptodown.com/windows/thorium-browser*",

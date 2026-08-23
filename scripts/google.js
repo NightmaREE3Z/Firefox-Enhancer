@@ -1,7 +1,7 @@
 (function () {
     'use strict';
 
-    // google.js of BraveFox Enhancer v26.3.3 (result parity, complete-card cleanup, centred desktop hover and Firefox menus)
+    // google.js of BraveFox Enhancer v27.4.4
 
     // === INSTANT NON-SEARCH GOOGLE APP ABORT ===
     // Gemini and Google Translate are standalone apps, not Google Search result pages.
@@ -725,7 +725,7 @@
 	/war3/i, /w4r3/i, /p41n/i, /pa1n/i, /p4in/i, /bl15s/i, /bl1s5/i, /bl155/i, /bl1ss/i, /bli55/i, /Stratu/i, /machinelearning/i, /Kairi/i, /sexx/i, /4lexa/i, /al3xa/i, /alex4/i,  /4l3xa/i, /al3x4/i, 
 	/Virtualbox/i, /Virtual box/i, /4l3x4/i, /4lex4/i, /bl15s/i, /bl1s5/i, /bl155/i, /blis5/i, /bli5s/i, /artintel/i, /LusTheory/i, /L-Theory/i, /LustTheory/i, /Lust Theory/i, /Lu-Theory/i, /mat1c/i, 
 	/m4tic/i, /m47ic/i, /ma7ic/i, /ma71c/i, /Lus-Theory/i, /Lust-Theory/i, /LusTheory/i, /L-Theory/i, /m4tic/i, /LustTheory/i, /Lust Theory/i, /Lu-Theory/i, /Lus-Theory/i, /Lust-Theory/i, /ComfyUI/i, 
-	/AIZuck/i,
+	/Gemini/i, /AIZuck/i,
 	 
 
 
@@ -972,8 +972,8 @@
 	/480hz/i, /air cooler/i, /CPU cooler/i, /liquid cooler/i, /water cooling/i, /AIO/i, /radiator/i, /heatsink/i, /heat sink/i, /thermal paste/i, /thermal pad/i, /fan curve/i, /PWM/i, /cooler/i, /Bluetooth/i, /Wi-Fi/i, 
 	/WiFi 5/i, /WiFi 6/i, /Wi-Fi 6/i, /WiFi 6E/i, /Wi-Fi 6E/i, /WiFi 7/i, /Wi-Fi 7/i, /RJ45/i, /2\.5GbE/i, /5GbE/i, /10GbE/i, /DHCP/i, /NAT/i, /charg/i, /IP address/i, /IPv4/i, /IPv6/i, /AV1/i, /H\.264/i, /H\.265/i, /HEVC/i,
 	/USB-C/i, /USB Type-C/i, /Thunderbolt/i, /DisplayPort Cable/i, /DP cable/i, /Windows/i, /Linux/i, /Ubuntu/i, /Debian/i, /Fedora/i, /macOS/i, /iOS/i, /ChromeOS/i, /Steam/i, /Epic Games/i, /GOG/i, /Battle\.net/i, /Discord/i, 
-	/Snapdragon/i, /Exynos/i, /Dimensity/i, /Qualcomm/i, /ChatGPT/i, /GPT-4o/i, /GPT-5.1/i, /GPT-5.4/i, /GPT-5.5/i, /GPT-5.6/i, /GPT-5.6 SOL/i, /Sonnet/i, /Gemini/i, /black friday/i, /SmackDown/i, /search/i, /GPT-5.4/i, /GPT-5.5/i, 
-	/Google Gemini/i, /GitHub CoPilot/i, /github/i, /hub/i, /git/i, /artifact/i,
+	/Snapdragon/i, /Exynos/i, /Dimensity/i, /Qualcomm/i, /ChatGPT/i, /GPT-4o/i, /GPT-5.1/i, /GPT-5.4/i, /GPT-5.5/i, /GPT-5.6/i, /GPT-5.6 SOL/i, /Sonnet/i, /black friday/i, /SmackDown/i, /search/i, /GPT-5.4/i, /GPT-5.5/i, 
+	/GitHub CoPilot/i, /github/i, /hub/i, /git/i, /artifact/i,
 
 
     	// English Medical Terms
@@ -1136,6 +1136,7 @@
         /aitool4\./i,
         /aitool4u\./i,
         /aitool\./i,
+        /gemini\./i,
         /remove\.bg/i,
         /folio\.procreate\./i,
         /procreate\./i,
