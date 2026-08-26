@@ -380,6 +380,18 @@
         pointer-events: none !important;
       }
 
+      /* Hide the native "Enable memory" setting row at paint time. The supplied
+       * ChatGPT row is the border-token-border-light/min-h-15 setting row containing
+       * the memory switch. The text check in hideMemoryEnableRows remains the semantic
+       * guard; this CSS rule prevents the row from flashing before React cleanup runs. */
+      html.${PERSONALIZATION_CLASS}
+      div.border-token-border-light.flex.min-h-15.items-center.border-b:has(button[role="switch"]) {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+
       /* The memory-summary overflow menu is rendered in a portal. */
       html.${PERSONALIZATION_CLASS}
       [role="menuitem"][data-color="danger"] {
@@ -1405,32 +1417,16 @@
   }
 
   function hideMemoryEnableRows(scope = document) {
-    forEachMatch(scope, 'button[role="switch"]', switchButton => {
-      const container = switchButton.closest('.flex.justify-between.gap-2') || switchButton.parentElement;
-      if (!container) return;
+    // Match the actual setting row supplied by ChatGPT rather than walking upward from
+    // the switch. This is both more deterministic and resilient to extra wrapper divs.
+    const rowSelector =
+      'div.border-token-border-light.flex.min-h-15.items-center.border-b:has(button[role="switch"])';
 
-      const context = normalizeText(container.textContent);
+    forEachMatch(scope, rowSelector, row => {
+      const context = normalizeText(row.textContent);
       if (!includesAny(context, MEMORY_ENABLE_LABELS)) return;
-
-      const row = findSettingRow(switchButton);
-      if (!row) return;
       hideElement(row);
     });
-  }
-
-  function findSettingRow(startNode) {
-    let node = startNode;
-    let outermostSwitchContainer = null;
-
-    for (let depth = 0; node && depth < 8; depth += 1, node = node.parentElement) {
-      if (node.querySelector?.('button[role="switch"]')) {
-        outermostSwitchContainer = node;
-      }
-      if (node.classList?.contains('border-token-border-light')) {
-        return node;
-      }
-    }
-    return outermostSwitchContainer;
   }
 
   function hideEnhancedMemoryBanners(scope = document) {

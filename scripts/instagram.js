@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name         IGCleaner
-// @version      2026-08-24
+// @name         IGCleaner v27.5.0
+// @version      2026-08-26
 // @description  Trying to make my Instagram experience tolerable.
 // @match        *://www.instagram.com/*
 // @match        *://www.instagram.com/?next=%2F/*
@@ -31,7 +31,6 @@
     }
 
     updateMetaManglerAccountEditClassV43();
-
 
     // ===== No-glimpse nav trash kill: exact-link, feed-safe =====
     // Exact /reels/ and /explore/ only. No a[href*="reel"] nonsense; feed media often uses /reel/<id>/.
@@ -2307,20 +2306,21 @@ const injectInlineCSS = () => {
         const searchBanCSS = buildSearchBanCSS();
 
         const articleProtectionCSS = `
-        main article:not([data-banned-scan]),
+        /* Dialog articles retain their hide-until-scanned protection.
+           Homepage feed articles are governed exclusively by the scoped
+           html.metamangler-feed-gate rules above; keeping a second global
+           article gate here can strand a React-replaced feed item invisible. */
         div[role="dialog"] article:not([data-banned-scan]),
         section[role="dialog"] article:not([data-banned-scan]) {
             opacity: 0 !important;
             pointer-events: none !important;
             transition: opacity 0.1s ease-in !important;
         }
-        main article[data-banned-scan="safe"],
         div[role="dialog"] article[data-banned-scan="safe"],
         section[role="dialog"] article[data-banned-scan="safe"] {
             opacity: 1 !important;
             pointer-events: auto !important;
         }
-        main article[data-banned-scan="banned"],
         div[role="dialog"] article[data-banned-scan="banned"],
         section[role="dialog"] article[data-banned-scan="banned"] {
             height: 1px !important;
@@ -2448,6 +2448,32 @@ overflow: visible !important;
         /* ADJUST STORIES TRAY PLACEMENT */
         div[data-pagelet="story_tray"] {
             margin-top: -16px !important; 
+        }
+
+        /* Newly-created story slots are paint-gated individually until Instagram
+           has populated the accessible username. This prevents late story tiles from
+           popping into an already-visible tray before the account ban check runs. */
+        div[data-pagelet="story_tray"] li[data-ig-story-pending],
+        div[data-pagelet="story_tray"] [data-ig-story-pending] {
+            display: none !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+            width: 0 !important;
+            min-width: 0 !important;
+            max-width: 0 !important;
+            height: 0 !important;
+            min-height: 0 !important;
+            max-height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            flex: 0 0 0 !important;
+            overflow: hidden !important;
+            position: absolute !important;
+            left: -10000px !important;
+            top: -10000px !important;
+            transition: none !important;
+            animation: none !important;
         }
 
         /* Persistent story-account hiding. Instagram can re-apply inline styles
@@ -2672,12 +2698,32 @@ injectInlineCSS();
         injectReelsCSS();
     }
 
+    // ===== v48: targeted story-slot paint gate =====
+    // Home-page story tray scope predicate used by the lightweight story-slot observer.
+    // v49 deliberately does NOT gate the whole tray; this only tells the observer
+    // when it is allowed to operate on Instagram's homepage story tray.
+    function isMetaManglerStoryTrayPathV45() {
+        try {
+            if (!location.hostname.includes('instagram.com')) return false;
+            const path = location.pathname || '/';
+            return (path === '/' || path === '') && !isReelsPage();
+        } catch {
+            return false;
+        }
+    }
+
+    // Never gate the whole tray. Only individual <li> slots are hidden synchronously
+    // when they are inserted or when Instagram fills their aria-label. This avoids
+    // interfering with the rest of the homepage while still preventing story pop-ins.
     // ===== Story tray account hider =====
     // Hide story tiles when the account username is explicitly listed in
     // instagramAccountsToHide or matches one of bannedRegexes.
     // Important: only the username is tested here, not the whole story tile
     // text, so unrelated UI text cannot accidentally ban the story.
     const IG_STORY_BAN_MARKER = 'data-ig-story-account-banned';
+    const IG_STORY_PENDING_MARKER = 'data-ig-story-pending';
+    let __igStoryTrayObserver = null;
+    let __igStoryTrayObservedNode = null;
 
     function normalizeInstagramStoryUsername(value = '') {
         try {
@@ -2745,6 +2791,274 @@ injectInlineCSS();
         return false;
     }
 
+
+    // ===== Story tray no-glimpse CSS =====
+    // Instagram can paint the story tray before the scheduled JS cleanup pass gets a
+    // chance to inspect the new <li>. Build paint-time selectors directly from the
+    // explicit banned-account list so those story tiles never get a visible frame.
+    // The existing JS story scanner still runs afterwards to cover localization/DOM
+    // variants and to mark items for carousel re-compaction.
+    function injectInstagramStoryBanNoGlimpseCSS() {
+        try {
+            const id = 'metamangler-story-ban-no-glimpse';
+            let style = document.getElementById(id);
+            if (!style) {
+                style = document.createElement('style');
+                style.id = id;
+            }
+
+            const selectors = [];
+            const addAccountSelectors = (username) => {
+                const value = String(username || '').trim().toLowerCase();
+                if (!value) return;
+                // These usernames originate from our own static account list, but keep
+                // the CSS string escaping defensive in case punctuation is added later.
+                const safe = value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+                selectors.push(
+                    `div[data-pagelet="story_tray"] li:has(> div[role="button"][aria-label*="Käyttäjän ${safe} " i])`,
+                    `div[data-pagelet="story_tray"] li:has(> div[role="button"][aria-label*="User ${safe} " i])`,
+                    `div[data-pagelet="story_tray"] div[role="button"][aria-label*="Käyttäjän ${safe} " i]`,
+                    `div[data-pagelet="story_tray"] div[role="button"][aria-label*="User ${safe} " i]`
+                );
+            };
+
+            // The explicit account list is the safe paint-time source. Regex bans remain
+            // JS-only because arbitrary regular expressions cannot be represented safely
+            // as CSS selectors.
+            for (const username of instagramAccountsToHideLower) {
+                addAccountSelectors(username);
+            }
+
+            style.textContent = `
+                /* Paint-time story ban: collapse only story tiles whose accessible
+                   username exactly corresponds to an explicitly banned account. */
+                ${selectors.join(',\n                ')} {
+                    display: none !important;
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                    width: 0 !important;
+                    min-width: 0 !important;
+                    max-width: 0 !important;
+                    height: 0 !important;
+                    min-height: 0 !important;
+                    max-height: 0 !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    overflow: hidden !important;
+                    position: absolute !important;
+                    left: -10000px !important;
+                    top: -10000px !important;
+                    transition: none !important;
+                    animation: none !important;
+                }
+            `;
+
+            const parent = document.head || document.documentElement;
+            if (parent && !style.isConnected) parent.appendChild(style);
+        } catch {}
+    }
+
+    injectInstagramStoryBanNoGlimpseCSS();
+
+
+    // ===== v46: individual late-story paint gate =====
+    // The tray is not the only thing Instagram mutates. Even after the tray has
+    // been revealed, React can append/re-hydrate new <li> story slots later.
+    // Every slot therefore starts as "pending" and stays paint-hidden until its
+    // accessible username exists and the account ban decision has completed.
+    function getInstagramStoryTrayV46() {
+        try {
+            if (!isMetaManglerStoryTrayPathV45()) return null;
+            return document.querySelector('div[data-pagelet="story_tray"]');
+        } catch {
+            return null;
+        }
+    }
+
+    function markInstagramStoryItemPendingV46(item) {
+        try {
+            if (!item || item.nodeType !== 1 || item.tagName !== 'LI') return false;
+            if (item.hasAttribute(IG_STORY_BAN_MARKER)) {
+                item.removeAttribute(IG_STORY_PENDING_MARKER);
+                return false;
+            }
+            if (!item.hasAttribute(IG_STORY_PENDING_MARKER)) {
+                item.setAttribute(IG_STORY_PENDING_MARKER, 'true');
+                return true;
+            }
+            return false;
+        } catch {
+            return false;
+        }
+    }
+
+    function classifyInstagramStoryItemV46(item) {
+        try {
+            if (!item || item.nodeType !== 1 || item.tagName !== 'LI') return false;
+            if (item.hasAttribute(IG_STORY_BAN_MARKER)) {
+                item.removeAttribute(IG_STORY_PENDING_MARKER);
+                return true;
+            }
+
+            const story = item.querySelector(
+                'div[role="button"][aria-label*="tarina" i], ' +
+                'div[role="button"][aria-label*="story" i]'
+            );
+            if (!story) return false;
+
+            const username = extractInstagramStoryUsername(story);
+            if (!username) return false;
+
+            if (isInstagramStoryUsernameBanned(username)) {
+                item.setAttribute(IG_STORY_BAN_MARKER, username);
+                story.setAttribute(IG_STORY_BAN_MARKER, username);
+                item.removeAttribute(IG_STORY_PENDING_MARKER);
+                collapseElement(item);
+                return true;
+            }
+
+            // Legitimate account: now that it has been positively classified,
+            // allow the story slot to enter the already-visible tray.
+            item.removeAttribute(IG_STORY_PENDING_MARKER);
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    function prepareInstagramStorySlotsV46(root = document) {
+        try {
+            const tray = getInstagramStoryTrayV46();
+            if (!tray) return 0;
+
+            const items = Array.from(tray.querySelectorAll(':scope > li'));
+            let resolved = 0;
+
+            for (const item of items) {
+                markInstagramStoryItemPendingV46(item);
+            }
+
+            for (const item of items) {
+                if (classifyInstagramStoryItemV46(item)) resolved++;
+            }
+
+            return resolved;
+        } catch {
+            return 0;
+        }
+    }
+
+    function getInstagramStoryItemFromNodeV48(node, tray) {
+        try {
+            if (!node || node.nodeType !== 1) return null;
+            if (node.tagName === 'LI' && node.parentElement === tray) return node;
+            const item = node.closest?.('li');
+            return item && item.parentElement === tray ? item : null;
+        } catch {
+            return null;
+        }
+    }
+
+    function collectInstagramStoryItemsFromMutationV48(mutation, tray, candidates) {
+        try {
+            if (mutation.type === 'attributes') {
+                const item = getInstagramStoryItemFromNodeV48(mutation.target, tray);
+                if (item) candidates.add(item);
+                return;
+            }
+
+            if (mutation.type !== 'childList') return;
+
+            const targetItem = getInstagramStoryItemFromNodeV48(mutation.target, tray);
+            if (targetItem) candidates.add(targetItem);
+
+            for (const node of mutation.addedNodes || []) {
+                if (!node || node.nodeType !== 1) continue;
+                const directItem = getInstagramStoryItemFromNodeV48(node, tray);
+                if (directItem) candidates.add(directItem);
+
+                if (node.matches?.('li')) {
+                    if (node.parentElement === tray) candidates.add(node);
+                    continue;
+                }
+
+                if (typeof node.querySelectorAll === 'function') {
+                    for (const item of node.querySelectorAll('li')) {
+                        if (item.parentElement === tray) candidates.add(item);
+                    }
+                }
+            }
+        } catch {}
+    }
+
+    function processInstagramStoryMutationV48(mutations, tray) {
+        try {
+            const candidates = new Set();
+            for (const mutation of mutations) {
+                collectInstagramStoryItemsFromMutationV48(mutation, tray, candidates);
+            }
+
+            if (!candidates.size) return;
+
+            let bannedChanged = false;
+            for (const item of candidates) {
+                if (!item?.isConnected || item.parentElement !== tray) continue;
+                if (!item.hasAttribute(IG_STORY_BAN_MARKER)) {
+                    markInstagramStoryItemPendingV46(item);
+                }
+
+                const hadBanMarker = item.hasAttribute(IG_STORY_BAN_MARKER);
+                classifyInstagramStoryItemV46(item);
+                if (!hadBanMarker && item.hasAttribute(IG_STORY_BAN_MARKER)) {
+                    bannedChanged = true;
+                }
+            }
+
+            if (bannedChanged) compactBannedInstagramStorySlots();
+        } catch {}
+    }
+
+    function ensureInstagramStoryTrayObserverV48() {
+        try {
+            const tray = getInstagramStoryTrayV46();
+
+            if (!tray) {
+                if (__igStoryTrayObserver) {
+                    try { __igStoryTrayObserver.disconnect(); } catch {}
+                }
+                __igStoryTrayObserver = null;
+                __igStoryTrayObservedNode = null;
+                return;
+            }
+
+            if (__igStoryTrayObservedNode === tray && __igStoryTrayObserver) return;
+
+            if (__igStoryTrayObserver) {
+                try { __igStoryTrayObserver.disconnect(); } catch {}
+            }
+
+            __igStoryTrayObserver = trackObserver(new MutationObserver(mutations => {
+                if (document.hidden) return;
+                processInstagramStoryMutationV48(mutations, tray);
+            }));
+
+            __igStoryTrayObserver.observe(tray, {
+                childList: true,
+                subtree: true,
+                attributes: true,
+                attributeFilter: ['aria-label']
+            });
+
+            __igStoryTrayObservedNode = tray;
+
+            // One initial pass is enough. After that, only mutation-affected <li>s are
+            // classified, preventing the story observer from repeatedly walking the entire
+            // tray while Instagram hydrates the rest of the homepage.
+            prepareInstagramStorySlotsV46(tray);
+            compactBannedInstagramStorySlots();
+        } catch {}
+    }
 
     // Instagram's story carousel virtualizes/positions its <li> items with
     // explicit translateX() values. display:none removes the banned item itself,
@@ -3511,6 +3825,17 @@ injectInlineCSS();
     function checkSPARouting() {
         if (__lastKnownUrl !== window.location.href) {
             __lastKnownUrl = window.location.href;
+            if (isMetaManglerStoryTrayPathV45()) {
+                
+                ensureInstagramStoryTrayObserverV48();
+            } else {
+                
+                if (__igStoryTrayObserver) {
+                    try { __igStoryTrayObserver.disconnect(); } catch {}
+                }
+                __igStoryTrayObserver = null;
+                __igStoryTrayObservedNode = null;
+            }
             window.dispatchEvent(new Event('locationchange'));
         }
     }
@@ -3520,6 +3845,13 @@ injectInlineCSS();
         updateMetaManglerFeedGateClass();
         updateMetaManglerAccountEditClassV43();
         if (document.hidden) return;
+
+        // Story slots are latency-sensitive: mark newly-created slots pending
+        // synchronously in the mutation callback rather than waiting for the
+        // normal 450 ms cleanup batch.
+        if (location.hostname.includes('instagram.com') && isMetaManglerStoryTrayPathV45()) {
+            ensureInstagramStoryTrayObserverV48();
+        }
 
         let hasAddedElement = false;
         try {
@@ -3585,8 +3917,10 @@ injectInlineCSS();
                 hideAllIGSuggestedLabelsV40();
                 hideIGAccountEditSectionsV43();
                 hideUnwantedUIButtons();
+                ensureInstagramStoryTrayObserverV48();
                 hideBannedInstagramStoryAccounts();
                 compactBannedInstagramStorySlots();
+                
                 if (isSearchSurfacePresent()) {
                     hideInstagramSearchResults();
                 }
@@ -3642,8 +3976,8 @@ injectInlineCSS();
             hideAllIGSuggestedLabelsV40();
             hideIGAccountEditSectionsV43();
             hideUnwantedUIButtons();
-            hideBannedInstagramStoryAccounts();
             compactBannedInstagramStorySlots();
+            
             if (isSearchSurfacePresent()) {
                 hideInstagramSearchResults();
             }
@@ -3663,6 +3997,12 @@ injectInlineCSS();
             updateMetaManglerAccountEditClassV43();
             checkSPARouting(); 
             patchIGSelfStoryShortcutV44();
+            if (location.hostname.includes('instagram.com')) {
+                ensureInstagramStoryTrayObserverV48();
+                hideBannedInstagramStoryAccounts();
+                compactBannedInstagramStorySlots();
+                
+            }
             updateOverlayState();
             makeOverlayLikesClickable(); 
             if (!isReelsPage() && !document.hidden) {
@@ -3718,6 +4058,15 @@ injectInlineCSS();
     onEvent(window, 'locationchange', function() {
         updateMetaManglerFeedGateClass();
         updateMetaManglerAccountEditClassV43();
+        if (isMetaManglerStoryTrayPathV45()) {
+            ensureInstagramStoryTrayObserverV48();
+        } else {
+            if (__igStoryTrayObserver) {
+                try { __igStoryTrayObserver.disconnect(); } catch {}
+            }
+            __igStoryTrayObserver = null;
+            __igStoryTrayObservedNode = null;
+        }
         patchIGSelfStoryShortcutV44();
         isFeedScanPhase = true; 
         reelsStyleInjected = false;
