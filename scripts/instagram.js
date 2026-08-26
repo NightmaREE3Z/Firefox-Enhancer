@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         IGCleaner
-// @version      2026-08-23
+// @version      2026-08-24
 // @description  Trying to make my Instagram experience tolerable.
 // @match        *://www.instagram.com/*
 // @match        *://www.instagram.com/?next=%2F/*
@@ -548,7 +548,7 @@ const bannedKeywords = [
    "Karmen Petrovic", "Ava Raine", "Yulisa Leon", "Cora Jade", "Gina Adams", "Jacy Jayne", "Gigi Dolin", "Thea Hail", "Tatum WWE", "Fallon", "Valentina Feroz", "Wilma", 
    "wondershare", "filmora", "Kelani Jordan", "Electra Lopez", "Wendy Choo", "lottapupu", "m1ska", "m1sk4", "Milli", "Niina", "Jasmin", "Saana", "Veera", "Saya Kamitani", 
    "misk4", "misk3", "m1sk3", "m1ske", "m1mmuska", "misk33waaa", "misk33waa", "misk33wa", "misk3waa", "misk3waaa", "miskaawq9", "misk3wa", "Matilda", "Malla", "Kamitani", 
-   "Nikkita", "linktr.ee", "vsco.co", "Sinulle ehdotettua", "Sinulle ehdotettu", "Suggested for you", "Myös Metalta", "@lovable.dev", "@lovable.ai"
+   "Nikkita", "linktr.ee", "vsco.co", "Sinulle ehdotettua", "Sinulle ehdotettu", "Suggested for you", "Myös Metalta", "@lovable.dev", "@lovable.ai",
 
 // String hashtags
    "#perse", "#pylly", "#tissit", "#takapuoli", "#takamus", "#boobs", "#boobies", "#boobie", "#booty", "#butt", "#babe", "#aigen", "#aigenerated", "#aigeneration", "#artificial",  
@@ -567,15 +567,15 @@ const bannedRegexes = [
    /Wilm/i, /Noelle/i, /Kristiina/i, /Reetta/i, /Saana/i, /Veera/i, /irpp4/i, /juliana/i, /julianna/i, /juulianna/i, /juulianna/i, /juuliana/i, /juulia/i, /rasikannas/i, /rasikangas/i,  
    /Saya Kamitani/i, /Kamitani/i, /Ansku/i, /Crowley/i, /Ruby Soho/i, /Monica/i, /Castillo/i, /Matsumoto/i, /Shino Suzuki/i, /Yamashita/i, /Adriana/i, /Nia Jax/i, /McQueen/i, /5uck/i, 
    /Lash Legend/i, /motionai/i, /Dolli/i, /Dolly/i, /Aliisa/i, /maarit/i, /taija/i, /saija/i, /seija/i, /tiina/i, /teija/i, /Miska/i, /Saara/i, /Saaru/i,  /Lumikki/i, /Laura/i, /Noora/i,
-   /Lumiikki/i, /Noora/i, /Elina/i,  /Nooru/i, /Camila/i, /Tiinu/i, /Henni/i, /Jasmin/i, /Katherin/i, /Janita/i, /Susan/i, /Sirja/i, /Venla/i, /Jenn/i, /Irene/i, /Milana/i, /Milena/i, 
+   /Lumiikki/i, /Noora/i, /Elina/i,  /Nooru/i, /Camila/i, /Emilia/i, /Tiinu/i, /Henni/i, /Jasmin/i, /Katherin/i, /Janita/i, /Susan/i, /Sirja/i, /Venla/i, /Jenn/i, /Irene/i, /Milana/i, 
    /Milene/i, /Minea/i, /Anette/i, /Tytti/i, /Elisa/i, /Elise/i, /Rebecca/i, /Jonna/i, /Janna/i, /Janet/i, /Aleksiina/i, /Alexiina/i, /Maria/i, /Marie/i, /Katja/i, /Minna/i, /Janika/i, 
    /Janissa/i, /Pauliina/i, /Janisa/i, /Miisa/i, /Vilma/i, /Kaisa/i, /Pinj/i, /Jemina/i, /Moona/i, /Viivi/i, /Annika/i, /Marissa/i, /Jutta/i, /Amalia/i, /Nelli/i, /Anniina/i, /Marjut/i, 
    /Siiri/i, /Kamila/i, /Kamilla/i, /Kamilia/i, /Lauren/i, /Janika/i, /Camilla/i, /Camilia/i, /Krisse/i, /Malla/i, /Miina/i, /Merja/i, /Alina/i, /Alina/i, /Mirkku/i, /Irkku/i, /zelina/i,  
    /Aliina/i, /Shirai/i, /Vilhel/i, /Wilhel/i, /Aurora/i, /Joana/i, /Iiris/i, /Erika/i, /Janina/i, /Kasie Cay/i, /Lisa Varon/i, /Marie Varon/i, /Takaichi/i, /With Grok/i, /By Grok/i,
    /heidih/i, /Grok's/i, /Elon Musk/i, /ElonMusk/i, /Sam Altman/i, /SamAltman/i, /changemotion/i, /swapmotion/i, /Huuska/i, /Sakurai/i, /Cargill/i, /Nikkita/i, /Lyons/i, /IYO SKY/i, 
-   /AI creative/i, /AI created/i, /Tekoäly/i, /Teko äly/i, /Teko-äly/i, /Teko_äly/i, /gener/i, /generoiva/i, /generoitu/i, /generated/i, /generative/i, /AI create/i, /seksi/i, 
+   /Milena/i, /AI creative/i, /AI created/i, /Tekoäly/i, /Teko äly/i, /Teko-äly/i, /Teko_äly/i, /generoiva/i, /generoitu/i, /generated/i, /generative/i, /AI create/i, /seksi/i, 
    /minja/i, /anaali/i, /pillu/i, /pimppi/i, /kyrpä/i, /kulli/i, /sexual/i, /sensuel/i, /seksuaali/i, /Kairi's/i, /Kairii/i, /Sexxy/i, /Sexy/i, /Sexx/i, /Sexi/i, /@lovable.dev/i,
-   /@lovable.ai/i, /lovable.dev/i, /lovable.ai/i, /lovable ai/i,
+   /gener/i, /@lovable.ai/i, /lovable.dev/i, /lovable.ai/i, /lovable ai/i,
 
 // Literal regex hashtags
    /\b#ass\b/i, /\b#tit\b/i, /\b#tits\b/i, /\b#boob\b/i, /\b#AI\b/i, /\b#Nox\b/i,
@@ -617,7 +617,7 @@ const instagramAccountsToHide = [
   'killerkellywrestling', 'kierahogan', 'diamante_lax', 'ladyfrost', 'taryn_terrell', 'rebeltanea', 'martimichellewwe', 'jaderedeww',  'alishawrestling', 'savannah_evanswrestling', 'jazzygabert', 'masha_slamovich', 
   'paigewwe', 'kayfabe_kayla', 'roxanne_perez', 'cora.jade', 'piia_barlund', 'lottapupu', 'giuliawrestler', 'starkz_wrestler', 'thedollhousewrestling', 'holidead', 'tessafblanchard', 'thealliebunny', 'taya_valkyrie',
   'thedemonbunny', 'rhearipley_wwe', 'rosemarythehive', 'siennawrestling', 'madisonrayne', 'kimber_lee90', 'kiera_hogan', 'diamantelax', 'realtenille', 'stephaniemcmahon', 'stephanie_buttermore', 'stephanie.vaquer', 
-  'julianarasikannas', 'wwe_asuka', 'kairi_sane_wwe', 'wwe_mandyrose', 'stephaniesanzo', 'shaqwrestling', 'jadecargill', 'emimatsumoto', 'yukisakazaki', 'gina.adams', 'mizuki_wrestler',
+  'julianarasikannas', 'emiliaaq96', 'wwe_asuka', 'kairi_sane_wwe', 'wwe_mandyrose', 'stephaniesanzo', 'shaqwrestling', 'jadecargill', 'emimatsumoto', 'yukisakazaki', 'gina.adams', 'mizuki_wrestler',
   'miskaawq9', 'misk33', 'misk33waaa', 'misk33waa', 'misk33wa', 'misk3waa', 'misk3waaa', 'misk3wa', 'misk4', 'misaaqw', 'lovable.dev', 'lovable', 'lovable.ai', 
 ];
 

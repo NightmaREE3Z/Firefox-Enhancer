@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "BraveFox Enhancer",
-  "version": "27.4.4",
+  "version": "27.4.8",
   "description": "Unified for Firefox PC and Android personal use, for more peaceful Interwebs experience",
   "background": {
     "scripts": [
