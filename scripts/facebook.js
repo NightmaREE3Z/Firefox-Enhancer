@@ -3972,7 +3972,7 @@ const globalRegex = [
     	/AJ Lee's/i, /Nikkita Lyons/i, /Lisa Varon/i, /Marie Varon/i, /Irving/i, /Belts Mone/i, /Amanda Huber/i, /Megan Bayne/i, /Wren Sinclair/i, /Bella Twins/i, /Britt Baker/i,  /Kairii/i, /Sexxy/i, /Xia Li/i,
 	/Sexx/i, /Sexi/i, /Monroe/i, /Girlfriend/i, /Girl's/i, /Women's/i, /Woman's/i, /Lady's/i, /Ladies'/i, /Toni Harsunen/i, /Wikman/i, /Vikman/i, /Jaida Parker/i, /suositukset/i, /ehdotukset/i, /Kamitani/i, 
 	/Artificial Intelligence/i, /20\. heinäkuu klo/i, /Sisältö ei ole käytettävissä tällä hetkellä/i, /sinulle ehdotettu/i, /kendal.*(grey|gray)/i, /leila.*(grey|gray)/i, /Jessika WWE/i, /Fallon Henley/i,
-	/Kiana/i, /Kiana James/i, /QTCinderella/i, /KaliArmstrong/i, /Kali Armstrong/i, /#KaliArmstrong/i, /#Kali/i, /Gail Kim/i, /Eerika/i, /Mira Immo/i,
+	/Kiana/i, /Kiana James/i, /QTCinderella/i, /KaliArmstrong/i, /Kali Armstrong/i, /#KaliArmstrong/i, /#Kali/i, /Gail Kim/i, /Eerika/i, /Mira Immo/i, /Serrano/i,
 
 // Boundaried regexes (separated for clarity)
 	/\bVaughn\b/i, /\bEvelyn\b/i,
@@ -3985,7 +3985,7 @@ const globalRegex = [
 	/\bWomens\b/i, /\bWomans\b/i, /\bLady\b/i, /\bLadies\b/i, /\bLadys\b/i, /\bMarie\b/i, /\bKairi\b/i, /\bAsuka\b/i, /\bB-Fab\b/i, /\b#\b/i, /\bTiffany\b/i, /\bStratton\b/i, /\bPerez\b/i, /\bPerze\b/i,
 	/\bHavok\b/i, /\bJillian\b/i, /\bMickie\b/i, /\bFlair\b/i, /\bMeltzer\b/i, /\bLayla\b/i, /\bBlake\b/i, /\bRipley\b/i, /\bKatie\b/i, /\bShafir\b/i, /\bStacy\b/i, /\bKeibler\b/i, /\bMaryse\b/i, /\bTrish\b/i,
 	/\bSarray\b/i, /\bXia\b/i, /\bRonda\b/i, /\bNattie\b/i, /\bBayley\b/i, /\bGiulia\b/i, /\bFallon\b/i, /\bMichin\b/i, /\bStratus\b/i, /\bKelly\b/i, /\bKarr\b/i, /\bFallon\b/i, /\bDeonna\b/i, /\bThekla\b/i,
-	/\bErika\b/i, /\bLeRae\b/i, /\bTamina\b/i, 
+	/\bErika\b/i, /\bLeRae\b/i, /\bTamina\b/i, /\bZoey\b/i,
 ];
 
 // v32: Dynamic wrestler names from wrestling.js/background storage.

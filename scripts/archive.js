@@ -293,6 +293,7 @@
         /virtu mac/i, /virtua mac/i, /virtual machi/i, /ma7ic/i, /0r9g4/i, /0r1q4/i, /0r1qa/i, /0rlg4h/i, /or1g@h/i, /orrga/i, /orrgaa/i, /orgaa/i, /0rg4/i, /org4/i, /org4/i, /orgy/i, /orgi/i, 
 	/org@/i, /0rg@/i, /0rgi/i, /0rga5m/i, /origas/i, /0riga/i, /0r1g4/i, /0rlg4/i, /orlg4/i, /0rlg@/i, /orlg@/i, /origa/i, /or1ga/i, /orig4/i, /0r1g4/i, /0rlga/i, /orlg4/i, /0rlg4/i, /0rlg@/i, 
 	/orlg@/i, /0rrg4/i, /orrg4/i, /or1g@/i, /0r1g@/i, /0r1ga/i, /0r!g@/i, /0r!g4/i, /0rig@/i, /0rig4/i, /0r9ga/i, /reveals/i, /reveali/i, /revealing/i, /reveale/i, /booba/i, /hehiai/i, /hiheai/i,
+	/Serrano/i, /Zerrano/i,
 
 
     // Symbols and emojis (Nuclear)
@@ -309,7 +310,7 @@
 	/\b5h3\b/i, /\bphotor\b/i, /\bGina\b/i, /\bGin4\b/i, /\bG1n4\b/i, /\bG1na\b/i, /\bGlna\b/i, /\bG!na\b/i, /\bGril\b/i,  /\bGail\b/i, /\bAshley\b/i, /\bPamela\b/i, /\bBrooke\b/i, 
 	/\bTylo\b/i, /\bCatherine\b/i, /\bBridget\b/i, /\bSally\b/i, /\bvsco\b/i, /\bdp nood\b/i, /\bdp nod\b/i, /\bdep nod\b/i, /\bFux\b/i, /\bVM\b/i, /\bVMs\b/i, /\bTNA\b/i, /\bButt\b/i,
 	/\bMachiine\b/i, /\bLily\b/i, /\bMacheine\b/i, /\bMachiene\b/i, /\bLilly\b/i, /\bAmber\b/i, /\bFuk\b/i, /\bFuc\b/i, /\bmotion\b/i, /\bH3r\b/i, /\bS0ft\b/i, /\b50ft\b/i, /\bFag\b/i,
-	/\bSX\b/i, /\bThekla\b/i, /\bDiva\b/i, 
+	/\bSX\b/i, /\bThekla\b/i, /\bDiva\b/i, /\bZoey\b/i, 
 
     // Finnish Nuclear regex list
 	/paneminen/i, /poista vaatteet/i, /vaatepoisto/i, /vaatteidenpoisto/i, /vaateiden poisto/i, /poista vaatteet/i, /poista vaat/i, /vaatteidenpoist/i, /poistavaat/i, /erotic/i,	

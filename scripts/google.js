@@ -725,7 +725,7 @@
 	/war3/i, /w4r3/i, /p41n/i, /pa1n/i, /p4in/i, /bl15s/i, /bl1s5/i, /bl155/i, /bl1ss/i, /bli55/i, /Stratu/i, /machinelearning/i, /Kairi/i, /sexx/i, /4lexa/i, /al3xa/i, /alex4/i,  /4l3xa/i, /al3x4/i, 
 	/Virtualbox/i, /Virtual box/i, /4l3x4/i, /4lex4/i, /bl15s/i, /bl1s5/i, /bl155/i, /blis5/i, /bli5s/i, /artintel/i, /LusTheory/i, /L-Theory/i, /LustTheory/i, /Lust Theory/i, /Lu-Theory/i, /mat1c/i, 
 	/m4tic/i, /m47ic/i, /ma7ic/i, /ma71c/i, /Lus-Theory/i, /Lust-Theory/i, /LusTheory/i, /L-Theory/i, /m4tic/i, /LustTheory/i, /Lust Theory/i, /Lu-Theory/i, /Lus-Theory/i, /Lust-Theory/i, /ComfyUI/i, 
-	/Gemini/i, /AIZuck/i,
+	/Gemini/i, /AIZuck/i, /Serrano/i,
 	 
 
 
@@ -742,7 +742,7 @@
 	/\b5h3\b/i, /\bphotor\b/i, /\bGina\b/i, /\bGin4\b/i, /\bG1n4\b/i, /\bG1na\b/i, /\bGlna\b/i, /\bG!na\b/i, /\bGril\b/i,  /\bGail\b/i, /\bAshley\b/i, /\bPamela\b/i, /\bBrooke\b/i, 
 	/\bTylo\b/i, /\bCatherine\b/i, /\bBridget\b/i, /\bSally\b/i, /\bvsco\b/i, /\bdp nood\b/i, /\bdp nod\b/i, /\bdep nod\b/i, /\bFux\b/i, /\bVM\b/i, /\bVMs\b/i, /\bTNA\b/i, /\bButt\b/i,
 	/\bMachiine\b/i, /\bLily\b/i, /\bMacheine\b/i, /\bMachiene\b/i, /\bLilly\b/i, /\bAmber\b/i, /\bFuk\b/i, /\bFuc\b/i, /\bmotion\b/i, /\bH3r\b/i, /\bS0ft\b/i, /\b50ft\b/i, /\bFag\b/i,
-	/\bThekla\b/i, /\bTit\b/i, /\bShotzi\b/i, /\bPant\b/i, /\bElena\b/i, /\bExGF\b/i, /\bEx-GF\b/i,
+	/\bThekla\b/i, /\bTit\b/i, /\bShotzi\b/i, /\bPant\b/i, /\bElena\b/i, /\bExGF\b/i, /\bEx-GF\b/i, /\bZoey\b/i,
 	
 
     // Finnish Nuclear regex list

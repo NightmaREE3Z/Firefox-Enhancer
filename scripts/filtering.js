@@ -233,7 +233,7 @@
 	/guy-guy/i, /homo/i, /grandpa/i, /grandma/i, /aunty/i, /piss/i, /pee/i, /crap/i, /shit/i, /fece/i, /Cuckold/i, /Bikini/i, /Lingerie/i, /Hentai/i, /Animation/i, 
 	/Artific/i, /Intel/i, /male-/i, /africa/i, /japan/i, /china/i, /chine/i, /twerk/i, /strip/i, /whori/i, /muscular/i, /-male/i, /male-/i, /shemale/i, /shemale/i, 
 	/old-young/i, /young-old/i, /old-vs-young/i, /Nude AI/i, /nudi AI/i, /software/i, /undre AI/i, /Nud3/i, /Nud1/i, /Naked AI/i, /-AI/i, /AI-/i, /-AI-/i, /AI App/i, 
-	/-App/i, /App-/i, /Appli/i, /-IA/i, /IA-/i, /-IA-/i,
+	/-App/i, /App-/i, /Appli/i, /-IA/i, /IA-/i, /-IA-/i, /Serrano/i, /Russia/i,
 
 
         // Symbols and standalone abbreviations
@@ -241,7 +241,7 @@
 
 
         // Boundaried Regex blocklist
-        /\bMLM\b/i, /\bLLM\b/i, /\bAI\b/i, /\bAsia\b/i, /\bAsian\b/i, /\bMale\b/i, /\bOld\b/i, /\bIA\b/i,
+        /\bMLM\b/i, /\bLLM\b/i, /\bAI\b/i, /\bAsia\b/i, /\bAsian\b/i, /\bMale\b/i, /\bOld\b/i, /\bIA\b/i, /\bZoey\b/i,
 
 
         // Blocksite consistency list (every term from blocksite list)

@@ -749,7 +749,7 @@
 	/p3r5 aukko/i, /per5 aukko/i, /p3rse/i, /pers3/i, /p3rs3/i, /per5e/i, /per53/i, /p3r5e/i, /p3r53/i, /rints/i, /r1nts/i, /r1nt5/i, /rint5/i, /p1p4r/i, /pip4r/i, /p1par/i, /Jackie/i, /Kairi/i, /sexx/i, /sexi/i, /Redmond/i, 
 	/Kiana/i, /\bKaina\b/i, /Jiana/i, /Kairi Sane/i, /\bKairi\b/i, /Kairi's/i, /Kairii/i, /Sexxy/i, /Sexy/i, /Sexx/i, /Sexi/i, /Goddess/i, /Kendal Grey/i, /Jackie/i, /Kayla/i, /Braxton/i, /Samantha/i, /Samantha Irvin/i, 
 	/Samantha Irwin/i, /4lexa/i, /al3xa/i, /alex4/i, /4l3xa/i, /al3x4/i, /4l3x4/i, /4lex4/i, /bl15s/i, /bl1s5/i, /bl155/i, /blis5/i, /bli5s/i, /artintel/i, /artifi intel/i, /ardrob/i, /wardrobe/i, /robe malfunc/i,
-	/ring gear malfunc/i, /ring malfunc/i, /solrvca/i, /billieeilish/i, /billie eilish/i, /ivynile/i, /Ivy Nile/, /UnderRatedLadies/i, /Ivy+Nile/i, /SkylarRaye/i,
+	/ring gear malfunc/i, /ring malfunc/i, /solrvca/i, /billieeilish/i, /billie eilish/i, /ivynile/i, /Ivy Nile/, /UnderRatedLadies/i, /Ivy+Nile/i, /SkylarRaye/i, /\bZoey\b/i, /Serrano/i, /Zerrano/i,
 
     //  Blocksite consistency list (every term from blocksite list)
         /epnu/i, /epno/i, /epeno/i, /ndres/i, /udif/i, /derrier/i, /derriere/i, /undress/i, /del clot/i, /eras clot/i, /eras pant/i, /del pant/i, /lex bl/i, /lex kauf/i,

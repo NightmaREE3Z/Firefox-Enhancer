@@ -547,8 +547,8 @@ const bannedKeywords = [
    "Karmen Petrovic", "Ava Raine", "Yulisa Leon", "Cora Jade", "Gina Adams", "Jacy Jayne", "Gigi Dolin", "Thea Hail", "Tatum WWE", "Fallon", "Valentina Feroz", "Wilma", 
    "wondershare", "filmora", "Kelani Jordan", "Electra Lopez", "Wendy Choo", "lottapupu", "m1ska", "m1sk4", "Milli", "Niina", "Jasmin", "Saana", "Veera", "Saya Kamitani", 
    "misk4", "misk3", "m1sk3", "m1ske", "m1mmuska", "misk33waaa", "misk33waa", "misk33wa", "misk3waa", "misk3waaa", "miskaawq9", "misk3wa", "Matilda", "Malla", "Kamitani", 
-   "Nikkita", "linktr.ee", "vsco.co", "Sinulle ehdotettua", "Sinulle ehdotettu", "Suggested for you", "Myös Metalta", "@lovable.dev", "@lovable.ai",
-
+   "Nikkita", "linktr.ee", "vsco.co", "Sinulle ehdotettua", "Sinulle ehdotettu", "Suggested for you", "Myös Metalta", "@lovable.dev", "@lovable.ai", "Serrano",
+ 
 // String hashtags
    "#perse", "#pylly", "#tissit", "#takapuoli", "#takamus", "#boobs", "#boobies", "#boobie", "#booty", "#butt", "#babe", "#aigen", "#aigenerated", "#aigeneration", "#artificial",  
    "#aiapplication", "#aiedit", "#rack", "#finnishgirl", "#girl", "#women", "#woman", "#ladies", "#girls", "#womens", "#womans", "#belfie", "#artificialintelligence", "#bestie", 
@@ -574,7 +574,7 @@ const bannedRegexes = [
    /heidih/i, /Grok's/i, /Elon Musk/i, /ElonMusk/i, /Sam Altman/i, /SamAltman/i, /changemotion/i, /swapmotion/i, /Huuska/i, /Sakurai/i, /Cargill/i, /Nikkita/i, /Lyons/i, /IYO SKY/i, 
    /Milena/i, /AI creative/i, /AI created/i, /Tekoäly/i, /Teko äly/i, /Teko-äly/i, /Teko_äly/i, /generoiva/i, /generoitu/i, /generated/i, /generative/i, /AI create/i, /seksi/i, 
    /minja/i, /anaali/i, /pillu/i, /pimppi/i, /kyrpä/i, /kulli/i, /sexual/i, /sensuel/i, /seksuaali/i, /Kairi's/i, /Kairii/i, /Sexxy/i, /Sexy/i, /Sexx/i, /Sexi/i, /@lovable.dev/i,
-   /gener/i, /@lovable.ai/i, /lovable.dev/i, /lovable.ai/i, /lovable ai/i,
+   /gener/i, /@lovable.ai/i, /lovable.dev/i, /lovable.ai/i, /lovable ai/i, /Serrano/i, /Zerrano/i,
 
 // Literal regex hashtags
    /\b#ass\b/i, /\b#tit\b/i, /\b#tits\b/i, /\b#boob\b/i, /\b#AI\b/i, /\b#Nox\b/i,
@@ -587,7 +587,7 @@ const bannedRegexes = [
    /\bLexi\b/i, /\bBy AI\b/i, /\bAI edited\b/i, /\bAI edit\b/i, /\bModel\b/i, /\bSexy\b/i, /\bSex\b/i, /\bAlexa\b/i, /\bAlexis\b/i, /\bHomo\b/i, /\bGay\b/i, /\bDeep\b/i, /\bFake\b/i, /\bBrie\b/i, 
    /\bGirls\b/i, /\bGirly\b/i, /\bGirlie\b/i, /\bGirl's\b/i, /\bTorres\b/i, /\bEve WWE\b/i, /\bNikki\b/i, /\bManna\b/i, /\bNanna\b/i, /\bAava\b/i, /\bAva\b/i, /\bRaine\b/i, /\bGrok\b/i, /\bJensku\b/i, 
    /\bSanna\b/i, /\bHanna\b/i, /\bHenna\b/i, /\bAss\b/i, /\bNiina\b/i, /\bSandra\b/i, /\bViola\b/i, /\bMinka\b/i, /\bMilla\b/i, /\bMirka\b/i, /\bRoosa\b/i, /\bPeppi\b/i, /\bEveliina\b/i, /\bJulle\b/i,  
-   /\bBy AI\b/i, /\bNikki\b/i, /\bNox\b/i, /\bMenni\b/i, /\bGlna\b/i, /\bvsco\b/i, /\bElon\b/i, /\bMusk\b/i, /\bJimi\b/i, /\bAltman\b/i, /\bTara\b/i, /\bKairi\b/i,
+   /\bBy AI\b/i, /\bNikki\b/i, /\bNox\b/i, /\bMenni\b/i, /\bGlna\b/i, /\bvsco\b/i, /\bElon\b/i, /\bMusk\b/i, /\bJimi\b/i, /\bAltman\b/i, /\bTara\b/i, /\bKairi\b/i, /\bZoey\b/i,
 ]; 
 
 // String allowed words

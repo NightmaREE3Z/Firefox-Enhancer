@@ -101,8 +101,9 @@
         /Sasha Banks/i, /Sakura/i, /Tessa/i, /Brooke/i, /Jakara/i, /Alba Fyre/i, /Isla Dawn/i, /Scarlett Bordeaux/i, /\bB-Fab\b/i, /Kayden Carter/i, /Katana Chance/i, /Valentina Feroz/i,
         /Bayley/i, /Lyra Valkyria/i, /Indi Hartwell/i, /Blair Davenport/i, /Maxxine Dupri/i, /Natalya/i, /Sakazaki/i, /Karmen Petrovic/i, /Ava Raine/i, /CJ Perry/i, /Shira/i, /Piper Niven/i,
         /Cora Jade/i, /Jacy Jayne/i, /Gigi Dolin/i, /Thea Hail/i, /Tatum WWE/i, /Paxley/i, /Fallon Henley/i, /Nattie/i, /escort/i, /Sol Ruca/i, /Kelani Jordan/i, /CJ Lana/i, /Lana Perry/i,
-        /Electra Lopez/i, /Wendy Choo/i, /Yulisa Leon/i, /Gina Adam/i, /Arianna Grace/i, /carbrera/i, /Michin/i, /Mia Yim/i, /\bMina\b/i, /Alba Fyre/i, /Blackheart/i, 
+        /Electra Lopez/i, /Wendy Choo/i, /Yulisa Leon/i, /Gina Adam/i, /Arianna Grace/i, /carbrera/i, /Michin/i, /Mia Yim/i, /\bMina\b/i, /Alba Fyre/i, /Blackheart/i, /\bZoey\b/i, /Serrano/i, 
 	
+
 	// Misc stuff
 	/deepnude/i, /undress/i, /nudify/i, /nude/i, /nudifier/i, /faceswap/i, /facemorph/i, /epnud/i, /udify/i, /udifi/i, /ndres/i, /deepfak/i, /\bBra\b/i, /diffusion/i, /trunks/i, /pant/i,
 	/fantime/i, /clothes/i, /crotch/i, /dress/i, /dreamtime/i, /panties/i, /panty/i, /cloth/i, /ndfy/i, /nd1f/i, /nd!f/i, /ndlf/i, /dreambooth/i, /dream booth/i, /dream boot/i, /dreamboot/i,
@@ -120,6 +121,7 @@
 	/Sharia/i, /Pride/i, /\bshe\b/i, /\bher\b/i, /Woman/i, /Women/i, /NXT Womens/i, /beta male/i, /alpha male/i, /DeepSeek/i, /Grok-AI/i, /Elon Musk/i, /\bElon\b/i, /\bMusk\b/i,
 	/selain/i, /Safari/i, /OperaGX/i, /MS Edge/i, /Microsoft Edge/i, /TOR-Browser/i, /TOR-selain/i, /Opera GX/i, /\btor\b/i, /browser/i, /Opera Browser/i, /Vivaldi/i, /Brave-Browser/i,
 	/Nooo/i, /Nuuu/i,
+
 
     //  Blocksite consistency list (every term from blocksite list)
         /epnu/i, /epno/i, /epeno/i, /ndres/i, /udif/i, /derrier/i, /derriere/i, /undress/i, /del clot/i, /eras clot/i, /eras pant/i, /del pant/i, /lex bl/i, /lex kauf/i,
@@ -237,7 +239,7 @@
 	/Lexy Nair/i, /Leyla Hirsch/i, /Lilian Garcia/i, /Lizzy Evo/i, /Eliza Alexander/i, /Lizzy Styles/i, /Lola Yara/i, /Lola the Adventurer/i, /Lola Vice/i, /Valerie Loureda/i, /Lyra Valkyria/i, 
 	/Aoife Valkyrie/i, /Lady Valkyrie/i, /xia-li/i, /xia li/i, /Maggie Lee/i, /Maggie Moore/i, /Maggie Minerva/i, /Maggie McKinney/i, /Mai Sakurai/i, /Maki Itoh/i, /Jakara Jackson/i, /Mara Sadè/i, 
 	/Maria Manic/i, /Marina Shafir/i, /Marti Belle/i, /Masha Slamovich/i, /Masyn Holiday/i, /Darci Khan/i, /Maxxine Dupri/i, /Sofia Cromwell/i, /Utami Hayashishita/i, /mayvalentine/i, /mayaworld/i, 
-	/may valentine/i, /maya-world/i, /maya world/i, /Mayu Iwatani/i, /mazzerati/i, /mazzerati/i, /McKenzie Mitchell/i, /Megan Bayne/i, /Lady Maravilla/i, /Meg Monroe/i, /Mercedes Martinez/i, 
+	/may valentine/i, /maya-world/i, /maya world/i, /Mayu Iwatani/i, /mazzerati/i, /mazzerati/i, /Zerrano/i, /McKenzie Mitchell/i, /Megan Bayne/i, /Lady Maravilla/i, /Meg Monroe/i, /Mercedes Martinez/i, 
 	/Melissa Santos/i, /Melina Perez/i, /Mei Suruga/i, /Megumi Kudo/i, /Mickie James/i, /Alexis Laree/i, /Emilia McKenzie/i, /Millie McKenzie/i, /Mila Moore/i, /Kellie Morga/i, /Mima Shimoda/i,
         /Mirai Maiumi/i, /Miranda Alize/i, /Miranda Salinas/i, /Mina Shirakawa/i, /Samantha Starr/i, /Shayna Wayne/i, /Myla Grace/i, /Trinity Fatu/i, /Naomi Knight/i, /Natalia Markova/i, /Nevaeh/i, 
 	/Ekaterina Bonnie/i, /Natalya Neidhart/i, /Jasmin Areebi/i, /Nikkita Lyons/i, /La Diablesa Rosa/i, /Nixon Newell/i, /Tegan Nox/i, /Nyla Rose/i, /Penelope Ford/i, /Persephone/i, /Rosemary/i,  
