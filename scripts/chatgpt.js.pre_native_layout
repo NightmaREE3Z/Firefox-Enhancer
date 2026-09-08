@@ -72,15 +72,6 @@
   const MEMORY_ENABLE_LABELS = new Set(['ota muisti käyttöön', 'enable memory']);
   const MEMORY_SUMMARY_LABELS = ['muistiyhteenveto', 'memory summary', 'saved memories'];
   const MANAGE_LABELS = new Set(['hallitse', 'manage']);
-  // ChatGPT renders the per-message memory status as an imperative React button
-  // (for example "Muisti päivitetty" / "Memory updated"). Clicking it opens
-  // saved memories without navigating through the protected Personalization route.
-  const MEMORY_STATUS_TRIGGER_LABELS = new Set([
-    'muisti päivitetty',
-    'muisti tallennettu',
-    'memory updated',
-    'memory saved'
-  ]);
   const ENHANCED_MEMORY_BUTTON_LABELS = new Set([
     'kokeile parannettua muistia',
     'try enhanced memory'
@@ -93,14 +84,6 @@
     'poista kaikki muistot',
     'delete all memories'
   ]);
-  const DELETE_SINGLE_MEMORY_LABELS = new Set([
-    'poista',
-    'delete'
-  ]);
-  const SAVED_MEMORIES_DIALOG_LABELS = [
-    'tallennetut muistot',
-    'saved memories'
-  ];
 
   const MODELS_TO_REMOVE = new Set([
     'gpt-5 instant',
@@ -109,20 +92,6 @@
     'o3',
     'o4-mini'
   ]);
-
-  // === Thinking-effort Instant lock ==============================================
-  // Regular chat currently exposes three effort stops: Instant / Medium / High
-  // (Välitön / Keskitaso / Korkea). BraveFox leaves Medium and High native, but
-  // blocks the minimum/Instant stop at the interaction boundary.
-  const THINKING_EFFORT_SLIDER_SELECTOR = '[role="slider"], input[type="range"]';
-  const THINKING_EFFORT_INSTANT_LABELS = new Set(['välitön', 'valiton', 'instant']);
-  const THINKING_EFFORT_MEDIUM_LABELS = new Set(['keskitaso', 'medium']);
-  const THINKING_EFFORT_HIGH_LABELS = new Set(['korkea', 'high']);
-  const THINKING_EFFORT_CONTEXT_TERMS = [
-    'päättelypanostus', 'paattelypanostus', 'reasoning effort',
-    'ajatteluaika', 'thinking time', 'thinking effort'
-  ];
-  const THINKING_EFFORT_INSTANT_CUTOFF = 0.25;
 
   // === Plugins vault ============================================================
   // The supplied + button uses this sprite fragment. A card showing that + is an
@@ -175,24 +144,8 @@
   const GPT_APPROVED_SECTION_ATTR = 'data-bravefox-gpt-approved-section';
   const GPTS_CURATING_CLASS = 'bravefox-gpts-curating';
   const PLUGINS_CURATING_CLASS = 'bravefox-plugins-curating';
-  const PLUGINS_READY_CLASS = 'bravefox-plugins-ready';
-  // Keep /plugins paint-hidden until React has stopped changing the native card set for
-  // a short quiet window. This turns the old card-by-card reveal into one stable paint.
-  const PLUGIN_READY_MIN_MS = 900;
-  const PLUGIN_READY_QUIET_MS = 420;
-  const PLUGIN_READY_HARD_MS = 3600;
-  const LEGACY_GPT_APPROVED_TITLE = 'BraveFox Approved GPTs';
-  const LEGACY_GPT_APPROVED_SUBTITLE = 'Useful GPTs on this list';
-  const GPT_NATIVE_HEADER_ID = 'bravefox-gpts-native-header';
-  const GPT_NATIVE_HEADER_ATTR = 'data-bravefox-gpt-native-header';
-  const GPT_NATIVE_HERO_ATTR = 'data-bravefox-gpt-native-hero';
-  const GPT_NATIVE_ACTIONS_ATTR = 'data-bravefox-gpt-native-actions';
-  const GPT_NATIVE_DESCRIPTION_TERMS = [
-    'löydä ja luo mukautettuja chatgpt-versioita',
-    'loyda ja luo mukautettuja chatgpt-versioita',
-    'find and create custom versions of chatgpt',
-    'discover and create custom versions of chatgpt'
-  ];
+  const GPT_APPROVED_TITLE = 'BraveFox Approved GPTs';
+  const GPT_APPROVED_SUBTITLE = 'Useful GPTs on this list';
   const GPT_SHOW_MORE_LABELS = new Set(['näytä enemmän', 'show more']);
   const GPT_MAX_SHOW_MORE_CLICKS = 4;
   const GPT_MIN_CURATION_MS = 1200;
@@ -215,19 +168,13 @@
   let routeCheckQueued = false;
   let uiScanTimer = 0;
   let uiScanRetryTimer = 0;
-  let escapeHatchObserver = null;
   let sidebarPolishTimers = [];
   let pluginVault = new Map();
   let pluginVaultLoaded = false;
   let pluginVaultLoadPromise = null;
   let pluginVaultSeeded = false;
-  let pluginCurationStartedAt = 0;
-  let pluginCurationLastActivityAt = 0;
-  let pluginLastNativeSignature = '';
-  let pluginReadyTimer = 0;
   let gptApprovedSection = null;
   let gptApprovedGrid = null;
-  let gptNativeHeaderHost = null;
   let gptCurationStartedAt = 0;
   let gptCurationLastActivityAt = 0;
   let gptCurationRetryTimer = 0;
@@ -236,18 +183,12 @@
 
   const replayAllowedButtons = new WeakSet();
   const replayAllowedPluginButtons = new WeakSet();
-  const thinkingEffortRepairing = new WeakSet();
-  let activeThinkingEffortSlider = null;
-  let activeThinkingEffortPointerId = null;
 
   // Pre-arm protected pages at document_start. On a direct /plugins or /gpts load,
   // ChatGPT never gets a paint before BraveFox either consumes a one-time unlock grant
   // or redirects the tab to the extension's native password page.
   const initialProtectedRoute = getProtectedRouteDescriptor();
-  if (initialProtectedRoute) {
-    document.documentElement.classList.add(GATED_CLASS);
-    setInlinePaintGate(true);
-  }
+  if (initialProtectedRoute) document.documentElement.classList.add(GATED_CLASS);
   if (isPluginsPathname(location.pathname)) document.documentElement.classList.add(PLUGINS_CURATING_CLASS);
   if (isGptsPathname(location.pathname)) document.documentElement.classList.add(GPTS_CURATING_CLASS);
 
@@ -255,33 +196,9 @@
   void synchronizeRoute();
   installNavigationGuards();
   installInteractionGuards();
-  installThinkingEffortInstantLock();
-  installEscapeHatchObserver();
   configureRouteObserver();
   scheduleGeneralUiScan(true);
   scheduleSidebarPolishRetries();
-  scheduleGoogleOnlyLoginCleanupRetries();
-
-  function setInlinePaintGate(active) {
-    const root = document.documentElement;
-    if (!root) return;
-
-    if (active) {
-      root.setAttribute('data-bravefox-inline-gated', 'true');
-      root.style.setProperty('visibility', 'hidden', 'important');
-      root.style.setProperty('opacity', '0', 'important');
-      root.style.setProperty('pointer-events', 'none', 'important');
-      root.style.setProperty('background', '#ffffff', 'important');
-      return;
-    }
-
-    if (root.getAttribute('data-bravefox-inline-gated') !== 'true') return;
-    root.removeAttribute('data-bravefox-inline-gated');
-    root.style.removeProperty('visibility');
-    root.style.removeProperty('opacity');
-    root.style.removeProperty('pointer-events');
-    root.style.removeProperty('background');
-  }
 
   function normalizeText(value) {
     return String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
@@ -328,37 +245,6 @@
         pointer-events: none !important;
       }
 
-      /* Google-only ChatGPT sign-in lane. These are paint-time selectors, so the
-       * disallowed auth paths never get a one-frame cameo while React mounts them.
-       * Google itself is intentionally untouched. */
-      [data-testid="signup-button"],
-      input#email,
-      input[name="email"][type="email"],
-      label:has(> input#email),
-      div:has(> input#email),
-      div:has(> label > input#email),
-      button:has(use[href$="#f5a288"]),
-      button:has(use[href$="#d6f274"]),
-      body:has(input#email) button[type="submit"][class*="btn-primary"][class*="h-13"][class*="w-full"],
-      body:has(input#email) div[class*="grid-cols-[1fr_max-content_1fr]"][class~="my-2"]:has(> div.h-px),
-      body:has(input#email) div.flex.flex-col.gap-3:has(button use[href$="#8e7aa4"]) > button:not(:has(use[href$="#8e7aa4"])) {
-        display: none !important;
-        visibility: hidden !important;
-        opacity: 0 !important;
-        pointer-events: none !important;
-      }
-
-      /* Account/settings escape-hatch cleanup. Keep these selectors paint-time so
-       * Personalization in the profile menu and Browse addons in Settings never flash.
-       * Bundle filenames may rotate; the sprite fragment ids are the stable part. */
-      [role="menuitem"]:has(use[href*="#face"]),
-      a[href="/plugins"]:has(use[href*="#all-products"]) {
-        display: none !important;
-        visibility: hidden !important;
-        opacity: 0 !important;
-        pointer-events: none !important;
-      }
-
       /* BraveFox ChatGPT navigation cleanup: no Plugins shortcut, no featured-plugin
        * promo row, and no native More/Lisää menu flash before it is replaced by Images. */
       a[data-testid="plugins-button"][data-sidebar-item="true"],
@@ -398,18 +284,6 @@
         pointer-events: none !important;
       }
 
-      /* Hide the native "Enable memory" setting row at paint time. The supplied
-       * ChatGPT row is the border-token-border-light/min-h-15 setting row containing
-       * the memory switch. The text check in hideMemoryEnableRows remains the semantic
-       * guard; this CSS rule prevents the row from flashing before React cleanup runs. */
-      html.${PERSONALIZATION_CLASS}
-      div.border-token-border-light.flex.min-h-15.items-center.border-b:has(button[role="switch"]) {
-        display: none !important;
-        visibility: hidden !important;
-        opacity: 0 !important;
-        pointer-events: none !important;
-      }
-
       /* The memory-summary overflow menu is rendered in a portal. */
       html.${PERSONALIZATION_CLASS}
       [role="menuitem"][data-color="danger"] {
@@ -419,45 +293,26 @@
         pointer-events: none !important;
       }
 
-      /* /plugins stays in a paint-safe filtering lane. Keep the main pane hidden until
-       * the vault has loaded and the first policy pass has classified native cards. */
-      html.${PLUGINS_CURATING_CLASS}:not(.${PLUGINS_READY_CLASS}) main,
-      html.${PLUGINS_CURATING_CLASS}:not(.${PLUGINS_READY_CLASS}) [role="main"] {
-        visibility: hidden !important;
-        opacity: 0 !important;
-        pointer-events: none !important;
-      }
-
-      /* Keep React's plugin page structure mounted. Hide only rejected plugin cards and
-       * card-bearing sections that contain no approved descendant. This is deliberately
-       * nesting-safe: an approved inner grid can no longer sit inside a hidden outer
-       * <section>, which was the reason /plugins could finish as an empty shell. */
-      html.${PLUGINS_CURATING_CLASS}
-      article:has(a[href^="/plugins/"]):not([data-bravefox-plugin-allowed]) {
+      /* /plugins stays in a paint-safe filtering lane. Native catalog sections/cards
+       * are invisible until JavaScript marks them as vault-approved. This also covers
+       * late React/lazy-load inserts, so a raw catalog card cannot flash after unlock. */
+      html.${PLUGINS_CURATING_CLASS} section:has(a[href^="/plugins/"]),
+      html.${PLUGINS_CURATING_CLASS} article:has(a[href^="/plugins/"]) {
         display: none !important;
         visibility: hidden !important;
         opacity: 0 !important;
         pointer-events: none !important;
       }
 
-      html.${PLUGINS_CURATING_CLASS}
-      section:has(article a[href^="/plugins/"]):not(:has(article[data-bravefox-plugin-allowed])) {
-        display: none !important;
-        visibility: hidden !important;
-        opacity: 0 !important;
-        pointer-events: none !important;
-      }
-
-      html.${PLUGINS_CURATING_CLASS} article[data-bravefox-plugin-allowed] {
-        display: flex !important;
+      html.${PLUGINS_CURATING_CLASS} section[data-bravefox-plugin-section-allowed="true"] {
+        display: block !important;
         visibility: visible !important;
         opacity: 1 !important;
         pointer-events: auto !important;
       }
 
-      html.${PLUGINS_CURATING_CLASS}
-      section:has(article[data-bravefox-plugin-allowed]) {
-        display: block !important;
+      html.${PLUGINS_CURATING_CLASS} article[data-bravefox-plugin-allowed] {
+        display: flex !important;
         visibility: visible !important;
         opacity: 1 !important;
         pointer-events: auto !important;
@@ -553,80 +408,11 @@
         pointer-events: auto !important;
       }
 
-      /* The visible /gpts chrome stays stock ChatGPT. BraveFox only owns the filtered
-       * card grid beneath it. Any heading left by an older BraveFox build is suppressed. */
-      #${GPT_APPROVED_SECTION_ID} > [data-bravefox-gpt-heading="true"] {
-        display: none !important;
-        visibility: hidden !important;
-      }
-
-      /* Keep ChatGPT's real title/description/search exactly where React owns them.
-       * BraveFox creates only lightweight action proxies, positioned in the page's
-       * top-right utility area so React-controlled nodes never need to move. */
-      #${GPT_NATIVE_HEADER_ID} {
-        display: flex !important;
-        justify-content: flex-end !important;
-        align-items: center !important;
-        gap: 0.5rem !important;
-        width: auto !important;
-        visibility: visible !important;
-        opacity: 1 !important;
-        pointer-events: auto !important;
-        /* Keep the native-style GPT actions out of the vertical directory flow.
-         * This mirrors ChatGPT's own top-right utility placement and lets the
-         * approved shelf sit naturally closer to the search field. */
-        position: fixed !important;
-        top: 0.9rem !important;
-        right: 1.25rem !important;
-        z-index: 60 !important;
-        margin: 0 !important;
-      }
-
-      #${GPT_NATIVE_HEADER_ID} [data-bravefox-gpt-action-proxy="my-gpts"] {
-        border: 0 !important;
-        background: transparent !important;
-        color: inherit !important;
-        cursor: pointer !important;
-        font-size: 0.875rem !important;
-        font-weight: 500 !important;
-        padding: 0.35rem 0.2rem !important;
-      }
-
-      #${GPT_NATIVE_HEADER_ID} [data-bravefox-gpt-action-proxy="create"] {
-        border: 0 !important;
-        border-radius: 999px !important;
-        background: #000000 !important;
-        color: #ffffff !important;
-        cursor: pointer !important;
-        font-size: 0.875rem !important;
-        font-weight: 600 !important;
-        padding: 0.4rem 0.75rem !important;
-      }
-
-      [${GPT_NATIVE_HERO_ATTR}="true"] {
-        visibility: visible !important;
+      /* The custom GPT shelf is BraveFox-owned, so do not inherit React's entrance
+       * animation state (opacity:0 / translateY) from recycled directory markup. */
+      #${GPT_APPROVED_SECTION_ID} > div[tabindex="0"] {
         opacity: 1 !important;
         transform: none !important;
-        /* ChatGPT currently lets the GPT directory hero grow to nearly a viewport.
-         * Once BraveFox removes the native shelves that leaves a giant blank spacer
-         * between Search and the curated grid. Keep the stock hero, but make its
-         * layout height match its actual title/description/search content. */
-        min-height: 0 !important;
-        height: auto !important;
-        flex: 0 0 auto !important;
-        flex-grow: 0 !important;
-        padding-bottom: 0 !important;
-        margin-bottom: 0 !important;
-      }
-
-      #${GPT_APPROVED_SECTION_ID} {
-        min-height: 0 !important;
-        /* One final compacting pass after moving the action row out of flow. */
-        margin-top: -0.7rem !important;
-      }
-
-      #${GPT_APPROVED_SECTION_ID} > [data-bravefox-gpt-content="true"] {
-        margin-top: 0 !important;
       }
 
       #${GPT_APPROVED_SECTION_ID} a.gizmo-link {
@@ -752,17 +538,6 @@
     return normalizedPath === '/gpts' || normalizedPath.startsWith('/gpts/');
   }
 
-  function resetPluginCurationState() {
-    if (pluginReadyTimer) {
-      clearTimeout(pluginReadyTimer);
-      pluginReadyTimer = 0;
-    }
-    pluginCurationStartedAt = 0;
-    pluginCurationLastActivityAt = 0;
-    pluginLastNativeSignature = '';
-    document.documentElement.classList.remove(PLUGINS_READY_CLASS);
-  }
-
   function resetGptCurationState() {
     if (gptCurationRetryTimer) {
       clearTimeout(gptCurationRetryTimer);
@@ -770,7 +545,6 @@
     }
     gptApprovedSection = null;
     gptApprovedGrid = null;
-    gptNativeHeaderHost = null;
     gptCurationStartedAt = 0;
     gptCurationLastActivityAt = 0;
     gptApprovedKeys.clear();
@@ -811,18 +585,15 @@
   function preArmProtectedRoute(descriptor) {
     if (!descriptor) return;
     document.documentElement.classList.add(GATED_CLASS);
-    setInlinePaintGate(true);
     document.documentElement.classList.toggle(PERSONALIZATION_CLASS, descriptor.key === 'personalization');
     document.documentElement.classList.toggle(PLUGINS_CURATING_CLASS, descriptor.key === 'plugins');
     document.documentElement.classList.toggle(GPTS_CURATING_CLASS, descriptor.key === 'gpts');
-    if (descriptor.key === 'plugins') document.documentElement.classList.remove(PLUGINS_READY_CLASS);
   }
 
   async function beginNativePasswordFlow({ kind = 'protected-route', routeKey, title, returnUrl = location.href, payload = {} }) {
     if (authRedirectRequested) return false;
     authRedirectRequested = true;
     document.documentElement.classList.add(GATED_CLASS);
-    setInlinePaintGate(true);
 
     const response = await sendRuntimeMessage({
       type: 'BRAVEFOX_CHATGPT_AUTH_BEGIN',
@@ -947,11 +718,7 @@
       pendingApprovedAction = null;
 
       if (previousRouteKey === 'plugins' && routeKey !== 'plugins') {
-        resetPluginCurationState();
         void finalizePluginVaultSeedIfReady();
-      }
-      if (routeKey === 'plugins' && previousRouteKey !== 'plugins') {
-        resetPluginCurationState();
       }
       if (previousRouteKey === 'gpts' && routeKey !== 'gpts') {
         resetGptCurationState();
@@ -962,14 +729,11 @@
 
     if (!descriptor) {
       document.documentElement.classList.remove(GATED_CLASS);
-      document.documentElement.classList.remove(PLUGINS_READY_CLASS);
-      setInlinePaintGate(false);
       return;
     }
 
     if (protectedRouteUnlocked) {
       document.documentElement.classList.remove(GATED_CLASS);
-      setInlinePaintGate(false);
       return;
     }
 
@@ -988,7 +752,6 @@
         pendingApprovedAction = grant;
         await prepareUnlockedProtectedRoute(routeKey);
         document.documentElement.classList.remove(GATED_CLASS);
-        setInlinePaintGate(false);
         scheduleGeneralUiScan(true);
         const approvedAction = pendingApprovedAction;
         pendingApprovedAction = null;
@@ -1045,23 +808,6 @@
 
     try {
       if (globalThis.navigation?.addEventListener) {
-        // Pre-arm protected SPA destinations before ChatGPT commits the new route. This
-        // closes the brief raw-/plugins glimpse that can otherwise happen before
-        // currententrychange or the href poll notices the URL.
-        globalThis.navigation.addEventListener('navigate', event => {
-          try {
-            const destinationUrl = event?.destination?.url;
-            if (!destinationUrl) return;
-            const descriptor = getProtectedRouteDescriptorForUrl(destinationUrl);
-            const sameUnlockedLane =
-              descriptor?.key &&
-              descriptor.key === activeProtectedRouteKey &&
-              protectedRouteUnlocked;
-            if (descriptor && !sameUnlockedLane) preArmProtectedRoute(descriptor);
-          } catch {
-            // currententrychange/polling remain as fallbacks.
-          }
-        });
         globalThis.navigation.addEventListener('currententrychange', queueRouteCheck);
       }
     } catch {
@@ -1105,40 +851,15 @@
       }
 
       const menuItem = getElementFromEvent(event, '[role="menuitem"]');
-      if (menuItem && isForbiddenMemoryDeleteItem(menuItem)) {
+      if (menuItem && isDeleteAllMemoriesItem(menuItem)) {
         event.preventDefault();
         event.stopPropagation();
         event.stopImmediatePropagation();
-        hideElement(menuItem);
         menuItem.remove();
         return;
       }
 
       const button = getButtonFromEvent(event);
-      const memoryStatusControl = getMemoryStatusEscapeControl(event);
-
-      // The memory-status button in a normal chat opens saved memories directly and
-      // therefore bypasses the protected #settings/personalization navigation lane.
-      // Catch the React action in capture phase and deliberately send it through the
-      // existing native BraveFox password page instead.
-      if (memoryStatusControl && isMemoryStatusEscapeControl(memoryStatusControl)) {
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-
-        const returnUrl = new URL(location.href);
-        returnUrl.hash = '#settings/personalization';
-
-        preArmProtectedRoute({ key: 'personalization', path: null, title: PERSONALIZATION_PROMPT });
-        void beginNativePasswordFlow({
-          kind: 'protected-route',
-          routeKey: 'personalization',
-          title: PERSONALIZATION_PROMPT,
-          returnUrl: returnUrl.href
-        });
-        return;
-      }
-
       if (button && !replayAllowedButtons.has(button) && isMemorySummaryManageButton(button)) {
         event.preventDefault();
         event.stopPropagation();
@@ -1170,292 +891,6 @@
     }, true);
   }
 
-  function installThinkingEffortInstantLock() {
-    const cancelInstantInteraction = event => {
-      try { event.preventDefault(); } catch {}
-      try { event.stopPropagation(); } catch {}
-      try { event.stopImmediatePropagation(); } catch {}
-    };
-
-    const scheduleRepair = slider => {
-      if (!(slider instanceof Element)) return;
-      queueMicrotask(() => enforceThinkingEffortSliderFloor(slider));
-      window.setTimeout(() => enforceThinkingEffortSliderFloor(slider), 40);
-    };
-
-    document.addEventListener('pointerdown', event => {
-      const slider = findThinkingEffortSliderForEvent(event);
-      if (!slider) return;
-
-      activeThinkingEffortSlider = slider;
-      activeThinkingEffortPointerId = Number.isFinite(event.pointerId) ? event.pointerId : null;
-
-      if (thinkingEffortPointerTargetsInstant(slider, event.clientX)) {
-        cancelInstantInteraction(event);
-        scheduleRepair(slider);
-      }
-    }, true);
-
-    document.addEventListener('pointermove', event => {
-      const slider = activeThinkingEffortSlider;
-      if (!slider?.isConnected) return;
-      if (activeThinkingEffortPointerId !== null && event.pointerId !== activeThinkingEffortPointerId) return;
-      if (!thinkingEffortPointerTargetsInstant(slider, event.clientX)) return;
-
-      cancelInstantInteraction(event);
-      scheduleRepair(slider);
-    }, true);
-
-    const finishPointerInteraction = event => {
-      const slider = activeThinkingEffortSlider;
-      if (slider?.isConnected && Number.isFinite(event.clientX) && thinkingEffortPointerTargetsInstant(slider, event.clientX)) {
-        cancelInstantInteraction(event);
-        scheduleRepair(slider);
-      }
-      activeThinkingEffortSlider = null;
-      activeThinkingEffortPointerId = null;
-    };
-
-    document.addEventListener('pointerup', finishPointerInteraction, true);
-    document.addEventListener('pointercancel', finishPointerInteraction, true);
-
-    document.addEventListener('click', event => {
-      if (isThinkingEffortTriggerControl(event.target)) {
-        window.setTimeout(() => enforceThinkingEffortFloor(document), 0);
-        window.setTimeout(() => enforceThinkingEffortFloor(document), 60);
-        window.setTimeout(() => enforceThinkingEffortFloor(document), 160);
-      }
-
-      const slider = findThinkingEffortSliderForEvent(event);
-      if (!slider || !Number.isFinite(event.clientX)) return;
-      if (!thinkingEffortPointerTargetsInstant(slider, event.clientX)) return;
-
-      cancelInstantInteraction(event);
-      scheduleRepair(slider);
-    }, true);
-
-    document.addEventListener('keydown', event => {
-      if ((event.key === 'Enter' || event.key === ' ') && isThinkingEffortTriggerControl(event.target)) {
-        window.setTimeout(() => enforceThinkingEffortFloor(document), 0);
-        window.setTimeout(() => enforceThinkingEffortFloor(document), 60);
-        window.setTimeout(() => enforceThinkingEffortFloor(document), 160);
-      }
-
-      const slider = findThinkingEffortSliderForEvent(event);
-      if (!slider) return;
-
-      const key = String(event.key || '');
-      if (key === 'Home') {
-        cancelInstantInteraction(event);
-        scheduleRepair(slider);
-        return;
-      }
-
-      if (key === 'ArrowLeft' || key === 'ArrowDown' || key === 'PageDown') {
-        if (isThinkingEffortAtOrBelowMedium(slider)) {
-          cancelInstantInteraction(event);
-          scheduleRepair(slider);
-          return;
-        }
-        scheduleRepair(slider);
-      }
-    }, true);
-
-    for (const eventName of ['input', 'change', 'focusin']) {
-      document.addEventListener(eventName, event => {
-        const slider = findThinkingEffortSliderForEvent(event);
-        if (!slider) return;
-        if (eventName !== 'focusin' && isThinkingEffortInstant(slider)) cancelInstantInteraction(event);
-        scheduleRepair(slider);
-      }, true);
-    }
-  }
-
-  function isThinkingEffortTriggerControl(target) {
-    if (!(target instanceof Element)) return false;
-    const control = target.closest('button, [role="button"], [aria-haspopup="menu"], [aria-haspopup="listbox"]');
-    if (!control) return false;
-    const context = normalizeText([
-      control.textContent || '',
-      control.getAttribute('aria-label') || '',
-      control.getAttribute('title') || ''
-    ].join(' '));
-    return THINKING_EFFORT_CONTEXT_TERMS.some(term => context.includes(term));
-  }
-
-  function getThinkingEffortSliderCandidates(scope = document) {
-    const result = [];
-    if (scope instanceof Element && scope.matches?.(THINKING_EFFORT_SLIDER_SELECTOR)) result.push(scope);
-    if (typeof scope?.querySelectorAll === 'function') {
-      for (const slider of scope.querySelectorAll(THINKING_EFFORT_SLIDER_SELECTOR)) result.push(slider);
-    }
-    return result;
-  }
-
-  function getThinkingEffortLabel(slider) {
-    if (!(slider instanceof Element)) return '';
-
-    const ownValues = [
-      slider.getAttribute('aria-valuetext'),
-      slider.getAttribute('aria-label'),
-      slider.getAttribute('title')
-    ];
-    for (const value of ownValues) {
-      const normalized = normalizeText(value);
-      if (THINKING_EFFORT_INSTANT_LABELS.has(normalized)) return 'instant';
-      if (THINKING_EFFORT_MEDIUM_LABELS.has(normalized)) return 'medium';
-      if (THINKING_EFFORT_HIGH_LABELS.has(normalized)) return 'high';
-    }
-
-    let node = slider.parentElement;
-    for (let depth = 0; node && depth < 6; depth += 1, node = node.parentElement) {
-      const context = normalizeText(node.textContent);
-      if (!context || context.length > 180) continue;
-      const words = context.split(/[^a-z0-9äöå]+/).filter(Boolean);
-      if (words.some(word => THINKING_EFFORT_INSTANT_LABELS.has(word))) return 'instant';
-      if (words.some(word => THINKING_EFFORT_MEDIUM_LABELS.has(word))) return 'medium';
-      if (words.some(word => THINKING_EFFORT_HIGH_LABELS.has(word))) return 'high';
-    }
-
-    return '';
-  }
-
-  function isThinkingEffortSlider(slider) {
-    if (!(slider instanceof Element) || !slider.matches?.(THINKING_EFFORT_SLIDER_SELECTOR)) return false;
-
-    const ownContext = normalizeText([
-      slider.getAttribute('aria-label') || '',
-      slider.getAttribute('aria-valuetext') || '',
-      slider.getAttribute('title') || '',
-      slider.getAttribute('name') || ''
-    ].join(' '));
-    if (THINKING_EFFORT_CONTEXT_TERMS.some(term => ownContext.includes(term))) return true;
-    if (getThinkingEffortLabel(slider)) return true;
-
-    let node = slider.parentElement;
-    for (let depth = 0; node && depth < 6; depth += 1, node = node.parentElement) {
-      const context = normalizeText(node.textContent);
-      if (!context || context.length > 240) continue;
-      if (THINKING_EFFORT_CONTEXT_TERMS.some(term => context.includes(term))) return true;
-    }
-
-    return false;
-  }
-
-  function findThinkingEffortSliderForEvent(event) {
-    const path = typeof event?.composedPath === 'function' ? event.composedPath() : [];
-    const seen = new Set();
-
-    const inspect = node => {
-      if (!(node instanceof Element) || seen.has(node)) return null;
-      seen.add(node);
-      if (node.matches?.(THINKING_EFFORT_SLIDER_SELECTOR) && isThinkingEffortSlider(node)) return node;
-      if (typeof node.querySelectorAll !== 'function') return null;
-      for (const slider of node.querySelectorAll(THINKING_EFFORT_SLIDER_SELECTOR)) {
-        if (isThinkingEffortSlider(slider)) return slider;
-      }
-      return null;
-    };
-
-    for (let i = 0; i < path.length && i < 8; i += 1) {
-      const found = inspect(path[i]);
-      if (found) return found;
-    }
-
-    return inspect(event?.target);
-  }
-
-  function readThinkingEffortRange(slider) {
-    if (!(slider instanceof Element)) return null;
-    const read = (attr, fallback) => {
-      const raw = slider.getAttribute(attr);
-      const value = raw === null || raw === '' ? Number(fallback) : Number(raw);
-      return Number.isFinite(value) ? value : NaN;
-    };
-
-    const min = read('aria-valuemin', slider instanceof HTMLInputElement ? slider.min : NaN);
-    const max = read('aria-valuemax', slider instanceof HTMLInputElement ? slider.max : NaN);
-    const now = read('aria-valuenow', slider instanceof HTMLInputElement ? slider.value : NaN);
-    if (!Number.isFinite(min) || !Number.isFinite(max) || !Number.isFinite(now) || max <= min) return null;
-
-    return { min, max, now, medium: min + ((max - min) / 2) };
-  }
-
-  function isThinkingEffortInstant(slider) {
-    if (!isThinkingEffortSlider(slider)) return false;
-    const range = readThinkingEffortRange(slider);
-    if (range) return range.now <= range.min + ((range.max - range.min) * 0.125);
-    return getThinkingEffortLabel(slider) === 'instant';
-  }
-
-  function isThinkingEffortAtOrBelowMedium(slider) {
-    if (!isThinkingEffortSlider(slider)) return false;
-    const range = readThinkingEffortRange(slider);
-    if (range) return range.now <= range.medium + ((range.max - range.min) * 0.08);
-    const label = getThinkingEffortLabel(slider);
-    return label === 'instant' || label === 'medium';
-  }
-
-  function getThinkingEffortInteractionRect(slider) {
-    if (!(slider instanceof Element)) return null;
-    const sliderRect = slider.getBoundingClientRect?.();
-    if (sliderRect && sliderRect.width >= 120 && sliderRect.height > 0 && sliderRect.height <= 70) return sliderRect;
-
-    let node = slider.parentElement;
-    for (let depth = 0; node && depth < 6; depth += 1, node = node.parentElement) {
-      const rect = node.getBoundingClientRect?.();
-      if (!rect || rect.width < 120 || rect.height <= 0 || rect.height > 70) continue;
-      return rect;
-    }
-    return sliderRect || null;
-  }
-
-  function thinkingEffortPointerTargetsInstant(slider, clientX) {
-    if (!isThinkingEffortSlider(slider) || !Number.isFinite(clientX)) return false;
-    const rect = getThinkingEffortInteractionRect(slider);
-    if (!rect || rect.width <= 0) return false;
-    const fraction = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    return fraction <= THINKING_EFFORT_INSTANT_CUTOFF;
-  }
-
-  function enforceThinkingEffortSliderFloor(slider) {
-    if (!slider?.isConnected || !isThinkingEffortSlider(slider) || !isThinkingEffortInstant(slider)) return false;
-    if (thinkingEffortRepairing.has(slider)) return true;
-
-    thinkingEffortRepairing.add(slider);
-    try {
-      if (slider instanceof HTMLInputElement && slider.type === 'range') {
-        const range = readThinkingEffortRange(slider);
-        if (!range) return false;
-        const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
-        if (valueSetter) valueSetter.call(slider, String(range.medium));
-        else slider.value = String(range.medium);
-        slider.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
-        slider.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
-        return true;
-      }
-
-      try { slider.focus({ preventScroll: true }); } catch { try { slider.focus(); } catch {} }
-      slider.dispatchEvent(new KeyboardEvent('keydown', {
-        key: 'ArrowRight', code: 'ArrowRight', bubbles: true, cancelable: true
-      }));
-      slider.dispatchEvent(new KeyboardEvent('keyup', {
-        key: 'ArrowRight', code: 'ArrowRight', bubbles: true, cancelable: true
-      }));
-      return true;
-    } finally {
-      window.setTimeout(() => thinkingEffortRepairing.delete(slider), 80);
-    }
-  }
-
-  function enforceThinkingEffortFloor(scope = document) {
-    for (const slider of getThinkingEffortSliderCandidates(scope)) {
-      if (isThinkingEffortSlider(slider) && isThinkingEffortInstant(slider)) {
-        enforceThinkingEffortSliderFloor(slider);
-      }
-    }
-  }
-
   function isLikelyMenuTrigger(target) {
     if (!(target instanceof Element)) return false;
     return Boolean(target.closest(
@@ -1478,61 +913,6 @@
 
   function isDeleteAllMemoriesItem(menuItem) {
     return DELETE_ALL_MEMORY_LABELS.has(normalizeText(menuItem.textContent));
-  }
-
-  function isSingleMemoryDeleteItem(menuItem) {
-    const label = normalizeText(menuItem?.textContent);
-    if (!DELETE_SINGLE_MEMORY_LABELS.has(label)) return false;
-
-    // The per-memory overflow menu is Radix/React portal-mounted under document.body,
-    // not inside the Saved Memories modal. Scope it by requiring the real saved-memory
-    // dialog to be open and at least one per-memory options trigger to exist there.
-    // That avoids globally murdering every generic "Poista" / "Delete" menu item in ChatGPT.
-    if (!hasSavedMemoriesDialogOpen()) return false;
-    if (menuItem.getAttribute('data-color') === 'danger') return true;
-
-    return Boolean(document.querySelector(
-      'button[aria-label^="Lisää vaihtoehtoja muistille:"], button[aria-label^="More options for memory:"]'
-    ));
-  }
-
-  function isForbiddenMemoryDeleteItem(menuItem) {
-    return isDeleteAllMemoriesItem(menuItem) || isSingleMemoryDeleteItem(menuItem);
-  }
-
-  function hasSavedMemoriesDialogOpen() {
-    for (const dialog of document.querySelectorAll('[role="dialog"][data-state="open"], [role="dialog"]')) {
-      if (!(dialog instanceof Element)) continue;
-
-      if (dialog.querySelector('#memories-search, input[name="memories-search"]')) return true;
-
-      const title = dialog.querySelector('h1, h2, [id^="radix-"]');
-      const titleText = normalizeText(title?.textContent);
-      if (SAVED_MEMORIES_DIALOG_LABELS.some(label => titleText.includes(label))) return true;
-
-      const dialogText = normalizeText(dialog.textContent);
-      if (SAVED_MEMORIES_DIALOG_LABELS.some(label => dialogText.includes(label))) {
-        const hasMemoryOptions = dialog.querySelector(
-          'button[aria-label^="Lisää vaihtoehtoja muistille:"], button[aria-label^="More options for memory:"]'
-        );
-        if (hasMemoryOptions) return true;
-      }
-    }
-    return false;
-  }
-
-  function getMemoryStatusEscapeControl(event) {
-    return getElementFromEvent(event, 'button, [role="button"], a');
-  }
-
-  function isMemoryStatusEscapeControl(control) {
-    if (!(control instanceof Element)) return false;
-    if (!MEMORY_STATUS_TRIGGER_LABELS.has(normalizeText(control.textContent))) return false;
-
-    // Personalization is already protected by the route gate. Never interfere with
-    // legitimate memory controls after that lane has been explicitly unlocked.
-    if (isPersonalizationRoute() && protectedRouteUnlocked) return false;
-    return true;
   }
 
   function isMemorySummaryManageButton(button) {
@@ -1608,54 +988,11 @@
     scheduleRouteMaintenance(0);
   }
 
-  function installEscapeHatchObserver() {
-    if (escapeHatchObserver) return;
-
-    const start = () => {
-      if (escapeHatchObserver || !document.documentElement) return;
-
-      escapeHatchObserver = new MutationObserver(mutations => {
-        for (const mutation of mutations) {
-          for (const node of mutation.addedNodes) {
-            if (!(node instanceof Element)) continue;
-
-            // Radix menus/settings dialogs are portal-mounted after the click that opens
-            // them. Only inspect roots that can actually contain one of our two escape
-            // hatches; normal chat/message DOM never reaches the expensive cleanup path.
-            const relevant =
-              node.matches('[role="menu"], [role="dialog"], [role="menuitem"], a[href="/plugins"]') ||
-              node.querySelector('[role="menu"], [role="dialog"], [role="menuitem"], a[href="/plugins"]');
-            if (!relevant) continue;
-
-            applyAccountAndSettingsCleanup(node);
-            if (isPersonalizationRoute()) hideSensitiveMemoryControls(node);
-          }
-        }
-      });
-
-      escapeHatchObserver.observe(document.documentElement, {
-        childList: true,
-        subtree: true
-      });
-    };
-
-    if (document.documentElement) start();
-    else document.addEventListener('DOMContentLoaded', start, { once: true });
-  }
-
   function scheduleRouteMaintenance(delay = 70) {
     if (routeMaintenanceTimer) clearTimeout(routeMaintenanceTimer);
     routeMaintenanceTimer = window.setTimeout(() => {
       routeMaintenanceTimer = 0;
       const route = getProtectedRouteDescriptor()?.key;
-
-      if (!document.getElementById(STYLE_ID)) injectStyles();
-
-      // Protected pages are unusually mutation-heavy; keep the tiny sidebar policy
-      // reasserted here so React cannot permanently evict the custom Kuvat/Images item.
-      polishSidebarNavigation();
-      removePluginFeaturedPromo(document);
-
       if (route === 'personalization') {
         hideSensitiveMemoryControls(document);
         cleanChatGptUi(document);
@@ -1717,20 +1054,36 @@
     if (!isPersonalizationRoute()) return;
     hideMemoryEnableRows(scope);
     hideEnhancedMemoryBanners(scope);
-    removeForbiddenMemoryDeleteItems(scope);
+    removeDeleteAllMemoriesItems(scope);
   }
 
   function hideMemoryEnableRows(scope = document) {
-    // Match the actual setting row supplied by ChatGPT rather than walking upward from
-    // the switch. This is both more deterministic and resilient to extra wrapper divs.
-    const rowSelector =
-      'div.border-token-border-light.flex.min-h-15.items-center.border-b:has(button[role="switch"])';
+    forEachMatch(scope, 'button[role="switch"]', switchButton => {
+      const container = switchButton.closest('.flex.justify-between.gap-2') || switchButton.parentElement;
+      if (!container) return;
 
-    forEachMatch(scope, rowSelector, row => {
-      const context = normalizeText(row.textContent);
+      const context = normalizeText(container.textContent);
       if (!includesAny(context, MEMORY_ENABLE_LABELS)) return;
+
+      const row = findSettingRow(switchButton);
+      if (!row) return;
       hideElement(row);
     });
+  }
+
+  function findSettingRow(startNode) {
+    let node = startNode;
+    let outermostSwitchContainer = null;
+
+    for (let depth = 0; node && depth < 8; depth += 1, node = node.parentElement) {
+      if (node.querySelector?.('button[role="switch"]')) {
+        outermostSwitchContainer = node;
+      }
+      if (node.classList?.contains('border-token-border-light')) {
+        return node;
+      }
+    }
+    return outermostSwitchContainer;
   }
 
   function hideEnhancedMemoryBanners(scope = document) {
@@ -1763,9 +1116,9 @@
     });
   }
 
-  function removeForbiddenMemoryDeleteItems(scope = document) {
+  function removeDeleteAllMemoriesItems(scope = document) {
     forEachMatch(scope, '[role="menuitem"]', item => {
-      if (!isForbiddenMemoryDeleteItem(item)) return;
+      if (!isDeleteAllMemoriesItem(item)) return;
       hideElement(item);
       item.remove();
     });
@@ -1994,10 +1347,8 @@
 
   async function rememberInstalledPluginCards(scope = document) {
     await ensurePluginVaultLoaded();
+    if (pluginVaultSeeded) return false;
 
-    // The original baseline remains a reinstall allowlist, but always refresh cards that
-    // ChatGPT itself currently exposes as installed/connected. This repairs incomplete
-    // snapshots from slow/lazy first loads without ever learning ordinary + catalog cards.
     let changed = false;
 
     for (const article of getPluginArticles(scope)) {
@@ -2045,100 +1396,43 @@
     return changed;
   }
 
-  function getPluginNativeSignature(cards) {
-    return cards.map(article => {
-      const info = extractPluginCardInfo(article);
-      const key = info?.key || '';
-      const installed = isInstalledPluginCard(article) ? 'i' : 'c';
-      const approved = key && pluginVault.has(key) ? 'a' : 'x';
-      return `${key}:${installed}:${approved}`;
-    }).join('|');
-  }
-
-  function hasRenderableApprovedPlugins() {
-    return Boolean(
-      document.querySelector('article[data-bravefox-plugin-allowed]') ||
-      document.querySelector(`#${PLUGIN_SAVED_SECTION_ID} .bravefox-saved-plugin-card`)
-    );
-  }
-
-  function schedulePluginStableReveal() {
-    if (!isPluginsRoute()) return;
-    if (document.documentElement.classList.contains(PLUGINS_READY_CLASS)) return;
-
-    if (pluginReadyTimer) {
-      clearTimeout(pluginReadyTimer);
-      pluginReadyTimer = 0;
-    }
-
-    const now = Date.now();
-    if (!pluginCurationStartedAt) {
-      pluginCurationStartedAt = now;
-      pluginCurationLastActivityAt = now;
-    }
-
-    const elapsed = now - pluginCurationStartedAt;
-    const quietFor = now - pluginCurationLastActivityAt;
-    const stable =
-      elapsed >= PLUGIN_READY_MIN_MS &&
-      quietFor >= PLUGIN_READY_QUIET_MS &&
-      hasRenderableApprovedPlugins();
-    const hardStop = elapsed >= PLUGIN_READY_HARD_MS;
-
-    if (stable || hardStop) {
-      document.documentElement.classList.add(PLUGINS_READY_CLASS);
-      return;
-    }
-
-    const minWait = Math.max(0, PLUGIN_READY_MIN_MS - elapsed);
-    const quietWait = Math.max(0, PLUGIN_READY_QUIET_MS - quietFor);
-    const wait = Math.max(80, Math.min(240, Math.max(minWait, quietWait)));
-    pluginReadyTimer = window.setTimeout(() => {
-      pluginReadyTimer = 0;
-      schedulePluginStableReveal();
-    }, wait);
-  }
-
   async function applyPluginPagePolicy(scope = document) {
     if (!isPluginsRoute()) return;
 
     document.documentElement.classList.add(PLUGINS_CURATING_CLASS);
     await ensurePluginVaultLoaded();
 
-    const now = Date.now();
-    if (!pluginCurationStartedAt) {
-      pluginCurationStartedAt = now;
-      pluginCurationLastActivityAt = now;
-    }
-
-    for (const article of document.querySelectorAll('article[data-bravefox-plugin-allowed]')) {
-      article.removeAttribute('data-bravefox-plugin-allowed');
-    }
     for (const section of document.querySelectorAll('section[data-bravefox-plugin-section-allowed="true"]')) {
       section.removeAttribute('data-bravefox-plugin-section-allowed');
     }
 
-    // Capture installed/connected cards before classification. Native catalog DOM is never
-    // removed anymore; rejected cards simply stay paint-hidden so React can reconcile safely.
+    // Capture installed/connected cards BEFORE anything is filtered. Once a plugin enters
+    // this vault, uninstalling it later does not remove the entry; its native + card (or a
+    // BraveFox fallback card) remains available for reinstall.
     await rememberInstalledPluginCards(scope);
 
     const cards = getPluginArticles(document);
-    const nativeSignature = getPluginNativeSignature(cards);
-    if (nativeSignature !== pluginLastNativeSignature) {
-      pluginLastNativeSignature = nativeSignature;
-      pluginCurationLastActivityAt = Date.now();
-    }
-
     const firstCatalogSection = cards[0]?.closest?.('section') || null;
     const preferredMount = firstCatalogSection?.parentElement || null;
     const seenAllowed = new Set();
     const allowedNativeCards = [];
+    const touchedSections = new Set();
 
     for (const article of cards) {
       if (article.hasAttribute('data-bravefox-saved-plugin')) continue;
 
       const info = extractPluginCardInfo(article);
-      if (!info || !pluginVault.has(info.key) || seenAllowed.has(info.key)) {
+      if (!info || !pluginVault.has(info.key)) {
+        const section = article.closest('section');
+        if (section) touchedSections.add(section);
+        article.remove();
+        continue;
+      }
+
+      if (seenAllowed.has(info.key)) {
+        const section = article.closest('section');
+        if (section) touchedSections.add(section);
+        article.remove();
         continue;
       }
 
@@ -2153,14 +1447,13 @@
       void savePluginVault();
     }
 
+    for (const section of touchedSections) {
+      if (!section.isConnected || section.id === PLUGIN_SAVED_SECTION_ID) continue;
+      if (!section.querySelector(PLUGIN_CARD_LINK_SELECTOR)) section.remove();
+    }
+
     renderMissingSavedPluginCards(seenAllowed, preferredMount, firstCatalogSection);
-
-    // Do not reveal the directory on the first classification pass. React tends to mount
-    // the catalog in several bursts, which previously produced the visible card cascade
-    // and layout jumps. Reveal once the native card signature has stayed quiet briefly.
-    schedulePluginStableReveal();
   }
-
 
   function renderMissingSavedPluginCards(nativeKeys, preferredMount = null, catalogAnchor = null) {
     const previousSection = document.getElementById(PLUGIN_SAVED_SECTION_ID);
@@ -2418,32 +1711,63 @@
     );
   }
 
-  function removeLegacyApprovedGptHeadings(scope = document) {
-    const root = scope?.querySelectorAll ? scope : document;
-    const legacyTitle = normalizeText(LEGACY_GPT_APPROVED_TITLE);
-    const legacySubtitle = normalizeText(LEGACY_GPT_APPROVED_SUBTITLE);
-
-    for (const node of root.querySelectorAll('div, span, h1, h2, h3')) {
-      const text = normalizeText(node.textContent);
-      if (text !== legacyTitle && text !== legacySubtitle) continue;
-      const wrapper = node.closest('[data-bravefox-gpt-heading="true"]');
-      if (wrapper) wrapper.remove();
-      else node.remove();
-    }
-  }
-
   function normalizeApprovedGptSection(section) {
     if (!(section instanceof Element)) return null;
 
     section.id = GPT_APPROVED_SECTION_ID;
     section.setAttribute(GPT_APPROVED_SECTION_ATTR, 'true');
 
-    // The approved shelf no longer owns a heading. The stock ChatGPT GPT directory
-    // header/search/actions are moved above this grid instead.
-    for (const heading of section.querySelectorAll(':scope > [data-bravefox-gpt-heading="true"]')) {
-      heading.remove();
+    let headingContainer = section.querySelector(':scope > div[data-bravefox-gpt-heading="true"]');
+    if (!headingContainer) {
+      headingContainer = section.querySelector(':scope > div[tabindex="0"]');
     }
-    removeLegacyApprovedGptHeadings(section);
+    if (!headingContainer) {
+      headingContainer = document.createElement('div');
+      section.insertBefore(headingContainer, section.firstChild);
+    }
+
+    headingContainer.setAttribute('data-bravefox-gpt-heading', 'true');
+    headingContainer.setAttribute('tabindex', '0');
+    headingContainer.style.opacity = '1';
+    headingContainer.style.transform = 'none';
+
+    let title = headingContainer.querySelector(':scope > .text-xl.font-semibold');
+    if (!title) {
+      title = document.createElement('div');
+      title.className = 'text-xl font-semibold md:text-2xl';
+      headingContainer.appendChild(title);
+    }
+    title.textContent = GPT_APPROVED_TITLE;
+
+    let subtitle = headingContainer.querySelector(':scope > .text-token-text-tertiary.text-sm');
+    if (!subtitle) {
+      subtitle = document.createElement('div');
+      subtitle.className = 'text-token-text-tertiary text-sm md:text-base';
+      headingContainer.appendChild(subtitle);
+    }
+    subtitle.textContent = GPT_APPROVED_SUBTITLE;
+
+    // Kill detached/duplicate title or subtitle nodes left by an earlier donor-based
+    // build. Keep the single heading pair above and nothing else with the same text.
+    for (const duplicateTitle of section.querySelectorAll('div.text-xl.font-semibold, div[class*="text-xl"][class*="font-semibold"]')) {
+      if (duplicateTitle !== title && normalizeText(duplicateTitle.textContent) === normalizeText(GPT_APPROVED_TITLE)) {
+        duplicateTitle.remove();
+      }
+    }
+    for (const duplicateSubtitle of section.querySelectorAll('div.text-token-text-tertiary.text-sm, div[class*="text-token-text-tertiary"][class*="text-sm"]')) {
+      if (duplicateSubtitle !== subtitle && normalizeText(duplicateSubtitle.textContent) === normalizeText(GPT_APPROVED_SUBTITLE)) {
+        duplicateSubtitle.remove();
+      }
+    }
+
+    // If an older build left duplicate BraveFox heading wrappers behind, keep exactly one.
+    for (const candidate of Array.from(section.children)) {
+      if (candidate === headingContainer || !(candidate instanceof Element)) continue;
+      const text = normalizeText(candidate.textContent);
+      if (text.includes(normalizeText(GPT_APPROVED_TITLE)) && text.includes(normalizeText(GPT_APPROVED_SUBTITLE))) {
+        candidate.remove();
+      }
+    }
 
     let content = section.querySelector(':scope > div[data-bravefox-gpt-content="true"]');
     if (!content) {
@@ -2474,9 +1798,24 @@
 
   function createApprovedGptSectionShell() {
     const section = document.createElement('div');
-    section.className = 'h-fit scroll-mt-28';
+    section.className = 'h-fit scroll-mt-28 last:min-h-[calc(100vh-8rem)]';
     section.id = GPT_APPROVED_SECTION_ID;
     section.setAttribute(GPT_APPROVED_SECTION_ATTR, 'true');
+
+    const heading = document.createElement('div');
+    heading.setAttribute('tabindex', '0');
+    heading.setAttribute('data-bravefox-gpt-heading', 'true');
+    heading.style.opacity = '1';
+    heading.style.transform = 'none';
+
+    const title = document.createElement('div');
+    title.className = 'text-xl font-semibold md:text-2xl';
+    title.textContent = GPT_APPROVED_TITLE;
+
+    const subtitle = document.createElement('div');
+    subtitle.className = 'text-token-text-tertiary text-sm md:text-base';
+    subtitle.textContent = GPT_APPROVED_SUBTITLE;
+    heading.append(title, subtitle);
 
     const content = document.createElement('div');
     content.className = 'mt-4 mb-10';
@@ -2485,201 +1824,9 @@
     const grid = document.createElement('div');
     grid.className = 'grid grid-cols-1 gap-x-1.5 gap-y-1 md:gap-x-2 md:gap-y-1.5 lg:grid-cols-2 lg:gap-x-3 lg:gap-y-2.5';
     content.appendChild(grid);
-    section.appendChild(content);
+    section.append(heading, content);
     return { section, grid };
   }
-
-  function findExactTextElement(root, expectedValues, selector = 'div, span, h1, h2, h3, p') {
-    const expected = new Set(expectedValues.map(value => normalizeText(value)));
-    for (const node of root.querySelectorAll(selector)) {
-      if (expected.has(normalizeText(node.textContent))) return node;
-    }
-    return null;
-  }
-
-  function findNativeGptSearchInput(root = document) {
-    for (const input of root.querySelectorAll('input')) {
-      const placeholder = normalizeText(input.getAttribute('placeholder'));
-      const aria = normalizeText(input.getAttribute('aria-label'));
-      if (
-        placeholder.includes('hae gpt') ||
-        placeholder.includes('search gpt') ||
-        aria.includes('hae gpt') ||
-        aria.includes('search gpt')
-      ) return input;
-    }
-    return null;
-  }
-
-  function findCommonAncestor(elements, maxDepth = 10) {
-    const nodes = elements.filter(node => node instanceof Element);
-    if (!nodes.length) return null;
-    let candidate = nodes[0];
-    let depth = 0;
-    while (candidate && depth <= maxDepth) {
-      if (nodes.every(node => candidate.contains(node))) return candidate;
-      candidate = candidate.parentElement;
-      depth += 1;
-    }
-    return null;
-  }
-
-  function findNativeGptHero() {
-    const root = document.querySelector('main') || document.querySelector('[role="main"]') || document;
-    const search = findNativeGptSearchInput(root);
-    if (!search) return null;
-
-    const title = findExactTextElement(root, ['GPT:t', 'GPTs'], 'h1, h2, div, span');
-    let description = null;
-    for (const node of root.querySelectorAll('div, p, span')) {
-      const text = normalizeText(node.textContent);
-      if (GPT_NATIVE_DESCRIPTION_TERMS.some(term => text.includes(term))) {
-        description = node;
-        break;
-      }
-    }
-
-    const required = [search];
-    if (title) required.push(title);
-    if (description) required.push(description);
-
-    // Walk upward from the search control until its native container also contains the
-    // stock GPT title/description. Stop before swallowing any of the directory shelves.
-    let candidate = search;
-    for (let depth = 0; candidate && depth < 10; depth += 1, candidate = candidate.parentElement) {
-      if (!required.every(node => candidate.contains(node))) continue;
-      if (candidate.querySelector?.(GPT_SOURCE_SECTION_SELECTOR)) continue;
-      return candidate;
-    }
-
-    return findCommonAncestor(required, 10);
-  }
-
-  function findNativeGptActions() {
-    const root = document.querySelector('main') || document.querySelector('[role="main"]') || document;
-    const myLabel = findExactTextElement(root, ['Omat GPT:t', 'My GPTs', 'My GPTs:'], 'div, span, a, button');
-    let createControl = null;
-
-    for (const control of root.querySelectorAll('button, a')) {
-      const text = normalizeText(control.textContent);
-      if (text === 'luo' || text === 'create' || text === '+ luo' || text === '+ create') {
-        createControl = control;
-        break;
-      }
-    }
-
-    const myControl =
-      myLabel?.closest?.('a, button') ||
-      (myLabel?.matches?.('a, button') ? myLabel : null);
-
-    if (!myControl && !createControl) return null;
-
-    const container = findCommonAncestor([myControl || myLabel, createControl].filter(Boolean), 6);
-    return { myLabel, myControl, createControl, container };
-  }
-
-
-  function removeNativeGptExploreLabel(root = document) {
-    const labels = ['Tutustu GPT:ihin', 'Explore GPTs', 'Explore GPTs:'];
-    const node = findExactTextElement(root, labels, 'div, span, p');
-    if (!node) return;
-    node.setAttribute('data-bravefox-gpt-explore-hidden', 'true');
-    node.style.setProperty('display', 'none', 'important');
-    node.style.setProperty('visibility', 'hidden', 'important');
-  }
-
-  function stripClonedDomIds(root) {
-    if (!(root instanceof Element)) return;
-    if (root.hasAttribute('id')) root.removeAttribute('id');
-    for (const node of root.querySelectorAll('[id]')) node.removeAttribute('id');
-  }
-
-  function makeGptActionProxy(kind, label, target) {
-    const control = document.createElement('button');
-    control.type = 'button';
-    control.setAttribute('data-bravefox-gpt-action-proxy', kind);
-    control.textContent = label;
-
-    control.addEventListener('click', event => {
-      event.preventDefault();
-      event.stopPropagation();
-      try {
-        if (target?.isConnected && typeof target.click === 'function') {
-          target.click();
-          return;
-        }
-
-        const href = target?.getAttribute?.('href');
-        if (href) location.assign(href);
-      } catch (error) {
-        console.warn('[BraveFox Enhancer] GPT action proxy failed:', error);
-      }
-    }, true);
-
-    return control;
-  }
-
-  function prepareNativeGptHeader() {
-    if (!gptApprovedSection?.isConnected) return false;
-
-    removeLegacyApprovedGptHeadings(document);
-
-    const hero = findNativeGptHero();
-    if (hero) {
-      hero.setAttribute(GPT_NATIVE_HERO_ATTR, 'true');
-      hero.style.opacity = '1';
-      hero.style.transform = 'none';
-    }
-
-    const actions = findNativeGptActions();
-    for (const nativeControl of [actions?.myControl || actions?.myLabel, actions?.createControl]) {
-      if (!(nativeControl instanceof Element)) continue;
-      nativeControl.setAttribute(GPT_NATIVE_ACTIONS_ATTR, 'true');
-      nativeControl.style.setProperty('display', 'none', 'important');
-      nativeControl.style.setProperty('visibility', 'hidden', 'important');
-    }
-
-    let host = document.getElementById(GPT_NATIVE_HEADER_ID);
-    if (!host) {
-      host = document.createElement('div');
-      host.id = GPT_NATIVE_HEADER_ID;
-      host.setAttribute(GPT_NATIVE_HEADER_ATTR, 'true');
-    }
-
-    // Never move ChatGPT's React-owned hero. Move only BraveFox-owned nodes so the final
-    // order is always: native GPT title/description/search -> curated grid. The BraveFox
-    // action proxies are fixed in the page's top-right utility area and do not consume flow.
-    // The previous build inserted the shelf before the first source section, which on the
-    // live page could place the whole curated grid above the native hero.
-    const parent = hero?.parentElement || gptApprovedSection.parentElement;
-    if (!parent) return false;
-
-    if (hero?.parentElement === parent) {
-      parent.insertBefore(host, hero.nextSibling);
-      parent.insertBefore(gptApprovedSection, host.nextSibling);
-    } else {
-      if (gptApprovedSection.parentElement !== parent) parent.appendChild(gptApprovedSection);
-      parent.insertBefore(host, gptApprovedSection);
-    }
-    gptNativeHeaderHost = host;
-
-    host.replaceChildren();
-
-    const myLabel = String(actions?.myLabel?.textContent || 'Omat GPT:t').trim() || 'Omat GPT:t';
-    const createText = String(actions?.createControl?.textContent || 'Luo').trim() || 'Luo';
-
-    const myProxy = makeGptActionProxy('my-gpts', myLabel, actions?.myControl || null);
-    host.appendChild(myProxy);
-
-    if (actions?.createControl) {
-      const createLabel = /^\s*\+/.test(createText) ? createText : `+ ${createText}`;
-      host.appendChild(makeGptActionProxy('create', createLabel, actions.createControl));
-    }
-
-    removeNativeGptExploreLabel(document);
-    return Boolean(hero && findNativeGptSearchInput(hero));
-  }
-
 
   function prepareApprovedGptSection() {
     if (gptApprovedSection?.isConnected && gptApprovedGrid?.isConnected) {
@@ -2708,22 +1855,12 @@
       section.getAttribute(GPT_APPROVED_SECTION_ATTR) !== 'true'
     );
     const firstSource = sourceSections[0] || null;
-    const nativeHero = findNativeGptHero();
-    const host =
-      nativeHero?.parentElement ||
-      firstSource?.parentElement ||
-      document.querySelector('main') ||
-      document.querySelector('[role="main"]');
+    const host = firstSource?.parentElement || document.querySelector('main') || document.querySelector('[role="main"]');
     if (!host) return null;
 
     const created = createApprovedGptSectionShell();
-    if (nativeHero?.parentElement === host) {
-      host.insertBefore(created.section, nativeHero.nextSibling);
-    } else if (firstSource?.parentElement === host) {
-      host.insertBefore(created.section, firstSource);
-    } else {
-      host.appendChild(created.section);
-    }
+    if (firstSource?.parentElement === host) host.insertBefore(created.section, firstSource);
+    else host.insertBefore(created.section, host.firstChild);
 
     gptApprovedSection = created.section;
     gptApprovedGrid = created.grid;
@@ -2775,52 +1912,39 @@
     if (!gptApprovedGrid?.isConnected) return 0;
 
     let changed = 0;
+    for (const card of getGptCards(document)) {
+      const wrapper = getGptCardWrapper(card);
+      if (!wrapper?.isConnected) continue;
 
-    // Re-index the BraveFox-owned clone grid first. If an older route pass left a card
-    // that no longer satisfies the allowlist, remove only that clone — never React's source.
-    for (const existingCard of getGptCards(gptApprovedGrid)) {
-      const existingWrapper = getGptCardWrapper(existingCard);
-      const key = makeGptCardKey(existingCard);
-      if (!isAllowedGptCard(existingCard)) {
-        existingWrapper?.remove();
-        gptApprovedKeys.delete(key);
+      if (!isAllowedGptCard(card)) {
+        // Anything not approved disappears immediately, even while its source shelf is hidden.
+        wrapper.remove();
         changed += 1;
         continue;
       }
-      gptApprovedKeys.add(key);
-      normalizeApprovedGptCard(existingCard, existingWrapper);
-    }
-
-    for (const card of getGptCards(document)) {
-      if (gptApprovedGrid.contains(card)) continue;
-      if (!isAllowedGptCard(card)) continue;
 
       const key = makeGptCardKey(card);
-      if (!key || gptApprovedKeys.has(key)) continue;
+      const alreadyInApprovedGrid = gptApprovedGrid.contains(wrapper);
 
-      const sourceWrapper = getGptCardWrapper(card);
-      if (!(sourceWrapper instanceof Element) || !sourceWrapper.isConnected) continue;
+      if (gptApprovedKeys.has(key) && !alreadyInApprovedGrid) {
+        wrapper.remove();
+        changed += 1;
+        continue;
+      }
 
-      const cloneWrapper = sourceWrapper.cloneNode(true);
-      stripClonedDomIds(cloneWrapper);
-
-      const cloneCard =
-        cloneWrapper.matches?.(GPT_CARD_SELECTOR)
-          ? cloneWrapper
-          : cloneWrapper.querySelector?.(GPT_CARD_SELECTOR);
-      if (!(cloneCard instanceof Element)) continue;
-
-      cloneCard.setAttribute('data-bravefox-gpt-allowed', 'true');
-      normalizeApprovedGptCard(cloneCard, cloneWrapper);
-      gptApprovedGrid.appendChild(cloneWrapper);
       gptApprovedKeys.add(key);
-      changed += 1;
+      card.setAttribute('data-bravefox-gpt-allowed', 'true');
+      normalizeApprovedGptCard(card, wrapper);
+
+      if (!alreadyInApprovedGrid) {
+        gptApprovedGrid.appendChild(wrapper);
+        changed += 1;
+      }
     }
 
     if (changed) gptCurationLastActivityAt = Date.now();
     return changed;
   }
-
 
   function isGptShowMoreButton(button) {
     if (!(button instanceof HTMLButtonElement)) return false;
@@ -2878,10 +2002,7 @@
         'huippuvalinnat', 'ohjelmointi', 'tutkimus ja analyysi', 'tuottavuus',
         'programming', 'research & analysis', 'productivity', 'dall·e', 'writing', 'lifestyle'
       ].filter(term => text.includes(term)).length;
-      if (categoryHits < 2) continue;
-
-      // Leave React's navigation node in place; CSS already keeps it paint-hidden.
-      nav.setAttribute('data-bravefox-gpt-category-nav-hidden', 'true');
+      if (categoryHits >= 2) nav.remove();
     }
   }
 
@@ -2895,12 +2016,18 @@
     const hardStop = elapsed >= GPT_HARD_CURATION_MS;
     if (!settled && !hardStop) return false;
 
-    // Native source shelves deliberately remain mounted but hidden. Removing them was
-    // capable of making ChatGPT's React tree throw "Content failed to load" on rerenders.
+    for (const section of getGptSections()) {
+      if (section === gptApprovedSection) continue;
+      section.remove();
+    }
+
+    // The custom shelf is already fully expanded by BraveFox; its native control is dead weight.
+    for (const button of gptApprovedSection.querySelectorAll('button')) {
+      if (isGptShowMoreButton(button)) button.remove();
+    }
     removeGptCategoryNavigation();
     return true;
   }
-
 
   function scheduleGptCurationRetry(delay = 260) {
     if (!isGptsRoute()) return;
@@ -2926,9 +2053,6 @@
       return;
     }
 
-    // Keep ChatGPT's stock GPT title/description/search/create controls, but move that
-    // native chrome above the BraveFox-filtered grid. No custom BraveFox heading text.
-    prepareNativeGptHeader();
     removeGptCategoryNavigation();
     harvestApprovedGpts();
     const expansion = expandGptSourceShelves();
@@ -2950,251 +2074,58 @@
     }
   }
 
-  function makeSidebarImagesItem(moreItem = null) {
+  function makeSidebarImagesItem(moreItem) {
     const anchor = document.createElement('a');
     anchor.tabIndex = 0;
     anchor.setAttribute('data-fill', '');
     anchor.className = 'group __menu-item hoverable gap-1.5 transition-colors keyboard-focused:focus-ring keyboard-focused:-outline-offset-2';
-    anchor.setAttribute('data-testid', 'sidebar-item-images');
+    anchor.setAttribute('data-testid', 'sidebar-item-library');
     anchor.setAttribute('data-sidebar-item', 'true');
     anchor.setAttribute('data-bravefox-sidebar-images', 'true');
     anchor.href = '/images';
     anchor.setAttribute('data-discover', 'true');
 
-    const bodyText = normalizeText(document.body?.textContent);
+    const oldUse = moreItem?.querySelector?.('svg use')?.getAttribute('href') || '/cdn/assets/sprites-shell-0b456576.svg#dots-horizontal';
+    const imageSprite = oldUse.includes('#') ? `${oldUse.split('#')[0]}#images` : '/cdn/assets/sprites-shell-0b456576.svg#images';
     const oldLabel = normalizeText(moreItem?.textContent);
-    const finnish =
-      oldLabel.includes('lisää') ||
-      /^fi(?:-|$)/i.test(String(document.documentElement.lang || '')) ||
-      bodyText.includes('uusi keskustelu') ||
-      bodyText.includes('kirjasto');
-    const label = finnish ? 'Kuvat' : 'Images';
+    const label = oldLabel.includes('lisää') ? 'Kuvat' : 'Images';
 
-    // Standalone SVG instead of borrowing a generated ChatGPT sprite id. This keeps the
-    // sidebar item intact even when ChatGPT rotates sprite bundles between deployments.
-    // Build it with DOM APIs rather than innerHTML so AMO's unsafe-assignment scanner stays quiet.
-    const iconHost = document.createElement('div');
-    iconHost.setAttribute('aria-hidden', 'true');
-    iconHost.className = 'relative flex items-center justify-center [opacity:var(--menu-item-icon-opacity,1)] icon';
-
-    const iconInner = document.createElement('div');
-    iconInner.className = 'absolute inset-0 flex items-center justify-center';
-
-    const svgNs = 'http://www.w3.org/2000/svg';
-    const svg = document.createElementNS(svgNs, 'svg');
-    svg.setAttribute('width', '20');
-    svg.setAttribute('height', '20');
-    svg.setAttribute('viewBox', '0 0 20 20');
-    svg.setAttribute('focusable', 'false');
-    svg.setAttribute('class', 'icon');
-    svg.setAttribute('aria-hidden', 'true');
-
-    const rect = document.createElementNS(svgNs, 'rect');
-    rect.setAttribute('x', '3.25');
-    rect.setAttribute('y', '4');
-    rect.setAttribute('width', '13.5');
-    rect.setAttribute('height', '12');
-    rect.setAttribute('rx', '2.25');
-    rect.setAttribute('fill', 'none');
-    rect.setAttribute('stroke', 'currentColor');
-    rect.setAttribute('stroke-width', '1.5');
-
-    const circle = document.createElementNS(svgNs, 'circle');
-    circle.setAttribute('cx', '7.25');
-    circle.setAttribute('cy', '8');
-    circle.setAttribute('r', '1.35');
-    circle.setAttribute('fill', 'none');
-    circle.setAttribute('stroke', 'currentColor');
-    circle.setAttribute('stroke-width', '1.35');
-
-    const path = document.createElementNS(svgNs, 'path');
-    path.setAttribute('d', 'M4.75 14.15l3.45-3.45 2.45 2.45 1.75-1.75 2.85 2.85');
-    path.setAttribute('fill', 'none');
-    path.setAttribute('stroke', 'currentColor');
-    path.setAttribute('stroke-width', '1.45');
-    path.setAttribute('stroke-linecap', 'round');
-    path.setAttribute('stroke-linejoin', 'round');
-
-    svg.append(rect, circle, path);
-    iconInner.append(svg);
-    iconHost.append(iconInner);
-
-    const labelHost = document.createElement('div');
-    labelHost.className = 'flex min-w-0 grow items-center gap-2.5';
-
-    const labelNode = document.createElement('div');
-    labelNode.className = 'truncate [&:has([data-marquee-text])]:min-w-0 [&:has([data-marquee-text])]:flex-1 [&:has([data-marquee-text])]:overflow-visible';
-    labelNode.textContent = label;
-    labelHost.append(labelNode);
-
-    anchor.append(iconHost, labelHost);
+    anchor.innerHTML = `
+      <div aria-hidden="true" class="relative flex items-center justify-center [opacity:var(--menu-item-icon-opacity,1)] icon">
+        <div class="absolute inset-0 flex items-center justify-center">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20" focusable="false" class="icon" aria-hidden="true">
+            <use href="${imageSprite}" fill="currentColor"></use>
+          </svg>
+        </div>
+      </div>
+      <div class="flex min-w-0 grow items-center gap-2.5">
+        <div class="truncate [&:has([data-marquee-text])]:min-w-0 [&:has([data-marquee-text])]:flex-1 [&:has([data-marquee-text])]:overflow-visible">${label}</div>
+      </div>`;
     return anchor;
   }
 
   function polishSidebarNavigation() {
-    // Do not remove React-owned sidebar nodes. CSS hides Plugins and More; leaving them
-    // mounted prevents React from reconciling our replacement away on busy directory pages.
     for (const pluginsButton of document.querySelectorAll(
       'a[data-testid="plugins-button"][data-sidebar-item="true"], a[data-sidebar-item="true"][href="/plugins"]'
     )) {
-      pluginsButton.setAttribute('aria-hidden', 'true');
-      pluginsButton.setAttribute('data-bravefox-sidebar-hidden', 'plugins');
-    }
-
-    const existingCustom = document.querySelector('a[data-bravefox-sidebar-images="true"]');
-    if (existingCustom?.isConnected) return;
-
-    const nativeImages = Array.from(document.querySelectorAll('a[data-sidebar-item="true"][href="/images"]'))
-      .find(item => !item.hasAttribute('data-bravefox-sidebar-images'));
-    if (nativeImages) {
-      nativeImages.setAttribute('data-bravefox-sidebar-images', 'true');
-      nativeImages.removeAttribute('aria-hidden');
-      return;
+      pluginsButton.remove();
     }
 
     const moreItems = Array.from(document.querySelectorAll('div[data-sidebar-item="true"][aria-haspopup="menu"]'))
       .filter(item => item.querySelector('svg use[href$="#dots-horizontal"]'));
 
-    const moreItem = moreItems[0] || null;
-    const custom = makeSidebarImagesItem(moreItem);
-
-    if (moreItem?.parentElement) {
-      moreItem.after(custom);
-      return;
-    }
-
-    // Fallback for routes where ChatGPT has not mounted More yet. Place Kuvat after
-    // Tasks/Ajastukset when possible, otherwise after the last normal top-level item.
-    const sidebarItems = Array.from(document.querySelectorAll('a[data-sidebar-item="true"]'))
-      .filter(item =>
-        !item.hasAttribute('data-bravefox-sidebar-images') &&
-        !String(item.getAttribute('href') || '').startsWith('/plugins')
-      );
-    const preferred = sidebarItems.find(item => {
-      const label = normalizeText(item.textContent);
-      const href = normalizeText(item.getAttribute('href'));
-      return label.includes('ajastukset') || label === 'tasks' || href.includes('task');
-    }) || sidebarItems[sidebarItems.length - 1] || null;
-
-    if (preferred?.parentElement) {
-      preferred.after(custom);
-    }
-  }
-
-
-  function hardHideEscapeHatch(element) {
-    if (!(element instanceof Element)) return;
-    hideElement(element);
-    element.style.setProperty('display', 'none', 'important');
-    element.style.setProperty('visibility', 'hidden', 'important');
-    element.style.setProperty('opacity', '0', 'important');
-    element.style.setProperty('pointer-events', 'none', 'important');
-  }
-
-  function applyAccountAndSettingsCleanup(scope = document) {
-    if (!scope || typeof scope.querySelectorAll !== 'function') return;
-
-    // Account/profile menu: Personalization / Yksilöinti. Radix mounts this menu in a
-    // portal, often after the click-time scan has already completed. The targeted portal
-    // observer above makes this live policy authoritative; text is the final fallback if
-    // ChatGPT rotates the sprite id again.
-    forEachMatch(scope, '[role="menuitem"]', item => {
-      const text = normalizeText(item.textContent);
-      const hasFaceIcon = Boolean(item.querySelector('use[href*="#face"]'));
-      if (hasFaceIcon || text === 'yksilöinti' || text === 'personalization') {
-        hardHideEscapeHatch(item);
+    for (const moreItem of moreItems) {
+      const existingCustom = document.querySelector('a[data-bravefox-sidebar-images="true"]');
+      if (existingCustom) {
+        moreItem.remove();
+        continue;
       }
-    });
 
-    // Settings > Plugins: exact /plugins navigation links are escape hatches, while
-    // plugin cards use /plugins/<id>. Paint-time CSS hides only the exact link. Here we
-    // collapse its row *only* when the live DOM exactly matches the small settings-row
-    // structure supplied by the user. Never climb generic ancestors: those can be major
-    // ChatGPT layout containers and hiding one can blank large parts of the app.
-    forEachMatch(scope, 'a[href="/plugins"]', link => {
-      const text = normalizeText(link.textContent);
-      const hasBrowseAddonsIcon = Boolean(link.querySelector('use[href*="#all-products"]'));
-      const isBrowseAddons =
-        hasBrowseAddonsIcon ||
-        text === 'selaa lisäosia' ||
-        text === 'browse addons' ||
-        text === 'browse add-ons';
-      if (!isBrowseAddons) return;
-
-      hardHideEscapeHatch(link);
-
-      const wrapper = link.parentElement;
-      const row = wrapper?.parentElement;
-      const wrapperIsExact =
-        wrapper instanceof HTMLElement &&
-        wrapper.children.length === 1 &&
-        wrapper.firstElementChild === link &&
-        wrapper.classList.contains('w-full');
-      const rowIsExact =
-        row instanceof HTMLElement &&
-        row.children.length === 1 &&
-        row.firstElementChild === wrapper &&
-        row.classList.contains('border-token-border-light') &&
-        row.classList.contains('flex') &&
-        row.classList.contains('items-center') &&
-        row.classList.contains('border-b');
-
-      if (wrapperIsExact && rowIsExact) hardHideEscapeHatch(row);
-    });
-  }
-
-  function applyGoogleOnlyLoginPolicy(scope = document) {
-    if (!scope || typeof scope.querySelectorAll !== 'function') return;
-
-    // Signup is never needed for this profile. Keep it gone even on logged-out chrome
-    // that has not mounted the email form yet.
-    forEachMatch(scope, '[data-testid="signup-button"]', hideElement);
-
-    // Current Apple + phone provider sprites. The broader provider-group rule below
-    // additionally keeps only Google if ChatGPT adds/reorders other provider buttons.
-    forEachMatch(scope, 'button:has(use[href$="#f5a288"]), button:has(use[href$="#d6f274"])', hideElement);
-
-    const email = document.querySelector('input#email, input[name="email"][type="email"]');
-    if (!email) return;
-
-    hideElement(email);
-
-    // Hide only the field-sized wrapper, not the whole auth form (Google may live beside it).
-    const fieldWrapper = email.closest('label') || email.parentElement;
-    if (fieldWrapper && !fieldWrapper.matches('form, main, body')) hideElement(fieldWrapper);
-
-    const form = email.closest('form');
-    if (form) {
-      for (const submit of form.querySelectorAll('button[type="submit"]')) hideElement(submit);
-    } else {
-      for (const submit of document.querySelectorAll('button[type="submit"][class*="btn-primary"][class*="h-13"][class*="w-full"]')) {
-        hideElement(submit);
-      }
-    }
-
-    // Remove the OR/TAI separator by both structure and text so harmless grids elsewhere
-    // on ChatGPT are not affected.
-    for (const divider of document.querySelectorAll('div[class*="grid-cols-[1fr_max-content_1fr]"]')) {
-      const text = normalizeText(divider.textContent);
-      if ((text === 'tai' || text === 'or') && divider.querySelector('.h-px')) hideElement(divider);
-    }
-
-    // In the provider button stack, Google is the only allowed path. The Google sprite
-    // from the supplied markup is #8e7aa4; everything else in that same provider group
-    // stays hidden even if Apple/phone text is localized differently.
-    for (const group of document.querySelectorAll('div.flex.flex-col.gap-3')) {
-      if (!group.querySelector('button use[href$="#8e7aa4"]')) continue;
-      for (const button of group.querySelectorAll(':scope > button')) {
-        if (!button.querySelector('use[href$="#8e7aa4"]')) hideElement(button);
-      }
-    }
-  }
-
-  function scheduleGoogleOnlyLoginCleanupRetries() {
-    // CSS does the no-glimpse work. These tiny retries only collapse any React wrappers
-    // that remain after mount, without installing another permanent whole-page observer.
-    for (const delay of [0, 60, 160, 420, 900, 1800, 3200]) {
-      window.setTimeout(() => applyGoogleOnlyLoginPolicy(document), delay);
+      const nativeImages = Array.from(document.querySelectorAll('a[data-sidebar-item="true"][href="/images"]'))
+        .find(item => !item.hasAttribute('data-bravefox-sidebar-images'));
+      const replacement = nativeImages || makeSidebarImagesItem(moreItem);
+      replacement.setAttribute('data-bravefox-sidebar-images', 'true');
+      moreItem.replaceWith(replacement);
     }
   }
 
@@ -3215,11 +2146,8 @@
   }
 
   function cleanChatGptUi(scope = document) {
-    applyGoogleOnlyLoginPolicy(scope);
-    applyAccountAndSettingsCleanup(scope);
     polishSidebarNavigation();
     removePluginFeaturedPromo(scope);
-    enforceThinkingEffortFloor(scope);
     forEachMatch(scope, 'div[role="menuitem"]', item => {
       const firstLine = normalizeText(String(item.textContent || '').split('\n')[0]);
       if (MODELS_TO_REMOVE.has(firstLine)) item.remove();

@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         FBCleaner 27.3.5
-// @date      	 2026-08-23
+// @date      	 2026-09-04
 // @description  Makes my Facebook experience less terrible.
 // @match        *://*.facebook.com/*
 // @grant        none
@@ -3469,6 +3469,7 @@ const isolatedFbids = [
 	'7950002728364292',
 	'100002704826559',
 	'371861326178508',
+	'100000764364623',
 	'100006231940849',
 	'100013206342389',
 	'100079421143598',
@@ -3484,10 +3485,12 @@ const isolatedFbids = [
 	'779432839',
 	'1139183121',
 	'610250511',
+	'1824830844',
 	'1495428881',
 	'1120952529',
 	'1356706889',
 	'10225004332552385',
+	'100000761260745',
 	'10219580837008386',
 	'10220029018452642',
 	'10223968662581283',
@@ -3532,6 +3535,7 @@ const isolatedFbids = [
 	'8065217176842846',
 	'895381147159854',
 	'1080918508606116',
+	'100002325955967',
 	'1072683142762986',
 	'630426793655292',
 	'609256709105634',
@@ -3724,7 +3728,12 @@ const blockedUrls = [
     /Rupaska%20/,
     /Laura%20Karhu/,
     /Mira%20Immonen/,
+    /Julia%20Rajala/,
+    /Nina%20Immonen/,
+    /Heli%20Kupari/,
     /Katariina%20/,
+    /Piia%20Oksanen/,
+    /Piia%20Bärlund/,
     /\/facebook\.com\/search\/top\/\?q=Katariina/,
     /\/facebook\.com\/search\/people\/\?q=Katariina/,
     /\/facebook\.com\/search\/top\/\?q=Kara%20B/,
@@ -3972,7 +3981,7 @@ const globalRegex = [
     	/AJ Lee's/i, /Nikkita Lyons/i, /Lisa Varon/i, /Marie Varon/i, /Irving/i, /Belts Mone/i, /Amanda Huber/i, /Megan Bayne/i, /Wren Sinclair/i, /Bella Twins/i, /Britt Baker/i,  /Kairii/i, /Sexxy/i, /Xia Li/i,
 	/Sexx/i, /Sexi/i, /Monroe/i, /Girlfriend/i, /Girl's/i, /Women's/i, /Woman's/i, /Lady's/i, /Ladies'/i, /Toni Harsunen/i, /Wikman/i, /Vikman/i, /Jaida Parker/i, /suositukset/i, /ehdotukset/i, /Kamitani/i, 
 	/Artificial Intelligence/i, /20\. heinäkuu klo/i, /Sisältö ei ole käytettävissä tällä hetkellä/i, /sinulle ehdotettu/i, /kendal.*(grey|gray)/i, /leila.*(grey|gray)/i, /Jessika WWE/i, /Fallon Henley/i,
-	/Kiana/i, /Kiana James/i, /QTCinderella/i, /KaliArmstrong/i, /Kali Armstrong/i, /#KaliArmstrong/i, /#Kali/i, /Gail Kim/i, /Eerika/i, /Mira Immo/i, /Serrano/i,
+	/Kiana/i, /Kiana James/i, /QTCinderella/i, /KaliArmstrong/i, /Kali Armstrong/i, /#KaliArmstrong/i, /#Kali/i, /Gail Kim/i, /Eerika/i, /Mira Immo/i, /Serrano/i, /Nina Immo/i, /Heli Kupa/i, /Julia Rajal/i,
 
 // Boundaried regexes (separated for clarity)
 	/\bVaughn\b/i, /\bEvelyn\b/i,

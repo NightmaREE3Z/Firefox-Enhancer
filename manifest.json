@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "BraveFox Enhancer",
-  "version": "27.5.1",
+  "version": "27.6.0",
   "description": "Unified for Firefox PC and Android personal use, for more peaceful Interwebs experience",
   "background": {
     "scripts": [
@@ -348,6 +348,27 @@
         "*://twitch.tv/*",
         "*://*.twitch.tv/*"
       ]
+    },
+    {
+      "matches": [
+        "https://www.instagram.com/*"
+      ],
+      "js": [
+        "scripts/igmainworld.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://www.instagram.com/*",
+        "https://www.threads.net/*"
+      ],
+      "js": [
+        "scripts/instagram.js"
+      ],
+      "run_at": "document_start",
+      "world": "ISOLATED"
     },
     {
       "matches": [

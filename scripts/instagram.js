@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name         IGCleaner v27.5.0
-// @version      2026-08-26
+// @name         IGCleaner v27.6.0-V6H
+// @version      2026-09-08
 // @description  Trying to make my Instagram experience tolerable.
 // @match        *://www.instagram.com/*
 // @match        *://www.instagram.com/?next=%2F/*
@@ -12,7 +12,6 @@
 
 (function() {
 'use strict';
-
 
     // ===== v43: route class for edit-profile no-glimpse CSS =====
     function isMetaManglerAccountEditPathV43() {
@@ -233,29 +232,9 @@
                     transition: none !important;
                 }
 
-                /* Feed gate: no content flash while home-feed posts are being caption-scanned. */
-                html.metamangler-feed-gate main article:not([data-banned-scan="safe"]):not([data-banned-scan="banned"]) {
-                    opacity: 0 !important;
-                    pointer-events: none !important;
-                    transition: none !important;
-                }
-
-                html.metamangler-feed-gate main article[data-banned-scan="safe"] {
-                    opacity: 1 !important;
-                    pointer-events: auto !important;
-                    transition: none !important;
-                }
-
-                html.metamangler-feed-gate main article[data-banned-scan="banned"] {
-                    opacity: 0 !important;
-                    pointer-events: none !important;
-                    max-height: 1px !important;
-                    min-height: 1px !important;
-                    height: 1px !important;
-                    margin: 0 !important;
-                    padding: 0 !important;
-                    border: 0 !important;
-                    overflow: hidden !important;
+                /* Legacy Home-feed gate intentionally neutralized in V6E. The dedicated
+                   coordinator below is the sole owner of Home-feed presentation. */
+                html.metamangler-feed-gate main article {
                     transition: none !important;
                 }
             `;
@@ -264,6 +243,7 @@
         } catch {}
     }
     injectMinimalNoGlimpseNavCSS();
+    injectHomeFeedHybridGateCSS();
 
     // ===== Feed gate: hide feed articles until the caption scan approves them =====
     function isMetaManglerHomeFeedPath() {
@@ -279,7 +259,9 @@
         try {
             const root = document.documentElement;
             if (!root) return;
-            root.classList.toggle('metamangler-feed-gate', isMetaManglerHomeFeedPath());
+            root.classList.remove('metamangler-feed-gate');
+            if (isMetaManglerHomeFeedPath()) root.setAttribute('data-bf-ig-home-feed-hybrid', '1');
+            else root.removeAttribute('data-bf-ig-home-feed-hybrid');
         } catch {}
     }
     updateMetaManglerFeedGateClass();
@@ -290,10 +272,13 @@
     const __observers = new Set();
     const __eventCleanups = new Set();
     const __rafIds = new Set(); 
+    const __idleIds = new Set();
     let __cleanupRan = false;
     let __intervalsRunning = false;
     let __isRedirectingFast = false; 
     let __lastKnownUrl = window.location.href; 
+    // DIAGNOSTIC: completely disable home-feed article processing to isolate scroll/render jank.
+    const __disableHomeFeedArticleProcessing = true;
 
     function devLog(message) {
         // console.log('[INSTAGRAM.JS]', message);
@@ -319,6 +304,17 @@
         });
         __rafIds.add(id);
         return id;
+    }
+    function addIdle(fn, timeout = 700) {
+        if (typeof requestIdleCallback === 'function') {
+            const id = requestIdleCallback((deadline) => {
+                __idleIds.delete(id);
+                try { fn(deadline); } catch {}
+            }, { timeout });
+            __idleIds.add(id);
+            return id;
+        }
+        return addTimeout(fn, 80);
     }
     function stopIntervals() {
         __timers.intervals.forEach(id => { try { clearInterval(id); } catch {} });
@@ -512,83 +508,225 @@
             __timers.timeouts.clear();
             __rafIds.forEach(id => { try { cancelAnimationFrame(id); } catch {} });
             __rafIds.clear();
+            __idleIds.forEach(id => { try { cancelIdleCallback(id); } catch {} });
+            __idleIds.clear();
+            if (homeFeedScrollIdleTimer !== null) { try { clearTimeout(homeFeedScrollIdleTimer); } catch {} homeFeedScrollIdleTimer = null; }
             __observers.forEach(obs => { try { obs.disconnect(); } catch {} });
             __observers.clear();
             __eventCleanups.forEach(fn => { try { fn(); } catch {} });
             __eventCleanups.clear();
+            try { __bfHomeFeedPrepaintObserver?.disconnect(); } catch {}
+            try { __bfHomeFeedPrepaintRootWaitObserver?.disconnect(); } catch {}
+            __bfHomeFeedPrepaintObserver = null;
+            __bfHomeFeedPrepaintObservedRoot = null;
+            __bfHomeFeedPrepaintRootWaitObserver = null;
             try { document.getElementById('extra-redirect-style')?.remove(); } catch {}
             try { document.getElementById('reels-navigation-hider')?.remove(); } catch {}
             try { document.getElementById('ig-blank-style')?.remove(); } catch {}
         } catch {}
     }
 
-// ======== Keyword arrays ========
-const bannedKeywords = [
-   "Bliss", "Alexa Bliss", "Tiffany", "Stratton", "Chelsea Green", "Bayley", "Blackheart", "Mercedes", "Alba Fyre", "sensuel", "Maryse", "Meta AI", "Del Rey", "CJ Perry", 
-   "Becky Lynch", "Michin", "Mia Yim", "julmakira", "Stephanie", "Liv Morgan", "Piper Niven", "sensuel", "queer", "Pride", "NXT Womens", "Perry", "Henley", "Nattie", 
-   "Jordynne", "Woman", "Women", "@tiffanywwe", "@yaonlylivvonce", "@alexa_bliss_wwe_", "@alexa_bliss", "@samanthathebomb", "Women's", "Woman's", "Summer Rae", "Mia Yim",
-   "Naomi", "Bianca Belair", "Jessika Carr", "Carr WWE", "Jessica Karr", "bikini", "Kristen Stewart", "Sydney Sweeney", "Piper Niven", "Nia Jax", "Meta AI", "AI generated",
-   "Young Bucks", "Jackson", "Lash Legend", "Jordynne Grace", "generated", "DeepSeek", "TOR-Browser", "TOR-selain", "Opera GX", "prostitute", "AI-generated", "Arianna Grace", 
-   "deepnude", "undress", "nudify", "nude", "nudifier", "faceswap", "facemorph", "Sweeney", "Alexis", "Sydney", "Zelina Vega", "Mandy Rose", "playboy", "Irving", "IYO SKY", 
-   "Nikki", "Bella", "Opera Browser", "Safari", "OperaGX", "MS Edge", "Microsoft Edge", "clothes", "Lola Vice", "Vice WWE", "Candice LeRae", "attire", "only fans", "miska",
-   "crotch", "dress", "dreamtime", "Velvet Sky", "LGBTQ", "panties", "panty", "cloth", "cleavage", "deviantart", "Trish", "Stratus", "Tutki", "AdvancingAI", "Paxley", "misk33",
-   "Tiffy Time", "Steward", "Roxanne", "cameltoe", "dreamtime AI", "Joanie", "Stewart", "Isla Dawn", "escort", "inpaint", "photopea", "onlyfans", "fantime", "Amari Miller", 
-   "upscale", "upscaling", "upscaled", "AJ Lee", "deepfake", "ring gear", "Transvestite", "Aleksa", "Giulia", "Rodriguez", "Lisa Marie Varon", "Kristen", "Natasha", "Natalia",
-   "booty", "Paige", "Mafiaprinsessa", "Chyna", "lingerie", "venice", "AI model", "deepfake", "nudifying", "nudifier", "undressing", "undressed", "undressifying", "undressify", 
-   "Vladimir Putin", "Toni Storm", "Skye Blue", "Carmella", "Mariah May", "Harley Cameron", "Hayter", "trunks", "pants", "Ripley", "manyvids", "Del Ray", "Belts Mone", "Cargill", 
-   "five feet of fury", "5 feet of fury", "selain", "browser", "DeepSeek", "DeepSeek AI", "fansly", "justforfans", "patreon", "Vince Russo", "Tay Conti", "Valhalla", "lotta",  
-   "Shirai", "Io Sky", "Iyo Shirai", "Dakota Kai", "wiikmaaan", "Asuka", "Kairi Sane", "Meiko Satomura", "NXT Women", "Russo", "underwear", "Rule 34", "Nikkita Lyons", "belfie", 
-   "Miko Satomura", "Sarray", "Xia Li", "Shayna Baszler", "Ronda Rousey", "Dana Brooke", "Izzi Dame", "Tamina", "Alicia Fox", "Madison Rayne", "Saraya", "Sol Ruca", "Roxanne", 
-   "Layla", "Michelle McCool", "Eve Torres", "Kelly", "Melina WWE", "Jillian Hall", "Mickie James", "Su Yung", "Britt", "Nick Jackson", "Matt Jackson", "Sakazaki", "Primera", 
-   "Maria Kanellis", "Beth Phoenix", "Victoria WWE", "Molly Holly", "Gail Kim", "Awesome Kong", "Deonna", "Purrazzo", "Anna Jay", "Riho", "Britney", "Nyla Rose", "Naomi",
-   "Angelina Love", "Tessmacher", "Havok", "Taya Valkyrie", "Valkyria", "Tay Melo", "Nightingale", "Statlander", "Hikaru Shida", "ZELINA!", "rule34", "Sasha", "lesbian",
-   "Penelope Ford", "Shotzi", "Tegan", "Stephanie", "Sasha Banks", "Sakura", "Tessa", "Brooke", "Jakara", "Alba Fyre", "Isla Dawn", "Scarlett Bordeaux", "lesbo", "Roxan", 
-   "B-Fab", "Kayden Carter", "Katana Chance", "Lyra Valkyria", "Indi Hartwell", "Blair", "Davenport", "Maxxine Dupri", "Russia", "China",  "Natalya", "Lisa Varon", "Vilma", 
-   "Karmen Petrovic", "Ava Raine", "Yulisa Leon", "Cora Jade", "Gina Adams", "Jacy Jayne", "Gigi Dolin", "Thea Hail", "Tatum WWE", "Fallon", "Valentina Feroz", "Wilma", 
-   "wondershare", "filmora", "Kelani Jordan", "Electra Lopez", "Wendy Choo", "lottapupu", "m1ska", "m1sk4", "Milli", "Niina", "Jasmin", "Saana", "Veera", "Saya Kamitani", 
-   "misk4", "misk3", "m1sk3", "m1ske", "m1mmuska", "misk33waaa", "misk33waa", "misk33wa", "misk3waa", "misk3waaa", "miskaawq9", "misk3wa", "Matilda", "Malla", "Kamitani", 
-   "Nikkita", "linktr.ee", "vsco.co", "Sinulle ehdotettua", "Sinulle ehdotettu", "Suggested for you", "Myös Metalta", "@lovable.dev", "@lovable.ai", "Serrano",
- 
-// String hashtags
-   "#perse", "#pylly", "#tissit", "#takapuoli", "#takamus", "#boobs", "#boobies", "#boobie", "#booty", "#butt", "#babe", "#aigen", "#aigenerated", "#aigeneration", "#artificial",  
-   "#aiapplication", "#aiedit", "#rack", "#finnishgirl", "#girl", "#women", "#woman", "#ladies", "#girls", "#womens", "#womans", "#belfie", "#artificialintelligence", "#bestie", 
-   "#gym", "#gymgirl", "#gymwoman", "#belfie", "#heru", "#heruu", "#heruhoro", "#slut", "#horny", "#horni", "#bitch", "#pants", "#panties", "#pajama", "#pyjama", "#bikini", 
-   "#lingerie", "#girly", "#girlie", "#finnishwoman", "#boudoir",
+// ======== Unified keyword regex filter ========
+// One source of truth for text/content keyword filtering. Literal keywords from the old list
+// are stored here as escaped /i regex literals; runtime-synced names are appended as regexes.
+const keywordsToHide = [
+    /Bliss/i, /Alexa Bliss/i, /Tiffany/i, /Stratton/i, /Chelsea Green/i, /Bayley/i, /Blackheart/i, /Mercedes/i,
+    /Alba Fyre/i, /sensuel/i, /Maryse/i, /Meta AI/i, /Del Rey/i, /CJ Perry/i, /Becky Lynch/i, /Michin/i,
+    /Mia Yim/i, /julmakira/i, /Stephanie/i, /Liv Morgan/i, /Piper Niven/i, /queer/i, /Pride/i, /NXT Womens/i,
+    /Perry/i, /Henley/i, /Nattie/i, /Jordynne/i, /Woman/i, /Women/i, /@tiffanywwe/i, /@yaonlylivvonce/i,
+    /@alexa_bliss_wwe_/i, /@alexa_bliss/i, /@samanthathebomb/i, /Women's/i, /Woman's/i, /Summer Rae/i, /Naomi/i, /Bianca Belair/i,
+    /Jessika Carr/i, /Carr WWE/i, /Jessica Karr/i, /bikini/i, /Kristen Stewart/i, /Sydney Sweeney/i, /Nia Jax/i, /AI generated/i,
+    /Young Bucks/i, /Jackson/i, /Lash Legend/i, /Jordynne Grace/i, /generated/i, /DeepSeek/i, /TOR-Browser/i, /TOR-selain/i,
+    /Opera GX/i, /prostitute/i, /AI-generated/i, /Arianna Grace/i, /deepnude/i, /undress/i, /nudify/i, /nude/i,
+    /nudifier/i, /faceswap/i, /facemorph/i, /Sweeney/i, /Alexis/i, /Sydney/i, /Zelina Vega/i, /Mandy Rose/i,
+    /playboy/i, /Irving/i, /IYO SKY/i, /Nikki/i, /Bella/i, /Opera Browser/i, /Safari/i, /OperaGX/i,
+    /MS Edge/i, /Microsoft Edge/i, /clothes/i, /Lola Vice/i, /Vice WWE/i, /Candice LeRae/i, /attire/i, /only fans/i,
+    /miska/i, /crotch/i, /dress/i, /dreamtime/i, /Velvet Sky/i, /LGBTQ/i, /panties/i, /panty/i,
+    /cloth/i, /cleavage/i, /deviantart/i, /Trish/i, /Stratus/i, /Tutki/i, /AdvancingAI/i, /Paxley/i,
+    /misk33/i, /Tiffy Time/i, /Steward/i, /Roxanne/i, /cameltoe/i, /dreamtime AI/i, /Joanie/i, /Stewart/i,
+    /Isla Dawn/i, /escort/i, /inpaint/i, /photopea/i, /onlyfans/i, /fantime/i, /Amari Miller/i, /upscale/i,
+    /upscaling/i, /upscaled/i, /AJ Lee/i, /deepfake/i, /ring gear/i, /Transvestite/i, /Aleksa/i, /Giulia/i,
+    /Rodriguez/i, /Lisa Marie Varon/i, /Kristen/i, /Natasha/i, /Natalia/i, /booty/i, /Paige/i, /Mafiaprinsessa/i,
+    /Chyna/i, /lingerie/i, /venice/i, /AI model/i, /nudifying/i, /undressing/i, /undressed/i, /undressifying/i,
+    /undressify/i, /Vladimir Putin/i, /Toni Storm/i, /Skye Blue/i, /Carmella/i, /Mariah May/i, /Harley Cameron/i, /Hayter/i,
+    /trunks/i, /pants/i, /Ripley/i, /manyvids/i, /Del Ray/i, /Belts Mone/i, /Cargill/i, /five feet of fury/i,
+    /5 feet of fury/i, /selain/i, /browser/i, /DeepSeek AI/i, /fansly/i, /justforfans/i, /patreon/i, /Vince Russo/i,
+    /Tay Conti/i, /Valhalla/i, /lotta/i, /Shirai/i, /Io Sky/i, /Iyo Shirai/i, /Dakota Kai/i, /wiikmaaan/i,
+    /Asuka/i, /Kairi Sane/i, /Meiko Satomura/i, /NXT Women/i, /Russo/i, /underwear/i, /Rule 34/i, /Nikkita Lyons/i,
+    /belfie/i, /Miko Satomura/i, /Sarray/i, /Xia Li/i, /Shayna Baszler/i, /Ronda Rousey/i, /Dana Brooke/i, /Izzi Dame/i,
+    /Tamina/i, /Alicia Fox/i, /Madison Rayne/i, /Saraya/i, /Sol Ruca/i, /Layla/i, /Michelle McCool/i, /Eve Torres/i,
+    /Kelly/i, /Melina WWE/i, /Jillian Hall/i, /Mickie James/i, /Su Yung/i, /Britt/i, /Nick Jackson/i, /Matt Jackson/i,
+    /Sakazaki/i, /Primera/i, /Maria Kanellis/i, /Beth Phoenix/i, /Victoria WWE/i, /Molly Holly/i, /Gail Kim/i, /Awesome Kong/i,
+    /Deonna/i, /Purrazzo/i, /Anna Jay/i, /Riho/i, /Britney/i, /Nyla Rose/i, /Angelina Love/i, /Tessmacher/i,
+    /Havok/i, /Taya Valkyrie/i, /Valkyria/i, /Tay Melo/i, /Nightingale/i, /Statlander/i, /Hikaru Shida/i, /ZELINA!/i,
+    /rule34/i, /Sasha/i, /lesbian/i, /Penelope Ford/i, /Shotzi/i, /Tegan/i, /Sasha Banks/i, /Sakura/i,
+    /Tessa/i, /Brooke/i, /Jakara/i, /Scarlett Bordeaux/i, /lesbo/i, /Roxan/i, /B-Fab/i, /Kayden Carter/i,
+    /Katana Chance/i, /Lyra Valkyria/i, /Indi Hartwell/i, /Blair/i, /Davenport/i, /Maxxine Dupri/i, /Russia/i, /China/i,
+    /Natalya/i, /Lisa Varon/i, /Vilma/i, /Karmen Petrovic/i, /Ava Raine/i, /Yulisa Leon/i, /Cora Jade/i, /Gina Adams/i,
+    /Jacy Jayne/i, /Gigi Dolin/i, /Thea Hail/i, /Tatum WWE/i, /Fallon/i, /Valentina Feroz/i, /Wilma/i, /wondershare/i,
+    /filmora/i, /Kelani Jordan/i, /Electra Lopez/i, /Wendy Choo/i, /lottapupu/i, /m1ska/i, /m1sk4/i, /Milli/i,
+    /Niina/i, /Jasmin/i, /Saana/i, /Veera/i, /Saya Kamitani/i, /misk4/i, /misk3/i, /m1sk3/i,
+    /m1ske/i, /m1mmuska/i, /misk33waaa/i, /misk33waa/i, /misk33wa/i, /misk3waa/i, /misk3waaa/i, /miskaawq9/i,
+    /misk3wa/i, /Matilda/i, /Malla/i, /Kamitani/i, /Minja/i, /Nikkita/i, /linktr\.ee/i, /vsco\.co/i,
+    /Sinulle ehdotettua/i, /Sinulle ehdotettu/i, /Suggested for you/i, /Myös Metalta/i, /@lovable\.dev/i, /@lovable\.ai/i, /Serrano/i, /#perse/i,
+    /#pylly/i, /#tissit/i, /#takapuoli/i, /#takamus/i, /#boobs/i, /#boobies/i, /#boobie/i, /#booty/i,
+    /#butt/i, /#babe/i, /#aigen/i, /#aigenerated/i, /#aigeneration/i, /#artificial/i, /#aiapplication/i, /#aiedit/i,
+    /#rack/i, /#finnishgirl/i, /#girl/i, /#women/i, /#woman/i, /#ladies/i, /#girls/i, /#womens/i,
+    /#womans/i, /#belfie/i, /#artificialintelligence/i, /#bestie/i, /#gym/i, /#gymgirl/i, /#gymwoman/i, /#heru/i,
+    /#heruu/i, /#heruhoro/i, /#slut/i, /#horny/i, /#horni/i, /#bitch/i, /#pants/i, /#panties/i,
+    /#pajama/i, /#pyjama/i, /#bikini/i, /#lingerie/i, /#girly/i, /#girlie/i, /#finnishwoman/i, /#boudoir/i,
+    /tiliehdotuksia/i, /linktr.ee/i, /vsco.co/i, /AI\-/i, /-\AI/i, /AI\-suck/i, /AIblow/i, /Suckin/i,
+    /Sucks/i, /Sucki/i, /Sucky/i, /AIsuck/i, /motionsw/i, /motionc/i, /poseai/i, /RemovingAI/i,
+    /blowjob/i, /b\-job/i, /bj0b/i, /bl0w/i, /blowj0b/i, /dr0ol/i, /dro0l/i, /bjob/i,
+    /5uck/i, /lex bl/i, /Steph's/i, /Stephanie's/i, /Stepha/i, /Stepan/i, /Stratu/i, /Stratt/i,
+    /Tiffa/i, /Tiffy/i, /katj/i, /lesb/i, /homo/i, /transvestite/i, /Henriikka/i, /Gina Adam/i,
+    /pride/i, /transve/i, /Henni/i, /Lawren/i, /Lawrenc/i, /Valtez/i, /Lawrence/i, /Jenny/i,
+    /Jenn1/i, /J3nn1/i, /J3nni/i, /J3nn4/i, /Jenn4/i, /Dua Lipa/i, /Dualipa/i, /Jenna/i,
+    /Julianne/i, /Juliane/i, /Juliana/i, /Julianna/i, /Rasikangas/i, /jjulia/i, /juuliska/i, /Roxanna/i,
+    /Wilm/i, /Noelle/i, /Kristiina/i, /Reetta/i, /irpp4/i, /juliana/i, /julianna/i, /juulianna/i,
+    /juuliana/i, /juulia/i, /rasikannas/i, /rasikangas/i, /Ansku/i, /Crowley/i, /Ruby Soho/i, /Monica/i,
+    /Castillo/i, /Matsumoto/i, /Shino Suzuki/i, /Yamashita/i, /Adriana/i, /McQueen/i, /motionai/i, /Dolli/i,
+    /Dolly/i, /Aliisa/i, /maarit/i, /taija/i, /saija/i, /seija/i, /tiina/i, /teija/i,
+    /Miska/i, /Saara/i, /Saaru/i, /Lumikki/i, /Laura/i, /Noora/i, /Lumiikki/i, /Elina/i,
+    /Nooru/i, /Camila/i, /Emilia/i, /Tiinu/i, /Katherin/i, /Janita/i, /Susan/i, /Sirja/i,
+    /Venla/i, /Jenn/i, /Irene/i, /Milana/i, /Milene/i, /Minea/i, /Anette/i, /Tytti/i,
+    /Elisa/i, /Elise/i, /Rebecca/i, /Jonna/i, /Janna/i, /Janet/i, /Aleksiina/i, /Alexiina/i,
+    /Maria/i, /Marie/i, /Katja/i, /Minna/i, /Janika/i, /Janissa/i, /Pauliina/i, /Janisa/i,
+    /Miisa/i, /Kaisa/i, /Pinj/i, /Jemina/i, /Moona/i, /Viivi/i, /Annika/i, /Marissa/i,
+    /Jutta/i, /Amalia/i, /Nelli/i, /Anniina/i, /Marjut/i, /Siiri/i, /Kamila/i, /Kamilla/i,
+    /Kamilia/i, /Lauren/i, /Camilla/i, /Camilia/i, /Krisse/i, /Miina/i, /Merja/i, /Alina/i,
+    /Mirkku/i, /Irkku/i, /zelina/i, /Aliina/i, /Vilhel/i, /Wilhel/i, /Aurora/i, /Joana/i,
+    /Iiris/i, /Erika/i, /Janina/i, /Kasie Cay/i, /Marie Varon/i, /Takaichi/i, /With Grok/i, /By Grok/i,
+    /heidih/i, /Grok's/i, /Elon Musk/i, /ElonMusk/i, /Sam Altman/i, /SamAltman/i, /changemotion/i, /swapmotion/i,
+    /Huuska/i, /Sakurai/i, /Lyons/i, /Milena/i, /AI creative/i, /AI created/i, /Tekoäly/i, /Teko äly/i,
+    /Teko-äly/i, /Teko_äly/i, /generoiva/i, /generoitu/i, /generative/i, /AI create/i, /seksi/i, /Sexi/i,
+    /minja/i, /anaali/i, /pillu/i, /pimppi/i, /kyrpä/i, /kulli/i, /sexual/i, /seksuaali/i,
+    /Kairi's/i, /Kairii/i, /Sexxy/i, /Sexy/i, /Sexx/i, /@lovable.dev/i, /lovable.dev/i, /maisa/i,
+    /gener/i, /@lovable.ai/i, /lovable.ai/i, /lovable ai/i, /Zerrano/i, /Ninajessika/i, /\b#ass\b/i, /\b#tit\b/i,
+    /\b#tits\b/i, /\b#boob\b/i, /\b#AI\b/i, /\b#Nox\b/i, /\bCharlotte\b/i, /\bGina\b/i, /\bGin4\b/i, /\bHer\b/i,
+    /\bShe\b/i, /\bHer's\b/i, /\bShe's\b/i, /\bHers\b/i, /\bShes\b/i, /\bAlexa\b/i, /\bTiffy\b/i, /\bAI\b/i,
+    /\bNeea\b/i, /\bHepe\b/i, /\bIris\b/i, /\bMiia\b/i, /\bMira\b/i, /\bTiia\b/i, /\bKara\b/i, /\bEllu\b/i,
+    /\bEeva\b/i, /\bEevi\b/i, /\bEssi\b/i, /\bKira\b/i, /\bSusu\b/i, /\bBra\b/i, /\bLana\b/i, /\bNea\b/i,
+    /\bSara\b/i, /\bAnni\b/i, /\bNikki\b/i, /\bNia\b/i, /\bJax\b/i, /\bElla\b/i, /\bElli\b/i, /\bRosa\b/i,
+    /\bMari\b/i, /\bmotion\b/i, /\bDoll\b/i, /\bOona\b/i, /\bIra\b/i, /\bIrppa\b/i, /\bG1na\b/i, /\bG!na\b/i,
+    /\bGigi\b/i, /\bDolin\b/i, /\bSarah\b/i, /\bG1n4\b/i, /\bEmmi\b/i, /\bAI-generated\b/i, /\bKati\b/i, /\bKiia\b/i,
+    /\bIda\b/i, /\bIida\b/i, /\bVera\b/i, /\bAI art\b/i, /\bLexi\b/i, /\bBy AI\b/i, /\bAI edited\b/i, /\bAI edit\b/i,
+    /\bModel\b/i, /\bSexy\b/i, /\bSex\b/i, /\bAlexis\b/i, /\bHomo\b/i, /\bGay\b/i, /\bDeep\b/i, /\bFake\b/i,
+    /\bBrie\b/i, /\bGirls\b/i, /\bGirly\b/i, /\bGirlie\b/i, /\bGirl's\b/i, /\bTorres\b/i, /\bEve WWE\b/i, /\bManna\b/i,
+    /\bNanna\b/i, /\bAava\b/i, /\bAva\b/i, /\bRaine\b/i, /\bGrok\b/i, /\bJensku\b/i, /\bSanna\b/i, /\bHanna\b/i,
+    /\bHenna\b/i, /\bAss\b/i, /\bNiina\b/i, /\bSandra\b/i, /\bViola\b/i, /\bMinka\b/i, /\bMilla\b/i, /\bMirka\b/i,
+    /\bRoosa\b/i, /\bPeppi\b/i, /\bEveliina\b/i, /\bJulle\b/i, /\bNox\b/i, /\bMenni\b/i, /\bGlna\b/i, /\bvsco\b/i,
+    /\bElon\b/i, /\bMusk\b/i, /\bJimi\b/i, /\bAltman\b/i, /\bTara\b/i, /\bKairi\b/i, /\bZoey\b/i,
 ];
 
-// ======== Regexes and Literals ========
-const bannedRegexes = [
-   /tiliehdotuksia/i, /linktr.ee/i, /vsco.co/i, /Sinulle ehdotettu/i, /Myös Metalta/i, /AI\-/i, /-\AI/i, /AI\-suck/i, /AIblow/i, /Suckin/i, /Sucks/i, /Sucki/i, /Sucky/i, /AIsuck/i, 
-   /ZELINA!/i, /motionsw/i, /motionc/i, /poseai/i, /RemovingAI/i, /blowjob/i, /b\-job/i, /bj0b/i, /bl0w/i, /blowj0b/i, /dr0ol/i, /dro0l/i, /AIblow/i, /bjob/i, /5uck/i, /lex bl/i, 
-   /Steph's/i, /Stephanie's/i, /Stepha/i, /Stephanie/i, /Stepan/i, /Stratu/i, /Stratt/i, /Tiffa/i, /Tiffy/i, /Trish/i, /Sasha/i, /lex bl/i, /katj/i, /lesb/i, /homo/i, /transvestite/i, 
-   /Henriikka/i,  /Shirai/i, /Cargill/i, /Gina Adam/i, /Gina Adams/i, /pride/i, /transve/i, /Henni/i, /Lawren/i, /Lawrenc/i, /Valtez/i, /Lawrence/i, /Jenny/i, /Jenn1/i, /J3nn1/i, 
-   /J3nni/i, /J3nn4/i, /Jenn4/i, /Dua Lipa/i, /Dualipa/i, /Jenna/i, /Julianne/i, /Juliane/i, /Juliana/i, /Julianna/i, /Rasikangas/i, /jjulia/i, /juuliska/i, /Roxanne/i, /Roxanna/i, 
-   /Wilm/i, /Noelle/i, /Kristiina/i, /Reetta/i, /Saana/i, /Veera/i, /irpp4/i, /juliana/i, /julianna/i, /juulianna/i, /juulianna/i, /juuliana/i, /juulia/i, /rasikannas/i, /rasikangas/i,  
-   /Saya Kamitani/i, /Kamitani/i, /Ansku/i, /Crowley/i, /Ruby Soho/i, /Monica/i, /Castillo/i, /Matsumoto/i, /Shino Suzuki/i, /Yamashita/i, /Adriana/i, /Nia Jax/i, /McQueen/i, /5uck/i, 
-   /Lash Legend/i, /motionai/i, /Dolli/i, /Dolly/i, /Aliisa/i, /maarit/i, /taija/i, /saija/i, /seija/i, /tiina/i, /teija/i, /Miska/i, /Saara/i, /Saaru/i,  /Lumikki/i, /Laura/i, /Noora/i,
-   /Lumiikki/i, /Noora/i, /Elina/i,  /Nooru/i, /Camila/i, /Emilia/i, /Tiinu/i, /Henni/i, /Jasmin/i, /Katherin/i, /Janita/i, /Susan/i, /Sirja/i, /Venla/i, /Jenn/i, /Irene/i, /Milana/i, 
-   /Milene/i, /Minea/i, /Anette/i, /Tytti/i, /Elisa/i, /Elise/i, /Rebecca/i, /Jonna/i, /Janna/i, /Janet/i, /Aleksiina/i, /Alexiina/i, /Maria/i, /Marie/i, /Katja/i, /Minna/i, /Janika/i, 
-   /Janissa/i, /Pauliina/i, /Janisa/i, /Miisa/i, /Vilma/i, /Kaisa/i, /Pinj/i, /Jemina/i, /Moona/i, /Viivi/i, /Annika/i, /Marissa/i, /Jutta/i, /Amalia/i, /Nelli/i, /Anniina/i, /Marjut/i, 
-   /Siiri/i, /Kamila/i, /Kamilla/i, /Kamilia/i, /Lauren/i, /Janika/i, /Camilla/i, /Camilia/i, /Krisse/i, /Malla/i, /Miina/i, /Merja/i, /Alina/i, /Alina/i, /Mirkku/i, /Irkku/i, /zelina/i,  
-   /Aliina/i, /Shirai/i, /Vilhel/i, /Wilhel/i, /Aurora/i, /Joana/i, /Iiris/i, /Erika/i, /Janina/i, /Kasie Cay/i, /Lisa Varon/i, /Marie Varon/i, /Takaichi/i, /With Grok/i, /By Grok/i,
-   /heidih/i, /Grok's/i, /Elon Musk/i, /ElonMusk/i, /Sam Altman/i, /SamAltman/i, /changemotion/i, /swapmotion/i, /Huuska/i, /Sakurai/i, /Cargill/i, /Nikkita/i, /Lyons/i, /IYO SKY/i, 
-   /Milena/i, /AI creative/i, /AI created/i, /Tekoäly/i, /Teko äly/i, /Teko-äly/i, /Teko_äly/i, /generoiva/i, /generoitu/i, /generated/i, /generative/i, /AI create/i, /seksi/i, 
-   /minja/i, /anaali/i, /pillu/i, /pimppi/i, /kyrpä/i, /kulli/i, /sexual/i, /sensuel/i, /seksuaali/i, /Kairi's/i, /Kairii/i, /Sexxy/i, /Sexy/i, /Sexx/i, /Sexi/i, /@lovable.dev/i,
-   /gener/i, /@lovable.ai/i, /lovable.dev/i, /lovable.ai/i, /lovable ai/i, /Serrano/i, /Zerrano/i,
+function publishInstagramKeywordConfigToMainWorld() {
+    try {
+        const patterns = keywordsToHide.map(regex => ({
+            source: regex.source,
+            flags: regex.flags
+        }));
+        window.postMessage({
+            __metamanglerType: 'ig-keyword-config',
+            patterns
+        }, location.origin);
+    } catch {}
+}
 
-// Literal regex hashtags
-   /\b#ass\b/i, /\b#tit\b/i, /\b#tits\b/i, /\b#boob\b/i, /\b#AI\b/i, /\b#Nox\b/i,
+function publishInstagramAllowedConfigToMainWorld() {
+    try {
+        window.postMessage({
+            __metamanglerType: 'ig-allowed-config',
+            words: allowedWords.slice()
+        }, location.origin);
+    } catch {}
+}
 
-// Literal regexes (Boundaries, bro) 
-   /\bCharlotte\b/i, /\bGina\b/i, /\bGin4\b/i, /\bHer\b/i, /\bShe\b/i, /\bHer's\b/i, /\bShe's\b/i, /\bHers\b/i, /\bShes\b/i, /\bAlexa\b/i, /\bTiffy\b/i, /\bAI\b/i, /\bNeea\b/i, /\bHepe\b/i, 
-   /\bIris\b/i, /\bMiia\b/i, /\bMira\b/i, /\bTiia\b/i, /\bKara\b/i, /\bEllu\b/i, /\bEeva\b/i, /\bEevi\b/i, /\bEssi\b/i, /\bKira\b/i, /\bSusu\b/i, /\bBra\b/i, /\bLana\b/i, /\bNea\b/i, /\bNeea\b/i, 
-   /\bSara\b/i, /\bAnni\b/i, /\bNikki\b/i, /\bNia\b/i, /\bJax\b/i, /\bElla\b/i, /\bElli\b/i, /\bRosa\b/i, /\bMari\b/i, /\bmotion\b/i, /\bDoll\b/i, /\bOona\b/i, /\bIra\b/i, /\bIrppa\b/i, /\bG1na\b/i,  
-   /\bG!na\b/i, /\bGina\b/i, /\bGigi\b/i, /\bDolin\b/i, /\bSarah\b/i, /\bG1n4\b/i, /\bEmmi\b/i, /\bAI-generated\b/i, /\bKati\b/i, /\bKiia\b/i, /\bIda\b/i, /\bIida\b/i, /\bVera\b/i, /\bAI art\b/i, 
-   /\bLexi\b/i, /\bBy AI\b/i, /\bAI edited\b/i, /\bAI edit\b/i, /\bModel\b/i, /\bSexy\b/i, /\bSex\b/i, /\bAlexa\b/i, /\bAlexis\b/i, /\bHomo\b/i, /\bGay\b/i, /\bDeep\b/i, /\bFake\b/i, /\bBrie\b/i, 
-   /\bGirls\b/i, /\bGirly\b/i, /\bGirlie\b/i, /\bGirl's\b/i, /\bTorres\b/i, /\bEve WWE\b/i, /\bNikki\b/i, /\bManna\b/i, /\bNanna\b/i, /\bAava\b/i, /\bAva\b/i, /\bRaine\b/i, /\bGrok\b/i, /\bJensku\b/i, 
-   /\bSanna\b/i, /\bHanna\b/i, /\bHenna\b/i, /\bAss\b/i, /\bNiina\b/i, /\bSandra\b/i, /\bViola\b/i, /\bMinka\b/i, /\bMilla\b/i, /\bMirka\b/i, /\bRoosa\b/i, /\bPeppi\b/i, /\bEveliina\b/i, /\bJulle\b/i,  
-   /\bBy AI\b/i, /\bNikki\b/i, /\bNox\b/i, /\bMenni\b/i, /\bGlna\b/i, /\bvsco\b/i, /\bElon\b/i, /\bMusk\b/i, /\bJimi\b/i, /\bAltman\b/i, /\bTara\b/i, /\bKairi\b/i, /\bZoey\b/i,
-]; 
+function publishInstagramAccountConfigToMainWorld() {
+    try {
+        window.postMessage({
+            __metamanglerType: 'ig-account-config',
+            accounts: instagramAccountsToHide.slice()
+        }, location.origin);
+    } catch {}
+}
+
+const pendingInstagramFeedClassifications = [];
+
+window.addEventListener('message', (event) => {
+    try {
+        if (event.source !== window) return;
+        const data = event.data;
+        if (!data || typeof data !== 'object') return;
+        if (data.__metamanglerType === 'ig-mainworld-config-request') {
+            publishInstagramKeywordConfigToMainWorld();
+            publishInstagramAllowedConfigToMainWorld();
+            publishInstagramAccountConfigToMainWorld();
+            return;
+        }
+        if (data.__metamanglerType === 'ig-feed-classifications' && Array.isArray(data.items)) {
+            if (typeof ingestInstagramNetworkFeedClassifications === 'function') {
+                ingestInstagramNetworkFeedClassifications(data.items);
+            } else {
+                pendingInstagramFeedClassifications.push(...data.items);
+            }
+        }
+    } catch {}
+});
+
+publishInstagramKeywordConfigToMainWorld();
+publishInstagramAllowedConfigToMainWorld();
+publishInstagramAccountConfigToMainWorld();
+try { window.postMessage({ __metamanglerType: 'ig-feed-classifier-ready' }, location.origin); } catch {}
+
+function resetKeywordRegexState(regex) {
+    try {
+        if (regex?.global || regex?.sticky) regex.lastIndex = 0;
+    } catch {}
+}
+
+function keywordRegexMatches(regex, text) {
+    try {
+        if (!regex || typeof regex.test !== 'function') return false;
+        resetKeywordRegexState(regex);
+        const matched = regex.test(String(text || ''));
+        resetKeywordRegexState(regex);
+        return matched;
+    } catch {
+        return false;
+    }
+}
+
+function escapeRegexLiteral(value) {
+    return String(value || '').replace(/[\\^$.*+?()\[\]{}|/]/g, '\\$&');
+}
+
+let instagramKeywordConfigPublishTimer = null;
+
+function scheduleInstagramKeywordConfigPublish() {
+    try {
+        if (instagramKeywordConfigPublishTimer) clearTimeout(instagramKeywordConfigPublishTimer);
+        instagramKeywordConfigPublishTimer = setTimeout(() => {
+            instagramKeywordConfigPublishTimer = null;
+            publishInstagramKeywordConfigToMainWorld();
+        }, 100);
+    } catch {}
+}
+
+function addKeywordRegexUnique(regex) {
+    try {
+        if (!(regex instanceof RegExp)) return false;
+        const key = `${regex.source}\u0000${regex.flags}`;
+        for (const existing of keywordsToHide) {
+            if (!(existing instanceof RegExp)) continue;
+            if (`${existing.source}\u0000${existing.flags}` === key) return false;
+        }
+        keywordsToHide.push(regex);
+        scheduleInstagramKeywordConfigPublish();
+        return true;
+    } catch {
+        return false;
+    }
+}
 
 // String allowed words
 const allowedWords = [
@@ -620,6 +758,9 @@ const instagramAccountsToHide = [
   'miskaawq9', 'misk33', 'misk33waaa', 'misk33waa', 'misk33wa', 'misk3waa', 'misk3waaa', 'misk3wa', 'misk4', 'misaaqw', 'lovable.dev', 'lovable', 'lovable.ai', 
 ];
 
+publishInstagramAllowedConfigToMainWorld();
+publishInstagramAccountConfigToMainWorld();
+
     const instagramBannedPaths = [
         ...instagramAccountsToHide,
         'instagram.com/explore',
@@ -630,7 +771,6 @@ const instagramAccountsToHide = [
     ];
 
 // === DYNAMIC WRESTLING SYNC ENGINE ===
-const dynamicWrestlingKeywords = [];
 const dynamicWrestlingSlugs = [];
 
 function loadDynamicWrestlingData() {
@@ -643,17 +783,11 @@ function loadDynamicWrestlingData() {
                     const slug = parts[parts.length - 1]; 
                     if (slug) {
                         dynamicWrestlingSlugs.push(slug.toLowerCase());
-                        const name = slug.replace(/-/g, ' ').toLowerCase(); 
-                        if (name.length > 2) dynamicWrestlingKeywords.push(name);
+                        const name = slug.replace(/-/g, ' ').trim();
+                        if (name.length > 2) addKeywordRegexUnique(new RegExp(escapeRegexLiteral(name), 'i'));
                     }
                 });
                 
-                dynamicWrestlingKeywords.forEach(kw => {
-                    if (!bannedKeywords.includes(kw)) {
-                        bannedKeywords.push(kw);
-                        bannedKeywordsLower.push(kw.toLowerCase());
-                    }
-                });
                 devLog(`Loaded ${dynamicWrestlingSlugs.length} dynamic wrestling names from SmackDownHotel cache.`);
             }
         });
@@ -670,7 +804,6 @@ function loadDynamicWrestlingData() {
 loadDynamicWrestlingData();
 // ===================================
 
-const bannedKeywordsLower = bannedKeywords.map(k => k.toLowerCase());
 const instagramBannedPathsLower = instagramBannedPaths.map(p => p.toLowerCase());
 const allowedWordsLower = allowedWords.map(w => w.toLowerCase());
 const instagramAccountsToHideLower = instagramAccountsToHide.map(a => a.toLowerCase());
@@ -679,10 +812,14 @@ const instagramAccountsSet = new Set(instagramAccountsToHideLower);
 const approvedPostIDs = new Set(); 
 const scannedPostsCache = new Map(); 
 const feedApprovedPostIDs = new Set(); 
+const feedBannedPostIDs = new Set(); 
+const feedDeepVerifiedPostIDs = new Set();
+const feedDecisionStorageKey = 'bfInstagramFeedDecisionsV2760HybridV6HStability'; 
+let feedDecisionSaveTimer = null;
 let isFeedScanPhase = true; 
 
     // ===== RAM guardrails: cap long-scroll caches without changing v20 behavior =====
-    const POST_CACHE_LIMIT = 700;
+    const POST_CACHE_LIMIT = 2000;
 
     function trimSetToLimit(set, limit = POST_CACHE_LIMIT) {
         try {
@@ -708,7 +845,11 @@ let isFeedScanPhase = true;
         try {
             if (!value) return;
             set.add(value);
-            trimSetToLimit(set);
+            // Home-feed content decisions are intentionally durable. A post ID is the
+            // identity of the decision, not the recycled article node. Keep the generic
+            // non-feed caches bounded, but let the persisted feed decision sets survive
+            // long scrolling sessions without silently forgetting older approvals.
+            if (set !== feedApprovedPostIDs && set !== feedBannedPostIDs) trimSetToLimit(set);
         } catch {}
     }
 
@@ -722,8 +863,126 @@ let isFeedScanPhase = true;
 
     function prunePostCaches() {
         trimSetToLimit(approvedPostIDs);
-        trimSetToLimit(feedApprovedPostIDs);
+        // feedApprovedPostIDs/feedBannedPostIDs are persisted Home-feed decisions and
+        // are deliberately not pruned here.
         trimMapToLimit(scannedPostsCache);
+    }
+
+    function loadFeedDecisionCache() {
+        try {
+            if (!location.hostname.includes('instagram.com')) return;
+            const raw = localStorage.getItem(feedDecisionStorageKey);
+            if (!raw) return;
+            const parsed = JSON.parse(raw);
+            const approved = Array.isArray(parsed?.approved) ? parsed.approved : [];
+            const banned = Array.isArray(parsed?.banned) ? parsed.banned : [];
+            const deepVerified = Array.isArray(parsed?.deepVerified) ? parsed.deepVerified : [];
+            for (const postID of approved) {
+                const id = String(postID);
+                rememberSet(feedApprovedPostIDs, id);
+                rememberSet(approvedPostIDs, id);
+                scannedPostsCache.set(id, false);
+            }
+            for (const postID of banned) {
+                const id = String(postID);
+                rememberSet(feedBannedPostIDs, id);
+                feedDeepVerifiedPostIDs.delete(id);
+                scannedPostsCache.set(id, true);
+            }
+            for (const postID of deepVerified) {
+                const id = String(postID);
+                if (feedApprovedPostIDs.has(id) && !feedBannedPostIDs.has(id)) feedDeepVerifiedPostIDs.add(id);
+            }
+            trimMapToLimit(scannedPostsCache);
+        } catch {}
+    }
+
+    function scheduleFeedDecisionCacheSave() {
+        try {
+            if (feedDecisionSaveTimer !== null) return;
+            feedDecisionSaveTimer = setTimeout(() => {
+                feedDecisionSaveTimer = null;
+                try {
+                    localStorage.setItem(feedDecisionStorageKey, JSON.stringify({
+                        approved: Array.from(feedApprovedPostIDs),
+                        banned: Array.from(feedBannedPostIDs),
+                        deepVerified: Array.from(feedDeepVerifiedPostIDs)
+                    }));
+                } catch {}
+            }, 300);
+        } catch {}
+    }
+
+    loadFeedDecisionCache();
+
+    // ===== v27.6.0 V6H MAIN-WORLD PRE-RENDER CLASSIFICATION BRIDGE =====
+    // MAIN world sanitizes the Home feed before Relay renders it. These transient
+    // Post-ID decisions let the DOM fallback respect connected/collaboration posts
+    // without turning network ALLOW into a durable approval cache entry.
+    const networkFeedRejectedPostIDs = new Set();
+    const networkFeedApprovedPostIDs = new Set();
+    const networkFeedRejectReasons = new Map();
+    const NETWORK_FEED_DECISION_LIMIT = 5000;
+
+    function trimNetworkFeedDecisions() {
+        try {
+            while (networkFeedRejectedPostIDs.size > NETWORK_FEED_DECISION_LIMIT) {
+                const oldest = networkFeedRejectedPostIDs.values().next().value;
+                if (oldest === undefined) break;
+                networkFeedRejectedPostIDs.delete(oldest);
+                networkFeedRejectReasons.delete(oldest);
+            }
+            while (networkFeedApprovedPostIDs.size > NETWORK_FEED_DECISION_LIMIT) {
+                const oldest = networkFeedApprovedPostIDs.values().next().value;
+                if (oldest === undefined) break;
+                networkFeedApprovedPostIDs.delete(oldest);
+            }
+        } catch {}
+    }
+
+    function ingestInstagramNetworkFeedClassifications(items) {
+        try {
+            if (!Array.isArray(items) || !items.length) return;
+            let changed = false;
+            for (const item of items) {
+                if (!item) continue;
+                const id = String(item.id || '').trim();
+                if (!id) continue;
+
+                if (item.decision === 'reject') {
+                    const reasons = Array.isArray(item.reasons) ? item.reasons.slice(0, 8) : [];
+                    if (!networkFeedRejectedPostIDs.has(id) || networkFeedApprovedPostIDs.has(id)) changed = true;
+                    networkFeedApprovedPostIDs.delete(id);
+                    networkFeedRejectedPostIDs.add(id);
+                    networkFeedRejectReasons.set(id, reasons);
+                    continue;
+                }
+
+                if (item.decision === 'allow') {
+                    const priorReasons = networkFeedRejectReasons.get(id) || [];
+                    const intrinsicReject = priorReasons.some(reason =>
+                        reason === 'banned-content' || reason === 'banned-account' || reason === 'ai-content' ||
+                        reason === 'sponsored-content' || reason === 'ad'
+                    );
+                    if (intrinsicReject) continue;
+                    if (!networkFeedApprovedPostIDs.has(id) || networkFeedRejectedPostIDs.has(id)) changed = true;
+                    networkFeedRejectedPostIDs.delete(id);
+                    networkFeedRejectReasons.delete(id);
+                    networkFeedApprovedPostIDs.add(id);
+                }
+            }
+            trimNetworkFeedDecisions();
+            if (changed && isMetaManglerHomeFeedPath()) {
+                try {
+                    if (typeof __bf2760HomeV5ScheduleReconcile === 'function') __bf2760HomeV5ScheduleReconcile(0);
+                    if (typeof __bf2760HomeV5SchedulePump === 'function') __bf2760HomeV5SchedulePump(40);
+                } catch {}
+            }
+        } catch {}
+    }
+
+    if (pendingInstagramFeedClassifications.length) {
+        ingestInstagramNetworkFeedClassifications(pendingInstagramFeedClassifications.splice(0));
     }
 
 function findPostWrapper(node) {
@@ -774,18 +1033,15 @@ function findPostWrapper(node) {
 
 function getPostIDFromArticle(article) {
     try {
+        if (!article) return null;
         const postLink = article.querySelector('a[href*="/p/"], a[href*="/reel/"], a[href*="/tv/"]');
         if (postLink) {
             const href = postLink.getAttribute('href') || '';
             const match = href.match(/\/(p|reel|tv)\/([A-Za-z0-9_-]+)/);
             if (match && match[2]) return match[2];
         }
-        const canonical = document.querySelector('link[rel="canonical"]');
-        if (canonical) {
-            const href = canonical.getAttribute('href') || '';
-            const match = href.match(/\/(p|reel|tv)\/([A-Za-z0-9_-]+)/);
-            if (match && match[2]) return match[2];
-        }
+        const embeddedID = article.getAttribute('data-post-id') || article.getAttribute('data-media-id');
+        if (embeddedID) return embeddedID;
     } catch {}
     return null;
 }
@@ -1318,13 +1574,15 @@ function isElementProtected(element) {
 
     function collectCaptionTextsFromArticle(article) {
         const texts = [];
-        const add = v => { if (v && typeof v === 'string') { const t = v.trim(); if (t) texts.push(t); } };
         try {
-            article.querySelectorAll('span, div, p').forEach(el => {
-                if (el.closest('ul[role="list"]')) return;
-                const t = (el.textContent || '').trim();
-                if (t && /[A-Za-z]/.test(t)) add(t);
-            });
+            const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT);
+            let node;
+            while ((node = walker.nextNode())) {
+                const parent = node.parentElement;
+                if (!parent || parent.closest('ul[role="list"]')) continue;
+                const t = (node.nodeValue || '').replace(/\s+/g, ' ').trim();
+                if (t && /[A-Za-z]/.test(t)) texts.push(t);
+            }
         } catch {}
         return texts;
     }
@@ -1335,25 +1593,17 @@ function isElementProtected(element) {
             const combinedText = texts.join(' ');
             for (const t of texts) {
                 const low = t.toLowerCase();
-                if (!allowedWordsLower.some(w => low.includes(w))) {
-                    for (const kw of bannedKeywordsLower) {
-                        if (kw && low.includes(kw)) return true;
-                    }
-                    for (const rx of bannedRegexes) {
-                        try { if (rx.test(t)) return true; } catch {}
-                    }
+                if (!allowedWordsLower.some(w => low.includes(w)) &&
+                    keywordsToHide.some(rx => keywordRegexMatches(rx, low))) {
+                    return true;
                 }
             }
             const handles = extractHandlesFromText(combinedText);
             for (const h of handles) {
                 if (instagramAccountsSet.has(h)) return true;
-                if (!allowedWordsLower.some(w => h.includes(w))) {
-                    for (const kw of bannedKeywordsLower) {
-                        if (kw && h.includes(kw)) return true;
-                    }
-                    for (const rx of bannedRegexes) {
-                        try { if (rx.test(h)) return true; } catch {}
-                    }
+                if (!allowedWordsLower.some(w => h.includes(w)) &&
+                    keywordsToHide.some(rx => keywordRegexMatches(rx, h))) {
+                    return true;
                 }
             }
             const attrNodes = article.querySelectorAll('[alt],[title],[aria-label]');
@@ -1363,21 +1613,12 @@ function isElementProtected(element) {
                     if (!val) return;
                     const low = val.toLowerCase();
                     if (!allowedWordsLower.some(w => low.includes(w))) {
-                        for (const kw of bannedKeywordsLower) {
-                            if (kw && low.includes(kw)) { throw 'BANNED_FOUND'; }
-                        }
-                        for (const rx of bannedRegexes) {
-                            if (rx.test(val)) { throw 'BANNED_FOUND'; }
-                        }
+                        if (keywordsToHide.some(rx => keywordRegexMatches(rx, low))) { throw 'BANNED_FOUND'; }
                         extractHandlesFromText(val).forEach(h => {
                             if (instagramAccountsSet.has(h)) { throw 'BANNED_FOUND'; }
-                            if (!allowedWordsLower.some(w => h.includes(w))) {
-                                for (const kw of bannedKeywordsLower) {
-                                    if (kw && h.includes(kw)) { throw 'BANNED_FOUND'; }
-                                }
-                                for (const rx of bannedRegexes) {
-                                    if (rx.test(h)) { throw 'BANNED_FOUND'; }
-                                }
+                            if (!allowedWordsLower.some(w => h.includes(w)) &&
+                                keywordsToHide.some(rx => keywordRegexMatches(rx, h))) {
+                                throw 'BANNED_FOUND';
                             }
                         });
                     }
@@ -1399,13 +1640,9 @@ function isElementProtected(element) {
                     if (instagramAccountsSet.has(candidateUser)) return true;
                 }
                 const hrefLow = hrefRaw.toLowerCase();
-                if (!allowedWordsLower.some(w => hrefLow.includes(w))) {
-                    for (const kw of bannedKeywordsLower) {
-                        if (kw && hrefLow.includes(kw)) return true;
-                    }
-                    for (const rx of bannedRegexes) {
-                        if (rx.test(hrefRaw)) return true;
-                    }
+                if (!allowedWordsLower.some(w => hrefLow.includes(w)) &&
+                    keywordsToHide.some(rx => keywordRegexMatches(rx, hrefRaw))) {
+                    return true;
                 }
             }
         } catch (e) {
@@ -1427,59 +1664,107 @@ function isElementProtected(element) {
                 if (!node) return resolve(true);
 
                 if (postID && scannedPostsCache.has(postID)) {
-                    const isBanned = scannedPostsCache.get(postID);
-                    return resolve(!isBanned);
+                    return resolve(!scannedPostsCache.get(postID));
+                }
+
+                if (postID && feedBannedPostIDs.has(postID)) {
+                    rememberScannedPost(postID, true);
+                    return resolve(false);
+                }
+
+                if (postID && (feedApprovedPostIDs.has(postID) || approvedPostIDs.has(postID))) {
+                    rememberScannedPost(postID, false);
+                    return resolve(true);
                 }
 
                 if (articleHasBannedCaption(node)) {
-                    if (postID) rememberScannedPost(postID, true);
-                    return resolve(false); 
+                    if (postID) {
+                        rememberScannedPost(postID, true);
+                        rememberSet(feedBannedPostIDs, postID);
+                        scheduleFeedDecisionCacheSave();
+                    }
+                    return resolve(false);
                 }
 
-                const moreBtns = Array.from(node.querySelectorAll('[role="button"], span, div')).filter(el => {
+                const moreBtn = Array.from(node.querySelectorAll('[role="button"], button, span')).find(el => {
                     if (!el || !el.textContent) return false;
                     const txt = el.textContent.trim().toLowerCase();
                     return txt === 'more' || txt === 'lisää' || txt === 'more...' || txt === 'lisää...';
                 });
-                
-                const moreBtn = moreBtns[0];
 
-                if (moreBtn) {
-                    const origOpacity = node.style.opacity;
-                    node.style.setProperty('opacity', '0', 'important');
-                    
+                if (!moreBtn) {
+                    if (postID) {
+                        rememberSet(feedApprovedPostIDs, postID);
+                        rememberSet(approvedPostIDs, postID);
+                        rememberScannedPost(postID, false);
+                        scheduleFeedDecisionCacheSave();
+                    }
+                    return resolve(true);
+                }
+
+                let expandedByScanner = false;
+                try {
                     moreBtn.click();
-                    
-                    setTimeout(() => {
-                        const hasBanned = articleHasBannedCaption(node);
-                        if (!hasBanned && postID) {
-                            rememberSet(feedApprovedPostIDs, postID); 
-                            rememberSet(approvedPostIDs, postID);
-                        }
-                        if (postID) rememberScannedPost(postID, hasBanned);
-                        
-                        if (!hasBanned) {
-                            node.style.setProperty('opacity', origOpacity || '1');
-                        }
-                        resolve(!hasBanned);
-                    }, 300);
-                    return;
-                }
+                    expandedByScanner = true;
+                } catch {}
 
-                if (postID) {
-                    rememberSet(feedApprovedPostIDs, postID); 
+                setTimeout(() => {
+                    let hasBanned = false;
+                    try { hasBanned = articleHasBannedCaption(node); } catch {}
+
+                    if (expandedByScanner) {
+                        try {
+                            const lessBtn = Array.from(node.querySelectorAll('[role="button"], button, span')).find(el => {
+                                if (!el || !el.textContent) return false;
+                                const txt = el.textContent.trim().toLowerCase();
+                                return txt === 'less' ||
+                                    txt === 'show less' ||
+                                    txt === 'vähemmän' ||
+                                    txt === 'näytä vähemmän' ||
+                                    txt === 'näytä vähemmän...';
+                            });
+                            if (lessBtn) lessBtn.click();
+                            else moreBtn.click();
+                        } catch {}
+                    }
+
+                    if (postID) {
+                        rememberScannedPost(postID, hasBanned);
+                        if (hasBanned) {
+                            rememberSet(feedBannedPostIDs, postID);
+                            feedApprovedPostIDs.delete(postID);
+                            approvedPostIDs.delete(postID);
+                        } else {
+                            rememberSet(feedApprovedPostIDs, postID);
                             rememberSet(approvedPostIDs, postID);
+                            feedBannedPostIDs.delete(postID);
+                        }
+                        scheduleFeedDecisionCacheSave();
+                    }
+                    resolve(!hasBanned);
+                }, 120);
+            } catch {
+                if (postID) {
+                    rememberScannedPost(postID, false);
+                    rememberSet(feedApprovedPostIDs, postID);
+                    rememberSet(approvedPostIDs, postID);
+                    scheduleFeedDecisionCacheSave();
                 }
-                if (postID) rememberScannedPost(postID, false);
-                resolve(true); 
-            } catch (e) {
-                resolve(true); 
+                resolve(true);
             }
         });
     }
 
     function safelyHideFeedArticle(article) {
         if (!article) return;
+        if (isMetaManglerHomeFeedPath() && article.tagName === 'ARTICLE' && article.closest('main')) {
+            try {
+                const postID = __bf2760HomeV5GetArticlePostID(article) || getPostIDFromArticle(article) || '';
+                if (postID) __bf2760HomeV5Reject(article, postID, true);
+                else __bf2760HomeV5ReconcileArticle(article, true);
+            } catch {}
+            return;
+        }
         article.style.setProperty('max-height', '1px', 'important');
         article.style.setProperty('height', '1px', 'important');
         article.style.setProperty('min-height', '1px', 'important');
@@ -1491,64 +1776,156 @@ function isElementProtected(element) {
         article.style.setProperty('overflow', 'hidden', 'important');
         article.style.removeProperty('visibility'); 
         hiddenElements.add(article);
-        
         stripImagesWithin(article);
     }
 
-    function processFeedPostsForScanning() {
+    function hideHomeFeedFooterLinks() {
         try {
-            if (isReelsPage() || isExcludedPath()) return;
-            
-            const articles = document.querySelectorAll('article');
-            if (articles.length === 0) return;
-            
-            articles.forEach(article => {
-                const postID = getPostIDFromArticle(article);
-                
-                const scannedID = article.getAttribute('data-scanned-post-id');
-                if (postID && scannedID && scannedID !== postID) {
-                    article.removeAttribute('data-banned-scan');
-                    article.removeAttribute('data-feed-scan-done');
+            if (!location.hostname.includes('instagram.com')) return;
+
+            const targetTexts = new Set([
+                'suosittua',
+                'instagram lite',
+                'meta ai',
+                'threads'
+            ]);
+
+            const isTargetLink = (element) => {
+                if (!element || element.nodeType !== 1) return false;
+                const text = String(element.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+                const href = String(element.getAttribute('href') || '').toLowerCase();
+                return targetTexts.has(text) ||
+                    href.includes('/meta-ai/') ||
+                    href === '/ai/' ||
+                    href.includes('threads.com') ||
+                    href.includes('threads.net');
+            };
+
+            const collapseTargetItem = (element) => {
+                if (!element || element.nodeType !== 1 || hiddenElements.has(element)) return;
+
+                const li = element.closest('li');
+                if (li && !li.closest('article, [role="article"], main')) {
+                    collapseElement(li);
+                    return;
                 }
 
-                if (article.hasAttribute('data-feed-scan-done')) return;
+                const parent = element.parentElement;
+                if (parent && !parent.matches('footer, nav, main, body, html') &&
+                    !parent.closest('article, [role="article"], main')) {
+                    const links = parent.querySelectorAll('a, [role="link"]');
+                    if (links.length <= 1) {
+                        collapseElement(parent);
+                        return;
+                    }
+                }
 
-                // Hide-first gate: keep the post invisible until expandAndScanNode decides safe/banned.
-                if (!article.hasAttribute('data-banned-scan')) {
-                    article.setAttribute('data-banned-scan', 'pending');
-                }
-                
-                article.setAttribute('data-feed-scan-done', '1');
-                if (postID) {
-                    article.setAttribute('data-scanned-post-id', postID);
-                }
-                
-                expandAndScanNode(article, postID).then(isClean => {
-                    if (isClean) {
+                collapseElement(element);
+            };
+
+            document.querySelectorAll('footer a, footer [role="link"], nav a, nav [role="link"], [role="navigation"] a, [role="navigation"] [role="link"]').forEach(element => {
+                if (isTargetLink(element)) collapseTargetItem(element);
+            });
+        } catch {}
+    }
+
+    function processFeedPostsForScanning(maxArticles = Number.POSITIVE_INFINITY) {
+        let processed = 0;
+        try {
+            if (isReelsPage() || isExcludedPath()) return 0;
+
+            if (isMetaManglerHomeFeedPath()) {
+                if (homeFeedScanQueue.size === 0) seedHomeFeedScanQueue();
+
+                for (const article of Array.from(homeFeedScanQueue)) {
+                    if (processed >= maxArticles) break;
+                    homeFeedScanQueue.delete(article);
+                    if (!article?.isConnected) continue;
+
+                    const postID = getPostIDFromArticle(article);
+                    const scannedID = article.getAttribute('data-scanned-post-id');
+                    if (postID && scannedID && scannedID !== postID) {
+                        article.removeAttribute('data-banned-scan');
+                        article.removeAttribute('data-feed-scan-done');
+                    }
+
+                    if (article.hasAttribute('data-feed-scan-done')) continue;
+
+                    if (!article.hasAttribute('data-banned-scan')) {
+                        article.setAttribute('data-banned-scan', 'pending');
+                    }
+
+                    article.setAttribute('data-feed-scan-done', '1');
+                    if (postID) article.setAttribute('data-scanned-post-id', postID);
+
+                    processed++;
+                    expandAndScanNode(article, postID).then(isClean => {
+                        if (!article.isConnected) return;
+                        if (isClean) {
+                            article.setAttribute('data-banned-scan', 'safe');
+                            article.style.removeProperty('max-height');
+                            article.style.removeProperty('height');
+                            article.style.removeProperty('min-height');
+                            article.style.removeProperty('margin');
+                            article.style.removeProperty('padding');
+                            article.style.removeProperty('border');
+                            article.style.removeProperty('overflow');
+                            article.style.setProperty('opacity', '1', 'important');
+                            article.style.removeProperty('pointer-events');
+                        } else {
+                            article.setAttribute('data-banned-scan', 'banned');
+                            safelyHideFeedArticle(article);
+                        }
+                    }).catch(() => {
+                        if (!article.isConnected) return;
                         article.setAttribute('data-banned-scan', 'safe');
-                        // Ensure pending inline opacity from the scan path cannot leave a clean post blank.
-                        article.style.removeProperty('max-height');
-                        article.style.removeProperty('height');
-                        article.style.removeProperty('min-height');
-                        article.style.removeProperty('margin');
-                        article.style.removeProperty('padding');
-                        article.style.removeProperty('border');
-                        article.style.removeProperty('overflow');
                         article.style.setProperty('opacity', '1', 'important');
                         article.style.removeProperty('pointer-events');
-                    } else {
-                        article.setAttribute('data-banned-scan', 'banned');
-                        safelyHideFeedArticle(article);
+                    });
+                }
+
+            } else {
+                const articles = document.querySelectorAll('article');
+                for (const article of articles) {
+                    if (processed >= maxArticles) break;
+                    const postID = getPostIDFromArticle(article);
+                    const scannedID = article.getAttribute('data-scanned-post-id');
+                    if (postID && scannedID && scannedID !== postID) {
+                        article.removeAttribute('data-banned-scan');
+                        article.removeAttribute('data-feed-scan-done');
                     }
-                }).catch(() => {
-                    article.setAttribute('data-banned-scan', 'safe');
-                    article.style.setProperty('opacity', '1', 'important');
-                    article.style.removeProperty('pointer-events');
-                });
-            });
-            
+                    if (article.hasAttribute('data-feed-scan-done')) continue;
+                    if (!article.hasAttribute('data-banned-scan')) article.setAttribute('data-banned-scan', 'pending');
+                    article.setAttribute('data-feed-scan-done', '1');
+                    if (postID) article.setAttribute('data-scanned-post-id', postID);
+                    processed++;
+                    expandAndScanNode(article, postID).then(isClean => {
+                        if (isClean) {
+                            article.setAttribute('data-banned-scan', 'safe');
+                            article.style.removeProperty('max-height');
+                            article.style.removeProperty('height');
+                            article.style.removeProperty('min-height');
+                            article.style.removeProperty('margin');
+                            article.style.removeProperty('padding');
+                            article.style.removeProperty('border');
+                            article.style.removeProperty('overflow');
+                            article.style.setProperty('opacity', '1', 'important');
+                            article.style.removeProperty('pointer-events');
+                        } else {
+                            article.setAttribute('data-banned-scan', 'banned');
+                            safelyHideFeedArticle(article);
+                        }
+                    }).catch(() => {
+                        article.setAttribute('data-banned-scan', 'safe');
+                        article.style.setProperty('opacity', '1', 'important');
+                        article.style.removeProperty('pointer-events');
+                    });
+                }
+            }
+
             addTimeout(() => { isFeedScanPhase = false; }, 2000);
         } catch {}
+        return processed;
     }
 
     let permalinkScanAttempts = 0;
@@ -1758,10 +2135,10 @@ ${p}, ${p} * {
         for (const raw of texts) {
             const low = raw.toLowerCase();
             if (!allowedWordsLower.some(w => low.includes(w))) {
-                for (const kw of bannedKeywordsLower) {
-                    if (kw && low.includes(kw)) return `keyword:${kw}`;
+                for (const rx of keywordsToHide) {
+                    try { if (keywordRegexMatches(rx, raw)) return `regex:${String(rx)}`; } catch {}
                 }
-                for (const rx of bannedRegexes) {
+                for (const rx of keywordsToHide) {
                     try { if (rx.test(raw)) return `regex:${String(rx)}`; } catch {}
                 }
             }
@@ -2099,11 +2476,19 @@ function hideIGSuggestedContainerFromLabelV40(labelElement) {
 
         const article = labelElement.closest('article');
         if (article) {
+            if (isMetaManglerHomeFeedPath() && article.closest('main')) {
+                const postID = __bf2760HomeV5GetArticlePostID(article) || getPostIDFromArticle(article) || '';
+                if (postID) __bf2760HomeV5Reject(article, postID, true);
+                else __bf2760HomeV5ReconcileArticle(article, true);
+                return true;
+            }
             article.setAttribute('data-banned-scan', 'banned');
             article.setAttribute('data-feed-scan-done', '1');
             safelyHideFeedArticle(article);
             return true;
         }
+
+        if (isMetaManglerHomeFeedPath() && labelElement.closest('main')) return false;
 
         // Sidebar/account-strip case: collapse the exact Suggested module, never the whole right rail.
         const peopleModule = findIGSuggestedPeopleModuleV41(labelElement);
@@ -2155,6 +2540,10 @@ function hideIGSuggestedContainerFromLabelV40(labelElement) {
 
 function hideAllIGSuggestedLabelsV40(root = document) {
     try {
+        if (isMetaManglerHomeFeedPath()) {
+            const node = root && root.nodeType === 1 ? root : document.documentElement;
+            if (root === document || node?.closest?.('main') || node?.querySelector?.('main')) return;
+        }
         const scanRoot = root && root.querySelectorAll ? root : document;
         const nodes = [];
         if (scanRoot.nodeType === 1 && isIGSuggestedLabelTextV40(scanRoot.textContent)) nodes.push(scanRoot);
@@ -2243,6 +2632,7 @@ function hideIGAccountEditSectionsV43(root = document) {
 
     function hideSinulleEhdotettuaBlock() {
         try {
+            if (isMetaManglerHomeFeedPath()) return;
             const spans = document.querySelectorAll('span');
             spans.forEach(span => {
                 if (!span.textContent) return;
@@ -2450,34 +2840,34 @@ overflow: visible !important;
             margin-top: -16px !important; 
         }
 
-        /* Newly-created story slots are paint-gated individually until Instagram
-           has populated the accessible username. This prevents late story tiles from
-           popping into an already-visible tray before the account ban check runs. */
-        div[data-pagelet="story_tray"] li[data-ig-story-pending],
-        div[data-pagelet="story_tray"] [data-ig-story-pending] {
-            display: none !important;
+        /* Keep the whole tray paint-hidden until the first account-classification /
+           compaction commit has completed. Layout is preserved, so the reveal itself
+           does not make Instagram recalculate the carousel geometry. */
+        div[data-pagelet="story_tray"]:not([data-ig-story-tray-ready]) {
             visibility: hidden !important;
             opacity: 0 !important;
             pointer-events: none !important;
-            width: 0 !important;
-            min-width: 0 !important;
-            max-width: 0 !important;
-            height: 0 !important;
-            min-height: 0 !important;
-            max-height: 0 !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            flex: 0 0 0 !important;
-            overflow: hidden !important;
-            position: absolute !important;
-            left: -10000px !important;
-            top: -10000px !important;
             transition: none !important;
             animation: none !important;
         }
 
-        /* Persistent story-account hiding. Instagram can re-apply inline styles
-           during hydration; keep banned story tiles out of the flex layout. */
+        /* Newly-created story slots are paint-gated individually until Instagram
+           has populated the accessible username. IMPORTANT: keep their geometry while
+           pending/staged so a banned tile cannot create a visible hole before the
+           transform compaction is committed in the same observer turn. */
+        div[data-pagelet="story_tray"] li[data-ig-story-pending],
+        div[data-pagelet="story_tray"] [data-ig-story-pending],
+        div[data-pagelet="story_tray"] li[data-ig-story-ban-staging],
+        div[data-pagelet="story_tray"] [data-ig-story-ban-staging] {
+            visibility: hidden !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+            transition: none !important;
+            animation: none !important;
+        }
+
+        /* Persistent story-account hiding. This geometry collapse is applied only
+           after the later story transforms have already been compacted in JS. */
         div[data-pagelet="story_tray"] li[data-ig-story-account-banned],
         div[data-pagelet="story_tray"] [data-ig-story-account-banned] {
             display: none !important;
@@ -2538,22 +2928,30 @@ overflow: visible !important;
 injectInlineCSS();
 
     const hideCriticalElements = () => {
-        selectorsToHide.forEach((selector) => {
-            document.querySelectorAll(selector).forEach((el) => {
-                if (isInPostOverlay(el)) return;
-                if (!hiddenElements.has(el)) {
-                    el.style.setProperty('visibility', 'hidden', 'important');
-                    el.style.setProperty('display', 'none', 'important');
-                    el.style.setProperty('opacity', '0', 'important');
-                    hiddenElements.add(el);
-                }
+        // Home Feed is virtualized and React-owned. Do not run the broad selector
+        // sweep here; several legacy selectors can match live feed controls/cards.
+        if (!isMetaManglerHomeFeedPath()) {
+            selectorsToHide.forEach((selector) => {
+                document.querySelectorAll(selector).forEach((el) => {
+                    if (isInPostOverlay(el)) return;
+                    if (!hiddenElements.has(el)) {
+                        el.style.setProperty('visibility', 'hidden', 'important');
+                        el.style.setProperty('display', 'none', 'important');
+                        el.style.setProperty('opacity', '0', 'important');
+                        hiddenElements.add(el);
+                    }
+                });
             });
-        });
-        processFeedPostsForScanning();
+        }
+        if (isMetaManglerHomeFeedPath()) {
+            try { __bf2760HomeV5EnsureObserver(); } catch {}
+        } else {
+            processFeedPostsForScanning();
+            hideSinulleEhdotettuaBlock();
+            hideAllIGSuggestedLabelsV40();
+        }
         hideMyosMetaltaElements();
         hideSettingsPageElements();
-        hideSinulleEhdotettuaBlock();
-        hideAllIGSuggestedLabelsV40();
         hideUnwantedUIButtons();
         if (isSearchSurfacePresent()) {
             hideInstagramSearchResults();
@@ -2700,8 +3098,8 @@ injectInlineCSS();
 
     // ===== v48: targeted story-slot paint gate =====
     // Home-page story tray scope predicate used by the lightweight story-slot observer.
-    // v49 deliberately does NOT gate the whole tray; this only tells the observer
-    // when it is allowed to operate on Instagram's homepage story tray.
+    // V6H gates only the tray's paint during its first classification/compaction commit;
+    // this predicate tells the observer when that Story-only protection may operate.
     function isMetaManglerStoryTrayPathV45() {
         try {
             if (!location.hostname.includes('instagram.com')) return false;
@@ -2712,16 +3110,18 @@ injectInlineCSS();
         }
     }
 
-    // Never gate the whole tray. Only individual <li> slots are hidden synchronously
-    // when they are inserted or when Instagram fills their aria-label. This avoids
-    // interfering with the rest of the homepage while still preventing story pop-ins.
+    // After the initial atomic tray reveal, only individual <li> slots are paint-hidden
+    // while their username is classified. Their geometry stays intact until any banned
+    // slot and the later translateX positions can be committed together before paint.
     // ===== Story tray account hider =====
     // Hide story tiles when the account username is explicitly listed in
-    // instagramAccountsToHide or matches one of bannedRegexes.
+    // instagramAccountsToHide or matches one of keywordsToHide.
     // Important: only the username is tested here, not the whole story tile
     // text, so unrelated UI text cannot accidentally ban the story.
     const IG_STORY_BAN_MARKER = 'data-ig-story-account-banned';
     const IG_STORY_PENDING_MARKER = 'data-ig-story-pending';
+    const IG_STORY_BAN_STAGING_MARKER = 'data-ig-story-ban-staging';
+    const IG_STORY_TRAY_READY_MARKER = 'data-ig-story-tray-ready';
     let __igStoryTrayObserver = null;
     let __igStoryTrayObservedNode = null;
 
@@ -2780,7 +3180,7 @@ injectInlineCSS();
 
         // Username-only regex match. Reset lastIndex for safety in case a
         // future regex is changed to use the global/sticky flags.
-        for (const rx of bannedRegexes) {
+        for (const rx of keywordsToHide) {
             try {
                 if (rx.global || rx.sticky) rx.lastIndex = 0;
                 if (rx.test(value)) return true;
@@ -2830,25 +3230,13 @@ injectInlineCSS();
             }
 
             style.textContent = `
-                /* Paint-time story ban: collapse only story tiles whose accessible
-                   username exactly corresponds to an explicitly banned account. */
+                /* Paint-time story ban: suppress the banned account visually but keep
+                   its slot geometry until the observer can compact the later translateX
+                   positions and collapse the slot atomically before the next paint. */
                 ${selectors.join(',\n                ')} {
-                    display: none !important;
                     visibility: hidden !important;
                     opacity: 0 !important;
                     pointer-events: none !important;
-                    width: 0 !important;
-                    min-width: 0 !important;
-                    max-width: 0 !important;
-                    height: 0 !important;
-                    min-height: 0 !important;
-                    max-height: 0 !important;
-                    margin: 0 !important;
-                    padding: 0 !important;
-                    overflow: hidden !important;
-                    position: absolute !important;
-                    left: -10000px !important;
-                    top: -10000px !important;
                     transition: none !important;
                     animation: none !important;
                 }
@@ -2879,7 +3267,7 @@ injectInlineCSS();
     function markInstagramStoryItemPendingV46(item) {
         try {
             if (!item || item.nodeType !== 1 || item.tagName !== 'LI') return false;
-            if (item.hasAttribute(IG_STORY_BAN_MARKER)) {
+            if (item.hasAttribute(IG_STORY_BAN_MARKER) || item.hasAttribute(IG_STORY_BAN_STAGING_MARKER)) {
                 item.removeAttribute(IG_STORY_PENDING_MARKER);
                 return false;
             }
@@ -2896,7 +3284,7 @@ injectInlineCSS();
     function classifyInstagramStoryItemV46(item) {
         try {
             if (!item || item.nodeType !== 1 || item.tagName !== 'LI') return false;
-            if (item.hasAttribute(IG_STORY_BAN_MARKER)) {
+            if (item.hasAttribute(IG_STORY_BAN_MARKER) || item.hasAttribute(IG_STORY_BAN_STAGING_MARKER)) {
                 item.removeAttribute(IG_STORY_PENDING_MARKER);
                 return true;
             }
@@ -2911,10 +3299,9 @@ injectInlineCSS();
             if (!username) return false;
 
             if (isInstagramStoryUsernameBanned(username)) {
-                item.setAttribute(IG_STORY_BAN_MARKER, username);
-                story.setAttribute(IG_STORY_BAN_MARKER, username);
+                item.setAttribute(IG_STORY_BAN_STAGING_MARKER, username);
+                story.setAttribute(IG_STORY_BAN_STAGING_MARKER, username);
                 item.removeAttribute(IG_STORY_PENDING_MARKER);
-                collapseElement(item);
                 return true;
             }
 
@@ -2943,6 +3330,8 @@ injectInlineCSS();
                 if (classifyInstagramStoryItemV46(item)) resolved++;
             }
 
+            compactBannedInstagramStorySlots();
+            tray.setAttribute(IG_STORY_TRAY_READY_MARKER, 'true');
             return resolved;
         } catch {
             return 0;
@@ -3004,13 +3393,13 @@ injectInlineCSS();
             let bannedChanged = false;
             for (const item of candidates) {
                 if (!item?.isConnected || item.parentElement !== tray) continue;
-                if (!item.hasAttribute(IG_STORY_BAN_MARKER)) {
+                if (!item.hasAttribute(IG_STORY_BAN_MARKER) && !item.hasAttribute(IG_STORY_BAN_STAGING_MARKER)) {
                     markInstagramStoryItemPendingV46(item);
                 }
 
-                const hadBanMarker = item.hasAttribute(IG_STORY_BAN_MARKER);
+                const hadBanMarker = item.hasAttribute(IG_STORY_BAN_MARKER) || item.hasAttribute(IG_STORY_BAN_STAGING_MARKER);
                 classifyInstagramStoryItemV46(item);
-                if (!hadBanMarker && item.hasAttribute(IG_STORY_BAN_MARKER)) {
+                if (!hadBanMarker && item.hasAttribute(IG_STORY_BAN_STAGING_MARKER)) {
                     bannedChanged = true;
                 }
             }
@@ -3056,7 +3445,7 @@ injectInlineCSS();
             // classified, preventing the story observer from repeatedly walking the entire
             // tray while Instagram hydrates the rest of the homepage.
             prepareInstagramStorySlotsV46(tray);
-            compactBannedInstagramStorySlots();
+            tray.setAttribute(IG_STORY_TRAY_READY_MARKER, 'true');
         } catch {}
     }
 
@@ -3074,6 +3463,25 @@ injectInlineCSS();
 
             const items = Array.from(tray.querySelectorAll('li'));
             if (!items.length) return 0;
+
+            const finalizeStagedItems = (entries = null) => {
+                try {
+                    const stagedItems = entries
+                        ? entries.map(entry => entry.item).filter(Boolean)
+                        : items.filter(item => item.hasAttribute(IG_STORY_BAN_STAGING_MARKER));
+                    for (const item of stagedItems) {
+                        if (!item.hasAttribute(IG_STORY_BAN_STAGING_MARKER)) continue;
+                        const username = item.getAttribute(IG_STORY_BAN_STAGING_MARKER) || 'true';
+                        item.setAttribute(IG_STORY_BAN_MARKER, username);
+                        item.removeAttribute(IG_STORY_BAN_STAGING_MARKER);
+                        item.removeAttribute(IG_STORY_PENDING_MARKER);
+                        for (const story of item.querySelectorAll(`[${IG_STORY_BAN_STAGING_MARKER}]`)) {
+                            story.setAttribute(IG_STORY_BAN_MARKER, username);
+                            story.removeAttribute(IG_STORY_BAN_STAGING_MARKER);
+                        }
+                    }
+                } catch {}
+            };
 
             const parsed = [];
             for (const item of items) {
@@ -3105,7 +3513,10 @@ injectInlineCSS();
                 });
             }
 
-            if (parsed.length < 2) return 0;
+            if (parsed.length < 2) {
+                finalizeStagedItems();
+                return 0;
+            }
 
             // Restore the original inline transforms before calculating the
             // compacted positions for this pass.
@@ -3115,7 +3526,7 @@ injectInlineCSS();
             }
 
             const hidden = parsed
-                .filter(entry => entry.item.hasAttribute(IG_STORY_BAN_MARKER))
+                .filter(entry => entry.item.hasAttribute(IG_STORY_BAN_MARKER) || entry.item.hasAttribute(IG_STORY_BAN_STAGING_MARKER))
                 .sort((a, b) => a.x - b.x);
 
             if (!hidden.length) return 0;
@@ -3129,12 +3540,15 @@ injectInlineCSS();
                 const diff = uniqueX[i] - uniqueX[i - 1];
                 if (diff > 0 && (slotStep === 0 || diff < slotStep)) slotStep = diff;
             }
-            if (!slotStep) return 0;
+            if (!slotStep) {
+                finalizeStagedItems(hidden);
+                return 0;
+            }
 
             let adjusted = 0;
 
             for (const entry of parsed) {
-                if (entry.item.hasAttribute(IG_STORY_BAN_MARKER)) {
+                if (entry.item.hasAttribute(IG_STORY_BAN_MARKER) || entry.item.hasAttribute(IG_STORY_BAN_STAGING_MARKER)) {
                     entry.item.setAttribute('data-ig-story-last-transform', entry.original);
                     continue;
                 }
@@ -3158,6 +3572,11 @@ injectInlineCSS();
                 entry.item.setAttribute('data-ig-story-last-transform', compacted);
                 adjusted++;
             }
+
+            // Finalize staged bans only after every visible item's compacted transform
+            // has been written. MutationObserver callbacks run before the next paint, so
+            // the user sees the already-compacted tray rather than a temporary hole.
+            finalizeStagedItems(hidden);
 
             return adjusted;
         } catch {
@@ -3183,30 +3602,40 @@ injectInlineCSS();
 
             let hidden = 0;
             for (const story of stories) {
-                if (story.hasAttribute(IG_STORY_BAN_MARKER)) continue;
+                if (story.hasAttribute(IG_STORY_BAN_MARKER) || story.hasAttribute(IG_STORY_BAN_STAGING_MARKER)) continue;
 
                 const username = extractInstagramStoryUsername(story);
                 if (!username) continue;
 
                 if (isInstagramStoryUsernameBanned(username)) {
-                    // Mark both the story button and its real carousel item.
-                    // The marker CSS keeps the item collapsed even when Instagram
-                    // rehydrates or rewrites its inline styles.
+                    // Stage first. compactBannedInstagramStorySlots() shifts later tiles
+                    // before converting this into the geometry-collapsing final marker.
                     const layoutItem = story.closest('li') || story;
-                    layoutItem.setAttribute(IG_STORY_BAN_MARKER, username);
-                    story.setAttribute(IG_STORY_BAN_MARKER, username);
-                    collapseElement(layoutItem);
+                    layoutItem.setAttribute(IG_STORY_BAN_STAGING_MARKER, username);
+                    story.setAttribute(IG_STORY_BAN_STAGING_MARKER, username);
+                    layoutItem.removeAttribute(IG_STORY_PENDING_MARKER);
                     hidden++;
                 }
             }
 
+            if (hidden) compactBannedInstagramStorySlots();
             return hidden;
         } catch {
             return 0;
         }
     }
 
+    function isHomeFeedArticleContext(element) {
+        try {
+            if (!isMetaManglerHomeFeedPath() || !element || element.nodeType !== 1) return false;
+            return !!(element.matches?.('article') || element.closest?.('article'));
+        } catch {
+            return false;
+        }
+    }
+
     function collapseElement(element) {
+        if (isHomeFeedArticleContext(element)) return;
         if (!hiddenElements.has(element)) {
             if (isElementProtected(element)) return;
 
@@ -3328,6 +3757,7 @@ injectInlineCSS();
 
     function collapseElementsBySelectors(selectors) {
         if (isReelsPage()) return;
+        if (isMetaManglerHomeFeedPath()) return;
         if (isPostOverlayOpen()) return;
         if (!selectors || !selectors.length) return;
         const allSelectors = selectors.join(',');
@@ -3351,6 +3781,7 @@ injectInlineCSS();
 
     function collapseElementsByKeywordsOrPaths(keywords, paths, selectors) {
         if (isReelsPage()) return;
+        if (isMetaManglerHomeFeedPath()) return;
         if (isPostOverlayOpen()) return;
         if (!selectors || !selectors.length) return;
         const allSelectors = selectors.join(',');
@@ -3373,8 +3804,8 @@ injectInlineCSS();
             const containsAllowed = allowedWordsLower.some(word => textContent.includes(word));
             if (containsAllowed) return;
             let matched = false;
-            for (let i = 0; i < bannedKeywordsLower.length; ++i) {
-                if (textContent.includes(bannedKeywordsLower[i])) {
+            for (let i = 0; i < keywordsToHide.length; ++i) {
+                if (keywordRegexMatches(keywordsToHide[i], textContent)) {
                     matched = true;
                     break;
                 }
@@ -3386,8 +3817,8 @@ injectInlineCSS();
                 }
             }
             if (!matched) {
-                for (let i = 0; i < bannedRegexes.length; ++i) {
-                    if (bannedRegexes[i].test(element.textContent)) {
+                for (let i = 0; i < keywordsToHide.length; ++i) {
+                    if (keywordRegexMatches(keywordsToHide[i], element.textContent)) {
                         matched = true;
                         break;
                     }
@@ -3486,8 +3917,16 @@ injectInlineCSS();
             return;
         }
 
+        if (isMetaManglerHomeFeedPath()) {
+            try { __bf2760HomeV5EnsureObserver(); } catch {}
+            hideUnwantedUIButtons();
+            updateOverlayState();
+            scanPermalinkArticleAndAct();
+            return;
+        }
+
         collapseElementsBySelectors(selectorsToHide);
-        collapseElementsByKeywordsOrPaths(bannedKeywords, instagramBannedPaths, selectorsToMonitor);
+        collapseElementsByKeywordsOrPaths(keywordsToHide, instagramBannedPaths, selectorsToMonitor);
         checkForRedirectElements();
         hideMyosMetaltaElements();
         hideSettingsPageElements();
@@ -3506,7 +3945,7 @@ injectInlineCSS();
         if (!value) return false;
         if (instagramAccountsSet.has(value)) return true;
 
-        for (const rx of bannedRegexes) {
+        for (const rx of keywordsToHide) {
             try {
                 if (rx.global || rx.sticky) rx.lastIndex = 0;
                 if (rx.test(value)) {
@@ -3658,7 +4097,7 @@ injectInlineCSS();
                 return; 
             }
 
-            if (bannedKeywordsLower.some(keyword => txt.includes(keyword))) {
+            if (keywordsToHide.some(keyword => keywordRegexMatches(keyword, txt))) {
                 let el = node.parentElement;
                 if (el && isInPostOverlay(el)) return;
                 if (el && el.closest('article[data-banned-scan="safe"]')) return;
@@ -3684,7 +4123,7 @@ injectInlineCSS();
             if (['peruuta', 'cancel'].includes(exactTrimmed)) return;
 
             if (allowedWordsLower.some(word => txt.includes(word))) return;
-            if (bannedRegexes.some(re => re.test(txtRaw))) {
+            if (keywordsToHide.some(re => keywordRegexMatches(re, txtRaw))) {
                 let el = node.parentElement;
                 if (el && isInPostOverlay(el)) return;
                 if (el && el.closest('article[data-banned-scan="safe"]')) return;
@@ -3722,28 +4161,33 @@ injectInlineCSS();
         const isNightmareStory = currentPathLow.includes('/stories/nightmaree3z') || currentPathLow.includes('/archive/');
         const targets = ['poista', 'delete', 'remove', 'poista seuraaja', 'remove follower', 'lopeta seuraaminen', 'unfollow', 'estä', 'block'];
         const storySafeWords = ['poista', 'delete', 'remove', 'poista julkaisu', 'delete post', 'poista tarina', 'delete story'];
-        
-        document.querySelectorAll('button, [role="button"], a, .x1i10hfl, [tabindex="0"], span, div').forEach(btn => {
-            const txt = (btn.textContent || '').trim().toLowerCase();
-            if (targets.includes(txt)) {
-                if (btn.tagName === 'DIV' || btn.tagName === 'SPAN') {
-                    if (btn.children.length > 2) return; 
+
+        const roots = isMetaManglerHomeFeedPath()
+            ? Array.from(document.querySelectorAll('[role="dialog"], [role="menu"]')).slice(0, 12)
+            : [document];
+        if (!roots.length) return;
+
+        for (const root of roots) {
+            root.querySelectorAll('button, [role="button"], a, .x1i10hfl, [tabindex="0"], span, div').forEach(btn => {
+                const txt = (btn.textContent || '').trim().toLowerCase();
+                if (targets.includes(txt)) {
+                    if (btn.tagName === 'DIV' || btn.tagName === 'SPAN') {
+                        if (btn.children.length > 2) return;
+                    }
+
+                    if (isNightmareStory && storySafeWords.includes(txt)) {
+                        unhideNode(btn);
+                        let pBtn = btn.closest('button, [role="button"], a, .x1i10hfl');
+                        unhideNode(pBtn);
+                        return;
+                    }
+
+                    collapseElement(btn);
+                    const parentBtn = btn.closest('button, [role="button"], a, .x1i10hfl');
+                    if (parentBtn && parentBtn !== btn) collapseElement(parentBtn);
                 }
-                
-                if (isNightmareStory && storySafeWords.includes(txt)) {
-                    unhideNode(btn);
-                    let pBtn = btn.closest('button, [role="button"], a, .x1i10hfl');
-                    unhideNode(pBtn);
-                    return; 
-                }
-                
-                collapseElement(btn);
-                const parentBtn = btn.closest('button, [role="button"], a, .x1i10hfl');
-                if (parentBtn && parentBtn !== btn) {
-                    collapseElement(parentBtn);
-                }
-            }
-        });
+            });
+        }
     }
 
     function fastSynchronousHider(mutations) {
@@ -3758,7 +4202,7 @@ injectInlineCSS();
 
             if (m.type === 'childList' && m.target) {
                 let nodeForArticle = m.target.nodeType === 1 ? m.target : m.target.parentElement;
-                if (nodeForArticle && nodeForArticle.closest) {
+                if (nodeForArticle && nodeForArticle.closest && !(isMetaManglerHomeFeedPath() && nodeForArticle.closest('article'))) {
                     const article = nodeForArticle.closest('article');
                     if (article && article.hasAttribute('data-banned-scan')) {
                         const currentId = getPostIDFromArticle(article);
@@ -3776,6 +4220,7 @@ injectInlineCSS();
             for (let j = 0; j < added.length; j++) {
                 const node = added[j];
                 if (node.nodeType !== 1) continue;
+                if (isMetaManglerHomeFeedPath() && (node.matches?.('article') || node.closest?.('article'))) continue;
                 
                 let elements;
                 try {
@@ -3840,15 +4285,552 @@ injectInlineCSS();
         }
     }
 
+    // ===== Home-feed recommendation filter (lightweight diagnostic path) =====
+    const IG_RECOMMENDATION_STATE = {
+        observer: null,
+        observedArticles: new WeakSet()
+    };
+
+    function normalizeIGRecommendationText(value) {
+        return String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    }
+
+    function isLikelyRecommendedFeedArticle(article) {
+        try {
+            if (!article || article.nodeType !== 1 || article.tagName !== 'ARTICLE') return false;
+
+            // Strong structural signals: Instagram's people-recommendation surfaces.
+            if (article.querySelector('a[href^="/explore/people"], a[href*="/explore/people/"]')) return true;
+
+            const strongLabels = new Set([
+                'suggested for you',
+                'suggested accounts',
+                'recommended for you',
+                'sinulle ehdotettu',
+                'sinulle ehdotettua',
+                'suositeltu sinulle',
+                'sponsoroitu',
+                'sponsored'
+            ]);
+
+            // Only inspect compact interactive/label elements. Do not walk every span/div/text node.
+            const compactNodes = article.querySelectorAll('button, a, [role="button"], [role="heading"]');
+            let checked = 0;
+            for (const el of compactNodes) {
+                if (checked++ >= 80) break;
+                const label = normalizeIGRecommendationText(el.getAttribute('aria-label'));
+                const title = normalizeIGRecommendationText(el.getAttribute('title'));
+                const text = normalizeIGRecommendationText(el.textContent);
+                if (strongLabels.has(label) || strongLabels.has(title) || strongLabels.has(text)) return true;
+                if (label === 'follow' || label === 'seuraa' || text === 'follow' || text === 'seuraa') return true;
+                if (el.tagName === 'A') {
+                    const href = String(el.getAttribute('href') || '').toLowerCase();
+                    if (href.includes('/explore/people')) return true;
+                }
+            }
+
+            return false;
+        } catch {
+            return false;
+        }
+    }
+
+    function hideRecommendedFeedArticle(article) {
+        try {
+            if (!article || !article.isConnected || article.tagName !== 'ARTICLE') return;
+            if (article.getAttribute('data-recommendation-filter') === 'banned') return;
+            // DIAGNOSTIC: mark the recommendation only. Do not change geometry,
+            // visibility, opacity, or layout so we can isolate the scroll culprit.
+            article.setAttribute('data-recommendation-filter', 'banned');
+        } catch {}
+    }
+
+    function ensureIGRecommendationObserver() {
+        try {
+            if (!isMetaManglerHomeFeedPath() || !('IntersectionObserver' in window)) return null;
+            if (IG_RECOMMENDATION_STATE.observer) return IG_RECOMMENDATION_STATE.observer;
+
+            IG_RECOMMENDATION_STATE.observer = trackObserver(new IntersectionObserver((entries) => {
+                try {
+                    if (document.hidden || !isMetaManglerHomeFeedPath()) return;
+                    for (const entry of entries) {
+                        if (!entry || !entry.isIntersecting) continue;
+                        const article = entry.target;
+                        if (!article || !article.isConnected) continue;
+                        if (isLikelyRecommendedFeedArticle(article)) hideRecommendedFeedArticle(article);
+                        IG_RECOMMENDATION_STATE.observer.unobserve(article);
+                    }
+                } catch {}
+            }, { root: null, rootMargin: '900px 0px 1200px 0px', threshold: 0 }));
+
+            return IG_RECOMMENDATION_STATE.observer;
+        } catch {
+            return null;
+        }
+    }
+
+    function observeIGRecommendationArticles(root = document) {
+        try {
+            if (!isMetaManglerHomeFeedPath()) return 0;
+            const observer = ensureIGRecommendationObserver();
+            if (!observer) return 0;
+
+            const candidates = [];
+            if (root && root.nodeType === 1 && root.matches?.('article')) candidates.push(root);
+            root?.querySelectorAll?.('article').forEach(article => candidates.push(article));
+            if (root === document) document.querySelectorAll('main article').forEach(article => candidates.push(article));
+
+            let observed = 0;
+            for (const article of candidates) {
+                if (!article || !article.isConnected) continue;
+                if (IG_RECOMMENDATION_STATE.observedArticles.has(article)) continue;
+                IG_RECOMMENDATION_STATE.observedArticles.add(article);
+                observer.observe(article);
+                observed++;
+            }
+            return observed;
+        } catch {
+            return 0;
+        }
+    }
+
+    function cleanupIGRecommendationObserver() {
+        try { IG_RECOMMENDATION_STATE.observer?.disconnect(); } catch {}
+        IG_RECOMMENDATION_STATE.observer = null;
+        IG_RECOMMENDATION_STATE.observedArticles = new WeakSet();
+    }
+
     let observerScheduled = false;
+    let homeFeedDirtyScanTimer = null;
+    const homeFeedDirtyArticles = new Set();
+    const homeFeedScanningArticles = new Set();
+    const homeFeedNoIDAttempts = new WeakMap();
+
+    const IG_FEED_SMOOTH_STATE = {
+        articleObserver: null,
+        observedArticles: new WeakSet(),
+        observerRootMargin: '1400px 0px 2200px 0px'
+    };
+
+    function ensureIGFeedArticleObserver() {
+        try {
+            if (!isMetaManglerHomeFeedPath() || !('IntersectionObserver' in window)) return null;
+            if (IG_FEED_SMOOTH_STATE.articleObserver) return IG_FEED_SMOOTH_STATE.articleObserver;
+
+            IG_FEED_SMOOTH_STATE.articleObserver = trackObserver(new IntersectionObserver((entries) => {
+                try {
+                    if (document.hidden || !isMetaManglerHomeFeedPath()) return;
+                    const candidates = [];
+                    for (const entry of entries) {
+                        if (!entry || !entry.isIntersecting) continue;
+                        const article = entry.target;
+                        if (!article || !article.isConnected) continue;
+                        if (homeFeedDirtyArticles.has(article) || !article.hasAttribute('data-feed-scan-done')) {
+                            candidates.push(article);
+                        }
+                    }
+                    if (candidates.length) processFeedPostsForScanning(candidates);
+                } catch {}
+            }, { root: null, rootMargin: IG_FEED_SMOOTH_STATE.observerRootMargin, threshold: 0 }));
+
+            return IG_FEED_SMOOTH_STATE.articleObserver;
+        } catch {
+            return null;
+        }
+    }
+
+    function observeIGFeedArticles(root = document) {
+        try {
+            if (!isMetaManglerHomeFeedPath()) return 0;
+            const observer = ensureIGFeedArticleObserver();
+            if (!observer) return 0;
+
+            const candidates = [];
+            if (root && root.nodeType === 1 && root.matches?.('article')) candidates.push(root);
+            root?.querySelectorAll?.('article').forEach(article => candidates.push(article));
+            if (root === document) {
+                document.querySelectorAll('main article, article').forEach(article => candidates.push(article));
+            }
+
+            let observed = 0;
+            for (const article of candidates) {
+                if (!article || !article.isConnected) continue;
+                if (IG_FEED_SMOOTH_STATE.observedArticles.has(article)) continue;
+                IG_FEED_SMOOTH_STATE.observedArticles.add(article);
+                observer.observe(article);
+                observed++;
+            }
+            return observed;
+        } catch {
+            return 0;
+        }
+    }
+
+    function cleanupIGFeedArticleObserver() {
+        try { __bf2760HomeV5Cleanup(); } catch {}
+    }
+
+    function restoreFeedArticleForRescan(article) {
+        try {
+            if (!article) return;
+            article.style.removeProperty('max-height');
+            article.style.removeProperty('height');
+            article.style.removeProperty('min-height');
+            article.style.removeProperty('margin');
+            article.style.removeProperty('padding');
+            article.style.removeProperty('border');
+            article.style.removeProperty('overflow');
+            article.style.removeProperty('content-visibility');
+            article.style.removeProperty('visibility');
+            article.style.setProperty('opacity', '1', 'important');
+            article.style.removeProperty('pointer-events');
+        } catch {}
+    }
+
+    function queueHomeFeedDirtyArticle(article) {
+        try {
+            if (!isMetaManglerHomeFeedPath() || !article || article.nodeType !== 1) return false;
+            if (article.tagName !== 'ARTICLE' || !article.isConnected) return false;
+            if (homeFeedScanningArticles.has(article)) return false;
+            homeFeedDirtyArticles.add(article);
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    function scheduleHomeFeedDirtyScan() {
+        try {
+            if (!isMetaManglerHomeFeedPath() || homeFeedDirtyArticles.size === 0) return;
+            if (homeFeedDirtyScanTimer !== null) return;
+            homeFeedDirtyScanTimer = setTimeout(() => {
+                homeFeedDirtyScanTimer = null;
+                if (!isMetaManglerHomeFeedPath() || document.hidden) return;
+
+                const nearby = [];
+                const distant = [];
+                const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 900;
+                for (const article of homeFeedDirtyArticles) {
+                    if (!article?.isConnected) {
+                        homeFeedDirtyArticles.delete(article);
+                        continue;
+                    }
+                    const rect = article.getBoundingClientRect();
+                    if (!rect || rect.bottom < -3200 || rect.top > viewportHeight + 4200) {
+                        distant.push(article);
+                        continue;
+                    }
+                    nearby.push({ article, distance: Math.abs(rect.top) });
+                }
+
+                nearby.sort((a, b) => a.distance - b.distance);
+                const candidates = nearby.slice(0, 4).map(item => item.article);
+                for (const article of candidates) homeFeedDirtyArticles.delete(article);
+
+                if (candidates.length) processFeedPostsForScanning(candidates);
+                if (homeFeedDirtyArticles.size) scheduleHomeFeedDirtyScan();
+            }, 40);
+        } catch {}
+    }
+
+    function enqueueHomeFeedMutation(mutation) {
+        try {
+            if (!isMetaManglerHomeFeedPath() || !mutation) return false;
+            let queued = false;
+
+            const target = mutation.target;
+            if (target?.nodeType === 1) {
+                const targetArticle = target.matches?.('article') ? target : target.closest?.('article');
+                if (targetArticle) {
+                    const state = getHomeFeedScanCSSState(targetArticle);
+                    if (state === 'approved' && mutation.addedNodes?.length) {
+                        for (const node of mutation.addedNodes) {
+                            if (nodeIntroducesExplicitFollowCTA_V2760(node)) {
+                                const id = getPostIDFromArticle(targetArticle);
+                                rejectHomeFeedArticle(targetArticle, id);
+                                break;
+                            }
+                        }
+                    } else if (!state || state === 'pending') {
+                        if (queueHomeFeedDirtyArticle(targetArticle)) queued = true;
+                    }
+                }
+            }
+
+            if (mutation.addedNodes?.length) {
+                for (const node of mutation.addedNodes) {
+                    if (!node || node.nodeType !== 1) continue;
+                    if (node.matches?.('article')) {
+                        observeIGFeedArticles(node);
+                        if (queueHomeFeedDirtyArticle(node)) queued = true;
+                        continue;
+                    }
+                    if (node.querySelector?.('article')) {
+                        observeIGFeedArticles(node);
+                        node.querySelectorAll('article').forEach(article => {
+                            const state = getHomeFeedScanCSSState(article);
+                            if (state === 'approved' && nodeIntroducesExplicitFollowCTA_V2760(node)) {
+                                rejectHomeFeedArticle(article, getPostIDFromArticle(article));
+                            } else if (!state || state === 'pending') {
+                                if (queueHomeFeedDirtyArticle(article)) queued = true;
+                            }
+                        });
+                    }
+                }
+            }
+
+            return queued;
+        } catch {
+            return false;
+        }
+    }
+
+    function markHomeFeedArticlePending(article, postID = null) {
+        try {
+            if (!article || article.nodeType !== 1) return;
+            if (isMetaManglerHomeFeedPath() && article.tagName === 'ARTICLE' && article.closest('main')) {
+                __bf2760HomeV5ReconcileArticle(article, true);
+                return;
+            }
+            article.setAttribute('data-bf-home-feed-scan-state', 'pending');
+            if (postID) article.setAttribute('data-scanned-post-id', postID);
+        } catch {}
+    }
+
+    function approveHomeFeedArticle(article, postID = null) {
+        try {
+            if (!article || article.nodeType !== 1) return;
+            if (isMetaManglerHomeFeedPath() && article.tagName === 'ARTICLE' && article.closest('main')) {
+                const id = String(postID || __bf2760HomeV5GetArticlePostID(article) || '');
+                if (id) __bf2760HomeV5Approve(article, id, 'stable');
+                else __bf2760HomeV5ReconcileArticle(article, true);
+                return;
+            }
+            if (isLikelyUnwantedHomeFeedArticleV27(article)) {
+                rejectHomeFeedArticle(article, postID);
+                return;
+            }
+            if (postID) {
+                rememberSet(feedApprovedPostIDs, postID);
+                rememberSet(approvedPostIDs, postID);
+                rememberScannedPost(postID, false);
+                feedBannedPostIDs.delete(postID);
+                scheduleFeedDecisionCacheSave();
+            }
+            article.setAttribute('data-bf-home-feed-scan-state', 'approved');
+            article.setAttribute('data-feed-scan-done', '1');
+            article.setAttribute('data-banned-scan', 'safe');
+            setHomeFeedArticleGateV2760(article, false);
+            article.style.removeProperty('display');
+            article.style.removeProperty('visibility');
+        } catch {}
+    }
+
+    function rejectHomeFeedArticle(article, postID = null) {
+        try {
+            if (!article || article.nodeType !== 1) return;
+            if (isMetaManglerHomeFeedPath() && article.tagName === 'ARTICLE' && article.closest('main')) {
+                const id = String(postID || __bf2760HomeV5GetArticlePostID(article) || '');
+                if (id) __bf2760HomeV5Reject(article, id, true);
+                else __bf2760HomeV5ReconcileArticle(article, true);
+                return;
+            }
+            if (postID) {
+                rememberSet(feedBannedPostIDs, postID);
+                rememberScannedPost(postID, true);
+                feedApprovedPostIDs.delete(postID);
+                approvedPostIDs.delete(postID);
+                scheduleFeedDecisionCacheSave();
+            }
+            article.setAttribute('data-bf-home-feed-scan-state', 'banned');
+            article.setAttribute('data-feed-scan-done', '1');
+            article.setAttribute('data-banned-scan', 'banned');
+            setHomeFeedArticleGateV2760(article, false);
+            article.style.setProperty('display', 'none', 'important');
+        } catch {}
+    }
+
+    function resetHomeFeedArticleState(article) {
+        try {
+            if (!article) return;
+            if (isMetaManglerHomeFeedPath() && article.tagName === 'ARTICLE' && article.closest('main')) {
+                article.removeAttribute('data-bf-home-feed-scan-state');
+                article.removeAttribute('data-feed-scan-done');
+                article.removeAttribute('data-banned-scan');
+                article.removeAttribute('data-scanned-post-id');
+                article.removeAttribute('data-bf-home-feed-gated');
+                __bf2760HomeV5ForgetArticle(article);
+                __bf2760HomeV5ReconcileArticle(article, true);
+                return;
+            }
+            article.removeAttribute('data-bf-home-feed-scan-state');
+            article.removeAttribute('data-feed-scan-done');
+            article.removeAttribute('data-banned-scan');
+            article.removeAttribute('data-scanned-post-id');
+            article.removeAttribute('data-bf-home-feed-gated');
+            article.style.removeProperty('display');
+            article.style.removeProperty('visibility');
+        } catch {}
+    }
+
+    function processFeedPostsForScanning(articleList = null) {
+        try {
+            if (isReelsPage() || isExcludedPath()) return 0;
+
+            if (isMetaManglerHomeFeedPath()) {
+                // V6E hard invariant: the dedicated ID-first coordinator is the only
+                // Home-feed scanner/presentation owner. Never enter the legacy scanner
+                // below, which can still use display:none / 1px geometry on articles.
+                const state = __bf2760HomeV5State();
+                if (!state.observer) __bf2760HomeV5EnsureObserver();
+                if (articleList) {
+                    for (const article of Array.from(new Set(articleList))) {
+                        if (article?.isConnected && article.tagName === 'ARTICLE') __bf2760HomeV5ReconcileArticle(article, true);
+                    }
+                    __bf2760HomeV5SchedulePump(60);
+                }
+                return 0;
+            }
+
+            if (isMetaManglerHomeFeedPath()) {
+                const articles = articleList
+                    ? Array.from(new Set(articleList))
+                    : Array.from(document.querySelectorAll('main article, article'));
+
+                let scheduled = 0;
+                for (const article of articles) {
+                    if (!article || !article.isConnected) continue;
+
+                    const postID = getPostIDFromArticle(article);
+                    const scannedID = article.getAttribute('data-scanned-post-id');
+                    if (postID && scannedID && scannedID !== postID) {
+                        resetHomeFeedArticleState(article);
+                    }
+
+                    const state = getHomeFeedScanCSSState(article);
+                    if (state === 'approved' || state === 'banned' || state === 'scanning') continue;
+
+                    if (!postID) {
+                        markHomeFeedArticlePending(article, null);
+                        const attempts = homeFeedNoIDAttempts.get(article) || 0;
+                        if (attempts < 4) {
+                            homeFeedNoIDAttempts.set(article, attempts + 1);
+                            queueHomeFeedDirtyArticle(article);
+                            continue;
+                        }
+                    } else {
+                        homeFeedNoIDAttempts.delete(article);
+                    }
+
+                    if (postID && (feedBannedPostIDs.has(postID) || scannedPostsCache.get(postID) === true)) {
+                        rejectHomeFeedArticle(article, postID);
+                        continue;
+                    }
+
+                    if (feedApprovedPostIDs.has(postID) || approvedPostIDs.has(postID) || scannedPostsCache.get(postID) === false) {
+                        approveHomeFeedArticle(article, postID);
+                        continue;
+                    }
+
+                    markHomeFeedArticlePending(article, postID);
+
+                    const highConfidenceRisk = shouldGateHomeFeedArticleV2760(article);
+                    if (highConfidenceRisk) {
+                        setHomeFeedArticleGateV2760(article, true);
+                    } else {
+                        setHomeFeedArticleGateV2760(article, false);
+                    }
+
+                    if (isLikelyUnwantedHomeFeedArticleV27(article)) {
+                        rejectHomeFeedArticle(article, postID);
+                        continue;
+                    }
+
+                    if (scheduled >= 2) continue;
+
+                    scheduled++;
+                    homeFeedScanningArticles.add(article);
+                    article.setAttribute('data-bf-home-feed-scan-state', 'scanning');
+
+                    expandAndScanNode(article, postID).then(isClean => {
+                        homeFeedScanningArticles.delete(article);
+                        if (!article.isConnected) return;
+
+                        const currentID = getPostIDFromArticle(article);
+                        if (postID && currentID && postID !== currentID) {
+                            resetHomeFeedArticleState(article);
+                            queueHomeFeedDirtyArticle(article);
+                            scheduleHomeFeedDirtyScan();
+                            return;
+                        }
+
+                        if (isClean) approveHomeFeedArticle(article, currentID || postID);
+                        else rejectHomeFeedArticle(article, currentID || postID);
+                        scheduleHomeFeedDirtyScan();
+                    }).catch(() => {
+                        homeFeedScanningArticles.delete(article);
+                        if (!article.isConnected) return;
+                        approveHomeFeedArticle(article, postID);
+                        scheduleHomeFeedDirtyScan();
+                    });
+                }
+                return scheduled;
+            }
+
+            const articles = articleList ? Array.from(new Set(articleList)) : Array.from(document.querySelectorAll('main article, article'));
+            if (!articles.length) return 0;
+
+            let processed = 0;
+            for (const article of articles) {
+                if (processed >= 8) break;
+                if (!article || !article.isConnected || article.hasAttribute('data-feed-scan-done')) continue;
+                const postID = getPostIDFromArticle(article);
+                article.setAttribute('data-banned-scan', 'pending');
+                article.setAttribute('data-feed-scan-done', '1');
+                if (postID) article.setAttribute('data-scanned-post-id', postID);
+                processed++;
+
+                expandAndScanNode(article, postID).then(isClean => {
+                    if (!article.isConnected) return;
+                    if (isClean) {
+                        article.setAttribute('data-banned-scan', 'safe');
+                        article.style.setProperty('opacity', '1', 'important');
+                        article.style.removeProperty('pointer-events');
+                    } else {
+                        article.setAttribute('data-banned-scan', 'banned');
+                        safelyHideFeedArticle(article);
+                    }
+                }).catch(() => {
+                    if (!article.isConnected) return;
+                    article.setAttribute('data-banned-scan', 'safe');
+                    article.style.setProperty('opacity', '1', 'important');
+                    article.style.removeProperty('pointer-events');
+                });
+            }
+            return processed;
+        } catch {}
+        return 0;
+    }
     function observerCallback(mutationsList) {
-        updateMetaManglerFeedGateClass();
-        updateMetaManglerAccountEditClassV43();
+        const isHomeFeed = isMetaManglerHomeFeedPath();
         if (document.hidden) return;
 
-        // Story slots are latency-sensitive: mark newly-created slots pending
-        // synchronously in the mutation callback rather than waiting for the
-        // normal 450 ms cleanup batch.
+        // HOME FEED HOT PATH: this observer is bound to <main>, so keep this
+        // callback intentionally tiny. Instagram generates a lot of descendant
+        // mutations while virtualizing/recycling posts; do not run unrelated
+        // cleaners or document-wide selectors here.
+        if (isHomeFeed) {
+            let queued = false;
+            for (const mutation of mutationsList) {
+                if (enqueueHomeFeedMutation(mutation)) queued = true;
+            }
+            if (queued) scheduleHomeFeedDirtyScan();
+            return;
+        }
+
+        updateMetaManglerFeedGateClass();
+        updateMetaManglerAccountEditClassV43();
+
         if (location.hostname.includes('instagram.com') && isMetaManglerStoryTrayPathV45()) {
             ensureInstagramStoryTrayObserverV48();
         }
@@ -3860,10 +4842,8 @@ injectInlineCSS();
                 for (const node of mutation.addedNodes) {
                     if (node && node.nodeType === 1) {
                         hasAddedElement = true;
-                        break;
                     }
                 }
-                if (hasAddedElement) break;
             }
         } catch {
             hasAddedElement = true;
@@ -3871,6 +4851,7 @@ injectInlineCSS();
         if (!hasAddedElement) return;
 
         injectMinimalNoGlimpseNavCSS();
+
         hideIGAccountEditSectionsV43();
         try {
             for (const mutation of mutationsList) {
@@ -3904,15 +4885,12 @@ injectInlineCSS();
             }
             collapseElementsBySelectors(selectorsToHide);
             hideProfileThreadsTags();
-            
             processFeedPostsForScanning();
-            
-            collapseElementsByKeywordsOrPaths(bannedKeywords, instagramBannedPaths, selectorsToMonitor);
+            collapseElementsByKeywordsOrPaths(keywordsToHide, instagramBannedPaths, selectorsToMonitor);
             if (location.hostname.includes('instagram.com')) {
                 hideInstagramBannedContent();
                 checkForRedirectElements();
                 hideMyosMetaltaElements();
-                hideSettingsPageElements();
                 hideSinulleEhdotettuaBlock();
                 hideAllIGSuggestedLabelsV40();
                 hideIGAccountEditSectionsV43();
@@ -3920,7 +4898,6 @@ injectInlineCSS();
                 ensureInstagramStoryTrayObserverV48();
                 hideBannedInstagramStoryAccounts();
                 compactBannedInstagramStorySlots();
-                
                 if (isSearchSurfacePresent()) {
                     hideInstagramSearchResults();
                 }
@@ -3932,18 +4909,288 @@ injectInlineCSS();
         }, 450);
     }
 
+    let __homeFeedFooterObserver = null;
+    let __homeFeedFooterObservedRoot = null;
+
+    function refreshHomeFeedFooterObserver() {
+        try {
+            if (!location.hostname.includes('instagram.com')) return;
+            const footer = document.querySelector('footer');
+            if (!footer) {
+                if (__homeFeedFooterObserver) {
+                    try { __homeFeedFooterObserver.disconnect(); } catch {}
+                }
+                __homeFeedFooterObserver = null;
+                __homeFeedFooterObservedRoot = null;
+                return;
+            }
+
+            if (__homeFeedFooterObserver && __homeFeedFooterObservedRoot === footer) {
+                hideHomeFeedFooterLinks();
+                return;
+            }
+
+            if (__homeFeedFooterObserver) {
+                try { __homeFeedFooterObserver.disconnect(); } catch {}
+            }
+
+            __homeFeedFooterObserver = trackObserver(new MutationObserver(() => {
+                if (!document.hidden) hideHomeFeedFooterLinks();
+            }));
+            __homeFeedFooterObservedRoot = footer;
+            __homeFeedFooterObserver.observe(footer, { childList: true, subtree: true });
+            hideHomeFeedFooterLinks();
+        } catch {}
+    }
+
+    let __refreshMutationObserverTarget = null;
+
     function initObserver() {
         const observer = trackObserver(new MutationObserver(observerCallback));
-        function startObserve() {
-            if (document.body) {
-                observer.observe(document.body, { childList: true, subtree: true });
-            } else {
-                onEvent(document, 'DOMContentLoaded', () => {
-                    observer.observe(document.body, { childList: true, subtree: true });
-                }, false);
-            }
+        let observedRoot = null;
+
+        function refreshTarget() {
+            try {
+                const isHomeFeed = isMetaManglerHomeFeedPath();
+                const nextRoot = isHomeFeed ? document.querySelector('main') : document.body;
+                if (!nextRoot) {
+                    if (observedRoot) {
+                        try { observer.disconnect(); } catch {}
+                        observedRoot = null;
+                    }
+                    return;
+                }
+
+                refreshHomeFeedFooterObserver();
+                watchForHomeFeedRootV27();
+                ensureHomeFeedPrepaintObserverV27();
+                if (isHomeFeed) observeIGFeedArticles(document);
+                if (observedRoot === nextRoot) return;
+
+                try { observer.disconnect(); } catch {}
+                observedRoot = nextRoot;
+
+                if (isHomeFeed) {
+                    // Narrow home-feed observer: only child-list mutations inside
+                    // <main> are relevant to feed post discovery.
+                    observer.observe(nextRoot, { childList: true, subtree: true });
+                    inspectAddedHomeFeedArticlesV27(nextRoot);
+                } else {
+                    observer.observe(nextRoot, { childList: true, subtree: true });
+                }
+            } catch {}
         }
-        startObserve();
+
+        __refreshMutationObserverTarget = refreshTarget;
+        refreshTarget();
+        addInterval(() => {
+            if (!document.hidden) {
+                refreshTarget();
+                refreshHomeFeedFooterObserver();
+            }
+        }, 2000);
+
+        if (!observedRoot) {
+            onEvent(document, 'DOMContentLoaded', refreshTarget, false);
+            addTimeout(refreshTarget, 250);
+            addTimeout(refreshTarget, 750);
+            addTimeout(refreshTarget, 1500);
+        }
+    }
+
+    let __bfHomeFeedPrepaintObserver = null;
+    let __bfHomeFeedPrepaintObservedRoot = null;
+
+    function articleHasExplicitFollowCTA_V2760(article) {
+        try {
+            if (!article || article.nodeType !== 1 || article.tagName !== 'ARTICLE') return false;
+            const articleRect = article.getBoundingClientRect();
+            const maxHeaderY = Math.max(160, Math.min(220, articleRect?.height || 220));
+            const candidates = article.querySelectorAll?.('button, [role="button"], a');
+            const limit = Math.min(candidates?.length || 0, 40);
+            for (let i = 0; i < limit; i++) {
+                const el = candidates[i];
+                if (!el || !el.isConnected) continue;
+                const txt = String(el.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+                const aria = String(el.getAttribute?.('aria-label') || '').replace(/\s+/g, ' ').trim().toLowerCase();
+                const exactFollow = txt === 'seuraa' || txt === 'follow' || aria === 'seuraa' || aria === 'follow';
+                if (!exactFollow) continue;
+
+                // Only treat an exact Follow/Seuraa control in the post header as a
+                // recommendation signal. A caption saying “follow me” must never do this.
+                let y = 0;
+                try { y = (el.getBoundingClientRect?.().top || 0) - (articleRect?.top || 0); } catch {}
+                if (y >= -20 && y <= maxHeaderY) return true;
+            }
+        } catch {}
+        return false;
+    }
+
+    function nodeIntroducesExplicitFollowCTA_V2760(node) {
+        try {
+            if (!node || node.nodeType !== 1) return false;
+            const candidates = node.matches?.('button, [role="button"], a')
+                ? [node]
+                : Array.from(node.querySelectorAll?.('button, [role="button"], a') || []);
+            const limit = Math.min(candidates.length, 16);
+            for (let i = 0; i < limit; i++) {
+                const el = candidates[i];
+                const txt = String(el.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+                const aria = String(el.getAttribute?.('aria-label') || '').replace(/\s+/g, ' ').trim().toLowerCase();
+                if (txt === 'seuraa' || txt === 'follow' || aria === 'seuraa' || aria === 'follow') return true;
+            }
+        } catch {}
+        return false;
+    }
+
+    function isLikelyUnwantedHomeFeedArticleV27(article) {
+        try {
+            if (!article || article.nodeType !== 1 || !isMetaManglerHomeFeedPath()) return false;
+            if (articleHasExplicitFollowCTA_V2760(article)) return true;
+        } catch {}
+        return false;
+    }
+
+    function getHomeFeedScanCSSState(article) {
+        try { return article?.getAttribute('data-bf-home-feed-scan-state') || ''; } catch {}
+        return '';
+    }
+
+    function shouldGateHomeFeedArticleV2760(article) {
+        try {
+            if (!article || article.nodeType !== 1 || !isMetaManglerHomeFeedPath()) return false;
+            if (article.hasAttribute('data-bf-network-suspicious')) return true;
+            if (articleHasExplicitFollowCTA_V2760(article)) return true;
+            const txt = String(article.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+            return txt.includes('sinulle ehdotettua') || txt.includes('sinulle ehdotettu') || txt.includes('suggested for you');
+        } catch {}
+        return false;
+    }
+
+    function setHomeFeedArticleGateV2760(article, gated) {
+        try {
+            if (!article || article.nodeType !== 1) return;
+            if (isMetaManglerHomeFeedPath() && article.tagName === 'ARTICLE' && article.closest('main')) {
+                article.removeAttribute('data-bf-home-feed-gated');
+                return;
+            }
+            if (gated) article.setAttribute('data-bf-home-feed-gated', '1');
+            else article.removeAttribute('data-bf-home-feed-gated');
+        } catch {}
+    }
+
+    function injectHomeFeedHybridGateCSS() {
+        try {
+            const id = 'metamangler-home-feed-hybrid-gate';
+            let style = document.getElementById(id);
+            if (!style) {
+                style = document.createElement('style');
+                style.id = id;
+                (document.head || document.documentElement).appendChild(style);
+            }
+            style.textContent = `
+                /* V6E Home Feed presentation. Paint-only hiding keeps native geometry for
+                   a reject that is too close to the viewport. Safely offscreen rejects use
+                   browser-owned size containment: React's child DOM stays completely intact. */
+                html[data-bf-ig-home-feed-hybrid="1"] main article[data-bf-home-v6e-hidden="1"]:not([data-bf-home-v6e-contained]) {
+                    visibility: hidden !important;
+                    pointer-events: none !important;
+                }
+                html[data-bf-ig-home-feed-hybrid="1"] main article[data-bf-home-v6e-contained] {
+                    content-visibility: hidden !important;
+                    contain-intrinsic-block-size: 12px !important;
+                    pointer-events: none !important;
+                }
+            `;
+            if (document.documentElement) {
+                if (isMetaManglerHomeFeedPath()) document.documentElement.setAttribute('data-bf-ig-home-feed-hybrid', '1');
+                else document.documentElement.removeAttribute('data-bf-ig-home-feed-hybrid');
+            }
+        } catch {}
+    }
+
+    function inspectAddedHomeFeedArticlesV27(node) {
+        try {
+            if (!node || node.nodeType !== 1 || !isMetaManglerHomeFeedPath()) return;
+
+            const articles = node.matches?.('article')
+                ? [node]
+                : Array.from(node.querySelectorAll?.('article') || []).slice(0, 20);
+
+            for (const article of articles) {
+                if (!article?.isConnected) continue;
+                const postID = getPostIDFromArticle(article);
+                const priorScannedID = article.getAttribute('data-scanned-post-id');
+                const priorState = article.getAttribute('data-bf-home-feed-scan-state');
+                if (postID && priorState === 'approved' && priorScannedID !== postID) {
+                    resetHomeFeedArticleState(article);
+                }
+
+                if (postID && feedBannedPostIDs.has(postID)) {
+                    rejectHomeFeedArticle(article, postID);
+                    continue;
+                }
+                if (isLikelyUnwantedHomeFeedArticleV27(article)) {
+                    rejectHomeFeedArticle(article, postID);
+                    continue;
+                }
+                if (postID && (feedApprovedPostIDs.has(postID) || approvedPostIDs.has(postID))) {
+                    approveHomeFeedArticle(article, postID);
+                    continue;
+                }
+
+                markHomeFeedArticlePending(article, postID);
+
+                queueHomeFeedDirtyArticle(article);
+            }
+            if (articles.length) scheduleHomeFeedDirtyScan();
+        } catch {}
+    }
+
+    function ensureHomeFeedPrepaintObserverV27() {
+        try {
+            if (!__bf2760SafeHomeIsActive()) {
+                __bf2760SafeCleanup();
+                return;
+            }
+
+            injectHomeFeedHybridGateCSS();
+            const root = document.querySelector('main');
+            if (!root) return;
+
+            const rootChanged = __BF2760_SAFE_HOME_STATE.observedRoot !== root;
+            if (rootChanged) {
+                __BF2760_SAFE_HOME_STATE.queue.clear();
+                __BF2760_SAFE_HOME_STATE.scanning.clear();
+                __BF2760_SAFE_HOME_STATE.observedRoot = root;
+                __BF2760_SAFE_HOME_STATE.route = location.href;
+                const existing = root.querySelectorAll?.('article') || [];
+                const limit = Math.min(existing.length, 16);
+                for (let i = 0; i < limit; i++) __bf2760SafeRegister(existing[i]);
+            }
+            __bf2760SafeSchedulePump(100);
+        } catch {}
+    }
+
+    function watchForHomeFeedRootV27() {
+        try {
+            if (!isMetaManglerHomeFeedPath()) return;
+            if (document.querySelector('main')) {
+                ensureHomeFeedPrepaintObserverV27();
+                return;
+            }
+            if (__bfHomeFeedPrepaintRootWaitObserver) return;
+            const root = document.documentElement;
+            if (!root) return;
+            __bfHomeFeedPrepaintRootWaitObserver = trackObserver(new MutationObserver(() => {
+                if (document.querySelector('main')) {
+                    try { __bfHomeFeedPrepaintRootWaitObserver.disconnect(); } catch {}
+                    __bfHomeFeedPrepaintRootWaitObserver = null;
+                    ensureHomeFeedPrepaintObserverV27();
+                }
+            }));
+            __bfHomeFeedPrepaintRootWaitObserver.observe(root, { childList: true, subtree: true });
+        } catch {}
     }
 
     function mainHandler() {
@@ -3953,6 +5200,11 @@ injectInlineCSS();
         patchIGSelfStoryShortcutV44();
         hideIGAccountEditSectionsV43();
         hideProfileThreadsTags();
+        hideHomeFeedFooterLinks();
+        refreshHomeFeedFooterObserver();
+        watchForHomeFeedRootV27();
+        ensureHomeFeedPrepaintObserverV27();
+        injectHomeFeedHybridGateCSS();
         handleRedirectionsAndContentHiding();
         if (isReelsPage()) {
             updateOverlayState();
@@ -3964,16 +5216,26 @@ injectInlineCSS();
             return;
         }
         
-        processFeedPostsForScanning();
+        if (isMetaManglerHomeFeedPath()) {
+            // The narrow main observer / prepaint observer now own Home-feed discovery.
+            // Avoid installing an additional intersection scanner here; duplicate
+            // observation increased churn without improving coverage.
+            cleanupIGRecommendationObserver();
+        } else {
+            cleanupIGRecommendationObserver();
+            processFeedPostsForScanning();
+        }
 
         if (location.hostname.includes('instagram.com')) {
-            hideInstagramBannedContent();
+            if (!isMetaManglerHomeFeedPath()) hideInstagramBannedContent();
             // genericAggressiveHider(); // disabled in regular home path to reduce churn/RAM
             checkForRedirectElements();
             hideMyosMetaltaElements();
             hideSettingsPageElements();
-            hideSinulleEhdotettuaBlock();
-            hideAllIGSuggestedLabelsV40();
+            if (!isMetaManglerHomeFeedPath()) {
+                hideSinulleEhdotettuaBlock();
+                hideAllIGSuggestedLabelsV40();
+            }
             hideIGAccountEditSectionsV43();
             hideUnwantedUIButtons();
             compactBannedInstagramStorySlots();
@@ -4001,7 +5263,12 @@ injectInlineCSS();
                 ensureInstagramStoryTrayObserverV48();
                 hideBannedInstagramStoryAccounts();
                 compactBannedInstagramStorySlots();
-                
+                if (isMetaManglerHomeFeedPath()) {
+                    cleanupIGRecommendationObserver();
+                    __bf2760HomeV5EnsureObserver();
+                } else {
+                    cleanupIGRecommendationObserver();
+                }
             }
             updateOverlayState();
             makeOverlayLikesClickable(); 
@@ -4073,16 +5340,21 @@ injectInlineCSS();
         currentURL = window.location.href;
         injectInlineCSS();
         updateOverlayState();
+        if (__refreshMutationObserverTarget) __refreshMutationObserverTarget();
+        ensureHomeFeedPrepaintObserverV27();
         permalinkScanAttempts = 0;
         if (isReelsPage()) {
             injectReelsCSS();
         } else {
             mainHandler();
             hideProfileThreadsTags();
+            hideHomeFeedFooterLinks();
             hideMyosMetaltaElements();
             hideSettingsPageElements();
-            hideSinulleEhdotettuaBlock();
-            hideAllIGSuggestedLabelsV40();
+            if (!isMetaManglerHomeFeedPath()) {
+                hideSinulleEhdotettuaBlock();
+                hideAllIGSuggestedLabelsV40();
+            }
             hideIGAccountEditSectionsV43();
             hideUnwantedUIButtons();
             if (isSearchSurfacePresent()) hideInstagramSearchResults();
@@ -4092,5 +5364,1201 @@ injectInlineCSS();
 
     onEvent(window, 'pagehide', cleanup, false);
     onEvent(window, 'beforeunload', cleanup, false);
+
+
+    // ===== v27.6.0 HYBRID V6E ONE-OWNER CONTAINED-COLLAPSE HOME-FEED COORDINATOR =====
+    // The Home Feed is a virtualized React surface. Post IDs own decisions; article
+    // elements are disposable hosts. Confirmed rejects are paint-hidden immediately.
+    // When safely below the viewport, Chromium content containment supplies a compact
+    // intrinsic block size without removing or display:none-ing React-managed children.
+    // Expensive caption expansion remains serialized, offscreen-only and tri-state:
+    // unsafe/failed verification stays UNKNOWN and is never cached as approved.
+    var __BF2760_HOME_V5_STATE;
+
+    function __bf2760HomeV5State() {
+        if (__BF2760_HOME_V5_STATE) return __BF2760_HOME_V5_STATE;
+        __BF2760_HOME_V5_STATE = {
+            root: null,
+            observer: null,
+            queue: [],
+            queuedIDs: new Set(),
+            queuedArticles: new WeakSet(),
+            articleIDs: new WeakMap(),
+            articleGenerations: new WeakMap(),
+            retirementArticles: new Set(),
+            retiredArticles: new Set(),
+            tombstones: new WeakMap(),
+            collapseFailedIDs: new Set(),
+            missingIDSince: new WeakMap(),
+            articleFingerprints: new WeakMap(),
+            dirtyArticles: new WeakSet(),
+            mutationArticles: new Set(),
+            mutationFlushScheduled: false,
+            scanning: false,
+            scanArticle: null,
+            scanID: null,
+            scanGeneration: 0,
+            pumpTimer: null,
+            pumpScheduled: false,
+            reconcileTimer: null,
+            reconcileDueAt: 0,
+            scrollUntil: 0,
+            userInputUntil: 0,
+            lastScrollAt: 0,
+            lastUserInputAt: 0,
+            userInputSerial: 0,
+            idleHandle: null,
+            route: ''
+        };
+        return __BF2760_HOME_V5_STATE;
+    }
+
+    function __bf2760HomeV5Active() {
+        try { return isMetaManglerHomeFeedPath(); } catch { return false; }
+    }
+
+    function __bf2760HomeV5Normalize(value) {
+        return String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    }
+
+    function __bf2760HomeV5GetArticlePostID(article) {
+        try {
+            if (!article) return '';
+            const parseHref = href => {
+                const match = String(href || '').match(/\/(?:p|reel|tv)\/([A-Za-z0-9_-]+)/);
+                return match?.[1] || '';
+            };
+
+            const time = article.querySelector?.('time');
+            const timestampLink = time?.closest?.('a[href*="/p/"], a[href*="/reel/"], a[href*="/tv/"]');
+            const timestampID = parseHref(timestampLink?.getAttribute?.('href'));
+            if (timestampID) return timestampID;
+
+            const ids = [];
+            const links = article.querySelectorAll?.('a[href*="/p/"], a[href*="/reel/"], a[href*="/tv/"]') || [];
+            const limit = Math.min(links.length, 24);
+            for (let i = 0; i < limit; i++) {
+                const id = parseHref(links[i]?.getAttribute?.('href'));
+                if (id && !ids.includes(id)) ids.push(id);
+            }
+            if (ids.length === 1) return ids[0];
+            if (ids.length > 1) {
+                // During React host recycling old and new permalinks can briefly coexist.
+                // Ambiguous identity is UNKNOWN; never let the old Post ID win by inertia.
+                return '';
+            }
+
+            const embeddedID = article.getAttribute?.('data-post-id') || article.getAttribute?.('data-media-id') || '';
+            return String(embeddedID || '');
+        } catch { return ''; }
+    }
+
+    function __bf2760HomeV5HasFollowCTA(article) {
+        try {
+            if (!article?.isConnected || article.tagName !== 'ARTICLE') return false;
+            const articleRect = article.getBoundingClientRect?.();
+            const maxHeaderY = Math.max(160, Math.min(220, articleRect?.height || 220));
+            const candidates = article.querySelectorAll?.('button, [role="button"], a') || [];
+            const limit = Math.min(candidates.length, 48);
+            for (let i = 0; i < limit; i++) {
+                const el = candidates[i];
+                const text = __bf2760HomeV5Normalize(el?.textContent);
+                const aria = __bf2760HomeV5Normalize(el?.getAttribute?.('aria-label'));
+                if (text !== 'seuraa' && text !== 'follow' && aria !== 'seuraa' && aria !== 'follow') continue;
+                let y = 0;
+                try { y = (el.getBoundingClientRect?.().top || 0) - (articleRect?.top || 0); } catch {}
+                if (y >= -24 && y <= maxHeaderY) return true;
+            }
+        } catch {}
+        return false;
+    }
+
+    const __BF2760_HOME_V6G_HARD_BADGE_TEXT = new Set([
+        'tekoälysisältö',
+        'luotu todennäköisesti tekoälyllä',
+        'ai info',
+        'made with ai',
+        'ai-generated content',
+        'ai generated content',
+        'ai-created content',
+        'ai created content',
+        'sponsoroitu',
+        'sponsored',
+        'maksettu kumppanuus',
+        'paid partnership',
+        'sinulle ehdotettua',
+        'sinulle ehdotettu',
+        'ehdotettu sinulle',
+        'suositeltu sinulle',
+        'sinulle suositeltua',
+        'suggested for you',
+        'suggested post',
+        'suggested posts',
+        'recommended for you',
+        'recommended post',
+        'recommended posts'
+    ]);
+
+    function __bf2760HomeV6GHasHardBadge(article) {
+        try {
+            if (!article?.isConnected) return false;
+            const candidates = article.querySelectorAll?.('[role="heading"], span, button, [role="button"], [aria-label], [title]') || [];
+            const limit = Math.min(candidates.length, 112);
+            for (let i = 0; i < limit; i++) {
+                const el = candidates[i];
+                const text = __bf2760HomeV5Normalize(el?.textContent);
+                const aria = __bf2760HomeV5Normalize(el?.getAttribute?.('aria-label'));
+                const title = __bf2760HomeV5Normalize(el?.getAttribute?.('title'));
+                if (__BF2760_HOME_V6G_HARD_BADGE_TEXT.has(text) ||
+                    __BF2760_HOME_V6G_HARD_BADGE_TEXT.has(aria) ||
+                    __BF2760_HOME_V6G_HARD_BADGE_TEXT.has(title)) return true;
+            }
+        } catch {}
+        return false;
+    }
+
+    function __bf2760HomeV5ImmediateRejectSignal(article, id = '') {
+        try {
+            if (!article?.isConnected) return false;
+            if (__bf2760HomeV6GHasHardBadge(article)) return true;
+            if (__bf2760HomeV5HasFollowCTA(article) && !(id && networkFeedApprovedPostIDs.has(id))) return true;
+        } catch {}
+        return false;
+    }
+
+    const __BF2760_HOME_V6E_COLLAPSE_ATTR = 'data-bf-home-v6e-contained';
+    const __BF2760_HOME_V6E_HIDDEN_ATTR = 'data-bf-home-v6e-hidden';
+    const __BF2760_HOME_V6E_COLLAPSE_SUPPORTED = (() => {
+        try {
+            return !!window.CSS?.supports?.('content-visibility', 'hidden') &&
+                !!window.CSS?.supports?.('contain-intrinsic-block-size', '12px');
+        } catch { return false; }
+    })();
+
+    function __bf2760HomeV5SetHidden(article, hidden) {
+        try {
+            if (!article) return;
+            article.removeAttribute('data-bf-home-v6d-hidden');
+            if (hidden) article.setAttribute(__BF2760_HOME_V6E_HIDDEN_ATTR, '1');
+            else article.removeAttribute(__BF2760_HOME_V6E_HIDDEN_ATTR);
+        } catch {}
+    }
+
+    function __bf2760HomeV6EGetArticleFingerprint(article) {
+        try {
+            if (!article?.isConnected) return '';
+            const time = article.querySelector?.('time');
+            const datetime = String(time?.getAttribute?.('datetime') || '').trim();
+            let author = '';
+            const links = article.querySelectorAll?.('a[href]') || [];
+            const limit = Math.min(links.length, 24);
+            for (let i = 0; i < limit; i++) {
+                const href = String(links[i]?.getAttribute?.('href') || '').trim();
+                if (!/^\/[A-Za-z0-9._-]+\/?(?:[?#].*)?$/.test(href)) continue;
+                const bare = href.split(/[?#]/, 1)[0].replace(/^\/|\/$/g, '').toLowerCase();
+                if (!bare || bare === 'p' || bare === 'reel' || bare === 'reels' || bare === 'tv' || bare === 'explore') continue;
+                author = bare;
+                break;
+            }
+            return `${author}|${datetime}`;
+        } catch { return ''; }
+    }
+
+    function __bf2760HomeV6ENearViewport(article) {
+        try {
+            const rect = article?.getBoundingClientRect?.();
+            const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 900;
+            return !!rect && rect.bottom > -viewportHeight * 0.35 && rect.top < viewportHeight * 1.35;
+        } catch { return true; }
+    }
+
+    function __bf2760HomeV5ClearTombstone(article) {
+        try {
+            if (!article) return;
+            const state = __bf2760HomeV5State();
+            state.retirementArticles.delete(article);
+            state.retiredArticles.delete(article);
+            article.removeAttribute(__BF2760_HOME_V6E_COLLAPSE_ATTR);
+            article.removeAttribute('data-bf-home-v6d-collapsed');
+            article.removeAttribute('data-bf-feed-tombstone');
+            state.tombstones.delete(article);
+        } catch {}
+    }
+
+    function __bf2760HomeV5RestoreArticle(article) {
+        try {
+            __bf2760HomeV5ClearTombstone(article);
+            __bf2760HomeV5SetHidden(article, false);
+        } catch {}
+    }
+
+    function __bf2760HomeV6EStillRejected(id) {
+        try {
+            return !!id && (networkFeedRejectedPostIDs.has(id) || feedBannedPostIDs.has(id) || scannedPostsCache.get(id) === true);
+        } catch { return false; }
+    }
+
+    function __bf2760HomeV6ECanCollapse(article, id) {
+        try {
+            if (!__BF2760_HOME_V6E_COLLAPSE_SUPPORTED || !article?.isConnected || !id) return false;
+            const state = __bf2760HomeV5State();
+            if (Date.now() < state.scrollUntil || Date.now() < state.userInputUntil) return false;
+            if (__bf2760HomeV5GetArticlePostID(article) !== id || !__bf2760HomeV6EStillRejected(id)) return false;
+            const rect = article.getBoundingClientRect?.();
+            if (!rect || rect.height <= 40) return false;
+            const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 900;
+            const safetyGap = Math.max(320, viewportHeight * 0.35);
+            return rect.top > viewportHeight + safetyGap;
+        } catch { return false; }
+    }
+
+    function __bf2760HomeV5ApplyTombstone(article, id) {
+        try {
+            const state = __bf2760HomeV5State();
+            if (!__bf2760HomeV6ECanCollapse(article, id)) return false;
+            const generation = state.articleGenerations.get(article) || 0;
+            let tombstone = state.tombstones.get(article);
+            if (!tombstone || tombstone.id !== id || tombstone.generation !== generation) {
+                __bf2760HomeV5ClearTombstone(article);
+                tombstone = { id, generation, retired: false };
+                state.tombstones.set(article, tombstone);
+            }
+            if (tombstone.retired) return true;
+
+            // One-way while this Post ID owns this host: no probe, no expand/revert cycle.
+            // content-visibility keeps React's descendants in the DOM and lets Chromium
+            // supply the compact intrinsic block size without child display:none surgery.
+            article.setAttribute(__BF2760_HOME_V6E_COLLAPSE_ATTR, id);
+            article.setAttribute('data-bf-feed-tombstone', id);
+            __bf2760HomeV5SetHidden(article, false);
+            tombstone.retired = true;
+            state.retirementArticles.delete(article);
+            state.retiredArticles.add(article);
+            return true;
+        } catch {}
+        return false;
+    }
+
+    function __bf2760HomeV5QueueRetirement(article, id) {
+        try {
+            if (!article?.isConnected || !id) return;
+            const state = __bf2760HomeV5State();
+            const generation = state.articleGenerations.get(article) || 0;
+            let tombstone = state.tombstones.get(article);
+            if (tombstone && (tombstone.id !== id || tombstone.generation !== generation)) {
+                __bf2760HomeV5ClearTombstone(article);
+                tombstone = null;
+            }
+            if (!tombstone) {
+                tombstone = { id, generation, retired: false };
+                state.tombstones.set(article, tombstone);
+            }
+
+            if (tombstone.retired) {
+                state.retirementArticles.delete(article);
+                state.retiredArticles.add(article);
+                __bf2760HomeV5SetHidden(article, false);
+                return;
+            }
+
+            // Rejection paint suppression is non-geometric and may happen immediately.
+            // Geometry changes wait for a safely-below, idle contained-collapse opportunity.
+            state.retirementArticles.add(article);
+            __bf2760HomeV5SetHidden(article, true);
+            if (!__bf2760HomeV5ApplyTombstone(article, id)) __bf2760HomeV5ScheduleReconcile(220);
+        } catch {}
+    }
+
+    function __bf2760HomeV5ProcessRetirements(limit = 16) {
+        try {
+            const state = __bf2760HomeV5State();
+            const idle = Date.now() >= state.scrollUntil && Date.now() >= state.userInputUntil;
+            let processed = 0;
+            for (const article of Array.from(state.retirementArticles)) {
+                if (processed++ >= limit) break;
+                if (!article?.isConnected) { __bf2760HomeV5RestoreArticle(article); continue; }
+                const tombstone = state.tombstones.get(article);
+                if (!tombstone) { state.retirementArticles.delete(article); continue; }
+                const currentID = __bf2760HomeV5GetArticlePostID(article);
+                const generation = state.articleGenerations.get(article) || 0;
+                if (!currentID) continue;
+                if (currentID !== tombstone.id || generation !== tombstone.generation || !__bf2760HomeV6EStillRejected(currentID)) {
+                    __bf2760HomeV5RestoreArticle(article);
+                    continue;
+                }
+                __bf2760HomeV5SetHidden(article, true);
+                if (idle) __bf2760HomeV5ApplyTombstone(article, currentID);
+            }
+
+            // Rotate a small audit window instead of DOM-querying every collapsed host on
+            // every reconcile tick. href/child mutations remain the primary recycle signal.
+            let audited = 0;
+            const auditLimit = Math.max(4, Math.min(12, Math.floor(limit / 2) || 4));
+            for (const article of Array.from(state.retiredArticles)) {
+                if (audited++ >= auditLimit) break;
+                state.retiredArticles.delete(article);
+                if (!article?.isConnected) { __bf2760HomeV5RestoreArticle(article); continue; }
+                const tombstone = state.tombstones.get(article);
+                const currentID = __bf2760HomeV5GetArticlePostID(article);
+                const generation = state.articleGenerations.get(article) || 0;
+                if (!tombstone?.retired) { __bf2760HomeV5RestoreArticle(article); continue; }
+                if (currentID && (currentID !== tombstone.id || generation !== tombstone.generation || !__bf2760HomeV6EStillRejected(currentID))) {
+                    __bf2760HomeV5RestoreArticle(article);
+                    continue;
+                }
+                state.retiredArticles.add(article);
+            }
+        } catch {}
+    }
+
+    function __bf2760HomeV5RememberDecision(id, banned, verification = '') {
+        try {
+            if (!id) return;
+            let persistentChanged = false;
+            if (banned) {
+                if (!feedBannedPostIDs.has(id)) persistentChanged = true;
+                rememberSet(feedBannedPostIDs, id);
+                if (feedApprovedPostIDs.delete(id)) persistentChanged = true;
+                if (feedDeepVerifiedPostIDs.delete(id)) persistentChanged = true;
+                approvedPostIDs.delete(id);
+                rememberScannedPost(id, true);
+            } else {
+                if (!feedApprovedPostIDs.has(id)) persistentChanged = true;
+                rememberSet(feedApprovedPostIDs, id);
+                rememberSet(approvedPostIDs, id);
+                if (feedBannedPostIDs.delete(id)) persistentChanged = true;
+                if (verification === 'expanded' && !feedDeepVerifiedPostIDs.has(id)) {
+                    feedDeepVerifiedPostIDs.add(id);
+                    persistentChanged = true;
+                }
+                rememberScannedPost(id, false);
+            }
+            if (persistentChanged) scheduleFeedDecisionCacheSave();
+        } catch {}
+    }
+
+    function __bf2760HomeV5ForgetArticle(article) {
+        try {
+            if (!article) return;
+            const state = __bf2760HomeV5State();
+            const priorID = state.articleIDs.get(article) || '';
+            state.articleIDs.delete(article);
+            state.articleFingerprints.delete(article);
+            state.missingIDSince.delete(article);
+            state.articleGenerations.set(article, (state.articleGenerations.get(article) || 0) + 1);
+            __bf2760HomeV5RemoveQueued(article, priorID);
+            __bf2760HomeV5RestoreArticle(article);
+        } catch {}
+    }
+
+    function __bf2760HomeV5Approve(article, id, verification = 'stable') {
+        try {
+            if (!article?.isConnected || !id) return;
+            const currentID = __bf2760HomeV5GetArticlePostID(article);
+            if (currentID !== id) return;
+            __bf2760HomeV5RememberDecision(id, false, verification);
+            __bf2760HomeV5RemoveQueued(article, id);
+            const state = __bf2760HomeV5State();
+            state.articleIDs.set(article, id);
+            state.dirtyArticles.delete(article);
+            __bf2760HomeV5RestoreArticle(article);
+        } catch {}
+    }
+
+    function __bf2760HomeV5Reject(article, id, hide = true) {
+        try {
+            if (!article?.isConnected || !id) return;
+            const currentID = __bf2760HomeV5GetArticlePostID(article);
+            if (currentID && currentID !== id) return;
+            __bf2760HomeV5RememberDecision(id, true);
+            __bf2760HomeV5RemoveQueued(article, id);
+            const state = __bf2760HomeV5State();
+            state.articleIDs.set(article, id);
+            if (hide) __bf2760HomeV5QueueRetirement(article, id);
+        } catch {}
+    }
+
+    function __bf2760HomeV5RemoveQueued(article, id = '') {
+        try {
+            const state = __bf2760HomeV5State();
+            const targetID = String(id || state.articleIDs.get(article) || '');
+            if (targetID) state.queuedIDs.delete(targetID);
+            if (article) state.queuedArticles.delete(article);
+            if (!state.queue.length) return;
+            state.queue = state.queue.filter(entry => {
+                if (!entry) return false;
+                if (article && entry.article === article) return false;
+                if (targetID && entry.id === targetID) return false;
+                return entry.article?.isConnected;
+            });
+        } catch {}
+    }
+
+    function __bf2760HomeV5Queue(article, id, options = null) {
+        try {
+            const state = __bf2760HomeV5State();
+            if (!article?.isConnected || !id) return;
+            if (state.queuedArticles.has(article) || state.scanning && state.scanArticle === article) return;
+            if (state.queuedIDs.has(id)) return;
+            const now = performance.now();
+            state.queuedArticles.add(article);
+            state.queuedIDs.add(id);
+            state.queue.push({
+                article,
+                id,
+                generation: state.articleGenerations.get(article) || 0,
+                enqueuedAt: Number.isFinite(options?.enqueuedAt) ? options.enqueuedAt : now,
+                notBefore: Number.isFinite(options?.notBefore) ? options.notBefore : now + 180,
+                attempts: Number.isFinite(options?.attempts) ? options.attempts : 0
+            });
+        } catch {}
+    }
+
+    function __bf2760HomeV6CRequeueCandidate(candidate, delay = 500) {
+        try {
+            const state = __bf2760HomeV5State();
+            const article = candidate?.article;
+            const id = candidate?.id || '';
+            const generation = candidate?.generation || 0;
+            if (!article?.isConnected || !id) return;
+            if (__bf2760HomeV5GetArticlePostID(article) !== id) return;
+            if ((state.articleGenerations.get(article) || 0) !== generation) return;
+            if (networkFeedRejectedPostIDs.has(id) || networkFeedApprovedPostIDs.has(id) || feedBannedPostIDs.has(id) || scannedPostsCache.get(id) === true) return;
+
+            if (state.queuedArticles.has(article) || state.queuedIDs.has(id)) return;
+            const attempts = Math.max(0, candidate?.attempts || 0) + 1;
+            const retryDelay = Math.min(5000, Math.max(delay, 350 * Math.pow(1.65, Math.min(attempts, 6))));
+            const now = performance.now();
+            state.queuedArticles.add(article);
+            state.queuedIDs.add(id);
+            state.queue.push({
+                article,
+                id,
+                generation,
+                attempts,
+                enqueuedAt: candidate?.enqueuedAt || now,
+                notBefore: now + retryDelay
+            });
+            __bf2760HomeV5SchedulePump(retryDelay + 25);
+        } catch {}
+    }
+
+    function __bf2760HomeV5ReconcileArticle(article, allowQueue = true) {
+        try {
+            if (!__bf2760HomeV5Active() || !article?.isConnected || article.tagName !== 'ARTICLE') return;
+            const state = __bf2760HomeV5State();
+            article.removeAttribute('data-bf-home-feed-gated');
+            article.removeAttribute('data-bf-home-feed-scan-state');
+            article.removeAttribute('data-banned-scan');
+            article.removeAttribute('data-feed-scan-done');
+
+            const id = __bf2760HomeV5GetArticlePostID(article);
+            const priorID = state.articleIDs.get(article) || '';
+            const fingerprint = __bf2760HomeV6EGetArticleFingerprint(article);
+            if (!id) {
+                if (priorID) {
+                    const priorFingerprint = state.articleFingerprints.get(article) || '';
+                    if (fingerprint && priorFingerprint && fingerprint !== priorFingerprint) {
+                        // Strong recycle evidence: do not let the new host inherit the old
+                        // reject/approval presentation while its permalink is between commits.
+                        __bf2760HomeV5ForgetArticle(article);
+                        return;
+                    }
+                    let since = state.missingIDSince.get(article);
+                    if (!Number.isFinite(since)) { since = performance.now(); state.missingIDSince.set(article, since); }
+                    const grace = __bf2760HomeV6ENearViewport(article) ? 90 : 180;
+                    if (performance.now() - since > grace) __bf2760HomeV5ForgetArticle(article);
+                    else __bf2760HomeV5ScheduleReconcile(Math.min(100, grace));
+                }
+                return;
+            }
+            state.missingIDSince.delete(article);
+
+            if (priorID && priorID !== id) {
+                state.articleGenerations.set(article, (state.articleGenerations.get(article) || 0) + 1);
+                __bf2760HomeV5RemoveQueued(article, priorID);
+                __bf2760HomeV5RestoreArticle(article);
+            }
+            state.articleIDs.set(article, id);
+            if (fingerprint) state.articleFingerprints.set(article, fingerprint);
+            const wasDirty = state.dirtyArticles.has(article);
+            if (wasDirty) state.dirtyArticles.delete(article);
+            const identityChanged = !priorID || priorID !== id;
+
+            // Structured/network and durable rejects always win. Persist a network
+            // rejection once it reaches the DOM so recycled hosts keep the same decision.
+            if (networkFeedRejectedPostIDs.has(id)) { __bf2760HomeV5Reject(article, id, true); return; }
+            if (feedBannedPostIDs.has(id) || scannedPostsCache.get(id) === true) { __bf2760HomeV5Reject(article, id, true); return; }
+            // Explicit on-post AI/recommendation/sponsor badges are authoritative DOM
+            // fallbacks, but scan them only on a new identity or a real React mutation.
+            if ((identityChanged || wasDirty) && __bf2760HomeV5ImmediateRejectSignal(article, id)) {
+                __bf2760HomeV5Reject(article, id, true);
+                return;
+            }
+            if (networkFeedApprovedPostIDs.has(id)) {
+                __bf2760HomeV5RemoveQueued(article, id);
+                __bf2760HomeV5RestoreArticle(article);
+                return;
+            }
+
+            if (feedApprovedPostIDs.has(id)) {
+                // An approval made before Instagram exposed a More/Lisää control is not
+                // allowed to become a permanent blind spot. Only re-check an approved
+                // post when React actually mutated that host; periodic reconciliation
+                // stays cheap for stable approved posts.
+                if (wasDirty && __bf2760HomeV5CheapContentCheck(article)) {
+                    __bf2760HomeV5Reject(article, id, true);
+                    return;
+                }
+                if (wasDirty && __bf2760HomeV5HasMoreButton(article) && !feedDeepVerifiedPostIDs.has(id)) {
+                    feedApprovedPostIDs.delete(id);
+                    approvedPostIDs.delete(id);
+                    scannedPostsCache.delete(id);
+                    scheduleFeedDecisionCacheSave();
+                    __bf2760HomeV5RestoreArticle(article);
+                    if (allowQueue) __bf2760HomeV5Queue(article, id);
+                    return;
+                }
+                __bf2760HomeV5Approve(article, id, feedDeepVerifiedPostIDs.has(id) ? 'expanded' : 'stable');
+                return;
+            }
+
+            __bf2760HomeV5RestoreArticle(article);
+            if (allowQueue) __bf2760HomeV5Queue(article, id);
+        } catch {}
+    }
+
+    function __bf2760HomeV6EFlushMutationArticles() {
+        try {
+            const state = __bf2760HomeV5State();
+            state.mutationFlushScheduled = false;
+            if (!__bf2760HomeV5Active() || document.hidden) { state.mutationArticles.clear(); return; }
+            let processed = 0;
+            for (const article of Array.from(state.mutationArticles)) {
+                state.mutationArticles.delete(article);
+                if (!article?.isConnected || article.tagName !== 'ARTICLE') continue;
+                state.dirtyArticles.add(article);
+                __bf2760HomeV5ReconcileArticle(article, true);
+                if (++processed >= 28) break;
+            }
+            __bf2760HomeV5ProcessRetirements(8);
+            __bf2760HomeV5SchedulePump(70);
+            if (state.mutationArticles.size) __bf2760HomeV6EScheduleMutationFlush();
+        } catch {}
+    }
+
+    function __bf2760HomeV6EScheduleMutationFlush() {
+        try {
+            const state = __bf2760HomeV5State();
+            if (state.mutationFlushScheduled) return;
+            state.mutationFlushScheduled = true;
+            const flush = () => __bf2760HomeV6EFlushMutationArticles();
+            if (typeof queueMicrotask === 'function') queueMicrotask(flush);
+            else Promise.resolve().then(flush).catch(() => setTimeout(flush, 0));
+        } catch {}
+    }
+
+    function __bf2760HomeV5DiscoverFromNode(node) {
+        try {
+            if (!node || node.nodeType !== 1 || !__bf2760HomeV5Active()) return false;
+            const state = __bf2760HomeV5State();
+            let found = false;
+            const add = (article) => {
+                if (!article?.isConnected || article.tagName !== 'ARTICLE') return;
+                state.mutationArticles.add(article);
+                found = true;
+            };
+            if (node.matches?.('article')) add(node);
+            else {
+                const closestArticle = node.closest?.('article');
+                if (closestArticle) add(closestArticle);
+            }
+            const articles = node.querySelectorAll?.('article') || [];
+            const limit = Math.min(articles.length, 24);
+            for (let i = 0; i < limit; i++) add(articles[i]);
+            if (found) __bf2760HomeV6EScheduleMutationFlush();
+            return found;
+        } catch {}
+        return false;
+    }
+
+    function __bf2760HomeV5PickCandidate() {
+        try {
+            const state = __bf2760HomeV5State();
+            if (!state.queue.length || Date.now() < state.scrollUntil || Date.now() < state.userInputUntil) return null;
+            const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 900;
+            let bestIndex = -1;
+            let bestScore = Infinity;
+            const now = performance.now();
+            const compactedQueue = [];
+            const idleFor = Date.now() - Math.max(state.lastScrollAt || 0, state.lastUserInputAt || 0);
+
+            for (const entry of state.queue) {
+                const article = entry?.article;
+                if (!article?.isConnected) { state.queuedIDs.delete(entry?.id || ''); state.queuedArticles.delete(article); continue; }
+                const currentID = __bf2760HomeV5GetArticlePostID(article);
+                if (!currentID || currentID !== entry.id || (state.articleGenerations.get(article) || 0) !== entry.generation) {
+                    state.queuedIDs.delete(entry.id); state.queuedArticles.delete(article); continue;
+                }
+
+                if (networkFeedApprovedPostIDs.has(entry.id)) {
+                    state.queuedIDs.delete(entry.id);
+                    state.queuedArticles.delete(article);
+                    __bf2760HomeV5RestoreArticle(article);
+                    continue;
+                }
+
+                const compactedIndex = compactedQueue.length;
+                compactedQueue.push(entry);
+                if ((entry.notBefore || 0) > now) continue;
+                const rect = article.getBoundingClientRect?.();
+                if (!rect) continue;
+                const hasMore = __bf2760HomeV5HasMoreButton(article);
+                const belowSafe = rect.top > viewportHeight * 1.50;
+                const aboveSafe = rect.bottom < -viewportHeight * 1.35;
+                if (hasMore && !belowSafe && !aboveSafe) continue;
+                if (hasMore && aboveSafe && idleFor < 1800) continue;
+
+                let score;
+                if (!hasMore) {
+                    const distance = rect.top > viewportHeight ? rect.top - viewportHeight : (rect.bottom < 0 ? -rect.bottom : 0);
+                    score = distance + Math.max(0, (entry.attempts || 0) * 80);
+                } else if (belowSafe) {
+                    score = Math.max(0, rect.top - viewportHeight) + Math.max(0, (entry.attempts || 0) * 120);
+                } else {
+                    score = 100000 + Math.abs(rect.bottom) + Math.max(0, (entry.attempts || 0) * 150);
+                }
+                score -= Math.min(800, Math.max(0, now - (entry.enqueuedAt || now)) * 0.05);
+                if (score < bestScore) { bestScore = score; bestIndex = compactedIndex; }
+            }
+
+            if (bestIndex < 0) { state.queue = compactedQueue; return null; }
+            const selected = compactedQueue[bestIndex] || null;
+            state.queue = compactedQueue.filter((_, index) => index !== bestIndex);
+            return selected;
+        } catch {}
+        return null;
+    }
+
+    function __bf2760HomeV5HasMoreButton(article) {
+        try {
+            if (!article) return false;
+            const nodes = article.querySelectorAll?.('button, [role="button"], span') || [];
+            const limit = Math.min(nodes.length, 64);
+            for (let i = 0; i < limit; i++) {
+                const text = __bf2760HomeV5Normalize(nodes[i]?.textContent);
+                if (text === 'more' || text === 'lisää' || text === 'more...' || text === 'lisää...') return true;
+            }
+        } catch {}
+        return false;
+    }
+
+    function __bf2760HomeV6CFindLessButton(article) {
+        try {
+            if (!article) return null;
+            const nodes = article.querySelectorAll?.('[role="button"], button, span') || [];
+            const limit = Math.min(nodes.length, 72);
+            for (let i = 0; i < limit; i++) {
+                const text = __bf2760HomeV5Normalize(nodes[i]?.textContent);
+                if (text === 'less' || text === 'show less' || text === 'vähemmän' || text === 'näytä vähemmän' || text === 'näytä vähemmän...') return nodes[i];
+            }
+        } catch {}
+        return null;
+    }
+
+    function __bf2760HomeV5CheapContentCheck(article) {
+        try {
+            return articleHasBannedCaption(article);
+        } catch { return false; }
+    }
+
+    function __bf2760HomeV5ExpandAndScan(article, id, generation) {
+        return new Promise(resolve => {
+            const scanState = __bf2760HomeV5State();
+            const inputSerial = scanState.userInputSerial;
+            let expanded = false;
+            let finished = false;
+            const done = (result) => {
+                if (finished) return;
+                finished = true;
+                resolve(result);
+            };
+            const identityValid = () => {
+                try {
+                    const state = __bf2760HomeV5State();
+                    return !!article?.isConnected &&
+                        __bf2760HomeV5GetArticlePostID(article) === id &&
+                        (state.articleGenerations.get(article) || 0) === generation;
+                } catch { return false; }
+            };
+            const scanActive = () => {
+                try { return identityValid() && __bf2760HomeV5Active() && !document.hidden; } catch { return false; }
+            };
+            const stillSafeToExpand = () => {
+                try {
+                    const state = __bf2760HomeV5State();
+                    if (!scanActive() || state.userInputSerial !== inputSerial || Date.now() < state.userInputUntil) return false;
+                    const rect = article.getBoundingClientRect?.();
+                    const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 900;
+                    const belowSafe = rect.top > viewportHeight * 1.55;
+                    const aboveSafe = rect.bottom < -viewportHeight * 1.35 &&
+                        Date.now() - Math.max(state.lastScrollAt || 0, state.lastUserInputAt || 0) >= 1800;
+                    return !!rect && (belowSafe || aboveSafe);
+                } catch { return false; }
+            };
+            const collapse = () => {
+                try {
+                    if (!expanded || !identityValid()) return false;
+                    const less = __bf2760HomeV6CFindLessButton(article);
+                    if (!less) return false;
+                    try { less.click(); return true; } catch { return false; }
+                } catch { return false; }
+            };
+
+            try {
+                if (!scanActive() || !stillSafeToExpand()) return done('retry');
+                const button = Array.from(article.querySelectorAll('[role="button"], button, span')).find(el => {
+                    const text = __bf2760HomeV5Normalize(el?.textContent);
+                    return text === 'more' || text === 'lisää' || text === 'more...' || text === 'lisää...';
+                });
+                // The caller observed More/Lisää. If React removed it before the click,
+                // the caption is still in a hydration transition; retry rather than
+                // turning that race into a permanent clean decision.
+                if (!button) return done('retry');
+
+                try { button.click(); expanded = true; } catch { return done('retry'); }
+                const startedAt = performance.now();
+
+                const poll = () => {
+                    try {
+                        if (!identityValid()) return done('retry');
+                        if (!scanActive() || !stillSafeToExpand()) {
+                            collapse();
+                            return done('retry');
+                        }
+                        if (__bf2760HomeV5CheapContentCheck(article)) {
+                            collapse();
+                            return done('banned');
+                        }
+
+                        const less = __bf2760HomeV6CFindLessButton(article);
+                        const moreStillPresent = __bf2760HomeV5HasMoreButton(article);
+                        const expansionObserved = !!less || !moreStillPresent;
+                        if (expansionObserved) {
+                            collapse();
+                            return done('clean-expanded');
+                        }
+
+                        if (performance.now() - startedAt >= 760) {
+                            collapse();
+                            return done('retry');
+                        }
+                        setTimeout(poll, 60);
+                    } catch {
+                        collapse();
+                        done('retry');
+                    }
+                };
+                setTimeout(poll, 60);
+            } catch {
+                collapse();
+                done('retry');
+            }
+        });
+    }
+
+    function __bf2760HomeV5RunOne() {
+        try {
+            const state = __bf2760HomeV5State();
+            if (!__bf2760HomeV5Active() || document.hidden || state.scanning || !state.queue.length) return;
+            const candidate = __bf2760HomeV5PickCandidate();
+            if (!candidate) return;
+
+            const { article, id, generation } = candidate;
+            state.queuedIDs.delete(id);
+            state.queuedArticles.delete(article);
+            if (!article?.isConnected || __bf2760HomeV5GetArticlePostID(article) !== id || (state.articleGenerations.get(article) || 0) !== generation) {
+                __bf2760HomeV5SchedulePump(80);
+                return;
+            }
+
+            state.scanning = true;
+            state.scanArticle = article;
+            state.scanID = id;
+            state.scanGeneration = generation;
+
+            const hasMore = __bf2760HomeV5HasMoreButton(article);
+            const beforeBanned = __bf2760HomeV5CheapContentCheck(article);
+            const candidateAge = performance.now() - Number(candidate.enqueuedAt || performance.now());
+            let work;
+            if (beforeBanned) {
+                work = Promise.resolve('banned');
+            } else if (hasMore) {
+                work = __bf2760HomeV5ExpandAndScan(article, id, generation);
+            } else if (candidateAge < 520) {
+                // Give a freshly inserted React article a short hydration window before
+                // declaring a no-More caption fully visible. Late mutations still revoke
+                // a stable approval if More/Lisää or banned text subsequently appears.
+                work = Promise.resolve('retry-hydration');
+            } else {
+                work = Promise.resolve('clean-stable');
+            }
+
+            work.then(result => {
+                try {
+                    if (!__bf2760HomeV5Active() || document.hidden) return;
+                    if (!article?.isConnected || __bf2760HomeV5GetArticlePostID(article) !== id || (state.articleGenerations.get(article) || 0) !== generation) return;
+                    if (result === 'retry' || result === 'retry-hydration') {
+                        __bf2760HomeV6CRequeueCandidate(candidate, result === 'retry-hydration' ? 240 : 550);
+                        return;
+                    }
+                    if (result === 'clean-stable' || result === 'clean-expanded') {
+                        // MAIN-world classification can complete while DOM verification
+                        // is already in flight, so structured rejects win at commit time.
+                        if (networkFeedRejectedPostIDs.has(id)) {
+                            __bf2760HomeV5Reject(article, id, true);
+                        } else if (__bf2760HomeV5ImmediateRejectSignal(article, id)) {
+                            __bf2760HomeV5Reject(article, id, true);
+                        } else if (networkFeedApprovedPostIDs.has(id)) {
+                            __bf2760HomeV5RestoreArticle(article);
+                        } else if (__bf2760HomeV5CheapContentCheck(article)) {
+                            __bf2760HomeV5Reject(article, id, true);
+                        } else {
+                            __bf2760HomeV5Approve(article, id, result === 'clean-expanded' ? 'expanded' : 'stable');
+                        }
+                    } else if (result === 'banned') {
+                        __bf2760HomeV5Reject(article, id, true);
+                    } else {
+                        __bf2760HomeV6CRequeueCandidate(candidate, 700);
+                    }
+                } catch {
+                    __bf2760HomeV6CRequeueCandidate(candidate, 850);
+                }
+            }).catch(() => {
+                // Fail visible, not permanently approved: an exception leaves the post
+                // UNKNOWN and queues a later retry instead of poisoning the Post-ID cache.
+                try { __bf2760HomeV6CRequeueCandidate(candidate, 900); } catch {}
+            }).finally(() => {
+                state.scanning = false;
+                state.scanArticle = null;
+                state.scanID = null;
+                state.scanGeneration = 0;
+                __bf2760HomeV5SchedulePump(100);
+            });
+        } catch {}
+    }
+
+    function __bf2760HomeV5SchedulePump(delay = 120) {
+        try {
+            if (!__bf2760HomeV5Active()) return;
+            const state = __bf2760HomeV5State();
+            if (state.pumpScheduled) return;
+            state.pumpScheduled = true;
+            state.pumpTimer = setTimeout(() => {
+                state.pumpTimer = null;
+                state.pumpScheduled = false;
+                const run = () => __bf2760HomeV5RunOne();
+                try {
+                    if (typeof requestIdleCallback === 'function') {
+                        state.idleHandle = requestIdleCallback(run, { timeout: 500 });
+                    } else {
+                        run();
+                    }
+                } catch { run(); }
+            }, Math.max(0, delay));
+        } catch {}
+    }
+
+    function __bf2760HomeV5ScheduleReconcile(delay = 300) {
+        try {
+            if (!__bf2760HomeV5Active()) return;
+            const state = __bf2760HomeV5State();
+            const wait = Math.max(0, delay);
+            const dueAt = Date.now() + wait;
+            if (state.reconcileTimer !== null && state.reconcileDueAt && state.reconcileDueAt <= dueAt) return;
+            if (state.reconcileTimer !== null) { try { clearTimeout(state.reconcileTimer); } catch {} }
+            state.reconcileDueAt = dueAt;
+            state.reconcileTimer = setTimeout(() => {
+                state.reconcileTimer = null;
+                state.reconcileDueAt = 0;
+                __bf2760HomeV5ReconcileVisible();
+                if (__bf2760HomeV5Active()) __bf2760HomeV5ScheduleReconcile(1800);
+            }, wait);
+        } catch {}
+    }
+
+    function __bf2760HomeV5ReconcileVisible() {
+        try {
+            if (!__bf2760HomeV5Active() || document.hidden) return;
+            const state = __bf2760HomeV5State();
+            const root = state.root || document.querySelector('main');
+            if (!root) return;
+            const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 900;
+            const articles = root.querySelectorAll?.('article') || [];
+            let seen = 0;
+            for (const article of articles) {
+                if (!article?.isConnected) continue;
+                const rect = article.getBoundingClientRect?.();
+                if (!rect) continue;
+                if (rect.bottom < -viewportHeight * 1.10 || rect.top > viewportHeight * 1.75) continue;
+                __bf2760HomeV5ReconcileArticle(article, true);
+                if (++seen >= 12) break;
+            }
+            __bf2760HomeV5ProcessRetirements(12);
+            __bf2760HomeV5SchedulePump(90);
+        } catch {}
+    }
+
+    function __bf2760HomeV5EnsureObserver() {
+        try {
+            if (!__bf2760HomeV5Active()) { __bf2760HomeV5Cleanup(); return null; }
+            const state = __bf2760HomeV5State();
+            const root = document.querySelector('main');
+            if (!root) return null;
+            let created = false;
+
+            if (state.root !== root || !state.observer) {
+                try { state.observer?.disconnect(); } catch {}
+                state.root = root;
+                state.route = location.href;
+                created = true;
+                state.observer = trackObserver(new MutationObserver(mutations => {
+                    if (!__bf2760HomeV5Active() || document.hidden) return;
+                    let found = false;
+                    for (const mutation of mutations) {
+                        // Ignore scanner-owned More/Lisää hydration. The serialized scan
+                        // validates ID/generation itself; feeding those mutations back into
+                        // discovery only creates redundant work and flicker opportunities.
+                        let mutationArticle = null;
+                        try { mutationArticle = mutation?.target?.closest?.('article') || null; } catch {}
+                        if (state.scanning && mutationArticle && mutationArticle === state.scanArticle) continue;
+
+                        if (mutation?.target?.nodeType === 1 && __bf2760HomeV5DiscoverFromNode(mutation.target)) found = true;
+                        if (!mutation.addedNodes?.length) continue;
+                        for (const node of mutation.addedNodes) {
+                            if (node?.nodeType !== 1) continue;
+                            if (__bf2760HomeV5DiscoverFromNode(node)) found = true;
+                        }
+                    }
+                    if (found) __bf2760HomeV5SchedulePump(80);
+                }));
+                state.observer.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ['href'] });
+
+                const existing = root.querySelectorAll?.('article') || [];
+                const limit = Math.min(existing.length, 18);
+                for (let i = 0; i < limit; i++) {
+                    state.dirtyArticles.add(existing[i]);
+                    __bf2760HomeV5ReconcileArticle(existing[i], true);
+                }
+            }
+
+            // Do the expensive near-viewport pass only when a root/observer is newly
+            // installed. Repeated bootstrap/interval calls merely ensure the owner exists;
+            // the coordinator's own reconcile timer handles steady-state maintenance.
+            if (created) __bf2760HomeV5ReconcileVisible();
+            __bf2760HomeV5ScheduleReconcile(700);
+            return state.observer;
+        } catch {}
+        return null;
+    }
+
+    function __bf2760HomeV5Cleanup() {
+        try {
+            const state = __bf2760HomeV5State();
+            try { state.observer?.disconnect(); } catch {}
+            state.observer = null;
+            state.root = null;
+            state.queue.length = 0;
+            state.queuedIDs.clear();
+            state.queuedArticles = new WeakSet();
+            for (const article of Array.from(state.retirementArticles)) {
+                try { __bf2760HomeV5RestoreArticle(article); } catch {}
+            }
+            for (const article of Array.from(state.retiredArticles)) {
+                try { __bf2760HomeV5RestoreArticle(article); } catch {}
+            }
+            state.retirementArticles.clear();
+            state.retiredArticles.clear();
+            state.tombstones = new WeakMap();
+            state.collapseFailedIDs.clear();
+            state.missingIDSince = new WeakMap();
+            state.articleFingerprints = new WeakMap();
+            state.dirtyArticles = new WeakSet();
+            state.mutationArticles.clear();
+            state.mutationFlushScheduled = false;
+            state.scanning = false;
+            state.scanArticle = null;
+            state.scanID = null;
+            state.scanGeneration = 0;
+            if (state.pumpTimer !== null) { try { clearTimeout(state.pumpTimer); } catch {} }
+            if (state.reconcileTimer !== null) { try { clearTimeout(state.reconcileTimer); } catch {} }
+            if (state.idleHandle !== null && typeof cancelIdleCallback === 'function') { try { cancelIdleCallback(state.idleHandle); } catch {} }
+            state.pumpTimer = null;
+            state.reconcileTimer = null;
+            state.reconcileDueAt = 0;
+            state.idleHandle = null;
+            state.scrollUntil = 0;
+            state.userInputUntil = 0;
+            state.lastScrollAt = 0;
+            state.lastUserInputAt = 0;
+            state.pumpScheduled = false;
+        } catch {}
+    }
+
+    // Public bridge used by the existing observer/bootstrap code. V6E keeps this
+    // coordinator the sole Home-feed owner; non-Home surfaces keep original scanners.
+    function inspectAddedHomeFeedArticlesV27(node) {
+        if (__bf2760HomeV5Active()) __bf2760HomeV5DiscoverFromNode(node);
+    }
+
+    function enqueueHomeFeedMutation(mutation) {
+        if (!__bf2760HomeV5Active()) return false;
+        if (!mutation?.addedNodes?.length) return false;
+        let found = false;
+        for (const node of mutation.addedNodes) {
+            if (node?.nodeType === 1 && __bf2760HomeV5DiscoverFromNode(node)) found = true;
+        }
+        return found;
+    }
+
+    function scheduleHomeFeedDirtyScan() {
+        __bf2760HomeV5SchedulePump(80);
+    }
+
+    function ensureHomeFeedPrepaintObserverV27() {
+        return __bf2760HomeV5EnsureObserver();
+    }
+
+    function watchForHomeFeedRootV27() {
+        if (__bf2760HomeV5Active()) __bf2760HomeV5EnsureObserver();
+    }
+
+    function ensureIGFeedArticleObserver() {
+        return __bf2760HomeV5Active() ? __bf2760HomeV5EnsureObserver() : null;
+    }
+
+    function observeIGFeedArticles() {
+        return __bf2760HomeV5Active() ? __bf2760HomeV5EnsureObserver() : null;
+    }
+
+    function cleanupIGFeedArticleObserver() {
+        try { __bf2760HomeV5Cleanup(); } catch {}
+    }
+
+    // ===== v27.6.0 V6E HOME-FEED OBSERVER OVERRIDE =====
+    function observerCallback(mutationsList) {
+        const isHomeFeed = isMetaManglerHomeFeedPath();
+        if (document.hidden) return;
+
+        if (isHomeFeed) {
+            // The dedicated coordinator observer is the sole Home-feed discovery owner.
+            // This legacy/bootstrap observer intentionally performs no article scan and
+            // does not re-run coordinator setup for every hydration mutation.
+            const state = __bf2760HomeV5State();
+            if (!state.observer || !state.root?.isConnected) __bf2760HomeV5EnsureObserver();
+            return;
+        }
+
+        // Preserve the pre-V5 non-Home observer behavior without touching the Home Feed.
+        updateMetaManglerFeedGateClass();
+        updateMetaManglerAccountEditClassV43();
+        if (location.hostname.includes('instagram.com') && isMetaManglerStoryTrayPathV45()) {
+            ensureInstagramStoryTrayObserverV48();
+        }
+        let hasAddedElement = false;
+        try {
+            for (const mutation of mutationsList || []) {
+                if (!mutation?.addedNodes?.length) continue;
+                for (const node of mutation.addedNodes) {
+                    if (node?.nodeType === 1) { hasAddedElement = true; break; }
+                }
+                if (hasAddedElement) break;
+            }
+        } catch { hasAddedElement = true; }
+        if (!hasAddedElement) return;
+
+        injectMinimalNoGlimpseNavCSS();
+        hideIGAccountEditSectionsV43();
+        hideProfileThreadsTags();
+        updateOverlayState();
+        makeOverlayLikesClickable();
+        fastSynchronousHider(mutationsList);
+        if (observerScheduled) return;
+        observerScheduled = true;
+        addTimeout(() => {
+            observerScheduled = false;
+            if (isReelsPage()) return;
+            if (location.hostname.includes('instagram.com') && location.pathname.match(/\/(followers|following)/)) {
+                hideInstagramAccountsFromList();
+                return;
+            }
+            if (isExcludedPath()) {
+                collapseElementsOnExcludedPaths();
+                return;
+            }
+            if (isMetaManglerHomeFeedPath()) {
+                __bf2760HomeV5EnsureObserver();
+                hideProfileThreadsTags();
+                hideHomeFeedFooterLinks();
+                hideUnwantedUIButtons();
+                ensureInstagramStoryTrayObserverV48();
+                hideBannedInstagramStoryAccounts();
+                compactBannedInstagramStorySlots();
+            } else {
+                collapseElementsBySelectors(selectorsToHide);
+                hideProfileThreadsTags();
+                processFeedPostsForScanning();
+                collapseElementsByKeywordsOrPaths(keywordsToHide, instagramBannedPaths, selectorsToMonitor);
+                if (location.hostname.includes('instagram.com')) {
+                    hideIGAccountEditSectionsV43();
+                    hideUnwantedUIButtons();
+                    ensureInstagramStoryTrayObserverV48();
+                    hideBannedInstagramStoryAccounts();
+                    compactBannedInstagramStorySlots();
+                    if (isSearchSurfacePresent()) hideInstagramSearchResults();
+                }
+            }
+            hideUnfollowRowInProfileDialog();
+            updateOverlayState();
+            scanPermalinkArticleAndAct();
+            prunePostCaches();
+        }, 450);
+    }
+
+    if (!window.__bf2760HomeV6EInputHookInstalled) {
+        window.__bf2760HomeV6EInputHookInstalled = true;
+        const markHomeFeedUserInputV6E = () => {
+            try {
+                if (!__bf2760HomeV5Active()) return;
+                const state = __bf2760HomeV5State();
+                state.userInputSerial++;
+                state.lastUserInputAt = Date.now();
+                state.userInputUntil = state.lastUserInputAt + 220;
+            } catch {}
+        };
+        onEvent(window, 'wheel', markHomeFeedUserInputV6E, { capture: true, passive: true });
+        onEvent(window, 'touchmove', markHomeFeedUserInputV6E, { capture: true, passive: true });
+        onEvent(window, 'pointerdown', markHomeFeedUserInputV6E, { capture: true, passive: true });
+        onEvent(window, 'keydown', event => {
+            try {
+                const key = String(event?.key || '');
+                if (key === 'ArrowDown' || key === 'ArrowUp' || key === 'PageDown' || key === 'PageUp' || key === 'Home' || key === 'End' || key === ' ') {
+                    markHomeFeedUserInputV6E();
+                }
+            } catch {}
+        }, { capture: true, passive: true });
+    }
+
+    if (!window.__bf2760HomeV6EScrollHookInstalled) {
+        window.__bf2760HomeV6EScrollHookInstalled = true;
+        onEvent(window, 'scroll', () => {
+            if (!__bf2760HomeV5Active()) return;
+            const state = __bf2760HomeV5State();
+            state.lastScrollAt = Date.now();
+            state.scrollUntil = state.lastScrollAt + 180;
+            __bf2760HomeV5ScheduleReconcile(300);
+            __bf2760HomeV5SchedulePump(320);
+        }, { capture: true, passive: true });
+    }
 
 })();
