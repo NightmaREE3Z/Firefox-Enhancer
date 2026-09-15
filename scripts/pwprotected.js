@@ -12,6 +12,8 @@
   const PAGE_PARAMS = new URLSearchParams(window.location.search);
   const BLOCKER_MANAGER_TARGET = PAGE_PARAMS.get('target') === 'blocker-manager';
   const CHATGPT_AUTH_TARGET = PAGE_PARAMS.get('target') === 'chatgpt';
+  const BRAVEFOX_AMO_TARGET = PAGE_PARAMS.get('target') === 'bravefox-amo';
+  const BRAVEFOX_AMO_REQUEST_ID = String(PAGE_PARAMS.get('request') || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 96);
   const CHATGPT_AUTH_REQUEST_ID = String(PAGE_PARAMS.get('request') || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 96);
   const BLOCKER_TARGET = BLOCKER_MANAGER_TARGET;
   const CUSTOM_PROMPT_TITLE = String(PAGE_PARAMS.get('title') || '').trim();
@@ -458,6 +460,35 @@
           submit.disabled = false;
           input.disabled = false;
           showIncorrectPassword(authError?.message || 'ChatGPT password request failed.');
+        });
+        return;
+      }
+
+      // BraveFox AMO uses a trusted extension page because addons.mozilla.org itself
+      // is a Firefox-restricted domain. After authentication this page navigates itself
+      // back to the stored AMO URL; AMO-only access never unlocks Firefox system pages.
+      if (BRAVEFOX_AMO_TARGET) {
+        if (!BRAVEFOX_AMO_REQUEST_ID || window !== window.parent || !api?.runtime?.sendMessage) {
+          showIncorrectPassword('BraveFox AMO password request is invalid or expired.');
+          return;
+        }
+
+        submit.disabled = true;
+        input.disabled = true;
+        error.textContent = '';
+
+        Promise.resolve(api.runtime.sendMessage({
+          type: 'BRAVEFOX_AMO_UNLOCK',
+          requestId: BRAVEFOX_AMO_REQUEST_ID
+        })).then(response => {
+          if (!response?.ok || !response?.returnUrl) {
+            throw new Error(response?.error || 'BraveFox AMO unlock request expired.');
+          }
+          window.location.replace(String(response.returnUrl));
+        }).catch(authError => {
+          submit.disabled = false;
+          input.disabled = false;
+          showIncorrectPassword(authError?.message || 'BraveFox AMO unlock failed.');
         });
         return;
       }

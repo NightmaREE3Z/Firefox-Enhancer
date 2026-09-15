@@ -1121,6 +1121,228 @@ browser.runtime.onMessage.addListener((message, sender) => {
 });
 
 
+
+// ---------------------------------------------------------------------------
+// BraveFox Enhancer AMO listing password gate — Fenix hard fallback
+// ---------------------------------------------------------------------------
+// AMO is a Firefox restricted domain. Do not inject into it or rely on webRequest/DNR.
+// Instead, identify the BraveFox listing from tab metadata, open our trusted extension
+// password page, close the AMO tab, and let the trusted password page navigate back only
+// after a successful unlock.
+const BRAVEFOX_AMO_BYPASS_TTL_MS = 5 * 60 * 1000;
+let braveFoxAmoBypassUntil = 0;
+const braveFoxAmoPendingRequests = new Map();
+const braveFoxAmoRedirectingTabs = new Set();
+let braveFoxAmoPollTimer = 0;
+
+function braveFoxIsProtectedAmoUrl(rawUrl) {
+  try {
+    const url = new URL(String(rawUrl || ""));
+    if (url.protocol !== "https:" || url.hostname.toLowerCase() !== "addons.mozilla.org") return false;
+    const path = String(url.pathname || "/").replace(/\/{2,}/g, "/");
+    return /^\/[^/]+\/(?:firefox|android)\/addon\/bravefox-enhancer(?:\/|$)/i.test(path);
+  } catch (_) {
+    return false;
+  }
+}
+
+function braveFoxAmoLocaleFallbackUrl() {
+  try {
+    const raw = String(browser.i18n?.getUILanguage?.() || "en-US").trim();
+    const locale = /^[a-z]{2,3}(?:-[A-Z]{2})?$/.test(raw) ? raw : "en-US";
+    return `https://addons.mozilla.org/${locale}/android/addon/bravefox-enhancer/`;
+  } catch (_) {
+    return "https://addons.mozilla.org/en-US/android/addon/bravefox-enhancer/";
+  }
+}
+
+function braveFoxGetProtectedAmoTargetFromTab(tab) {
+  try {
+    const url = String(tab?.url || "");
+    if (braveFoxIsProtectedAmoUrl(url)) return url;
+
+    // Fenix may withhold/sanitize URL details for Mozilla-restricted pages. In that case,
+    // require both a BraveFox-specific title and an AMO-origin signal before treating it
+    // as our listing. This avoids gating unrelated AMO pages.
+    const title = String(tab?.title || "").toLowerCase();
+    const favIconUrl = String(tab?.favIconUrl || "").toLowerCase();
+    const urlLower = url.toLowerCase();
+    const titleMatches = title.includes("bravefox enhancer");
+    const amoSignal = urlLower.includes("addons.mozilla.org") || favIconUrl.includes("addons.mozilla.org");
+    if (titleMatches && amoSignal) return braveFoxAmoLocaleFallbackUrl();
+  } catch (_) {}
+  return "";
+}
+
+function braveFoxIsAmoBypassed(tabId) {
+  if (Date.now() <= braveFoxAmoBypassUntil) return true;
+  braveFoxAmoBypassUntil = 0;
+  // Stronger Firefox-system authorization inherits downward when the same tab carries it.
+  return braveFoxIsFirefoxSystemBypassed(tabId);
+}
+
+function braveFoxGrantAmoBypass() {
+  braveFoxAmoBypassUntil = Date.now() + BRAVEFOX_AMO_BYPASS_TTL_MS;
+  return braveFoxAmoBypassUntil;
+}
+
+function braveFoxMakeAmoRequestId() {
+  try {
+    if (globalThis.crypto?.randomUUID) return crypto.randomUUID();
+    const bytes = new Uint8Array(16);
+    globalThis.crypto?.getRandomValues?.(bytes);
+    return Array.from(bytes, value => value.toString(16).padStart(2, "0")).join("");
+  } catch (_) {
+    return `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  }
+}
+
+function braveFoxIsAmoPasswordPage(sender, requestId = "") {
+  try {
+    const url = new URL(String(sender?.url || sender?.tab?.url || ""));
+    const extensionOrigin = new URL(browser.runtime.getURL("/")).origin;
+    return url.origin === extensionOrigin &&
+      url.pathname === "/html/password-protected.html" &&
+      url.searchParams.get("target") === "bravefox-amo" &&
+      (!requestId || url.searchParams.get("request") === requestId);
+  } catch (_) {
+    return false;
+  }
+}
+
+function braveFoxPruneAmoRequests() {
+  const cutoff = Date.now() - 10 * 60 * 1000;
+  for (const [requestId, pending] of braveFoxAmoPendingRequests) {
+    if (!pending || Number(pending.createdAt || 0) < cutoff) braveFoxAmoPendingRequests.delete(requestId);
+  }
+}
+
+async function braveFoxOpenAmoPasswordGate(tabId, originalUrl) {
+  if (!Number.isInteger(tabId) || tabId < 0 || !originalUrl) return false;
+  if (braveFoxIsAmoBypassed(tabId) || braveFoxAmoRedirectingTabs.has(tabId)) return false;
+
+  braveFoxAmoRedirectingTabs.add(tabId);
+  braveFoxPruneAmoRequests();
+
+  const requestId = braveFoxMakeAmoRequestId();
+  braveFoxAmoPendingRequests.set(requestId, {
+    originalUrl: String(originalUrl),
+    sourceTabId: tabId,
+    createdAt: Date.now()
+  });
+
+  const params = new URLSearchParams({
+    target: "bravefox-amo",
+    request: requestId,
+    compact: "1",
+    title: "BraveFox Enhancer add-on page is password protected"
+  });
+  const gateUrl = browser.runtime.getURL(`html/password-protected.html?${params.toString()}`);
+
+  try {
+    // Fenix is more reliable when a trusted extension tab is created normally than when
+    // an already-restricted AMO tab is navigated in place by tabs.update(). New tabs open
+    // selected by default on Android, so no unsupported `active` flag is required here.
+    const gateTab = await browser.tabs.create({ url: gateUrl });
+    if (!gateTab?.id) throw new Error("Firefox did not create the BraveFox password tab.");
+
+    try { await browser.tabs.remove(tabId); } catch (_) {}
+    return true;
+  } catch (error) {
+    braveFoxAmoPendingRequests.delete(requestId);
+    console.warn(`${LOG_PREFIX} Could not open BraveFox AMO password gate:`, error);
+    return false;
+  } finally {
+    braveFoxAmoRedirectingTabs.delete(tabId);
+  }
+}
+
+function braveFoxCheckAmoTab(tab) {
+  try {
+    const tabId = tab?.id;
+    if (!Number.isInteger(tabId) || tabId < 0 || braveFoxIsAmoBypassed(tabId)) return;
+    const targetUrl = braveFoxGetProtectedAmoTargetFromTab(tab);
+    if (!targetUrl) return;
+    void braveFoxOpenAmoPasswordGate(tabId, targetUrl);
+  } catch (_) {}
+}
+
+async function braveFoxCheckAmoTabById(tabId) {
+  if (!Number.isInteger(tabId) || tabId < 0) return;
+  try {
+    const tab = await browser.tabs.get(tabId);
+    braveFoxCheckAmoTab(tab);
+  } catch (_) {}
+}
+
+async function braveFoxPollActiveAmoTabs() {
+  try {
+    const tabs = await browser.tabs.query({ active: true });
+    for (const tab of tabs || []) braveFoxCheckAmoTab(tab);
+  } catch (_) {}
+}
+
+if (browser.tabs?.onCreated) {
+  browser.tabs.onCreated.addListener(tab => braveFoxCheckAmoTab(tab));
+}
+if (browser.tabs?.onUpdated) {
+  browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+    braveFoxCheckAmoTab({
+      ...(tab || {}),
+      id: tabId,
+      url: changeInfo?.url || tab?.url || "",
+      title: changeInfo?.title || tab?.title || "",
+      favIconUrl: changeInfo?.favIconUrl || tab?.favIconUrl || ""
+    });
+  });
+}
+if (browser.tabs?.onActivated) {
+  browser.tabs.onActivated.addListener(activeInfo => {
+    void braveFoxCheckAmoTabById(activeInfo?.tabId);
+  });
+}
+if (browser.tabs?.onRemoved) {
+  browser.tabs.onRemoved.addListener(tabId => {
+    braveFoxAmoRedirectingTabs.delete(tabId);
+  });
+}
+
+// Android/Fenix fallback: restricted-domain navigation can be quiet. Poll only active
+// tab metadata at a low rate; this does not inspect page DOM or run code on AMO itself.
+try {
+  const braveFoxBackgroundIsAndroid = /Android/i.test(String(globalThis.navigator?.userAgent || ""));
+  if (braveFoxBackgroundIsAndroid && !braveFoxAmoPollTimer) {
+    braveFoxAmoPollTimer = setInterval(() => {
+      void braveFoxPollActiveAmoTabs();
+    }, 700);
+  }
+} catch (_) {}
+
+browser.runtime.onMessage.addListener((message, sender) => {
+  if (!message || typeof message !== "object" || message.type !== "BRAVEFOX_AMO_UNLOCK") return undefined;
+
+  return (async () => {
+    const requestId = String(message.requestId || "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 96);
+    if (!requestId || !braveFoxIsAmoPasswordPage(sender, requestId)) {
+      return { ok: false, error: "BraveFox AMO unlock request denied." };
+    }
+
+    braveFoxPruneAmoRequests();
+    const pending = braveFoxAmoPendingRequests.get(requestId);
+    if (!pending?.originalUrl) {
+      return { ok: false, error: "BraveFox AMO unlock request expired." };
+    }
+
+    braveFoxAmoPendingRequests.delete(requestId);
+    braveFoxGrantAmoBypass();
+    return {
+      ok: true,
+      ttlMs: BRAVEFOX_AMO_BYPASS_TTL_MS,
+      returnUrl: pending.originalUrl
+    };
+  })();
+});
+
 // ---------------------------------------------------------------------------
 // ChatGPT secondary-browser route closure + native password-page bridge
 // ---------------------------------------------------------------------------
