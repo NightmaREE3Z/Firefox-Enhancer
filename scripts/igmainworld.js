@@ -36,7 +36,7 @@
             const OWN = Object.prototype.hasOwnProperty;
             const PAGINATION_FIRST_MIN = 24;
             const PAGINATION_FIRST_SPARSE = 36;
-            const CONFIG_SEND_GRACE_MS = 120;
+            const CONFIG_SEND_GRACE_MS = 450;
             const feedPageStats = [];
             let paginationFirstTarget = PAGINATION_FIRST_MIN;
             try { window.__bfInstagramFeedSanitizerStatsV6H = feedPageStats; } catch {}

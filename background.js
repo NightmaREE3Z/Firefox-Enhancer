@@ -945,6 +945,183 @@ browser.runtime.onMessage.addListener(message => {
 
 
 // ---------------------------------------------------------------------------
+// Firefox/Fenix protected browser-management page password gate
+// ---------------------------------------------------------------------------
+const BRAVEFOX_FIREFOX_SYSTEM_BYPASS_TTL_MS = 5 * 60 * 1000;
+const braveFoxFirefoxSystemBypassTabs = new Map();
+const braveFoxFirefoxSystemOriginalUrls = new Map();
+const braveFoxFirefoxSystemRedirectingTabs = new Set();
+
+function braveFoxIsProtectedFirefoxSystemUrl(rawUrl) {
+  const url = String(rawUrl || "").trim().toLowerCase();
+  if (!url) return false;
+
+  if (/^about:(?:addons|debugging|config|profiles|support)(?:$|[/?#])/.test(url)) return true;
+
+  // Firefox for Android stable builds have historically exposed the GeckoView
+  // configuration editor through this chrome URL when about:config is blocked.
+  return /^chrome:\/\/geckoview\/content\/config\.xhtml(?:$|[/?#])/.test(url);
+}
+
+function braveFoxIsFirefoxSystemBypassed(tabId) {
+  if (!Number.isInteger(tabId) || tabId < 0) return false;
+  const expiresAt = Number(braveFoxFirefoxSystemBypassTabs.get(tabId) || 0);
+  if (!expiresAt) return false;
+  if (Date.now() <= expiresAt) return true;
+  braveFoxFirefoxSystemBypassTabs.delete(tabId);
+  return false;
+}
+
+function braveFoxGrantFirefoxSystemBypass(tabId) {
+  if (!Number.isInteger(tabId) || tabId < 0) return false;
+  braveFoxFirefoxSystemBypassTabs.set(tabId, Date.now() + BRAVEFOX_FIREFOX_SYSTEM_BYPASS_TTL_MS);
+  return true;
+}
+
+function braveFoxIsFirefoxSystemPasswordPage(sender) {
+  try {
+    const url = new URL(String(sender?.url || sender?.tab?.url || ""));
+    const extensionOrigin = new URL(browser.runtime.getURL("/")).origin;
+    return url.origin === extensionOrigin &&
+      url.pathname === "/html/password-protected.html" &&
+      url.searchParams.get("target") === "firefox-system";
+  } catch (_) {
+    return false;
+  }
+}
+
+async function braveFoxRedirectFirefoxSystemTab(tabId, originalUrl) {
+  if (!Number.isInteger(tabId) || tabId < 0 || !braveFoxIsProtectedFirefoxSystemUrl(originalUrl)) return false;
+  if (braveFoxIsFirefoxSystemBypassed(tabId) || braveFoxFirefoxSystemRedirectingTabs.has(tabId)) return false;
+
+  braveFoxFirefoxSystemRedirectingTabs.add(tabId);
+  braveFoxFirefoxSystemOriginalUrls.set(tabId, String(originalUrl));
+
+  const params = new URLSearchParams({
+    target: "firefox-system",
+    compact: "1",
+    title: "Saatana! Sivu salasanasuojattu"
+  });
+
+  try {
+    await browser.tabs.update(tabId, {
+      url: browser.runtime.getURL(`html/password-protected.html?${params.toString()}`),
+      loadReplace: false
+    });
+    return true;
+  } catch (error) {
+    braveFoxFirefoxSystemOriginalUrls.delete(tabId);
+    console.warn(`${LOG_PREFIX} Could not redirect protected Firefox system page:`, error);
+    return false;
+  } finally {
+    braveFoxFirefoxSystemRedirectingTabs.delete(tabId);
+  }
+}
+
+function braveFoxCheckFirefoxSystemNavigation(tabId, rawUrl) {
+  if (!Number.isInteger(tabId) || tabId < 0 || !braveFoxIsProtectedFirefoxSystemUrl(rawUrl)) return;
+  if (braveFoxIsFirefoxSystemBypassed(tabId)) return;
+  void braveFoxRedirectFirefoxSystemTab(tabId, rawUrl);
+}
+
+async function braveFoxCheckActivatedFirefoxSystemTab(activeInfo) {
+  const tabId = activeInfo?.tabId;
+  if (!Number.isInteger(tabId) || tabId < 0) return;
+  try {
+    const tab = await browser.tabs.get(tabId);
+    braveFoxCheckFirefoxSystemNavigation(tabId, tab?.url || "");
+  } catch (_) {}
+}
+
+async function braveFoxScanOpenFirefoxSystemTabs() {
+  try {
+    const tabs = await browser.tabs.query({});
+    for (const tab of tabs) {
+      braveFoxCheckFirefoxSystemNavigation(tab?.id, tab?.url || "");
+    }
+  } catch (error) {
+    console.warn(`${LOG_PREFIX} Could not scan protected Firefox system pages:`, error);
+  }
+}
+
+if (browser.tabs?.onCreated) {
+  browser.tabs.onCreated.addListener(tab => {
+    braveFoxCheckFirefoxSystemNavigation(tab?.id, tab?.url || "");
+  });
+}
+
+if (browser.tabs?.onUpdated) {
+  browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+    braveFoxCheckFirefoxSystemNavigation(tabId, changeInfo?.url || tab?.url || "");
+  });
+}
+
+if (browser.tabs?.onActivated) {
+  browser.tabs.onActivated.addListener(activeInfo => {
+    void braveFoxCheckActivatedFirefoxSystemTab(activeInfo);
+  });
+}
+
+if (browser.tabs?.onRemoved) {
+  browser.tabs.onRemoved.addListener(tabId => {
+    braveFoxFirefoxSystemBypassTabs.delete(tabId);
+    braveFoxFirefoxSystemOriginalUrls.delete(tabId);
+    braveFoxFirefoxSystemRedirectingTabs.delete(tabId);
+  });
+}
+
+function braveFoxHandleFirefoxSystemWebNavigation(details) {
+  if (details?.frameId !== 0) return;
+  braveFoxCheckFirefoxSystemNavigation(details?.tabId, details?.url || "");
+}
+
+if (browser.webNavigation?.onBeforeNavigate) {
+  browser.webNavigation.onBeforeNavigate.addListener(braveFoxHandleFirefoxSystemWebNavigation);
+}
+if (browser.webNavigation?.onCommitted) {
+  browser.webNavigation.onCommitted.addListener(braveFoxHandleFirefoxSystemWebNavigation);
+}
+if (browser.webNavigation?.onHistoryStateUpdated) {
+  browser.webNavigation.onHistoryStateUpdated.addListener(braveFoxHandleFirefoxSystemWebNavigation);
+}
+
+browser.runtime.onMessage.addListener((message, sender) => {
+  if (!message || typeof message !== "object") return undefined;
+  if (message.type !== "BRAVEFOX_EXT_UNLOCK" && message.type !== "BRAVEFOX_GO_TO_EXTENSIONS") return undefined;
+
+  return (async () => {
+    const tabId = sender?.tab?.id;
+    if (!Number.isInteger(tabId) || tabId < 0 || !braveFoxIsFirefoxSystemPasswordPage(sender)) {
+      return { ok: false, error: "Firefox system-page unlock request denied." };
+    }
+
+    if (message.type === "BRAVEFOX_EXT_UNLOCK") {
+      if (!braveFoxFirefoxSystemOriginalUrls.has(tabId)) {
+        return { ok: false, error: "Firefox system-page unlock request expired." };
+      }
+      braveFoxGrantFirefoxSystemBypass(tabId);
+      return {
+        ok: true,
+        ttlMs: BRAVEFOX_FIREFOX_SYSTEM_BYPASS_TTL_MS
+      };
+    }
+
+    if (!braveFoxIsFirefoxSystemBypassed(tabId) || !braveFoxFirefoxSystemOriginalUrls.has(tabId)) {
+      return { ok: false, error: "Firefox system-page return request expired." };
+    }
+
+    try {
+      await browser.tabs.goBack(tabId);
+      braveFoxFirefoxSystemOriginalUrls.delete(tabId);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: String(error?.message || error) };
+    }
+  })();
+});
+
+
+// ---------------------------------------------------------------------------
 // ChatGPT secondary-browser route closure + native password-page bridge
 // ---------------------------------------------------------------------------
 const BRAVEFOX_CHATGPT_AUTH_TTL_MS = 2 * 60 * 1000;
@@ -1226,6 +1403,7 @@ async function main() {
   await platformModule.initializePlatform?.();
   await loadHostsCache();
   installRequestListener();
+  void braveFoxScanOpenFirefoxSystemTabs();
   setupAlarms();
   await runStartupUpdates(false);
 

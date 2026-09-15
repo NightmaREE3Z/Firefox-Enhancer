@@ -5089,16 +5089,16 @@ injectInlineCSS();
                 (document.head || document.documentElement).appendChild(style);
             }
             style.textContent = `
-                /* V6E Home Feed presentation. Paint-only hiding keeps native geometry for
-                   a reject that is too close to the viewport. Safely offscreen rejects use
-                   browser-owned size containment: React's child DOM stays completely intact. */
+                /* V6I Home Feed presentation. A reject is paint-hidden only while active input/scroll
+                   is settling. As soon as the coordinator is idle it receives a tiny browser-owned
+                   contained slot, keeping React's child DOM intact without leaving a post-sized hole. */
                 html[data-bf-ig-home-feed-hybrid="1"] main article[data-bf-home-v6e-hidden="1"]:not([data-bf-home-v6e-contained]) {
                     visibility: hidden !important;
                     pointer-events: none !important;
                 }
                 html[data-bf-ig-home-feed-hybrid="1"] main article[data-bf-home-v6e-contained] {
                     content-visibility: hidden !important;
-                    contain-intrinsic-block-size: 12px !important;
+                    contain-intrinsic-block-size: 1px !important;
                     pointer-events: none !important;
                 }
             `;
@@ -5531,7 +5531,7 @@ injectInlineCSS();
     const __BF2760_HOME_V6E_COLLAPSE_SUPPORTED = (() => {
         try {
             return !!window.CSS?.supports?.('content-visibility', 'hidden') &&
-                !!window.CSS?.supports?.('contain-intrinsic-block-size', '12px');
+                !!window.CSS?.supports?.('contain-intrinsic-block-size', '1px');
         } catch { return false; }
     })();
 
@@ -5602,13 +5602,14 @@ injectInlineCSS();
         try {
             if (!__BF2760_HOME_V6E_COLLAPSE_SUPPORTED || !article?.isConnected || !id) return false;
             const state = __bf2760HomeV5State();
+            // v6I: active input/scroll is the only geometry safety boundary. The old
+            // below-the-viewport requirement left rejected visible/above-viewport hosts as
+            // full-height invisible articles, which is exactly the intermittent empty-card gap.
             if (Date.now() < state.scrollUntil || Date.now() < state.userInputUntil) return false;
             if (__bf2760HomeV5GetArticlePostID(article) !== id || !__bf2760HomeV6EStillRejected(id)) return false;
             const rect = article.getBoundingClientRect?.();
-            if (!rect || rect.height <= 40) return false;
-            const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 900;
-            const safetyGap = Math.max(320, viewportHeight * 0.35);
-            return rect.top > viewportHeight + safetyGap;
+            if (!rect || rect.height <= 1) return false;
+            return true;
         } catch { return false; }
     }
 
@@ -5661,8 +5662,8 @@ injectInlineCSS();
                 return;
             }
 
-            // Rejection paint suppression is non-geometric and may happen immediately.
-            // Geometry changes wait for a safely-below, idle contained-collapse opportunity.
+            // Rejection paint suppression may happen immediately. Geometry changes wait only
+            // for the short active input/scroll quiet window, then collapse to a tiny contained slot.
             state.retirementArticles.add(article);
             __bf2760HomeV5SetHidden(article, true);
             if (!__bf2760HomeV5ApplyTombstone(article, id)) __bf2760HomeV5ScheduleReconcile(220);

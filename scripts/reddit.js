@@ -247,14 +247,35 @@
             if (window.__nrAnswersEarlyInstalled) return;
             window.__nrAnswersEarlyInstalled = true;
 
+            function getRedditPageNonce() {
+                try {
+                    const scripts = document.querySelectorAll('script[nonce]');
+                    for (let i = 0; i < scripts.length; i++) {
+                        const nonce = scripts[i].nonce || scripts[i].getAttribute('nonce') || '';
+                        if (nonce) return nonce;
+                    }
+                } catch {}
+                return '';
+            }
+
             function injectIntoPage(fn) {
                 try {
+                    // Reddit's /media utility page has no nav/Answers surface and enforces a
+                    // nonce-only script CSP. Never create an inline script there.
+                    if (/^\/media(?:\/|$)/i.test(location.pathname || '')) return false;
+
+                    const nonce = getRedditPageNonce();
+                    if (!nonce) return false;
+
                     const el = document.createElement('script');
                     el.type = 'text/javascript';
+                    el.nonce = nonce;
                     el.textContent = `;(${fn})();`;
                     (document.documentElement || document.head).appendChild(el);
                     el.remove();
+                    return true;
                 } catch {}
+                return false;
             }
 
             (function injectPrehideCss() {
@@ -297,7 +318,7 @@
                 } catch {}
             })();
 
-            injectIntoPage(function pageWorldAnswersHook() {
+            const installAnswersRuntime = function pageWorldAnswersHook() {
                 if (window.__nrAnswersPageHooked) return;
                 window.__nrAnswersPageHooked = true;
 
@@ -431,9 +452,23 @@
                 window.addEventListener('beforeunload', disconnectAll, { once: true });
 
                 try { removeAnswersIn(document); } catch {}
-            });
+            };
 
-            PAGE_WORLD_HOOKED = true;
+            // Install the same helper in the extension/content-script world so reddit.js and
+            // redditleftnav.js can cooperate without relying on page-world globals.
+            try { installAnswersRuntime(); } catch {}
+
+            // Closed Shadow DOM interception still needs the real page world. Reuse Reddit's
+            // own CSP nonce when it becomes available; if no nonce is exposed, fail quietly
+            // instead of deliberately generating a CSP violation.
+            const pageHookDelays = [0, 40, 120, 260, 520, 900];
+            pageHookDelays.forEach(delay => {
+                setTimeout(() => {
+                    try {
+                        if (!PAGE_WORLD_HOOKED) PAGE_WORLD_HOOKED = injectIntoPage(installAnswersRuntime);
+                    } catch {}
+                }, delay);
+            });
         } catch {}
     })();
 
@@ -511,13 +546,8 @@
             a[href="/answers/"],
             a[href^="/answers"],
             faceplate-tracker[noun="gen_guides_sidebar"],
-            span:contains("BETA"),
-            span:contains("Answers BETA"),
             a[href="/answers/"],
-            span.text-global-admin.font-semibold.text-12:contains("BETA"),
-            span.text-global-admin.font-semibold.text-12:contains("Answers BETA"),
             svg[icon-name="answers-outline"],
-            span:contains("Answers"),
             *[href="/answers/"] {
                 display: none !important;
                 visibility: hidden !important;

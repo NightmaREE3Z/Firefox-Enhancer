@@ -487,8 +487,20 @@
       if (window !== window.parent) {
         window.parent.postMessage('BraveFox-Unlock', '*');
       } else {
-        chrome.runtime.sendMessage({ type: 'BRAVEFOX_EXT_UNLOCK' }, () => {
-          chrome.runtime.sendMessage({ type: 'BRAVEFOX_GO_TO_EXTENSIONS' });
+        submit.disabled = true;
+        input.disabled = true;
+        error.textContent = '';
+
+        Promise.resolve(api.runtime.sendMessage({ type: 'BRAVEFOX_EXT_UNLOCK' })).then(response => {
+          if (!response?.ok) throw new Error(response?.error || 'Firefox system-page unlock request expired.');
+          return api.runtime.sendMessage({ type: 'BRAVEFOX_GO_TO_EXTENSIONS' });
+        }).then(response => {
+          if (!response?.ok) throw new Error(response?.error || 'Firefox could not return to the protected browser page.');
+          // On success the background returns this tab through Firefox history.
+        }).catch(authError => {
+          submit.disabled = false;
+          input.disabled = false;
+          showIncorrectPassword(authError?.message || 'Firefox system-page unlock failed.');
         });
       }
     });

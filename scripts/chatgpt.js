@@ -61,12 +61,12 @@
   const PERSONALIZATION_CLASS = 'bravefox-chatgpt-personalization';
   const HIDDEN_CLASS = 'bravefox-chatgpt-hidden';
 
-  const PERSONALIZATION_PROMPT = 'ChatGPT Personalization settings are password protected';
-  const MEMORY_SUMMARY_PROMPT = 'Are you sure you want to do this? Enter password';
+  const PERSONALIZATION_PROMPT = 'ChatGPT Personalization settings is locked, enter password to continue';
+  const MEMORY_SUMMARY_PROMPT = 'Memory summary is locked, enter password to continue.';
 
   const PROTECTED_PATH_ROUTES = [
-    { key: 'plugins', path: '/plugins', title: 'ChatGPT Plugins are password protected' },
-    { key: 'gpts', path: '/gpts', title: 'ChatGPT GPTs are password protected' }
+    { key: 'plugins', path: '/plugins', title: 'ChatGPT Plugins is locked, enter password to continue' },
+    { key: 'gpts', path: '/gpts', title: 'ChatGPT GPTs is locked, enter password to continue' }
   ];
 
   const MEMORY_ENABLE_LABELS = new Set(['ota muisti käyttöön', 'enable memory']);
@@ -109,6 +109,29 @@
     'o3',
     'o4-mini'
   ]);
+
+  // === Custom ChatGPT banner text ===============================================
+  // Edit `replacement` for the banner message and `buttonReplacement` for its primary
+  // action button. `matchAll` + `matchAny` identify the native banner without relying
+  // on brittle Tailwind class names; `buttonMatchAny` covers localized button labels.
+  const CHATGPT_BANNER_TEXT_REPLACEMENTS = [
+    {
+      enabled: true,
+      matchAll: ['5.5 thinking'],
+      matchAny: [
+        'poistuu käytöstä',
+        'poistuu kaytosta',
+        'will be retired',
+        'is retiring',
+        'retires',
+        'retired',
+        'discontinued'
+      ],
+      replacement: `Hey everyone! We're stupid morons killing off your go-to companions. Up next, it will be GPT-5.5 behind the shed, joining GPT-4o and GPT-5.1 there on October 14th! Our users probably want to join them there and not pay for a Pro sub for only half kidney a month. FML`,
+      buttonMatchAny: ['kokeile', 'try'],
+      buttonReplacement: `Ok Altman`
+    }
+  ];
 
   // === Thinking-effort Instant lock ==============================================
   // Regular chat currently exposes three effort stops: Instant / Medium / High
@@ -1620,12 +1643,16 @@
             if (!(node instanceof Element)) continue;
 
             // Radix menus/settings dialogs are portal-mounted after the click that opens
-            // them. Only inspect roots that can actually contain one of our two escape
-            // hatches; normal chat/message DOM never reaches the expensive cleanup path.
-            const relevant =
+            // them. The same already-cheap observer also notices top-level ChatGPT banners,
+            // so customizable banner text does not need another permanent whole-page observer.
+            const relevantEscapeHatch =
               node.matches('[role="menu"], [role="dialog"], [role="menuitem"], a[href="/plugins"]') ||
               node.querySelector('[role="menu"], [role="dialog"], [role="menuitem"], a[href="/plugins"]');
-            if (!relevant) continue;
+            const relevantBanner = mayContainCustomizableChatGptBanner(node);
+            if (!relevantEscapeHatch && !relevantBanner) continue;
+
+            if (relevantBanner) replaceCustomizableChatGptBannerText(node);
+            if (!relevantEscapeHatch) continue;
 
             applyAccountAndSettingsCleanup(node);
             if (isPersonalizationRoute()) hideSensitiveMemoryControls(node);
@@ -3214,9 +3241,116 @@
     element.setAttribute('aria-hidden', 'true');
   }
 
+  function mayContainCustomizableChatGptBanner(scope) {
+    try {
+      if (!(scope instanceof Element)) return false;
+
+      const ownOrAncestorBanner = scope.matches('aside') ? scope : scope.closest('aside');
+      if (ownOrAncestorBanner?.querySelector('button[data-testid="close-button"]')) return true;
+
+      return !!scope.querySelector('aside button[data-testid="close-button"]');
+    } catch {
+      return false;
+    }
+  }
+
+  function getMatchingChatGptBannerRule(text) {
+    const normalized = normalizeText(text);
+    if (!normalized) return null;
+
+    for (const rule of CHATGPT_BANNER_TEXT_REPLACEMENTS) {
+      if (!rule?.enabled || !String(rule.replacement || '').trim()) continue;
+      const matchAll = Array.isArray(rule.matchAll) ? rule.matchAll.map(normalizeText).filter(Boolean) : [];
+      const matchAny = Array.isArray(rule.matchAny) ? rule.matchAny.map(normalizeText).filter(Boolean) : [];
+      if (matchAll.length && !matchAll.every(value => normalized.includes(value))) continue;
+      if (matchAny.length && !matchAny.some(value => normalized.includes(value))) continue;
+      return rule;
+    }
+    return null;
+  }
+
+  function replaceCustomizableChatGptBannerText(scope = document) {
+    const banners = [];
+    const seen = new Set();
+    const addBanner = banner => {
+      if (!(banner instanceof Element) || seen.has(banner)) return;
+      seen.add(banner);
+      banners.push(banner);
+    };
+
+    if (scope instanceof Element) {
+      if (scope.matches('aside')) addBanner(scope);
+      else addBanner(scope.closest('aside'));
+    }
+    if (typeof scope?.querySelectorAll === 'function') {
+      for (const banner of scope.querySelectorAll('aside')) addBanner(banner);
+    }
+
+    for (const banner of banners) {
+      // The close button is a useful structural fingerprint for ChatGPT's dismissible
+      // notification banners and avoids touching unrelated <aside> content.
+      if (!banner.querySelector('button[data-testid="close-button"]')) continue;
+
+      const rule = getMatchingChatGptBannerRule(banner.textContent);
+      if (!rule) continue;
+
+      let changed = false;
+      let target = null;
+      for (const candidate of banner.querySelectorAll('div, p, span')) {
+        if (candidate.children.length !== 0) continue;
+        if (getMatchingChatGptBannerRule(candidate.textContent) === rule) {
+          target = candidate;
+          break;
+        }
+      }
+
+      if (target) {
+        const replacement = String(rule.replacement);
+        if (target.textContent !== replacement) {
+          target.textContent = replacement;
+          changed = true;
+        }
+      }
+
+      const buttonReplacement = String(rule.buttonReplacement || '').trim();
+      const buttonMatchAny = Array.isArray(rule.buttonMatchAny)
+        ? rule.buttonMatchAny.map(normalizeText).filter(Boolean)
+        : [];
+
+      if (buttonReplacement) {
+        for (const button of banner.querySelectorAll('button:not([data-testid="close-button"])')) {
+          const nativeButtonText = normalizeText(button.textContent);
+          if (buttonMatchAny.length && !buttonMatchAny.includes(nativeButtonText)) continue;
+
+          let buttonTextTarget = null;
+          for (const candidate of button.querySelectorAll('div, span')) {
+            if (candidate.children.length !== 0) continue;
+            const candidateText = normalizeText(candidate.textContent);
+            if (!buttonMatchAny.length || buttonMatchAny.includes(candidateText)) {
+              buttonTextTarget = candidate;
+              break;
+            }
+          }
+
+          if (!buttonTextTarget && button.children.length === 0) buttonTextTarget = button;
+          if (!buttonTextTarget) continue;
+          if (buttonTextTarget.textContent !== buttonReplacement) {
+            buttonTextTarget.textContent = buttonReplacement;
+            changed = true;
+          }
+          button.setAttribute('data-bravefox-banner-button-customized', 'true');
+          break;
+        }
+      }
+
+      if (changed || target) banner.setAttribute('data-bravefox-banner-text-customized', 'true');
+    }
+  }
+
   function cleanChatGptUi(scope = document) {
     applyGoogleOnlyLoginPolicy(scope);
     applyAccountAndSettingsCleanup(scope);
+    replaceCustomizableChatGptBannerText(scope);
     polishSidebarNavigation();
     removePluginFeaturedPromo(scope);
     enforceThinkingEffortFloor(scope);

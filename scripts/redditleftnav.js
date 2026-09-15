@@ -163,7 +163,7 @@
     } catch {}
   }
 
-  // NEW: Ask reddit.js page-world hook (if present) to remove “Answers” everywhere (incl. closed Shadow DOM)
+  // NEW: Ask reddit.js shared Answers helper (if present), then use the local light-DOM fallback
   function nudgeAnswersRemoval() {
     try {
       if (typeof window.__nrRemoveAnswersIn_forAnswers === 'function') {
@@ -179,6 +179,96 @@
     let count = 0;
     const id = setInterval(() => {
       try { nudgeAnswersRemoval(); } catch {}
+      try { nudgeRecentRemoval(); } catch {}
+      if (++count >= times) clearInterval(id);
+    }, delay);
+  }
+
+  const RECENT_SELECTORS = [
+    '#recent-communities-section',
+    'div#recent-communities-section',
+    'faceplate-expandable-section-helper#recent-communities-section',
+    'summary[aria-controls="RECENT"]',
+    '[aria-controls="RECENT"]',
+    '#RECENT',
+    'reddit-recent-pages',
+    'shreddit-recent-communities',
+    'div[data-testid="community-list"]',
+    '[data-testid="recent-communities"]',
+    '.recent-communities'
+  ];
+
+  function hideRecentSection() {
+    try {
+      RECENT_SELECTORS.forEach(sel => {
+        try {
+          const nodes = document.querySelectorAll(sel);
+          if (!nodes || !nodes.length) return;
+          nodes.forEach(el => {
+            try {
+              const container =
+                el.closest?.('#recent-communities-section') ||
+                el.closest?.('faceplate-expandable-section-helper#recent-communities-section') ||
+                el.closest?.('details') ||
+                el.closest?.('div.mb-sm.pb-sm') ||
+                el;
+              container.style.display = 'none';
+              container.style.pointerEvents = 'none';
+              container.style.visibility = 'hidden';
+              container.style.opacity = '0';
+              container.style.height = '0';
+              container.style.minHeight = '0';
+              container.style.maxHeight = '0';
+              container.style.margin = '0';
+              container.style.padding = '0';
+              container.style.overflow = 'hidden';
+            } catch {}
+          });
+        } catch {}
+      });
+
+      const scopes = document.querySelectorAll('nav, aside, [data-testid="left-sidebar"], #left-sidebar-container, reddit-sidebar-nav, flex-left-nav-container');
+      scopes.forEach(scope => {
+        try {
+          const items = scope.querySelectorAll('div, li, span, summary, faceplate-expandable-section-helper');
+          items.forEach(el => {
+            const text = (el.textContent || '').trim();
+            if (!text || !/^RECENT$/i.test(text)) return;
+            const container =
+              el.closest?.('#recent-communities-section') ||
+              el.closest?.('faceplate-expandable-section-helper#recent-communities-section') ||
+              el.closest?.('details') ||
+              el.closest?.('div.mb-sm.pb-sm') ||
+              el;
+            container.style.display = 'none';
+            container.style.pointerEvents = 'none';
+            container.style.visibility = 'hidden';
+            container.style.opacity = '0';
+            container.style.height = '0';
+            container.style.minHeight = '0';
+            container.style.maxHeight = '0';
+            container.style.margin = '0';
+            container.style.padding = '0';
+            container.style.overflow = 'hidden';
+          });
+        } catch {}
+      });
+
+      try { localStorage.setItem('recent-subreddits-store', '[]'); } catch {}
+      try { localStorage.removeItem('recent-communities-store'); } catch {}
+      try { localStorage.removeItem('recent-communities'); } catch {}
+      try { localStorage.removeItem('reddit-recent-pages'); } catch {}
+    } catch {}
+  }
+
+  function nudgeRecentRemoval() {
+    try { hideRecentSection(); } catch {}
+  }
+
+  function scheduleRecentNudgeBurst(times = 12, delay = 120) {
+    let count = 0;
+    const id = setInterval(() => {
+      try { nudgeRecentRemoval(); } catch {}
       if (++count >= times) clearInterval(id);
     }, delay);
   }
@@ -208,8 +298,9 @@
         el.style.opacity = '1';
       });
 
-      // NEW: also kill any “Answers/Guides” entries that may have mounted here
+      // NEW: also kill any hidden nav extras that may have mounted here
       nudgeAnswersRemoval();
+      nudgeRecentRemoval();
     } catch {}
   }
 
@@ -471,9 +562,14 @@
     // Ensure cross-browser layout
     applyLayout();
 
-    // NEW: enforce Answers removal again after any reflow
+    // NEW: enforce nav cleanup again after any reflow
     nudgeAnswersRemoval();
+    nudgeRecentRemoval();
     scheduleAnswersNudgeBurst();
+    scheduleRecentNudgeBurst();
+
+    // NEW: sweep for insecure subresources possibly mounted with this reflow
+    scheduleUpgradeBurst();
 
     log(`expand run: before=${before}, attrChanged=${attrChanged}, after=${isExpanded(container)}`);
   }
@@ -491,7 +587,10 @@
               neutralizeHoverGate();
               applyLayout();
               nudgeAnswersRemoval();        // NEW: re‑hide Answers after attribute flips
+              nudgeRecentRemoval();
               scheduleAnswersNudgeBurst();  // NEW: sweep late mounts
+              scheduleRecentNudgeBurst();
+              scheduleUpgradeBurst();       // NEW: sweep newly mounted media
               log('guard reapplied expanded after attribute flip');
             }
           }
@@ -511,6 +610,9 @@
           installAttributeGuard(container);
           // NEW: catch late nav mounts caused by SPA route changes
           nudgeAnswersRemoval();
+          nudgeRecentRemoval();
+          // NEW: and upgrade insecure resources that may have been added
+          upgradeInsecureResources();
         }
       });
       moDoc.observe(document.documentElement, { childList: true, subtree: true });
@@ -529,6 +631,8 @@
         roParent = new ResizeObserver(() => {
           scheduleLeftSync();
           nudgeAnswersRemoval();       // NEW: in case layout swaps nav variants
+          nudgeRecentRemoval();
+          scheduleUpgradeBurst();      // NEW: layout swaps often mount media nodes
         });
         roParent.observe(parent);
       }
@@ -541,6 +645,8 @@
         roDoc = new ResizeObserver(() => {
           scheduleLeftSync();
           nudgeAnswersRemoval();
+          nudgeRecentRemoval();
+          scheduleUpgradeBurst();
         });
         roDoc.observe(document.documentElement);
       }
@@ -549,12 +655,12 @@
 
   function installWindowListeners() {
     // Keep fixed-left aligned in Firefox on resize/zoom/orientation changes
-    on(window, 'resize', () => { scheduleLeftSync(); nudgeAnswersRemoval(); }, { passive: true });
-    on(window, 'orientationchange', () => { scheduleLeftSync(); nudgeAnswersRemoval(); }, { passive: true });
+    on(window, 'resize', () => { scheduleLeftSync(); nudgeAnswersRemoval(); nudgeRecentRemoval(); scheduleUpgradeBurst(); }, { passive: true });
+    on(window, 'orientationchange', () => { scheduleLeftSync(); nudgeAnswersRemoval(); nudgeRecentRemoval(); scheduleUpgradeBurst(); }, { passive: true });
 
     // Also re-run on visibility regain (route changes often happen while hidden)
     on(document, 'visibilitychange', () => {
-      if (!document.hidden) setTimeout(() => { forceExpandOnce(); scheduleLeftSync(); nudgeAnswersRemoval(); scheduleAnswersNudgeBurst(); }, 50);
+      if (!document.hidden) setTimeout(() => { forceExpandOnce(); scheduleLeftSync(); nudgeAnswersRemoval(); nudgeRecentRemoval(); scheduleAnswersNudgeBurst(); scheduleRecentNudgeBurst(); scheduleUpgradeBurst(); }, 50);
     }, { passive: true });
 
     // Occasionally Reddit toggles classes that change layout margins on scroll.
@@ -580,16 +686,126 @@
     removeFixedArtifactsIfAny();
   }
 
+  // ===== NEW: Insecure URL upgrader (prevents Mixed Content warnings) =====
+
+  // Hosts we’re comfortable upgrading to https
+  const UPGRADE_HOSTS = [
+    'i.redd.it',
+    'preview.redd.it',
+    'external-preview.redd.it',
+    'redditmedia.com',
+    'i.redditmedia.com',
+    'i.imgur.com',
+    'imgur.com',
+    'media.giphy.com',
+    'giphy.com'
+  ];
+
+  function hostnameMatchesAllowlist(h) {
+    try {
+      const host = String(h || '').toLowerCase();
+      return UPGRADE_HOSTS.some(allowed => host === allowed || host.endsWith('.' + allowed));
+    } catch { return false; }
+  }
+
+  function upgradeOneUrl(u) {
+    try {
+      const str = String(u || '').trim();
+      if (!str) return null;
+      if (str.startsWith('data:') || str.startsWith('blob:') || str.startsWith('about:') || str.startsWith('chrome-extension:')) return null;
+
+      const url = new URL(str, document.baseURI);
+      if (url.protocol === 'http:' && hostnameMatchesAllowlist(url.hostname)) {
+        url.protocol = 'https:';
+        return url.toString();
+      }
+    } catch {}
+    return null;
+  }
+
+  function upgradeSrcset(value) {
+    try {
+      if (!value || typeof value !== 'string') return value;
+      const parts = value.split(',');
+      const remapped = parts.map(p => {
+        const t = p.trim();
+        if (!t) return t;
+        // Split first whitespace to separate URL from descriptor (e.g., "2x" or "640w")
+        const spaceIdx = t.search(/\s/);
+        let urlPart = t;
+        let desc = '';
+        if (spaceIdx > -1) {
+          urlPart = t.slice(0, spaceIdx);
+          desc = t.slice(spaceIdx).trim();
+        }
+        const upgraded = upgradeOneUrl(urlPart);
+        return (upgraded || urlPart) + (desc ? ' ' + desc : '');
+      });
+      return remapped.join(', ');
+    } catch { return value; }
+  }
+
+  function upgradeInsecureResources(root = document) {
+    try {
+      const nodes = root.querySelectorAll('img, source, video, audio, picture, a, link[rel="preload"][as="image"], [style]');
+      nodes.forEach(el => {
+        try {
+          // src / href / poster
+          ['src', 'href', 'poster'].forEach(attr => {
+            const cur = el.getAttribute && el.getAttribute(attr);
+            const up = upgradeOneUrl(cur);
+            if (up && up !== cur) el.setAttribute(attr, up);
+          });
+
+          // srcset (images)
+          const srcset = el.getAttribute && el.getAttribute('srcset');
+          if (srcset) {
+            const upSet = upgradeSrcset(srcset);
+            if (upSet && upSet !== srcset) el.setAttribute('srcset', upSet);
+          }
+
+          // Inline style background / background-image
+          if (el.hasAttribute && el.hasAttribute('style')) {
+            const styleVal = el.getAttribute('style') || '';
+            // Replace any url("http:...") or url(http:...)
+            const replaced = styleVal.replace(/url\(\s*(['"]?)(http:\/\/[^'")]+)\1\s*\)/gi, (_m, q, url) => {
+              const up = upgradeOneUrl(url);
+              if (up) return `url(${q}${up}${q})`;
+              return _m;
+            });
+            if (replaced !== styleVal) el.setAttribute('style', replaced);
+          }
+        } catch {}
+      });
+    } catch {}
+  }
+
+  function scheduleUpgradeBurst(times = 10, delay = 120) {
+    let count = 0;
+    const id = setInterval(() => {
+      try { upgradeInsecureResources(); } catch {}
+      if (++count >= times) clearInterval(id);
+    }, delay);
+  }
+
+  // ===== END: Insecure URL upgrader =====
+
   function init() {
     // Try immediately, then on DOM ready, then install observers.
     nudgeAnswersRemoval();       // NEW: immediate pass
+    nudgeRecentRemoval();
     scheduleAnswersNudgeBurst(); // NEW: early burst
+    scheduleRecentNudgeBurst();
+
+    // NEW: proactively upgrade any insecure media URLs right away
+    upgradeInsecureResources();
+    scheduleUpgradeBurst();
 
     forceExpandOnce();
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => { forceExpandOnce(); nudgeAnswersRemoval(); scheduleAnswersNudgeBurst(); }, { once: true });
+      document.addEventListener('DOMContentLoaded', () => { forceExpandOnce(); nudgeAnswersRemoval(); nudgeRecentRemoval(); scheduleAnswersNudgeBurst(); scheduleRecentNudgeBurst(); upgradeInsecureResources(); scheduleUpgradeBurst(); }, { once: true });
     } else {
-      setTimeout(() => { forceExpandOnce(); nudgeAnswersRemoval(); scheduleAnswersNudgeBurst(); }, 0);
+      setTimeout(() => { forceExpandOnce(); nudgeAnswersRemoval(); nudgeRecentRemoval(); scheduleAnswersNudgeBurst(); scheduleRecentNudgeBurst(); upgradeInsecureResources(); scheduleUpgradeBurst(); }, 0);
     }
     installDomObserver();
     installWindowListeners();
