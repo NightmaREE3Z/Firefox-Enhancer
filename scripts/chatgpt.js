@@ -132,6 +132,15 @@
       buttonReplacement: `Ok Altman`
     }
   ];
+  const CHATGPT_BANNER_HIDE_KEY = 'bravefoxChatGptHiddenModelNotices_v1';
+  const CHATGPT_BANNER_CLOSE_MENU_ID = 'bravefox-chatgpt-banner-close-menu';
+  const CHATGPT_BANNER_CLOSE_MENU_OPEN_ATTR = 'data-bravefox-banner-close-menu-open';
+  const CHATGPT_BANNER_MENU_TRIGGER_ATTR = 'data-bravefox-banner-menu-trigger';
+  const CHATGPT_BANNER_MENU_DETAILS_ATTR = 'data-bravefox-banner-menu-details';
+  let hiddenChatGptBannerModelSlugs = new Set();
+  let hiddenChatGptBannerPrefsLoaded = false;
+  let hiddenChatGptBannerPrefsLoadPromise = null;
+
 
   // === Thinking-effort Instant lock ==============================================
   // Regular chat currently exposes three effort stops: Instant / Medium / High
@@ -259,9 +268,11 @@
 
   const replayAllowedButtons = new WeakSet();
   const replayAllowedPluginButtons = new WeakSet();
+  const nativeBannerCloseReplayAllowedButtons = new WeakSet();
   const thinkingEffortRepairing = new WeakSet();
   let activeThinkingEffortSlider = null;
   let activeThinkingEffortPointerId = null;
+  let customBannerCloseMenuLastOpenAt = 0;
 
   // Pre-arm protected pages at document_start. On a direct /plugins or /gpts load,
   // ChatGPT never gets a paint before BraveFox either consumes a one-time unlock grant
@@ -284,6 +295,7 @@
   scheduleGeneralUiScan(true);
   scheduleSidebarPolishRetries();
   scheduleGoogleOnlyLoginCleanupRetries();
+  void ensureHiddenChatGptBannerPrefsLoaded().then(() => scheduleGeneralUiScan(true));
 
   function setInlinePaintGate(active) {
     const root = document.documentElement;
@@ -658,6 +670,110 @@
 
       /* Expansion is automatic. Never show ChatGPT's Show more button in the custom shelf. */
       html.${GPTS_CURATING_CLASS} [${GPT_APPROVED_SECTION_ATTR}="true"] button.btn-secondary.w-full {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+
+      #${CHATGPT_BANNER_CLOSE_MENU_ID} {
+        position: fixed !important;
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+        z-index: 2147483647 !important;
+        min-width: 260px !important;
+        max-width: min(360px, calc(100vw - 24px)) !important;
+        padding: 6px !important;
+        border: 1px solid rgba(127, 127, 127, 0.28) !important;
+        border-radius: 14px !important;
+        background: var(--main-surface-primary, #ffffff) !important;
+        color: var(--text-primary, #111111) !important;
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18) !important;
+        font-size: 14px !important;
+        line-height: 1.25 !important;
+      }
+
+      #${CHATGPT_BANNER_CLOSE_MENU_ID} button {
+        display: flex !important;
+        width: 100% !important;
+        align-items: center !important;
+        justify-content: flex-start !important;
+        border: 0 !important;
+        border-radius: 10px !important;
+        background: transparent !important;
+        color: inherit !important;
+        cursor: pointer !important;
+        padding: 9px 10px !important;
+        text-align: start !important;
+        font: inherit !important;
+      }
+
+      #${CHATGPT_BANNER_CLOSE_MENU_ID} button:hover,
+      #${CHATGPT_BANNER_CLOSE_MENU_ID} button:focus-visible {
+        background: var(--surface-hover, rgba(127, 127, 127, 0.12)) !important;
+        outline: none !important;
+      }
+
+      #${CHATGPT_BANNER_CLOSE_MENU_ID} [data-bravefox-banner-menu-subtitle] {
+        padding: 4px 10px 7px !important;
+        opacity: 0.68 !important;
+        font-size: 12px !important;
+      }
+
+      details[${CHATGPT_BANNER_MENU_DETAILS_ATTR}="true"] {
+        display: block !important;
+        position: relative !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+        z-index: 2147483647 !important;
+        flex: 0 0 auto !important;
+      }
+
+      summary[${CHATGPT_BANNER_MENU_TRIGGER_ATTR}="true"] {
+        display: flex !important;
+        position: relative !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+        z-index: 2147483647 !important;
+        align-items: center !important;
+        justify-content: center !important;
+        width: 36px !important;
+        height: 36px !important;
+        border: 0 !important;
+        border-radius: 10px !important;
+        background: var(--surface-secondary, rgba(127, 127, 127, 0.10)) !important;
+        color: inherit !important;
+        cursor: pointer !important;
+        font: inherit !important;
+        font-size: 20px !important;
+        line-height: 1 !important;
+        list-style: none !important;
+        padding: 0 !important;
+        user-select: none !important;
+      }
+
+      summary[${CHATGPT_BANNER_MENU_TRIGGER_ATTR}="true"]::-webkit-details-marker {
+        display: none !important;
+      }
+
+      summary[${CHATGPT_BANNER_MENU_TRIGGER_ATTR}="true"]:hover,
+      summary[${CHATGPT_BANNER_MENU_TRIGGER_ATTR}="true"]:focus-visible {
+        background: var(--surface-hover, rgba(127, 127, 127, 0.16)) !important;
+        outline: none !important;
+      }
+
+      details[${CHATGPT_BANNER_MENU_DETAILS_ATTR}="true"] > #${CHATGPT_BANNER_CLOSE_MENU_ID} {
+        position: absolute !important;
+        top: calc(100% + 8px) !important;
+        right: 0 !important;
+        left: auto !important;
+      }
+
+      aside[data-bravefox-banner-text-customized="true"] button[data-testid="close-button"] {
         display: none !important;
         visibility: hidden !important;
         opacity: 0 !important;
@@ -1127,6 +1243,22 @@
         }
       }
 
+      const bannerCloseMenu = getElementFromEvent(event, `#${CHATGPT_BANNER_CLOSE_MENU_ID}`);
+      if (bannerCloseMenu) return;
+
+      const customBannerMenuDetails = getElementFromEvent(event, `details[${CHATGPT_BANNER_MENU_DETAILS_ATTR}="true"]`);
+      if (customBannerMenuDetails) return;
+
+      const customBannerCloseButton = getElementFromEvent(event, 'button[data-bravefox-banner-button-action="close"]');
+      if (customBannerCloseButton && closeCustomChatGptBannerFromButton(customBannerCloseButton)) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        return;
+      }
+
+      dismissCustomChatGptBannerCloseMenu();
+
       const menuItem = getElementFromEvent(event, '[role="menuitem"]');
       if (menuItem && isForbiddenMemoryDeleteItem(menuItem)) {
         event.preventDefault();
@@ -1188,9 +1320,368 @@
     }, true);
 
     document.addEventListener('keydown', event => {
+      if (event.key === 'Escape') {
+        if (dismissCustomChatGptBannerCloseMenu()) {
+          event.preventDefault();
+          event.stopPropagation();
+          event.stopImmediatePropagation();
+        }
+        return;
+      }
+
       if (event.key !== 'Enter' && event.key !== ' ') return;
       if (isLikelyMenuTrigger(event.target)) scheduleGeneralUiScan(false);
     }, true);
+  }
+
+  function ensureCustomChatGptBannerMenuTrigger(banner) {
+    if (!(banner instanceof Element)) return null;
+
+    const existing = banner.querySelector(`details[${CHATGPT_BANNER_MENU_DETAILS_ATTR}="true"]`);
+    if (existing instanceof HTMLDetailsElement) return existing;
+
+    const closeButton = banner.querySelector('button[data-testid="close-button"]');
+    if (!(closeButton instanceof HTMLButtonElement)) return null;
+
+    const details = document.createElement('details');
+    details.setAttribute(CHATGPT_BANNER_MENU_DETAILS_ATTR, 'true');
+    details.setAttribute('data-bravefox-owned-control', 'true');
+
+    const summary = document.createElement('summary');
+    summary.textContent = '⋯';
+    summary.title = 'Notice options';
+    summary.setAttribute('aria-label', 'Notice options');
+    summary.setAttribute(CHATGPT_BANNER_MENU_TRIGGER_ATTR, 'true');
+    details.appendChild(summary);
+
+    const modelSlug = getCurrentChatGptBannerModelSlug(banner);
+    const menu = document.createElement('div');
+    menu.id = CHATGPT_BANNER_CLOSE_MENU_ID;
+    menu.setAttribute('role', 'menu');
+    menu.setAttribute('aria-label', 'BraveFox banner notice menu');
+    menu.setAttribute('data-bravefox-banner-model-slug', modelSlug);
+
+    const subtitle = document.createElement('div');
+    subtitle.setAttribute('data-bravefox-banner-menu-subtitle', 'true');
+    subtitle.textContent = modelSlug
+      ? `Notice menu for ${modelSlug}`
+      : 'Notice menu';
+    menu.appendChild(subtitle);
+
+    const switchGpt55Button = document.createElement('button');
+    switchGpt55Button.type = 'button';
+    switchGpt55Button.setAttribute('role', 'menuitem');
+    switchGpt55Button.textContent = 'Switch to GPT-5.5';
+    switchGpt55Button.title = 'Switch the composer to GPT-5.5 Thinking, preferring Medium effort';
+    switchGpt55Button.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      details.open = false;
+      void switchChatGptComposerToGpt55Medium(banner, closeButton);
+    });
+    menu.appendChild(switchGpt55Button);
+
+    const hideModelButton = document.createElement('button');
+    hideModelButton.type = 'button';
+    hideModelButton.setAttribute('role', 'menuitem');
+    hideModelButton.textContent = modelSlug
+      ? 'Hide notice permanently on this model'
+      : 'Hide this notice permanently';
+    hideModelButton.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      details.open = false;
+      void hideCustomChatGptBannerForModelAndClose(banner, closeButton, modelSlug);
+    });
+    menu.appendChild(hideModelButton);
+
+    const closeOnceButton = document.createElement('button');
+    closeOnceButton.type = 'button';
+    closeOnceButton.setAttribute('role', 'menuitem');
+    closeOnceButton.textContent = 'Close this notice';
+    closeOnceButton.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      details.open = false;
+      clickNativeChatGptBannerClose(closeButton);
+    });
+    menu.appendChild(closeOnceButton);
+
+    const cancelButton = document.createElement('button');
+    cancelButton.type = 'button';
+    cancelButton.setAttribute('role', 'menuitem');
+    cancelButton.textContent = 'Cancel';
+    cancelButton.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      details.open = false;
+    });
+    menu.appendChild(cancelButton);
+
+    details.appendChild(menu);
+
+    try {
+      closeButton.parentElement?.insertBefore(details, closeButton);
+    } catch {
+      return null;
+    }
+
+    return details;
+  }
+
+  function interceptCustomChatGptBannerNativeCloseEvent(event) {
+    return false;
+  }
+
+  function closeCustomChatGptBannerFromButton(button) {
+    if (!(button instanceof Element)) return false;
+    const banner = button.closest('aside');
+    if (!(banner instanceof Element)) return false;
+
+    const closeButton = banner.querySelector('button[data-testid="close-button"]');
+    if (!(closeButton instanceof HTMLButtonElement) || closeButton === button) return false;
+
+    return clickNativeChatGptBannerClose(closeButton);
+  }
+
+  function showCustomChatGptBannerCloseMenu(anchorButton) {
+    if (!(anchorButton instanceof Element)) return false;
+    const details = anchorButton.closest(`details[${CHATGPT_BANNER_MENU_DETAILS_ATTR}="true"]`);
+    if (!(details instanceof HTMLDetailsElement)) return false;
+    details.open = true;
+    return true;
+  }
+
+  function placeCustomChatGptBannerCloseMenu(menu, anchor) {
+    return Boolean(menu?.isConnected && anchor?.isConnected);
+  }
+
+  function dismissCustomChatGptBannerCloseMenu() {
+    let changed = false;
+    for (const details of document.querySelectorAll(`details[${CHATGPT_BANNER_MENU_DETAILS_ATTR}="true"][open]`)) {
+      if (!(details instanceof HTMLDetailsElement)) continue;
+      details.open = false;
+      changed = true;
+    }
+    return changed;
+  }
+
+  function isElementActuallyVisible(element) {
+    if (!(element instanceof Element) || !element.isConnected) return false;
+    const rect = element.getBoundingClientRect?.();
+    if (!rect || rect.width <= 0 || rect.height <= 0) return false;
+    const style = window.getComputedStyle?.(element);
+    return !style || (style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity || 1) > 0);
+  }
+
+  function getVisibleChatGptModelMenuChoices() {
+    const selectors = '[role="menuitem"], [role="menuitemradio"], [role="option"], [role="radio"], button';
+    return Array.from(document.querySelectorAll(selectors)).filter(element => {
+      if (!isElementActuallyVisible(element)) return false;
+      if (element.closest(`aside[data-bravefox-banner-text-customized="true"]`)) return false;
+      const text = normalizeText(element.textContent);
+      return Boolean(text && text.length <= 180);
+    });
+  }
+
+  function findVisibleChatGptModelChoice(predicate) {
+    for (const element of getVisibleChatGptModelMenuChoices()) {
+      const text = normalizeText(element.textContent);
+      if (predicate(text, element)) return element;
+    }
+    return null;
+  }
+
+  function getChatGptComposerModelSelector() {
+    const preferred = Array.from(document.querySelectorAll('button.__composer-pill[aria-haspopup="menu"]'))
+      .find(isElementActuallyVisible);
+    if (preferred instanceof HTMLButtonElement) return preferred;
+
+    return Array.from(document.querySelectorAll('button[aria-haspopup="menu"]')).find(button => {
+      if (!(button instanceof HTMLButtonElement) || !isElementActuallyVisible(button)) return false;
+      if (!button.closest('form')) return false;
+      const text = normalizeText(button.textContent);
+      return /\b\d+(?:\.\d+)?\b/.test(text) && !text.includes('attach') && !text.includes('liitä');
+    }) || null;
+  }
+
+  function waitForChatGptUiChoice(predicate, timeoutMs = 1600) {
+    return new Promise(resolve => {
+      const startedAt = Date.now();
+      const poll = () => {
+        const found = findVisibleChatGptModelChoice(predicate);
+        if (found || Date.now() - startedAt >= timeoutMs) {
+          resolve(found || null);
+          return;
+        }
+        window.setTimeout(poll, 60);
+      };
+      poll();
+    });
+  }
+
+  async function switchChatGptComposerToGpt55Medium(banner, closeButton) {
+    const selector = getChatGptComposerModelSelector();
+    if (!(selector instanceof HTMLButtonElement)) return false;
+
+    const current = normalizeText(selector.textContent);
+    const alreadyGpt55 = current.includes('5.5');
+    const alreadyMedium = THINKING_EFFORT_MEDIUM_LABELS.has(current) ||
+      Array.from(THINKING_EFFORT_MEDIUM_LABELS).some(label => current.includes(label));
+
+    if (alreadyGpt55 && alreadyMedium) {
+      clickNativeChatGptBannerClose(closeButton);
+      return true;
+    }
+
+    try { selector.click(); } catch { return false; }
+
+    if (!alreadyGpt55) {
+      const gpt55Choice = await waitForChatGptUiChoice(text => {
+        if (!text.includes('5.5')) return false;
+        if (text.includes('5.6') || text.includes('5.4') || text.includes('5.1')) return false;
+        return true;
+      });
+
+      if (!(gpt55Choice instanceof Element)) return false;
+      try { gpt55Choice.click(); } catch { return false; }
+      await new Promise(resolve => window.setTimeout(resolve, 120));
+    }
+
+    let refreshedSelector = getChatGptComposerModelSelector();
+    if (refreshedSelector instanceof HTMLButtonElement) {
+      const refreshedText = normalizeText(refreshedSelector.textContent);
+      if (refreshedText.includes('5.5') && Array.from(THINKING_EFFORT_MEDIUM_LABELS).some(label => refreshedText.includes(label))) {
+        clickNativeChatGptBannerClose(closeButton);
+        return true;
+      }
+
+      if (refreshedText.includes('5.5')) {
+        try { refreshedSelector.click(); } catch {}
+      }
+    }
+
+    const mediumChoice = await waitForChatGptUiChoice(text => {
+      return THINKING_EFFORT_MEDIUM_LABELS.has(text) ||
+        Array.from(THINKING_EFFORT_MEDIUM_LABELS).some(label => text === label || text.endsWith(` ${label}`));
+    }, 1200);
+
+    if (mediumChoice instanceof Element) {
+      try { mediumChoice.click(); } catch {}
+      await new Promise(resolve => window.setTimeout(resolve, 80));
+    }
+
+    refreshedSelector = getChatGptComposerModelSelector();
+    const finalText = normalizeText(refreshedSelector?.textContent || '');
+    const switchedToGpt55 = finalText.includes('5.5');
+    const switchedToMedium = Array.from(THINKING_EFFORT_MEDIUM_LABELS).some(label => finalText.includes(label));
+
+    if (switchedToGpt55 && switchedToMedium) clickNativeChatGptBannerClose(closeButton);
+    return switchedToGpt55;
+  }
+
+  async function hideCustomChatGptBannerForModelAndClose(banner, closeButton, modelSlug) {
+    dismissCustomChatGptBannerCloseMenu();
+    const slug = normalizeChatGptModelSlug(modelSlug) || getCurrentChatGptBannerModelSlug(banner);
+    if (slug) {
+      await ensureHiddenChatGptBannerPrefsLoaded();
+      hiddenChatGptBannerModelSlugs.add(slug);
+      await saveHiddenChatGptBannerPrefs();
+    }
+    clickNativeChatGptBannerClose(closeButton);
+    hideElement(banner);
+    banner.remove();
+  }
+
+  function clickNativeChatGptBannerClose(closeButton) {
+    if (!(closeButton instanceof HTMLButtonElement)) return false;
+    nativeBannerCloseReplayAllowedButtons.add(closeButton);
+    try {
+      closeButton.click();
+      return true;
+    } catch {
+      return false;
+    } finally {
+      window.setTimeout(() => nativeBannerCloseReplayAllowedButtons.delete(closeButton), 0);
+    }
+  }
+
+  async function ensureHiddenChatGptBannerPrefsLoaded() {
+    if (hiddenChatGptBannerPrefsLoaded) return hiddenChatGptBannerModelSlugs;
+    if (hiddenChatGptBannerPrefsLoadPromise) return hiddenChatGptBannerPrefsLoadPromise;
+
+    hiddenChatGptBannerPrefsLoadPromise = (async () => {
+      try {
+        const stored = await api?.storage?.local?.get?.([CHATGPT_BANNER_HIDE_KEY]);
+        const rows = Array.isArray(stored?.[CHATGPT_BANNER_HIDE_KEY])
+          ? stored[CHATGPT_BANNER_HIDE_KEY]
+          : [];
+        hiddenChatGptBannerModelSlugs = new Set(rows.map(normalizeChatGptModelSlug).filter(Boolean));
+      } catch (error) {
+        console.warn('[BraveFox Enhancer] Failed to load hidden ChatGPT banner model prefs:', error);
+        hiddenChatGptBannerModelSlugs = new Set();
+      } finally {
+        hiddenChatGptBannerPrefsLoaded = true;
+        hiddenChatGptBannerPrefsLoadPromise = null;
+      }
+      return hiddenChatGptBannerModelSlugs;
+    })();
+
+    return hiddenChatGptBannerPrefsLoadPromise;
+  }
+
+  async function saveHiddenChatGptBannerPrefs() {
+    try {
+      if (!api?.storage?.local?.set) return;
+      await api.storage.local.set({
+        [CHATGPT_BANNER_HIDE_KEY]: Array.from(hiddenChatGptBannerModelSlugs).sort()
+      });
+    } catch (error) {
+      console.warn('[BraveFox Enhancer] Failed to save hidden ChatGPT banner model prefs:', error);
+    }
+  }
+
+  function normalizeChatGptModelSlug(value) {
+    return String(value || '')
+      .trim()
+      .toLowerCase()
+      .replace(/_/g, '-')
+      .replace(/[^a-z0-9.-]+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '');
+  }
+
+  function getCurrentChatGptBannerModelSlug(banner) {
+    const candidates = [];
+
+    try {
+      const selectedFromMessages = Array.from(document.querySelectorAll('[data-message-model-slug]'))
+        .map(node => node.getAttribute('data-message-model-slug'))
+        .filter(Boolean);
+      candidates.push(...selectedFromMessages.reverse());
+    } catch {}
+
+    try {
+      const url = new URL(location.href);
+      candidates.push(url.searchParams.get('model'));
+    } catch {}
+
+    try {
+      const text = normalizeText(banner?.textContent || '');
+      if (text.includes('5.5') && text.includes('thinking')) candidates.push('gpt-5-5-thinking');
+      if (text.includes('5.5')) candidates.push('gpt-5-5-thinking');
+    } catch {}
+
+    for (const candidate of candidates) {
+      const normalized = normalizeChatGptModelSlug(candidate);
+      if (normalized) return normalized;
+    }
+    return '';
+  }
+
+  function shouldHideCustomChatGptBannerForModel(banner) {
+    const modelSlug = getCurrentChatGptBannerModelSlug(banner);
+    return Boolean(modelSlug && hiddenChatGptBannerModelSlugs.has(modelSlug));
   }
 
   function installThinkingEffortInstantLock() {
@@ -3294,6 +3785,14 @@
       const rule = getMatchingChatGptBannerRule(banner.textContent);
       if (!rule) continue;
 
+      if (hiddenChatGptBannerPrefsLoaded && shouldHideCustomChatGptBannerForModel(banner)) {
+        const closeButton = banner.querySelector('button[data-testid="close-button"]');
+        if (closeButton instanceof HTMLButtonElement) clickNativeChatGptBannerClose(closeButton);
+        hideElement(banner);
+        banner.remove();
+        continue;
+      }
+
       let changed = false;
       let target = null;
       for (const candidate of banner.querySelectorAll('div, p, span')) {
@@ -3339,11 +3838,20 @@
             changed = true;
           }
           button.setAttribute('data-bravefox-banner-button-customized', 'true');
+          button.setAttribute('data-bravefox-banner-button-action', 'close');
           break;
         }
       }
 
-      if (changed || target) banner.setAttribute('data-bravefox-banner-text-customized', 'true');
+      if (changed || target) {
+        banner.setAttribute('data-bravefox-banner-text-customized', 'true');
+        const modelSlug = getCurrentChatGptBannerModelSlug(banner);
+        if (modelSlug) banner.setAttribute('data-bravefox-banner-model-slug', modelSlug);
+      }
+
+      if (banner.getAttribute('data-bravefox-banner-text-customized') === 'true') {
+        ensureCustomChatGptBannerMenuTrigger(banner);
+      }
     }
   }
 
