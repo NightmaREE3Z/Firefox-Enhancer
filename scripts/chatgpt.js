@@ -1361,32 +1361,10 @@
     menu.setAttribute('aria-label', 'BraveFox banner notice menu');
     menu.setAttribute('data-bravefox-banner-model-slug', modelSlug);
 
-    const subtitle = document.createElement('div');
-    subtitle.setAttribute('data-bravefox-banner-menu-subtitle', 'true');
-    subtitle.textContent = modelSlug
-      ? `Notice menu for ${modelSlug}`
-      : 'Notice menu';
-    menu.appendChild(subtitle);
-
-    const switchGpt55Button = document.createElement('button');
-    switchGpt55Button.type = 'button';
-    switchGpt55Button.setAttribute('role', 'menuitem');
-    switchGpt55Button.textContent = 'Switch to GPT-5.5';
-    switchGpt55Button.title = 'Switch the composer to GPT-5.5 Thinking, preferring Medium effort';
-    switchGpt55Button.addEventListener('click', event => {
-      event.preventDefault();
-      event.stopPropagation();
-      details.open = false;
-      void switchChatGptComposerToGpt55Medium(banner, closeButton);
-    });
-    menu.appendChild(switchGpt55Button);
-
     const hideModelButton = document.createElement('button');
     hideModelButton.type = 'button';
     hideModelButton.setAttribute('role', 'menuitem');
-    hideModelButton.textContent = modelSlug
-      ? 'Hide notice permanently on this model'
-      : 'Hide this notice permanently';
+    hideModelButton.textContent = 'Hide this notification permanently';
     hideModelButton.addEventListener('click', event => {
       event.preventDefault();
       event.stopPropagation();
@@ -1394,18 +1372,6 @@
       void hideCustomChatGptBannerForModelAndClose(banner, closeButton, modelSlug);
     });
     menu.appendChild(hideModelButton);
-
-    const closeOnceButton = document.createElement('button');
-    closeOnceButton.type = 'button';
-    closeOnceButton.setAttribute('role', 'menuitem');
-    closeOnceButton.textContent = 'Close this notice';
-    closeOnceButton.addEventListener('click', event => {
-      event.preventDefault();
-      event.stopPropagation();
-      details.open = false;
-      clickNativeChatGptBannerClose(closeButton);
-    });
-    menu.appendChild(closeOnceButton);
 
     const cancelButton = document.createElement('button');
     cancelButton.type = 'button';
