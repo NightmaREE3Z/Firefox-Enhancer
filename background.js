@@ -1123,12 +1123,12 @@ browser.runtime.onMessage.addListener((message, sender) => {
 
 
 // ---------------------------------------------------------------------------
-// BraveFox Enhancer AMO listing password gate — Fenix hard fallback
+// addons.mozilla.org password gate — Firefox/Fenix restricted-domain fallback
 // ---------------------------------------------------------------------------
 // AMO is a Firefox restricted domain. Do not inject into it or rely on webRequest/DNR.
-// Instead, identify the BraveFox listing from tab metadata, open our trusted extension
-// password page, close the AMO tab, and let the trusted password page navigate back only
-// after a successful unlock.
+// Instead, identify AMO navigation from tab metadata, open our trusted extension password
+// page, close the AMO tab, and let the trusted password page navigate back only after a
+// successful unlock. This mirrors the Chromium build's addons.mozilla.org/* protection.
 const BRAVEFOX_AMO_BYPASS_TTL_MS = 5 * 60 * 1000;
 let braveFoxAmoBypassUntil = 0;
 const braveFoxAmoPendingRequests = new Map();
@@ -1138,9 +1138,7 @@ let braveFoxAmoPollTimer = 0;
 function braveFoxIsProtectedAmoUrl(rawUrl) {
   try {
     const url = new URL(String(rawUrl || ""));
-    if (url.protocol !== "https:" || url.hostname.toLowerCase() !== "addons.mozilla.org") return false;
-    const path = String(url.pathname || "/").replace(/\/{2,}/g, "/");
-    return /^\/[^/]+\/(?:firefox|android)\/addon\/bravefox-enhancer(?:\/|$)/i.test(path);
+    return url.protocol === "https:" && url.hostname.toLowerCase() === "addons.mozilla.org";
   } catch (_) {
     return false;
   }
@@ -1235,7 +1233,7 @@ async function braveFoxOpenAmoPasswordGate(tabId, originalUrl) {
     target: "bravefox-amo",
     request: requestId,
     compact: "1",
-    title: "BraveFox Enhancer add-on page is password protected"
+    title: "addons.mozilla.org is password protected"
   });
   const gateUrl = browser.runtime.getURL(`html/password-protected.html?${params.toString()}`);
 
@@ -1342,6 +1340,368 @@ browser.runtime.onMessage.addListener((message, sender) => {
     };
   })();
 });
+
+// ---------------------------------------------------------------------------
+// BraveFox top-level web/action password bridge — Firefox parity 2026-09-20
+// ---------------------------------------------------------------------------
+// Protected web pages use the same native top-level extension password screen as
+// the Chromium build. Timed grants last five minutes, while Gemini, GitHub Copilot,
+// and Wise Old Man use browser-session grants. Sensitive in-page actions stay one-shot.
+const BRAVEFOX_WEB_AUTH_STATE_KEY = "bravefoxWebAuthState_v1";
+const BRAVEFOX_WEB_AUTH_REQUEST_TTL_MS = 2 * 60 * 1000;
+const BRAVEFOX_WEB_PAGE_GRANT_TTL_MS = 5 * 60 * 1000;
+const BRAVEFOX_WEB_ACTION_GRANT_TTL_MS = 60 * 1000;
+const braveFoxWebAuthMemoryFallback = { requests: {}, pageGrants: {}, actionGrants: {} };
+
+const BRAVEFOX_WEB_SESSION_PAGE_SCOPES = Object.freeze({
+  GITHUB_COPILOT: "github-copilot",
+  GEMINI: "gemini-google",
+  WISEOLDMAN: "wiseoldman-net"
+});
+
+const BRAVEFOX_WEB_ONE_TIME_PAGE_SCOPES = Object.freeze({
+  GEMINI_SAVED_INFO: "gemini-saved-info"
+});
+
+function braveFoxNewWebAuthRequestId() {
+  try {
+    if (globalThis.crypto?.randomUUID) return crypto.randomUUID().replace(/-/g, "");
+  } catch (_) {}
+  return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 14)}`;
+}
+
+function braveFoxNormalizeWebGateUrl(rawUrl) {
+  try {
+    const url = new URL(String(rawUrl || ""));
+    if (url.protocol !== "http:" && url.protocol !== "https:") return "";
+    return url.href;
+  } catch (_) {
+    return "";
+  }
+}
+
+function braveFoxWebGateHost(rawUrl) {
+  try {
+    return new URL(String(rawUrl || "")).hostname.toLowerCase();
+  } catch (_) {
+    return "";
+  }
+}
+
+function braveFoxWebOneTimePageScope(rawUrl) {
+  try {
+    const url = new URL(String(rawUrl || ""));
+    const host = url.hostname.toLowerCase();
+    const path = (url.pathname || "/").replace(/\/+$/, "") || "/";
+
+    if (host === "gemini.google.com" && (path === "/saved-info" || path.startsWith("/saved-info/"))) {
+      return BRAVEFOX_WEB_ONE_TIME_PAGE_SCOPES.GEMINI_SAVED_INFO;
+    }
+  } catch (_) {}
+
+  return "";
+}
+
+function braveFoxWebSessionPageScope(rawUrl) {
+  try {
+    const url = new URL(String(rawUrl || ""));
+    const host = url.hostname.toLowerCase();
+    const path = url.pathname || "/";
+
+    if (host === "gemini.google.com") {
+      if (braveFoxWebOneTimePageScope(rawUrl)) return "";
+      return BRAVEFOX_WEB_SESSION_PAGE_SCOPES.GEMINI;
+    }
+
+    if (host === "github.com" && (/^\/copilot(?:\/|$)/i.test(path) || /^\/features\/copilot(?:\/|$)/i.test(path))) {
+      return BRAVEFOX_WEB_SESSION_PAGE_SCOPES.GITHUB_COPILOT;
+    }
+
+    if (host === "wiseoldman.net" || host === "www.wiseoldman.net") {
+      return BRAVEFOX_WEB_SESSION_PAGE_SCOPES.WISEOLDMAN;
+    }
+  } catch (_) {}
+
+  return "";
+}
+
+function braveFoxWebPageGrantKey(tabId, rawUrl) {
+  const oneTimeScope = braveFoxWebOneTimePageScope(rawUrl);
+  if (oneTimeScope) return Number.isInteger(tabId) ? `one-time:${tabId}:${oneTimeScope}` : "";
+
+  const sessionScope = braveFoxWebSessionPageScope(rawUrl);
+  if (sessionScope) return `session:${sessionScope}`;
+
+  const host = braveFoxWebGateHost(rawUrl);
+  return Number.isInteger(tabId) && host ? `${tabId}:${host}` : "";
+}
+
+function braveFoxWebPageGrantIsActive(grant) {
+  if (!grant || typeof grant !== "object") return false;
+  if (grant.mode === "session") return true;
+  return Number(grant.expiresAt) > Date.now();
+}
+
+function braveFoxWebActionGrantKey(tabId, rawUrl, actionKey) {
+  const host = braveFoxWebGateHost(rawUrl);
+  const action = String(actionKey || "").trim().toLowerCase().slice(0, 160);
+  return Number.isInteger(tabId) && host && action ? `${tabId}:${host}:${action}` : "";
+}
+
+async function braveFoxLoadWebAuthState() {
+  try {
+    if (!browser.storage?.session) {
+      return structuredClone(braveFoxWebAuthMemoryFallback);
+    }
+    const stored = await browser.storage.session.get(BRAVEFOX_WEB_AUTH_STATE_KEY);
+    const state = stored?.[BRAVEFOX_WEB_AUTH_STATE_KEY];
+    return {
+      requests: state?.requests && typeof state.requests === "object" ? state.requests : {},
+      pageGrants: state?.pageGrants && typeof state.pageGrants === "object" ? state.pageGrants : {},
+      actionGrants: state?.actionGrants && typeof state.actionGrants === "object" ? state.actionGrants : {}
+    };
+  } catch (_) {
+    return structuredClone(braveFoxWebAuthMemoryFallback);
+  }
+}
+
+async function braveFoxSaveWebAuthState(state) {
+  const normalized = {
+    requests: state?.requests || {},
+    pageGrants: state?.pageGrants || {},
+    actionGrants: state?.actionGrants || {}
+  };
+
+  if (!browser.storage?.session) {
+    braveFoxWebAuthMemoryFallback.requests = structuredClone(normalized.requests);
+    braveFoxWebAuthMemoryFallback.pageGrants = structuredClone(normalized.pageGrants);
+    braveFoxWebAuthMemoryFallback.actionGrants = structuredClone(normalized.actionGrants);
+    return;
+  }
+
+  try {
+    await browser.storage.session.set({ [BRAVEFOX_WEB_AUTH_STATE_KEY]: normalized });
+  } catch (_) {
+    braveFoxWebAuthMemoryFallback.requests = structuredClone(normalized.requests);
+    braveFoxWebAuthMemoryFallback.pageGrants = structuredClone(normalized.pageGrants);
+    braveFoxWebAuthMemoryFallback.actionGrants = structuredClone(normalized.actionGrants);
+  }
+}
+
+function braveFoxPruneWebAuthState(state) {
+  const now = Date.now();
+
+  for (const [id, request] of Object.entries(state.requests || {})) {
+    if (!request || Number(request.expiresAt) <= now) delete state.requests[id];
+  }
+
+  for (const [key, grant] of Object.entries(state.pageGrants || {})) {
+    if (!grant || typeof grant !== "object") {
+      delete state.pageGrants[key];
+      continue;
+    }
+    if (grant.mode === "session") continue;
+    if (Number(grant.expiresAt) <= now) delete state.pageGrants[key];
+  }
+
+  for (const [key, grant] of Object.entries(state.actionGrants || {})) {
+    if (!grant || Number(grant.expiresAt) <= now) delete state.actionGrants[key];
+  }
+
+  return state;
+}
+
+function braveFoxIsWebPasswordPage(sender, requestId = "") {
+  try {
+    const url = new URL(String(sender?.url || sender?.tab?.url || ""));
+    const extensionOrigin = new URL(browser.runtime.getURL("/")).origin;
+    return url.origin === extensionOrigin &&
+      url.pathname === "/html/password-protected.html" &&
+      url.searchParams.get("target") === "web" &&
+      (!requestId || url.searchParams.get("request") === requestId);
+  } catch (_) {
+    return false;
+  }
+}
+
+function braveFoxFindPendingWebAuthRequest(state, kind, tabId, returnUrl, actionKey = "") {
+  for (const request of Object.values(state.requests || {})) {
+    if (!request || request.kind !== kind || request.tabId !== tabId || request.returnUrl !== returnUrl) continue;
+    if (kind === "action" && request.actionKey !== actionKey) continue;
+    if (Number(request.expiresAt) <= Date.now()) continue;
+    return request;
+  }
+  return null;
+}
+
+browser.runtime.onMessage.addListener((message, sender) => {
+  if (!message || typeof message !== "object") return undefined;
+  if (!String(message.type || "").startsWith("BRAVEFOX_WEB_")) return undefined;
+
+  return (async () => {
+    const tabId = sender?.tab?.id;
+    if (!Number.isInteger(tabId)) throw new Error("BraveFox password gate could not identify the tab.");
+
+    if (message.type === "BRAVEFOX_WEB_AUTH_GATE") {
+      const senderUrl = braveFoxNormalizeWebGateUrl(sender?.tab?.url || sender?.url || "");
+      const returnUrl = braveFoxNormalizeWebGateUrl(message.returnUrl || senderUrl);
+      if (!senderUrl || !returnUrl || braveFoxWebGateHost(senderUrl) !== braveFoxWebGateHost(returnUrl)) {
+        throw new Error("BraveFox password gate return URL was denied.");
+      }
+
+      const state = braveFoxPruneWebAuthState(await braveFoxLoadWebAuthState());
+      const grantKey = braveFoxWebPageGrantKey(tabId, returnUrl);
+      const grant = state.pageGrants[grantKey];
+
+      if (braveFoxWebPageGrantIsActive(grant)) {
+        const oneTime = grant.mode === "one-time";
+        if (oneTime) delete state.pageGrants[grantKey];
+        await braveFoxSaveWebAuthState(state);
+        return {
+          ok: true,
+          unlocked: true,
+          session: grant.mode === "session",
+          oneTime,
+          expiresAt: grant.mode === "session" || oneTime ? null : grant.expiresAt
+        };
+      }
+
+      let request = braveFoxFindPendingWebAuthRequest(state, "page", tabId, returnUrl);
+      if (!request) {
+        const requestId = braveFoxNewWebAuthRequestId();
+        request = {
+          requestId,
+          kind: "page",
+          tabId,
+          returnUrl,
+          host: braveFoxWebGateHost(returnUrl),
+          title: String(message.title || "Password required").slice(0, 180),
+          createdAt: Date.now(),
+          expiresAt: Date.now() + BRAVEFOX_WEB_AUTH_REQUEST_TTL_MS
+        };
+        state.requests[requestId] = request;
+      }
+
+      await braveFoxSaveWebAuthState(state);
+      const params = new URLSearchParams({
+        target: "web",
+        request: request.requestId,
+        compact: "1",
+        title: request.title
+      });
+      await browser.tabs.update(tabId, {
+        url: browser.runtime.getURL(`html/password-protected.html?${params.toString()}`)
+      });
+      return { ok: true, unlocked: false, redirecting: true };
+    }
+
+    if (message.type === "BRAVEFOX_WEB_ACTION_GATE") {
+      const senderUrl = braveFoxNormalizeWebGateUrl(sender?.tab?.url || sender?.url || "");
+      const returnUrl = braveFoxNormalizeWebGateUrl(message.returnUrl || senderUrl);
+      const actionKey = String(message.actionKey || "generic-action")
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]/g, "-")
+        .slice(0, 160);
+
+      if (!senderUrl || !returnUrl || !actionKey || braveFoxWebGateHost(senderUrl) !== braveFoxWebGateHost(returnUrl)) {
+        throw new Error("BraveFox action password request was denied.");
+      }
+
+      const state = braveFoxPruneWebAuthState(await braveFoxLoadWebAuthState());
+      const grantKey = braveFoxWebActionGrantKey(tabId, returnUrl, actionKey);
+      const grant = state.actionGrants[grantKey];
+
+      if (grant && Number(grant.expiresAt) > Date.now()) {
+        delete state.actionGrants[grantKey];
+        await braveFoxSaveWebAuthState(state);
+        return { ok: true, unlocked: true };
+      }
+
+      let request = braveFoxFindPendingWebAuthRequest(state, "action", tabId, returnUrl, actionKey);
+      if (!request) {
+        const requestId = braveFoxNewWebAuthRequestId();
+        request = {
+          requestId,
+          kind: "action",
+          actionKey,
+          tabId,
+          returnUrl,
+          host: braveFoxWebGateHost(returnUrl),
+          title: String(message.title || "Password required").slice(0, 180),
+          createdAt: Date.now(),
+          expiresAt: Date.now() + BRAVEFOX_WEB_AUTH_REQUEST_TTL_MS
+        };
+        state.requests[requestId] = request;
+      }
+
+      await braveFoxSaveWebAuthState(state);
+      const params = new URLSearchParams({
+        target: "web",
+        request: request.requestId,
+        compact: "1",
+        title: request.title
+      });
+      await browser.tabs.update(tabId, {
+        url: browser.runtime.getURL(`html/password-protected.html?${params.toString()}`)
+      });
+      return { ok: true, unlocked: false, redirecting: true };
+    }
+
+    if (message.type === "BRAVEFOX_WEB_AUTH_APPROVE") {
+      const requestId = String(message.requestId || "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 128);
+      if (!requestId || !braveFoxIsWebPasswordPage(sender, requestId)) {
+        throw new Error("BraveFox password approval was denied.");
+      }
+
+      const state = braveFoxPruneWebAuthState(await braveFoxLoadWebAuthState());
+      const request = state.requests[requestId];
+      if (!request || request.tabId !== tabId) throw new Error("BraveFox password request expired.");
+
+      if (request.kind === "action") {
+        const grantKey = braveFoxWebActionGrantKey(tabId, request.returnUrl, request.actionKey);
+        state.actionGrants[grantKey] = {
+          actionKey: request.actionKey,
+          expiresAt: Date.now() + BRAVEFOX_WEB_ACTION_GRANT_TTL_MS
+        };
+      } else {
+        const grantKey = braveFoxWebPageGrantKey(tabId, request.returnUrl);
+        const oneTimeScope = braveFoxWebOneTimePageScope(request.returnUrl);
+        const sessionScope = braveFoxWebSessionPageScope(request.returnUrl);
+
+        if (oneTimeScope) {
+          state.pageGrants[grantKey] = {
+            mode: "one-time",
+            scope: oneTimeScope,
+            host: request.host,
+            expiresAt: Date.now() + BRAVEFOX_WEB_AUTH_REQUEST_TTL_MS
+          };
+        } else if (sessionScope) {
+          state.pageGrants[grantKey] = {
+            mode: "session",
+            scope: sessionScope,
+            host: request.host,
+            grantedAt: Date.now()
+          };
+        } else {
+          state.pageGrants[grantKey] = {
+            mode: "timed",
+            host: request.host,
+            expiresAt: Date.now() + BRAVEFOX_WEB_PAGE_GRANT_TTL_MS
+          };
+        }
+      }
+
+      delete state.requests[requestId];
+      await braveFoxSaveWebAuthState(state);
+      await browser.tabs.update(tabId, { url: request.returnUrl });
+      return { ok: true };
+    }
+
+    return { ok: false, error: "Unknown BraveFox web password message." };
+  })().catch(error => ({ ok: false, error: String(error?.message || error) }));
+});
+
 
 // ---------------------------------------------------------------------------
 // ChatGPT secondary-browser route closure + native password-page bridge

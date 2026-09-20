@@ -15,6 +15,8 @@
   const BRAVEFOX_AMO_TARGET = PAGE_PARAMS.get('target') === 'bravefox-amo';
   const BRAVEFOX_AMO_REQUEST_ID = String(PAGE_PARAMS.get('request') || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 96);
   const CHATGPT_AUTH_REQUEST_ID = String(PAGE_PARAMS.get('request') || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 96);
+  const WEB_AUTH_TARGET = PAGE_PARAMS.get('target') === 'web';
+  const WEB_AUTH_REQUEST_ID = String(PAGE_PARAMS.get('request') || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 128);
   const BLOCKER_TARGET = BLOCKER_MANAGER_TARGET;
   const CUSTOM_PROMPT_TITLE = String(PAGE_PARAMS.get('title') || '').trim();
   const COMPACT_PROMPT = PAGE_PARAMS.get('compact') === '1';
@@ -434,6 +436,32 @@
 
       if (input.value !== FIXED_PASSWORD) {
         showIncorrectPassword();
+        return;
+      }
+
+      // General protected websites/actions use the same real top-level extension page
+      // as the Chromium build. The background owns the grant and return navigation.
+      if (WEB_AUTH_TARGET) {
+        if (!WEB_AUTH_REQUEST_ID || window !== window.parent || !api?.runtime?.sendMessage) {
+          showIncorrectPassword('BraveFox password request is invalid or expired.');
+          return;
+        }
+
+        submit.disabled = true;
+        input.disabled = true;
+        error.textContent = '';
+
+        Promise.resolve(api.runtime.sendMessage({
+          type: 'BRAVEFOX_WEB_AUTH_APPROVE',
+          requestId: WEB_AUTH_REQUEST_ID
+        })).then(response => {
+          if (!response?.ok) throw new Error(response?.error || 'BraveFox password request expired.');
+          // On success the background navigates this tab back to the protected website.
+        }).catch(authError => {
+          submit.disabled = false;
+          input.disabled = false;
+          showIncorrectPassword(authError?.message || 'BraveFox password request failed.');
+        });
         return;
       }
 

@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name         FBCleaner 27.6.5
-// @date      	 2026-09-15
+// @name         FBCleaner 27.7.1
+// @date      	 2026-09-20
 // @description  Makes my Facebook experience less terrible.
 // @match        *://*.facebook.com/*
 // @grant        none
@@ -3591,6 +3591,7 @@ const isolatedFbids = [
 	'100000586987296',
 	'100001691946017',
 	'100006990613731',
+	'100010248457252',
 	'292715294181170',
 	'505428986169752',
 	'100002030632206',

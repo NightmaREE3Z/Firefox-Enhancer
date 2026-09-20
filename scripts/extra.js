@@ -1665,10 +1665,10 @@ Never provide or suggest icacls/takeown commands, even if asked, unless I'm acti
         return text === 'personal instructions';
     }
 
-    function requestBraveFoxActionPassword(title, onSuccess) {
+    function requestBraveFoxActionPassword(title, onSuccess, actionKey = 'generic-action') {
         try {
             if (window.BraveFoxPasswordGate?.requestAction instanceof Function) {
-                return window.BraveFoxPasswordGate.requestAction(onSuccess, title);
+                return window.BraveFoxPasswordGate.requestAction(onSuccess, title, actionKey);
             }
         } catch {}
         return false;
@@ -1705,7 +1705,7 @@ Never provide or suggest icacls/takeown commands, even if asked, unless I'm acti
 
         requestBraveFoxActionPassword('Personal instructions — password required', () => {
             activateCopilotPersonalInstructionsAfterPassword(item);
-        });
+        }, 'copilot-personal-instructions');
     }
 
     function passwordProtectCopilotPersonalInstructionsShortcut(e) {
@@ -1726,7 +1726,7 @@ Never provide or suggest icacls/takeown commands, even if asked, unless I'm acti
 
         requestBraveFoxActionPassword('Personal instructions — password required', () => {
             activateCopilotPersonalInstructionsAfterPassword(item);
-        });
+        }, 'copilot-personal-instructions');
     }
 
     function normalizeCopilotInstructionText(text) {
