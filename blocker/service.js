@@ -117,6 +117,7 @@ const HARD_CODED_LINKS = Object.freeze(
   "gemini.google.com",
   "user/3ws1lu2bwli971gvhv28yemrm",
   "instagram.com/taijamaarit",
+  "instagram.com/emiliaaq96",
   "upskirt.tv",
   "celeb.gate.cc",
   "pullpush.io",
@@ -383,7 +384,8 @@ async function fullState(sender) {
     profile: dataset.profile,
     settings,
     adminUnlocked: await isAdminTabUnlocked(tabId),
-    storageStatus: publicStorageStatus(dataset)
+    storageStatus: publicStorageStatus(dataset),
+    githubSync: await getGitHubSyncStatus()
   };
 }
 
@@ -421,20 +423,6 @@ async function mutateDataset(kind, operation, payload) {
   } else if (operation === 'replace') next = uniqueInOrder(payload.values, normalizer);
   else if (operation === 'merge') next = uniqueInOrder([...next, ...payload.values], normalizer);
   else throw new Error('Unknown dataset operation.');
-
-  const changed = next.length !== current.length || next.some((item, index) => item !== current[index]);
-  if (!changed) {
-    return {
-      ok: true,
-      changed: false,
-      terms: dataset.terms,
-      links: dataset.links,
-      tlds: dataset.tlds,
-      trustedSites: dataset.trustedSites,
-      storageStatus: publicStorageStatus(dataset),
-      githubSync: await getGitHubSyncStatus()
-    };
-  }
 
   const saved = await saveDataset({
     terms: kind === 'terms' ? next : dataset.terms,
@@ -531,6 +519,7 @@ async function prepaintTimeRuleCheck(message, sender) {
   try {
     sendNativeBlockLog(reason, url, '');
     await browser.tabs.update(tabId, { url: blockedPageUrl(reason, url) });
+    try { await browser.history.deleteUrl({ url }); } catch {}
     return { ok: true, blocked: true };
   } catch (error) {
     console.warn('[BraveFox Focus Master] Time Rule pre-paint redirect failed:', error);
@@ -540,8 +529,18 @@ async function prepaintTimeRuleCheck(message, sender) {
   }
 }
 
+function isTwitchUrl(value) {
+  try {
+    const host = new URL(String(value || '')).hostname.toLowerCase();
+    return host === 'twitch.tv' || host.endsWith('.twitch.tv');
+  } catch {
+    return false;
+  }
+}
+
 async function evaluateNavigation(tabId, url, title = '') {
   if (!Number.isInteger(tabId) || tabId < 0) return;
+  if (isTwitchUrl(url)) return;
   if (!isSupportedWebUrl(url)) return;
   if (shouldBypassRedirect(tabId, url) || redirectInFlight.has(tabId)) return;
   const last = recentlyRedirected.get(tabId);
@@ -574,6 +573,7 @@ async function evaluateNavigation(tabId, url, title = '') {
     try {
       sendNativeBlockLog(unsupportedReason, url, '');
       await browser.tabs.update(tabId, { url: blockedPageUrl(unsupportedReason, url) });
+      try { await browser.history.deleteUrl({ url }); } catch {}
     } catch (error) {
       console.warn('[BraveFox Focus Master] Unsupported archive redirect failed:', error);
     } finally {
@@ -605,6 +605,7 @@ async function evaluateNavigation(tabId, url, title = '') {
       } else {
         await browser.tabs.update(tabId, { url: blockedPageUrl(hardDeniedReason, url) });
       }
+      try { await browser.history.deleteUrl({ url }); } catch {}
     } catch (error) {
       console.warn('[BraveFox Focus Master] Hard-denied redirect failed:', error);
     } finally {
@@ -625,6 +626,7 @@ async function evaluateNavigation(tabId, url, title = '') {
     try {
       sendNativeBlockLog(timeReason, url, '');
       await browser.tabs.update(tabId, { url: blockedPageUrl(timeReason, url) });
+      try { await browser.history.deleteUrl({ url }); } catch {}
     } catch (error) {
       console.warn('[BraveFox Focus Master] Time-rule redirect failed:', error);
     } finally {
@@ -664,6 +666,7 @@ async function evaluateNavigation(tabId, url, title = '') {
       } else {
         await browser.tabs.update(tabId, { url: blockedPageUrl(reason, url) });
       }
+      try { await browser.history.deleteUrl({ url }); } catch {}
     } catch (error) {
       console.warn('[BraveFox Focus Master] Redirect failed:', error);
     } finally {
@@ -689,6 +692,7 @@ async function evaluateNavigation(tabId, url, title = '') {
   recentlyRedirected.set(tabId, { url, at: Date.now() });
   try {
     sendNativeBlockLog(hostReason, url, '');
+    try { await browser.history.deleteUrl({ url }); } catch {}
     await browser.tabs.remove(tabId);
   } catch (error) {
     console.warn('[BraveFox Focus Master] Fetched-host tab close failed:', error);
@@ -908,7 +912,7 @@ browser.runtime.onMessage.addListener((message, sender) => {
         };
       case MESSAGE.downloadGitHubLists: {
         await requireManagerAccess(sender);
-        const result = await downloadGitHubLists({ allowBundledFallback: true });
+        const result = await downloadGitHubLists({ allowBundledFallback: false });
         return {
           ok: true,
           terms: result.dataset.terms,

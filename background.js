@@ -50,184 +50,233 @@ const ALLOWED_SITES = new Set([
 // Keep this background layer focused on the Enhancer's legacy static URL rules.
 
 // Existing PC static URL policy, now shared by both Firefox platforms.
-const STATIC_BLOCK_PATTERNS = [
-  "*://www.lunapic.com/*",
-  "*://www9.lunapic.com/*",
-  "*://www9.lunapic.com/editor/*",
-  "*://pixelixe.com/*",
-  "*://picresize.com/*",
-  "*://microsoft365.com/*",
-  "*://microsoft.com/fi-fi/edge/business/download*",
-  "*://microsoft.com/fi-fi/edge/business*",
-  "*://microsoft.com/fi-fi/edge/*",
-  "*://microsoft.com/fi-fi/edge/business/download?cs=3457492030&form=MA13FJ*",
-  "*://uptodown.com/windows/browsing*",
-  "*://uptodown.com/windows/internet*",
-  "*://uptodown.com/windows/web-browsers*",
-  "*://en.uptodown.com/windows/web-browsers*",
-  "*://uptodown.com/windows/browsers*",
-  "*://uptodown.com/windows/internet-browsers*",
-  "*://uptodown.com/windows/browser*",
-  "*://uptodown.com/windows/web-navigators*",
-  "*://uptodown.com/windows/navigators*",
-  "*://uptodown.com/windows/networking*",
-  "*://uptodown.com/windows/networking/browsers*",
-  "*://uptodown.com/windows/google-chrome*",
-  "*://google-chrome.uptodown.com/*",
-  "*://google-chrome.en.uptodown.com/*",
-  "*://google-chrome.en.uptodown.com/windows*",
-  "*://google-chrome-portable.uptodown.com/*",
-  "*://google-chrome-portable.en.uptodown.com/*",
-  "*://uptodown.com/windows/mozilla-firefox*",
-  "*://mozilla-firefox.uptodown.com/*",
-  "*://mozilla-firefox.en.uptodown.com/*",
-  "*://mozilla-firefox.en.uptodown.com/windows*",
-  "*://uptodown.com/windows/microsoft-edge*",
-  "*://microsoft-edge.uptodown.com/*",
-  "*://microsoft-edge.en.uptodown.com/*",
-  "*://microsoft-edge.en.uptodown.com/windows*",
-  "*://uptodown.com/windows/opera*",
-  "*://opera.uptodown.com/*",
-  "*://opera.en.uptodown.com/*",
-  "*://opera.en.uptodown.com/windows*",
-  "*://uptodown.com/windows/brave*",
-  "*://uptodown.com/windows/brave-browser*",
-  "*://brave-browser.uptodown.com/*",
-  "*://brave-browser.en.uptodown.com/*",
-  "*://brave-browser-nightly.uptodown.com/*",
-  "*://brave-browser-nightly.en.uptodown.com/*",
-  "*://uptodown.com/windows/tor-browser*",
-  "*://tor.uptodown.com/*",
-  "*://tor.en.uptodown.com/*",
-  "*://tor.uptodown.com/windows*",
-  "*://tor.en.uptodown.com/windows*",
-  "*://safari.uptodown.com/*",
-  "*://safari.en.uptodown.com/*",
-  "*://safari.en.uptodown.com/windows*",
-  "*://uptodown.com/windows/cent-browser*",
-  "*://cent-browser.uptodown.com/*",
-  "*://cent-browser.en.uptodown.com/*",
-  "*://uptodown.com/windows/librewolf*",
-  "*://librewolf.uptodown.com/*",
-  "*://librewolf.en.uptodown.com/*",
-  "*://uptodown.com/windows/internet-explorer*",
-  "*://internet-explorer.uptodown.com/*",
-  "*://internet-explorer.en.uptodown.com/*",
-  "*://uptodown.com/windows/ccleaner-browser*",
-  "*://ccleaner-browser.uptodown.com/*",
-  "*://ccleaner-browser.en.uptodown.com/*",
-  "*://uptodown.com/windows/chromium*",
-  "*://chromium.uptodown.com/*",
-  "*://chromium.en.uptodown.com/*",
-  "*://chromium.uptodown.com/windows*",
-  "*://chromium.en.uptodown.com/windows*",
-  "*://uptodown.com/windows/epic-browser*",
-  "*://epic-browser.uptodown.com/*",
-  "*://epic-browser.en.uptodown.com/*",
-  "*://uptodown.com/windows/theworld-browser*",
-  "*://theworld-browser.uptodown.com/*",
-  "*://theworld-browser.en.uptodown.com/*",
-  "*://uptodown.com/windows/avant-browser*",
-  "*://gemini.google.com*",
-  "*://avant-browser.uptodown.com/*",
-  "*://avant-browser.en.uptodown.com/*",
-  "*://uptodown.com/windows/thorium-browser*",
-  "*://thorium-browser.uptodown.com/*",
-  "*://thorium-browser.en.uptodown.com/*",
-  "*://uptodown.com/windows/square-1-web-browser*",
-  "*://square-1-web-browser.uptodown.com/*",
-  "*://square-1-web-browser.en.uptodown.com/*",
-  "*://uptodown.com/windows/netscape-navigator*",
-  "*://netscape-navigator.uptodown.com/*",
-  "*://netscape-navigator.en.uptodown.com/*",
-  "*://uptodown.com/windows/vivaldi*",
-  "*://vivaldi.uptodown.com/*",
-  "*://vivaldi.en.uptodown.com/*",
-  "*://vivaldi.en.uptodown.com/windows*",
-  "*://uptodown.com/windows/waterfox*",
-  "*://waterfox.uptodown.com/*",
-  "*://waterfox.en.uptodown.com/*",
-  "*://waterfox.en.uptodown.com/windows*",
-  "*://uptodown.com/windows/uc-browser*",
-  "*://guthib.com/*",
-  "*://instagram.com/*",
-  "*://www.instagram.com/*",
-  "*://tiktok.com/*",
-  "*://www.tiktok.com/*",
-  "*://uc-browser-pc.uptodown.com/*",
-  "*://uc-browser-pc.en.uptodown.com/*",
-  "*://uc-browser-pc.en.uptodown.com/windows*",
-  "*://uptodown.com/windows/yandex-browser*",
-  "*://yandex-browser.uptodown.com/*",
-  "*://yandex-browser.en.uptodown.com/*",
-  "*://uptodown.com/windows/maxthon*",
-  "*://maxthon.uptodown.com/*",
-  "*://maxthon.en.uptodown.com/*",
-  "*://apps.microsoft.com/detail/9mxbp1fb84cq*",
-  "*://apps.microsoft.com/detail/9nh2gph4jzs4*",
-  "*://viamaker.uptodown.com/*",
-  "*://viamaker.en.uptodown.com/*",
-  "*://capcut.uptodown.com/*",
-  "*://capcut.en.uptodown.com/*",
-  "*://catcut-video-editor-and-maker.uptodown.com/*",
-  "*://catcut-video-editor-and-maker.en.uptodown.com/*",
-  "*://oracle.com/*",
-  "*://virtualbox.org/*",
-  "*://virtualbox.net/*",
-  "*://vmware.com/*",
-  "*://xvideos.com/*",
-  "*://osboxes.org/*",
-  "*://horizonmw.org/*",
-  "*://reddit.com/answers*",
-  "*://fantopia.mystrikingly.com/*",
-  "*://www.softorbits.net/*",
-  "*://softorbits.net/*",
-  "*://virtualbox.com/*",
-  "*://virtualbox.net/*",
-  "*://vmware.com/*",
-  "*://uptodown.com/*",
-  "*://horizonmw.org/*",
-  "*://ira-amanda.blogspot.com/*",
-  "*://irpp4.blogspot.com/*",
-  "*://irppas.blogspot.com/*",
-  "*://jiujau.blogspot.com/*",
-  "*://perttas.blogspot.com/*",
-  "*://ira-amanda.blogspot.fi/*",
-  "*://irpp4.blogspot.fi/*",
-  "*://irppas.blogspot.fi/*",
-  "*://jiujau.blogspot.fi/*",
-  "*://perttas.blogspot.fi/*",
-  "*://vsco.co/*",
-  "*://threads.com/*",
-  "*://threads.net/*",
-  "*://osboxes.org/*",
-  "*://oracle.com/*",
-  "*://oracle.org/*",
-  "*://oracle.net/*",
-  "*://waterfox.net/*",
-  "*://download.fi/*",
-  "*://pwpix.net/*",
-  "*://tiktok.com/@m1mmuska*",
-  "*://tiktok.com/@just.se.mimmi*",
-  "*://instagram.com/m1mmuska*",
-  "*://tiktok.com/@karabrannbacka*",
-  "*://instagram.com/karabrannbacka*",
-  "*://instagram.com/piia_barlund*",
-  "*://instagram.com/julmakira*",
-  "*://reddit.com/r/comfyui*",
-  "*://comfy.org/*",
-  "*://runcomfy.com/*",
-  "*://stable-diffusion-art.com/*",
-  "*://comfyui.org/*",
-  "*://thinkdiffusion.com/*",
-  "*://github.com/copilot*",
-  "*://snapchat.com/*",
-  "*://snapchat.com/web*",
-  "*://snapchat.com/*",
-  "*://www.snapchat.com/*",
-  "*://www.snapchat.com/web/*",
-  "*://web.snapchat.com/*",
-  "*://*.snapchat.com/*"
+// Blocklist for other domains if needed
+const blockedSites = [
+   "microsoft365.com",
+   "microsoft.com/fi-fi/edge/business/download", 
+   "microsoft.com/fi-fi/edge/business", 
+   "microsoft.com/fi-fi/edge/", 
+   "microsoft.com/fi-fi/edge/business/download?cs=3457492030&form=MA13FJ",
+   "uptodown.com/windows/browsing",
+   "uptodown.com/windows/internet",
+   "uptodown.com/windows/web-browsers",
+   "en.uptodown.com/windows/web-browsers",
+   "uptodown.com/windows/browsers",
+   "uptodown.com/windows/internet-browsers",
+   "uptodown.com/windows/browser",
+   "uptodown.com/windows/web-navigators",
+   "uptodown.com/windows/navigators",
+   "uptodown.com/windows/networking",
+   "uptodown.com/windows/networking/browsers",
+   "uptodown.com/windows/google-chrome",
+   "google-chrome.uptodown.com",
+   "google-chrome.en.uptodown.com",
+   "google-chrome.en.uptodown.com/windows",
+   "google-chrome-portable.uptodown.com",
+   "google-chrome-portable.en.uptodown.com",
+   "uptodown.com/windows/mozilla-firefox",
+   "mozilla-firefox.uptodown.com",
+   "mozilla-firefox.en.uptodown.com",
+   "mozilla-firefox.en.uptodown.com/windows",
+   "firefox.com/fi/",
+   "mozilla.fi",
+   "mozilla.org/fi/",
+   "brave.com/",
+   "brave.com",
+   "instagram.com/popular",
+   "download.fi/verkko",
+   "uptodown.com/windows/microsoft-edge",
+   "microsoft-edge.uptodown.com",
+   "microsoft-edge.en.uptodown.com",
+   "microsoft-edge.en.uptodown.com/windows",
+   "uptodown.com/windows/opera",
+   "opera.uptodown.com",
+   "opera.en.uptodown.com",
+   "opera.en.uptodown.com/windows",
+   "uptodown.com/windows/brave",
+   "brave-browser.uptodown.com",
+   "brave-browser.en.uptodown.com",
+   "brave-browser-nightly.uptodown.com",
+   "brave-browser-nightly.en.uptodown.com",
+   "uptodown.com/windows/tor-browser",
+   "github.com/mozilla-firefox",
+   "softonic.com",
+   "en.softonic.com",
+   "download.it",
+   "taplink.cc",
+   "tor.uptodown.com",
+   "tor.en.uptodown.com",
+   "tor.uptodown.com/windows",
+   "tor.en.uptodown.com/windows",
+   "safari.uptodown.com",
+   "safari.en.uptodown.com",
+   "safari.en.uptodown.com/windows",
+   "uptodown.com/windows/cent-browser",
+   "cent-browser.uptodown.com",
+   "cent-browser.en.uptodown.com",
+   "uptodown.com/windows/librewolf",
+   "apps.microsoft.com/detail/9nzvdkpmr9rd",
+   "librewolf.uptodown.com",
+   "librewolf.en.uptodown.com",
+   "uptodown.com/windows/internet-explorer",
+   "internet-explorer.uptodown.com",
+   "internet-explorer.en.uptodown.com",
+   "uptodown.com/windows/ccleaner-browser",
+   "ccleaner-browser.uptodown.com",
+   "ccleaner-browser.en.uptodown.com",
+   "uptodown.com/windows/chromium",
+   "chromium.uptodown.com",
+   "instagram.com/explore",
+   "chromium.en.uptodown.com",
+   "chromium.uptodown.com/windows",
+   "chromium.en.uptodown.com/windows",
+   "uptodown.com/windows/epic-browser",
+   "epic-browser.uptodown.com",
+   "epic-browser.en.uptodown.com",
+   "uptodown.com/windows/theworld-browser",
+   "theworld-browser.uptodown.com",
+   "theworld-browser.en.uptodown.com",
+   "uptodown.com/windows/avant-browser",
+   "avant-browser.uptodown.com",
+   "avant-browser.en.uptodown.com",
+   "uptodown.com/windows/thorium-browser",
+   "thorium-browser.uptodown.com",
+   "thorium-browser.en.uptodown.com",
+   "uptodown.com/windows/square-1-web-browser",
+   "square-1-web-browser.uptodown.com",
+   "square-1-web-browser.en.uptodown.com",
+   "blocked.html?type=term&trigger=user%2F3ws1lu2bwli971gvhv28yemrm&source=https%3A%2F%2Fopen.spotify.com%2Fuser%2F3ws1lu2bwli971gvhv28yemrm&attempted=",
+   "https://scontent-hel3-1.cdninstagram.com/v/t51.82787-15/625469698_18528894469069282_4159101025682725824_n.jpg?stp=dst-jpg_e35_tt6&_nc_cat=110&ig_cache_key=MTA5OTQzMDg5ODEzOTYxMzg0MA%3D%3D.3-ccb7-5&ccb=7-5&_nc_sid=58cdad&efg=eyJ2ZW5jb2RlX3RhZyI6IkZFRUQueHBpZHMuNDE0LnNkci5yZWd1bGFyX3Bob3RvLkMzIn0%3D&_nc_ohc=x3EmvxyyzQ0Q7kNvwEMliDa&_nc_oc=Adq47sggBK-OipwPSfQYfj4GoWNsWkDhJsyykEFLnooi21eGjYmTgOT5qcB9e2Bns-jYq6ImXYoq2zT6Gy55rrte&_nc_ad=z-m&_nc_cid=0&_nc_zt=23&_nc_ht=scontent-hel3-1.cdninstagram.com&_nc_gid=DJiKr0I4IZBECZYqwSVB-g&_nc_ss=7a22e&oh=00_AQIU1S2NemJ_ccgVGsokuNC56Xo3eRWFA3INpFXkyTusOg&oe=6ABA7AA2",
+   "p/9B9pOqs0qQ",
+   "uptodown.com/windows/netscape-navigator",
+   "netscape-navigator.uptodown.com",
+   "netscape-navigator.en.uptodown.com",
+   "uptodown.com/windows/vivaldi",
+   "vivaldi.uptodown.com",
+   "vivaldi.en.uptodown.com",
+   "vivaldi.en.uptodown.com/windows",
+   "uptodown.com/windows/waterfox",
+   "waterfox.uptodown.com",
+   "github.com/Lateralus138",
+   "waterfox.en.uptodown.com",
+   "m365.cloud.microsoft",
+   "m365.cloud",
+   "m365.microsoft",
+   "?origindomain=microsoft365",
+   "m365.cloud.microsoft/?origindomain=microsoft365",
+   "waterfox.en.uptodown.com/windows",
+   "uptodown.com/windows/uc-browser",
+   "uc-browser-pc.uptodown.com",
+   "uc-browser-pc.en.uptodown.com",
+   "uc-browser-pc.en.uptodown.com/windows",
+   "uptodown.com/windows/yandex-browser",
+   "yandex-browser.uptodown.com",
+   "yandex-browser.en.uptodown.com",
+   "apps.microsoft.com/detail/9mxbp1fb84cq",
+   "apps.microsoft.com/detail/9nh2gph4jzs4",
+   "apps.microsoft.com/detail/9nrtvfllggtv",
+   "viamaker.uptodown.com",
+   "viamaker.en.uptodown.com",
+   "capcut.uptodown.com",
+   "capcut.en.uptodown.com",
+   "catcut-video-editor-and-maker.uptodown.com",
+   "catcut-video-editor-and-maker.en.uptodown.com",
+   "reddit.com/answers",
+   "fantopia.mystrikingly.com",
+   "www.softorbits.net",
+   "softorbits.net",
+   "virtualbox.com",
+   "virtualbox.net",
+   "vmware.com",
+   "oracle.com",
+   "oracle.org",
+   "oracle.net",
+   "waterfox.net",
+   "download.fi",
+   "vsco.co",
+   "pinterest.com",
+   "gemini.google.com",
+   "instagram.com/m1mmuska",
+   "tiktok.com/@karabr",
+   "tiktok.com/@kara",
+   "tiktok.com/@karts",
+   "tiktok.com/@just.se.mimmi",
+   "tiktok.com/@m1mmuska",
+   "instagram.com/karabr",
+   "instagram.com/piia_barlund",
+   "tiktok.com/@bulgaru",
+   "tiktok.com/@laur",
+   "instagram.com/julmakira",
+   "lite.irc-galleria.net",
+   "irc-galleria.fi",
+   "irc.fi",
+   "reddit.com/r/comfyui",
+   "xvideos.com/c/AI-239",
+   "comfy.org",
+   "runcomfy.com",
+   "facebook.com/prowrestlingworld",
+   "stable-diffusion-art.com",
+   "comfyui.org",
+   "thinkdiffusion.com",
+   "threads.com",
+   "threads.net",
+   "grok.com",
+   "grok.ai",
+   "pwpix.net",
+   "reveddit.com/v/jumalattaretPro",
+   "reddit.com/media?url=https%3A%2F%2Fi.redd.it%2F418s0mmtpve81.jpg",
+   "reddit.com/media?url=https%3A%2F%2Fi.redd.it%2F5sj5dp809wg71.jpg",
+   "reddit.com/media?url=https%3A%2F%2Fi.redd.it%2Fqc3dwb3zpmm81.jpg",
+   "reddit.com/media?url=https%3A%2F%2Fi.redd.it%2Fkwfiq6v52dp81.jpg",
+   "reddit.com/media?url=https%3A%2F%2Fi.redd.it%2Fmh3mrxsf4cg91.jpg",
+   "reddit.com/media?url=https%3A%2F%2Fi.redd.it%2Fcl2le6iawhk71.jpg",
+   "reddit.com/u/birppis",
+   "reveddit.com/y/birppis",
+   "jiujau.blogspot.com",
+   "jiujau.blogspot.fi",
+   "perttas.blogspot.com",
+   "perttas.blogspot.fi",
+   "instagram.com/nickiminaj",
+   "instagram.com/ninnuliin11",
+   "instagram.com/n1nnul11n11.real",
+   "instagram.com/n1nnul11n11_reels",
+   "facebook.com/profile.php?id=100000639309471",
+   "irc-galleria.net/user/irpp4/album?page=0",
+   "irc-galleria.net/user/irpp4/album?page=1",
+   "instagram.com/accounts/hide_story_and_live",
+   "www.reddit.com/user/birppis/comments/",
+   "www.reddit.com/user/birppis/submitted/",
+   "www.reddit.com/user/birppis/posts/",
+   "www.reddit.com/user/birppis/comments",
+   "www.reddit.com/user/birppis/submitted",
+   "www.reddit.com/user/birppis/posts",
+   "studio.creativefabrica.com",
+   "www.creativefabrica.com",
+   "tiktok.com/@juliana.rasikannas",
+   "reddit.com/user/JulianaRasikannas",
+   "reddit.com/r/snappijuorut",
+   "reddit.com/r/snappisensuroimat0n",
+   "snapchat.com/@",
+   "pinterest.com",
+   "snapchat.com/spotlight",
+   "instagram.com/misk33waaa",
+   "instagram.com/mafiaprinsessa",
+   "dashboard.g2a.com/support/conversations/view/M-VJYS-724654",
+   "dashboard.g2a.com/support/conversations/view/M-LSMI-906369",
+   "tiktok.com/search?q=katarii",
+   "tiktok.com/search?q=kara",
+   "tiktok.com/search?q=kart",
+   "tiktok.com/search?q=bränn",
+   "tiktok.com/search?q=brann",
+   "tiktok.com/search?q=br4nn",
+   "tiktok.com/search?q=just",
+   "tiktok.com/search?q=m1mm",
+   "tiktok.com/search?q=mimm",
+   "tiktok.com/search?q=ira",
+   "tiktok.com/search?q=alexa",
+   "tiktok.com/search?q=blis",
+   "tiktok.com/@katarii",
+   "instagram.com/katarii"
 ];
 
 const WRESTLING_CACHE_TIME_KEY = "wrestling_women_urls_time";
@@ -363,56 +412,8 @@ function isAllowlistedHostname(hostname) {
   return hostnameMatchesSet(hostname, ALLOWED_SITES) || isCompletelyExcludedHostname(hostname);
 }
 
-function escapeRegex(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function globPathToRegex(pathGlob) {
-  const escaped = String(pathGlob || "/*")
-    .split("*")
-    .map(escapeRegex)
-    .join(".*");
-  return new RegExp(`^${escaped}$`, "i");
-}
-
-function compileStaticBlockRules(patterns) {
-  const exactHosts = new Map();
-  const wildcardHosts = [];
-
-  for (const pattern of patterns) {
-    const match = String(pattern).match(/^\*:\/\/([^/]+)(\/.*)$/i);
-    if (!match) continue;
-    const hostPattern = match[1].toLowerCase();
-    const pathRegex = globPathToRegex(match[2]);
-
-    if (hostPattern.startsWith("*.")) {
-      wildcardHosts.push({ suffix: hostPattern.slice(2), pathRegex });
-      continue;
-    }
-
-    if (!exactHosts.has(hostPattern)) exactHosts.set(hostPattern, []);
-    exactHosts.get(hostPattern).push(pathRegex);
-  }
-
-  return { exactHosts, wildcardHosts };
-}
-
-const STATIC_BLOCK_RULES = compileStaticBlockRules(STATIC_BLOCK_PATTERNS);
-
-function matchesStaticBlockRule(urlObject) {
-  const hostname = normalizeHostname(urlObject.hostname);
-  const path = `${urlObject.pathname || "/"}${urlObject.search || ""}${urlObject.hash || ""}`;
-
-  const exactRules = STATIC_BLOCK_RULES.exactHosts.get(hostname);
-  if (exactRules && exactRules.some(regex => regex.test(path))) return true;
-
-  for (const rule of STATIC_BLOCK_RULES.wildcardHosts) {
-    if ((hostname === rule.suffix || hostname.endsWith(`.${rule.suffix}`)) && rule.pathRegex.test(path)) {
-      return true;
-    }
-  }
-
-  return false;
+function matchesStaticBlockedSite(url) {
+  return blockedSites.some(site => String(url || "").includes(site));
 }
 
 function binarySearch(sortedValues, target) {
@@ -447,7 +448,7 @@ async function shouldBlockUrl(url) {
     if (isCompletelyExcludedUrl(url)) return false;
     const hostname = normalizeHostname(parsed.hostname);
     if (!hostname || isAllowlistedHostname(hostname)) return false;
-    if (matchesStaticBlockRule(parsed)) return true;
+    if (matchesStaticBlockedSite(url)) return true;
     // Focus Master 1.2.0 owns fetched-host enforcement in blocker/service.js so
     // manual Blocker rules and TrustedSites can outrank the blunt host fallback.
     return false;
@@ -1706,6 +1707,7 @@ browser.runtime.onMessage.addListener((message, sender) => {
 // ---------------------------------------------------------------------------
 // ChatGPT secondary-browser route closure + native password-page bridge
 // ---------------------------------------------------------------------------
+const BRAVEFOX_CHATGPT_AUTH_KEY = "bravefoxChatGptAuthRequests_v1";
 const BRAVEFOX_CHATGPT_AUTH_TTL_MS = 2 * 60 * 1000;
 const braveFoxChatGptAuthRequests = new Map();
 const braveFoxChatGptTabsClosing = new Set();
@@ -1730,18 +1732,47 @@ function braveFoxChatGptProtectedRouteKey(rawUrl) {
   try {
     const url = new URL(String(rawUrl || ""));
     if (url.protocol !== "https:" || url.hostname.toLowerCase() !== "chatgpt.com") return "";
+    const path = braveFoxNormalizeChatGptPath(url.pathname);
     const hash = decodeURIComponent(url.hash || "").toLowerCase();
-    return hash.startsWith("#settings/personalization") ? "personalization" : "";
+    if (path === "/library/d/6ab47ad73fe88191b5861b9b1f45132a" || path.startsWith("/library/d/6ab47ad73fe88191b5861b9b1f45132a/")) return "library-protected-files";
+    if (hash.startsWith("#settings/personalization")) return "personalization";
+    return "";
   } catch (_) {
     return "";
   }
 }
 
-function braveFoxPruneChatGptAuthRequests() {
+async function braveFoxLoadChatGptAuthRequests() {
+  try {
+    if (browser.storage?.session) {
+      const state = await browser.storage.session.get([BRAVEFOX_CHATGPT_AUTH_KEY]);
+      const requests = state?.[BRAVEFOX_CHATGPT_AUTH_KEY];
+      if (requests && typeof requests === "object") return requests;
+    }
+  } catch (_) {}
+
+  const requests = {};
+  for (const [id, request] of braveFoxChatGptAuthRequests.entries()) requests[id] = request;
+  return requests;
+}
+
+async function braveFoxSaveChatGptAuthRequests(requests) {
+  braveFoxChatGptAuthRequests.clear();
+  for (const [id, request] of Object.entries(requests || {})) braveFoxChatGptAuthRequests.set(id, request);
+
+  try {
+    if (browser.storage?.session) {
+      await browser.storage.session.set({ [BRAVEFOX_CHATGPT_AUTH_KEY]: requests || {} });
+    }
+  } catch (_) {}
+}
+
+function braveFoxPruneChatGptAuthRequests(requests) {
   const now = Date.now();
-  for (const [id, request] of braveFoxChatGptAuthRequests.entries()) {
-    if (!request || Number(request.expiresAt) <= now) braveFoxChatGptAuthRequests.delete(id);
+  for (const [id, request] of Object.entries(requests || {})) {
+    if (!request || Number(request.expiresAt) <= now) delete requests[id];
   }
+  return requests;
 }
 
 function braveFoxIsChatGptPasswordPage(sender, requestId = "") {
@@ -1798,34 +1829,46 @@ browser.runtime.onMessage.addListener((message, sender) => {
   if (!String(message.type || "").startsWith("BRAVEFOX_CHATGPT_AUTH_")) return undefined;
 
   return (async () => {
-    braveFoxPruneChatGptAuthRequests();
     const tabId = sender?.tab?.id;
     if (!Number.isInteger(tabId)) throw new Error("ChatGPT auth tab could not be identified.");
 
     if (message.type === "BRAVEFOX_CHATGPT_AUTH_BEGIN") {
-      const senderUrl = String(sender?.tab?.url || sender?.url || "");
+      const senderUrl = String(sender?.url || sender?.tab?.url || "");
       if (!senderUrl.startsWith("https://chatgpt.com/")) throw new Error("ChatGPT auth request denied.");
 
       const returnUrl = String(message.returnUrl || "").trim();
       const routeKey = braveFoxChatGptProtectedRouteKey(returnUrl);
-      if (routeKey !== "personalization") throw new Error("ChatGPT auth return route is not protected.");
+      if (!routeKey) throw new Error("ChatGPT auth return route is not protected.");
 
       const requestId = String(message.requestId || "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 96);
       if (!requestId) throw new Error("ChatGPT auth request id is missing.");
 
-      const kind = message.kind === "memory-summary" ? "memory-summary" : "protected-route";
+      const kind = ["protected-route", "memory-summary", "plugin-install", "library-file-delete", "library-edit-mode"].includes(message.kind)
+        ? message.kind
+        : "protected-route";
+      const sourcePayload = message.payload && typeof message.payload === "object" ? message.payload : {};
+      const payload = {
+        pluginKey: String(sourcePayload.pluginKey || "").slice(0, 300),
+        fileName: String(sourcePayload.fileName || "").slice(0, 500),
+        href: String(sourcePayload.href || "").slice(0, 1200),
+        rowText: String(sourcePayload.rowText || "").slice(0, 1200)
+      };
       const title = String(message.title || "ChatGPT page is password protected").slice(0, 180);
-      braveFoxChatGptAuthRequests.set(requestId, {
+
+      const requests = braveFoxPruneChatGptAuthRequests(await braveFoxLoadChatGptAuthRequests());
+      requests[requestId] = {
         requestId,
         tabId,
         returnUrl,
         routeKey,
         kind,
+        payload,
         title,
         approved: false,
         createdAt: Date.now(),
         expiresAt: Date.now() + BRAVEFOX_CHATGPT_AUTH_TTL_MS
-      });
+      };
+      await braveFoxSaveChatGptAuthRequests(requests);
 
       const params = new URLSearchParams({
         target: "chatgpt",
@@ -1845,44 +1888,51 @@ browser.runtime.onMessage.addListener((message, sender) => {
         throw new Error("ChatGPT auth approval denied.");
       }
 
-      const request = braveFoxChatGptAuthRequests.get(requestId);
+      const requests = braveFoxPruneChatGptAuthRequests(await braveFoxLoadChatGptAuthRequests());
+      const request = requests[requestId];
       if (!request || request.tabId !== tabId) throw new Error("ChatGPT auth request expired.");
       request.approved = true;
       request.expiresAt = Date.now() + 60 * 1000;
-      braveFoxChatGptAuthRequests.set(requestId, request);
+      requests[requestId] = request;
+      await braveFoxSaveChatGptAuthRequests(requests);
       await browser.tabs.update(tabId, { url: request.returnUrl });
       return { ok: true };
     }
 
     if (message.type === "BRAVEFOX_CHATGPT_AUTH_CONSUME") {
-      const currentUrl = String(sender?.tab?.url || sender?.url || "");
+      const currentUrl = String(sender?.url || sender?.tab?.url || "");
       const routeKey = braveFoxChatGptProtectedRouteKey(currentUrl);
-      if (routeKey !== "personalization") return { ok: true, unlocked: false };
+      if (!routeKey) return { ok: true, unlocked: false };
 
+      const requests = braveFoxPruneChatGptAuthRequests(await braveFoxLoadChatGptAuthRequests());
       let matchId = "";
       let match = null;
-      for (const [id, request] of braveFoxChatGptAuthRequests.entries()) {
+      for (const [id, request] of Object.entries(requests)) {
         if (!request?.approved || request.tabId !== tabId || request.routeKey !== routeKey) continue;
         if (!match || Number(request.createdAt) > Number(match.createdAt)) {
           matchId = id;
           match = request;
         }
       }
-      if (!match) return { ok: true, unlocked: false };
+      if (!match) {
+        await braveFoxSaveChatGptAuthRequests(requests);
+        return { ok: true, unlocked: false };
+      }
 
-      braveFoxChatGptAuthRequests.delete(matchId);
+      delete requests[matchId];
+      await braveFoxSaveChatGptAuthRequests(requests);
       return {
         ok: true,
         unlocked: true,
         routeKey: match.routeKey,
-        kind: match.kind
+        kind: match.kind,
+        payload: match.payload || {}
       };
     }
 
     return { ok: false, error: "Unknown ChatGPT auth message." };
   })().catch(error => ({ ok: false, error: String(error?.message || error) }));
 });
-
 
 // ---------------------------------------------------------------------------
 // Firefox-PC redirect logger bridge for BraveFox Enhancer (BFE) content scripts

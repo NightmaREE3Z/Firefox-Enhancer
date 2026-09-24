@@ -63,6 +63,12 @@
 
   const PERSONALIZATION_PROMPT = 'ChatGPT Personalization settings is locked, enter password to continue';
   const MEMORY_SUMMARY_PROMPT = 'Memory summary is locked, enter password to continue.';
+  const LIBRARY_PROTECTED_FOLDER_ID = '6ab47ad73fe88191b5861b9b1f45132a';
+  const LIBRARY_PROTECTED_FOLDER_NAME = 'Protected Files';
+  const LIBRARY_PROTECTED_FOLDER_PROMPT = 'Protected Files is locked, enter password to continue';
+  const LIBRARY_PROTECTED_FILE_DELETE_PROMPT = 'Deleting a file from Protected Files requires your password';
+  const LIBRARY_PROTECTED_EDIT_MODE_PROMPT = 'Protected Files Edit Mode is locked, enter password to continue';
+  const LIBRARY_EDIT_MODE_CLASS = 'bravefox-protected-library-edit-mode';
 
   const PROTECTED_PATH_ROUTES = [
     { key: 'plugins', path: '/plugins', title: 'ChatGPT Plugins is locked, enter password to continue' },
@@ -142,19 +148,21 @@
   let hiddenChatGptBannerPrefsLoadPromise = null;
 
 
-  // === Thinking-effort Instant lock ==============================================
-  // Regular chat currently exposes three effort stops: Instant / Medium / High
-  // (Välitön / Keskitaso / Korkea). BraveFox leaves Medium and High native, but
-  // blocks the minimum/Instant stop at the interaction boundary.
+  // === Thinking-effort / model-tier edge lock ===================================
+  // ChatGPT can surface Instant on the minimum stop and Pro on the maximum stop
+  // in this slider family. BraveFox blocks those two edge tiers while leaving the
+  // interior choices, including normal Medium/High reasoning effort, untouched.
   const THINKING_EFFORT_SLIDER_SELECTOR = '[role="slider"], input[type="range"]';
   const THINKING_EFFORT_INSTANT_LABELS = new Set(['välitön', 'valiton', 'instant']);
   const THINKING_EFFORT_MEDIUM_LABELS = new Set(['keskitaso', 'medium']);
   const THINKING_EFFORT_HIGH_LABELS = new Set(['korkea', 'high']);
+  const THINKING_EFFORT_PRO_LABELS = new Set(['pro']);
   const THINKING_EFFORT_CONTEXT_TERMS = [
     'päättelypanostus', 'paattelypanostus', 'reasoning effort',
     'ajatteluaika', 'thinking time', 'thinking effort'
   ];
   const THINKING_EFFORT_INSTANT_CUTOFF = 0.25;
+  const THINKING_EFFORT_PRO_CUTOFF = 0.75;
 
   // === Plugins vault ============================================================
   // The supplied + button uses this sprite fragment. A card showing that + is an
@@ -240,6 +248,7 @@
   let routeMaintenanceTimer = 0;
   let activeProtectedRouteKey = null;
   let protectedRouteUnlocked = false;
+  let protectedLibraryEditMode = false;
   let routeAuthCheckInProgress = false;
   let authRedirectRequested = false;
   let pendingApprovedAction = null;
@@ -289,7 +298,7 @@
   void synchronizeRoute();
   installNavigationGuards();
   installInteractionGuards();
-  installThinkingEffortInstantLock();
+  installThinkingEffortEdgeLock();
   installEscapeHatchObserver();
   configureRouteObserver();
   scheduleGeneralUiScan(true);
@@ -856,6 +865,10 @@
       }
 
       const pathname = String(url.pathname || '/').toLowerCase().replace(/\/+$/, '') || '/';
+      const protectedLibraryPath = `/library/d/${LIBRARY_PROTECTED_FOLDER_ID}`;
+      if (pathname === protectedLibraryPath || pathname.startsWith(`${protectedLibraryPath}/`)) {
+        return { key: 'library-protected-files', path: protectedLibraryPath, title: LIBRARY_PROTECTED_FOLDER_PROMPT };
+      }
       for (const route of PROTECTED_PATH_ROUTES) {
         if (pathname === route.path || pathname.startsWith(`${route.path}/`)) return route;
       }
@@ -1063,6 +1076,14 @@
     }
     if (grant.kind === 'plugin-install') {
       resumePluginInstallAfterUnlock(String(grant.payload?.pluginKey || ''));
+      return;
+    }
+    if (grant.kind === 'library-edit-mode') {
+      enableProtectedLibraryEditMode();
+      return;
+    }
+    if (grant.kind === 'library-file-delete') {
+      resumeProtectedLibraryFileDelete(grant.payload || {});
     }
   }
 
@@ -1084,6 +1105,11 @@
       routeAuthCheckInProgress = false;
       authRedirectRequested = false;
       pendingApprovedAction = null;
+
+      if (previousRouteKey === 'library-protected-files' || routeKey !== 'library-protected-files') {
+        protectedLibraryEditMode = false;
+        document.documentElement.classList.remove(LIBRARY_EDIT_MODE_CLASS);
+      }
 
       if (previousRouteKey === 'plugins' && routeKey !== 'plugins') {
         resetPluginCurationState();
@@ -1158,6 +1184,7 @@
   function checkForRouteChange() {
     if (location.href === lastUrl) return false;
     lastUrl = location.href;
+    cleanupProtectedLibraryUiOutsideFolder();
     void synchronizeRoute();
     scheduleGeneralUiScan(true);
     return true;
@@ -1166,6 +1193,7 @@
   function installNavigationGuards() {
     const handleNavigation = () => {
       lastUrl = location.href;
+      cleanupProtectedLibraryUiOutsideFolder();
       void synchronizeRoute();
       scheduleGeneralUiScan(true);
       scheduleSidebarPolishRetries();
@@ -1650,8 +1678,8 @@
     return Boolean(modelSlug && hiddenChatGptBannerModelSlugs.has(modelSlug));
   }
 
-  function installThinkingEffortInstantLock() {
-    const cancelInstantInteraction = event => {
+  function installThinkingEffortEdgeLock() {
+    const cancelBlockedEdgeInteraction = event => {
       try { event.preventDefault(); } catch {}
       try { event.stopPropagation(); } catch {}
       try { event.stopImmediatePropagation(); } catch {}
@@ -1659,8 +1687,13 @@
 
     const scheduleRepair = slider => {
       if (!(slider instanceof Element)) return;
-      queueMicrotask(() => enforceThinkingEffortSliderFloor(slider));
-      window.setTimeout(() => enforceThinkingEffortSliderFloor(slider), 40);
+      queueMicrotask(() => enforceThinkingEffortSliderEdges(slider));
+      window.setTimeout(() => enforceThinkingEffortSliderEdges(slider), 40);
+    };
+
+    const pointerTargetsBlockedEdge = (slider, clientX) => {
+      return thinkingEffortPointerTargetsInstant(slider, clientX) ||
+        thinkingEffortPointerTargetsPro(slider, clientX);
     };
 
     document.addEventListener('pointerdown', event => {
@@ -1670,8 +1703,8 @@
       activeThinkingEffortSlider = slider;
       activeThinkingEffortPointerId = Number.isFinite(event.pointerId) ? event.pointerId : null;
 
-      if (thinkingEffortPointerTargetsInstant(slider, event.clientX)) {
-        cancelInstantInteraction(event);
+      if (pointerTargetsBlockedEdge(slider, event.clientX)) {
+        cancelBlockedEdgeInteraction(event);
         scheduleRepair(slider);
       }
     }, true);
@@ -1680,16 +1713,16 @@
       const slider = activeThinkingEffortSlider;
       if (!slider?.isConnected) return;
       if (activeThinkingEffortPointerId !== null && event.pointerId !== activeThinkingEffortPointerId) return;
-      if (!thinkingEffortPointerTargetsInstant(slider, event.clientX)) return;
+      if (!pointerTargetsBlockedEdge(slider, event.clientX)) return;
 
-      cancelInstantInteraction(event);
+      cancelBlockedEdgeInteraction(event);
       scheduleRepair(slider);
     }, true);
 
     const finishPointerInteraction = event => {
       const slider = activeThinkingEffortSlider;
-      if (slider?.isConnected && Number.isFinite(event.clientX) && thinkingEffortPointerTargetsInstant(slider, event.clientX)) {
-        cancelInstantInteraction(event);
+      if (slider?.isConnected && Number.isFinite(event.clientX) && pointerTargetsBlockedEdge(slider, event.clientX)) {
+        cancelBlockedEdgeInteraction(event);
         scheduleRepair(slider);
       }
       activeThinkingEffortSlider = null;
@@ -1701,24 +1734,24 @@
 
     document.addEventListener('click', event => {
       if (isThinkingEffortTriggerControl(event.target)) {
-        window.setTimeout(() => enforceThinkingEffortFloor(document), 0);
-        window.setTimeout(() => enforceThinkingEffortFloor(document), 60);
-        window.setTimeout(() => enforceThinkingEffortFloor(document), 160);
+        window.setTimeout(() => enforceThinkingEffortEdges(document), 0);
+        window.setTimeout(() => enforceThinkingEffortEdges(document), 60);
+        window.setTimeout(() => enforceThinkingEffortEdges(document), 160);
       }
 
       const slider = findThinkingEffortSliderForEvent(event);
       if (!slider || !Number.isFinite(event.clientX)) return;
-      if (!thinkingEffortPointerTargetsInstant(slider, event.clientX)) return;
+      if (!pointerTargetsBlockedEdge(slider, event.clientX)) return;
 
-      cancelInstantInteraction(event);
+      cancelBlockedEdgeInteraction(event);
       scheduleRepair(slider);
     }, true);
 
     document.addEventListener('keydown', event => {
       if ((event.key === 'Enter' || event.key === ' ') && isThinkingEffortTriggerControl(event.target)) {
-        window.setTimeout(() => enforceThinkingEffortFloor(document), 0);
-        window.setTimeout(() => enforceThinkingEffortFloor(document), 60);
-        window.setTimeout(() => enforceThinkingEffortFloor(document), 160);
+        window.setTimeout(() => enforceThinkingEffortEdges(document), 0);
+        window.setTimeout(() => enforceThinkingEffortEdges(document), 60);
+        window.setTimeout(() => enforceThinkingEffortEdges(document), 160);
       }
 
       const slider = findThinkingEffortSliderForEvent(event);
@@ -1726,14 +1759,30 @@
 
       const key = String(event.key || '');
       if (key === 'Home') {
-        cancelInstantInteraction(event);
+        cancelBlockedEdgeInteraction(event);
+        scheduleRepair(slider);
+        return;
+      }
+
+      if (key === 'End' && sliderHasProTierSignal(slider)) {
+        cancelBlockedEdgeInteraction(event);
         scheduleRepair(slider);
         return;
       }
 
       if (key === 'ArrowLeft' || key === 'ArrowDown' || key === 'PageDown') {
         if (isThinkingEffortAtOrBelowMedium(slider)) {
-          cancelInstantInteraction(event);
+          cancelBlockedEdgeInteraction(event);
+          scheduleRepair(slider);
+          return;
+        }
+        scheduleRepair(slider);
+        return;
+      }
+
+      if (key === 'ArrowRight' || key === 'ArrowUp' || key === 'PageUp') {
+        if (isThinkingEffortAtOrAbovePrePro(slider)) {
+          cancelBlockedEdgeInteraction(event);
           scheduleRepair(slider);
           return;
         }
@@ -1745,7 +1794,9 @@
       document.addEventListener(eventName, event => {
         const slider = findThinkingEffortSliderForEvent(event);
         if (!slider) return;
-        if (eventName !== 'focusin' && isThinkingEffortInstant(slider)) cancelInstantInteraction(event);
+        if (eventName !== 'focusin' && (isThinkingEffortInstant(slider) || isThinkingEffortPro(slider))) {
+          cancelBlockedEdgeInteraction(event);
+        }
         scheduleRepair(slider);
       }, true);
     }
@@ -1785,6 +1836,7 @@
       if (THINKING_EFFORT_INSTANT_LABELS.has(normalized)) return 'instant';
       if (THINKING_EFFORT_MEDIUM_LABELS.has(normalized)) return 'medium';
       if (THINKING_EFFORT_HIGH_LABELS.has(normalized)) return 'high';
+      if (THINKING_EFFORT_PRO_LABELS.has(normalized)) return 'pro';
     }
 
     let node = slider.parentElement;
@@ -1795,6 +1847,7 @@
       if (words.some(word => THINKING_EFFORT_INSTANT_LABELS.has(word))) return 'instant';
       if (words.some(word => THINKING_EFFORT_MEDIUM_LABELS.has(word))) return 'medium';
       if (words.some(word => THINKING_EFFORT_HIGH_LABELS.has(word))) return 'high';
+      if (words.some(word => THINKING_EFFORT_PRO_LABELS.has(word))) return 'pro';
     }
 
     return '';
@@ -1861,11 +1914,35 @@
     return { min, max, now, medium: min + ((max - min) / 2) };
   }
 
+  function getThinkingEffortInputStep(slider, range) {
+    if (!(slider instanceof HTMLInputElement) || slider.type !== 'range' || !range) return NaN;
+    const raw = String(slider.step || '').trim().toLowerCase();
+    if (raw && raw !== 'any') {
+      const value = Number(raw);
+      if (Number.isFinite(value) && value > 0) return value;
+    }
+    return 1;
+  }
+
   function isThinkingEffortInstant(slider) {
     if (!isThinkingEffortSlider(slider)) return false;
+    const label = getThinkingEffortLabel(slider);
+    if (label === 'instant') return true;
+    if (label === 'medium' || label === 'high' || label === 'pro') return false;
     const range = readThinkingEffortRange(slider);
     if (range) return range.now <= range.min + ((range.max - range.min) * 0.125);
-    return getThinkingEffortLabel(slider) === 'instant';
+    return false;
+  }
+
+  function isThinkingEffortPro(slider) {
+    if (!isThinkingEffortSlider(slider)) return false;
+    const label = getThinkingEffortLabel(slider);
+    if (label === 'pro') return true;
+    if (label === 'instant' || label === 'medium' || label === 'high') return false;
+    if (!sliderHasProTierSignal(slider)) return false;
+    const range = readThinkingEffortRange(slider);
+    if (range) return range.now >= range.max - ((range.max - range.min) * 0.125);
+    return false;
   }
 
   function isThinkingEffortAtOrBelowMedium(slider) {
@@ -1874,6 +1951,65 @@
     if (range) return range.now <= range.medium + ((range.max - range.min) * 0.08);
     const label = getThinkingEffortLabel(slider);
     return label === 'instant' || label === 'medium';
+  }
+
+  function isThinkingEffortAtOrAbovePrePro(slider) {
+    if (!isThinkingEffortSlider(slider) || !sliderHasProTierSignal(slider)) return false;
+    const range = readThinkingEffortRange(slider);
+    if (range) {
+      const step = getThinkingEffortInputStep(slider, range);
+      if (Number.isFinite(step) && step > 0) return range.now >= range.max - step - 1e-9;
+      return range.now >= range.max - ((range.max - range.min) * 0.34);
+    }
+    return isThinkingEffortPro(slider);
+  }
+
+  function sliderHasProTierSignal(slider) {
+    if (!(slider instanceof Element)) return false;
+
+    const ownValues = [
+      slider.getAttribute('aria-valuetext'),
+      slider.getAttribute('aria-label'),
+      slider.getAttribute('title'),
+      slider.getAttribute('name')
+    ];
+    for (const value of ownValues) {
+      const words = normalizeText(value).split(/[^a-z0-9äöå]+/).filter(Boolean);
+      if (words.some(word => THINKING_EFFORT_PRO_LABELS.has(word))) return true;
+    }
+
+    let node = slider.parentElement;
+    for (let depth = 0; node && depth < 6; depth += 1, node = node.parentElement) {
+      const context = normalizeText(node.textContent);
+      if (context && context.length <= 240) {
+        const words = context.split(/[^a-z0-9äöå]+/).filter(Boolean);
+        if (words.some(word => THINKING_EFFORT_PRO_LABELS.has(word))) return true;
+      }
+
+      if (typeof node.querySelectorAll === 'function') {
+        for (const element of node.querySelectorAll('[aria-label], [title]')) {
+          const words = normalizeText([
+            element.getAttribute('aria-label') || '',
+            element.getAttribute('title') || ''
+          ].join(' ')).split(/[^a-z0-9äöå]+/).filter(Boolean);
+          if (words.some(word => THINKING_EFFORT_PRO_LABELS.has(word))) return true;
+        }
+      }
+    }
+
+    const range = readThinkingEffortRange(slider);
+    if (!range) return false;
+
+    if (slider instanceof HTMLInputElement && slider.type === 'range') {
+      const step = getThinkingEffortInputStep(slider, range);
+      if (Number.isFinite(step) && step > 0) {
+        const stops = Math.round((range.max - range.min) / step) + 1;
+        if (stops >= 4 && stops <= 8) return true;
+      }
+    }
+
+    const span = range.max - range.min;
+    return Number.isInteger(range.min) && Number.isInteger(range.max) && span >= 3 && span <= 7;
   }
 
   function getThinkingEffortInteractionRect(slider) {
@@ -1896,6 +2032,14 @@
     if (!rect || rect.width <= 0) return false;
     const fraction = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
     return fraction <= THINKING_EFFORT_INSTANT_CUTOFF;
+  }
+
+  function thinkingEffortPointerTargetsPro(slider, clientX) {
+    if (!isThinkingEffortSlider(slider) || !sliderHasProTierSignal(slider) || !Number.isFinite(clientX)) return false;
+    const rect = getThinkingEffortInteractionRect(slider);
+    if (!rect || rect.width <= 0) return false;
+    const fraction = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    return fraction >= THINKING_EFFORT_PRO_CUTOFF;
   }
 
   function enforceThinkingEffortSliderFloor(slider) {
@@ -1928,11 +2072,50 @@
     }
   }
 
-  function enforceThinkingEffortFloor(scope = document) {
-    for (const slider of getThinkingEffortSliderCandidates(scope)) {
-      if (isThinkingEffortSlider(slider) && isThinkingEffortInstant(slider)) {
-        enforceThinkingEffortSliderFloor(slider);
+  function enforceThinkingEffortSliderCeiling(slider) {
+    if (!slider?.isConnected || !isThinkingEffortSlider(slider) || !isThinkingEffortPro(slider)) return false;
+    if (thinkingEffortRepairing.has(slider)) return true;
+
+    thinkingEffortRepairing.add(slider);
+    try {
+      if (slider instanceof HTMLInputElement && slider.type === 'range') {
+        const range = readThinkingEffortRange(slider);
+        if (!range) return false;
+        const step = getThinkingEffortInputStep(slider, range);
+        const previousValue = Number.isFinite(step) && step > 0
+          ? Math.max(range.min, range.max - step)
+          : range.medium;
+        const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+        if (valueSetter) valueSetter.call(slider, String(previousValue));
+        else slider.value = String(previousValue);
+        slider.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+        slider.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+        return true;
       }
+
+      try { slider.focus({ preventScroll: true }); } catch { try { slider.focus(); } catch {} }
+      slider.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 'ArrowLeft', code: 'ArrowLeft', bubbles: true, cancelable: true
+      }));
+      slider.dispatchEvent(new KeyboardEvent('keyup', {
+        key: 'ArrowLeft', code: 'ArrowLeft', bubbles: true, cancelable: true
+      }));
+      return true;
+    } finally {
+      window.setTimeout(() => thinkingEffortRepairing.delete(slider), 80);
+    }
+  }
+
+  function enforceThinkingEffortSliderEdges(slider) {
+    if (!slider?.isConnected || !isThinkingEffortSlider(slider)) return false;
+    if (isThinkingEffortInstant(slider)) return enforceThinkingEffortSliderFloor(slider);
+    if (isThinkingEffortPro(slider)) return enforceThinkingEffortSliderCeiling(slider);
+    return false;
+  }
+
+  function enforceThinkingEffortEdges(scope = document) {
+    for (const slider of getThinkingEffortSliderCandidates(scope)) {
+      enforceThinkingEffortSliderEdges(slider);
     }
   }
 
@@ -3827,7 +4010,7 @@
     replaceCustomizableChatGptBannerText(scope);
     polishSidebarNavigation();
     removePluginFeaturedPromo(scope);
-    enforceThinkingEffortFloor(scope);
+    enforceThinkingEffortEdges(scope);
     forEachMatch(scope, 'div[role="menuitem"]', item => {
       const firstLine = normalizeText(String(item.textContent || '').split('\n')[0]);
       if (MODELS_TO_REMOVE.has(firstLine)) item.remove();
@@ -3853,6 +4036,1266 @@
       if (matches) hideElement(element);
     });
   }
+
+
+  // === Library protected-folder guard ==========================================
+  // "Protected Files" is a hard exclusion from Library selection. The native
+  // checkbox stays technically operable so this script can undo React's bulk
+  // "Select all" state, while human pointer/keyboard interaction is blocked in
+  // capture phase. Items inside the folder cannot be bulk-selected. In Safe Mode,
+  // each file's native three-dot menu exposes only "Discuss this". A separate
+  // OpenIV-style Edit Mode requires a fresh password and temporarily restores the
+  // full native per-file menu until the user exits the folder, reloads, or locks it.
+  const LIBRARY_CHECKABLE_SELECTOR = 'input[type="checkbox"], [role="checkbox"], [aria-checked="true"], [aria-checked="false"]';
+  const LIBRARY_SELECT_ALL_LABELS = new Set(['select all', 'valitse kaikki']);
+  const LIBRARY_DELETE_LABELS = new Set(['delete', 'remove', 'poista']);
+  const LIBRARY_DISCUSS_LABELS = new Set([
+    'keskustele tästä',
+    'keskustele tasta',
+    'discuss this',
+    'chat about this'
+  ]);
+  const LIBRARY_GUARD_ATTR = 'data-bravefox-library-protected';
+  const LIBRARY_GUARD_STYLE_ID = 'bravefox-library-protected-style';
+  const LIBRARY_MENU_HIDDEN_ATTR = 'data-bravefox-protected-menu-hidden';
+  const LIBRARY_MENU_READY_ATTR = 'data-bravefox-protected-menu-ready';
+  const LIBRARY_FOLDER_MENU_HIDDEN_ATTR = 'data-bravefox-protected-folder-menu-hidden';
+  const LIBRARY_MENU_OPENING_CLASS = 'bravefox-protected-menu-opening';
+  const LIBRARY_EDIT_MODE_BUTTON_ID = 'bravefox-protected-library-edit-mode-button';
+  const LIBRARY_EDIT_MODE_BUTTON_ATTR = 'data-bravefox-edit-mode-active';
+
+  let libraryGuardObserver = null;
+  let libraryGuardTimer = 0;
+  let libraryGuardBypassDepth = 0;
+  let libraryDeleteReplayDepth = 0;
+  let protectedLibraryLastMenuIdentity = null;
+  let libraryGuardLastHref = location.href;
+
+  function isChatGptLibraryLocation() {
+    return location.pathname.toLowerCase().startsWith('/library');
+  }
+
+  function normalizedLibraryLabel(element) {
+    if (!(element instanceof Element)) return '';
+    return normalizeText(
+      element.getAttribute('aria-label') ||
+      element.getAttribute('title') ||
+      element.textContent ||
+      ''
+    );
+  }
+
+  function hasExactProtectedFolderText(root) {
+    if (!(root instanceof Element)) return false;
+    const wanted = normalizeText(LIBRARY_PROTECTED_FOLDER_NAME);
+    if (root.children.length === 0 && normalizeText(root.textContent) === wanted) return true;
+    for (const element of root.querySelectorAll('span, div, p, strong, a, button')) {
+      if (element.children.length !== 0) continue;
+      if (normalizeText(element.textContent) === wanted) return true;
+    }
+    return false;
+  }
+
+  function elementMentionsProtectedFolderId(root) {
+    if (!(root instanceof Element)) return false;
+    if (String(root.getAttribute('href') || '').includes(LIBRARY_PROTECTED_FOLDER_ID)) return true;
+    return !!root.querySelector(`a[href*="${LIBRARY_PROTECTED_FOLDER_ID}"]`);
+  }
+
+  function findLibraryItemContainer(control) {
+    if (!(control instanceof Element)) return null;
+
+    let element = control;
+    for (let depth = 0; depth < 9 && element; depth += 1, element = element.parentElement) {
+      if (!(element instanceof Element)) break;
+
+      const semanticItem = element.matches(
+        'tr, li, article, [role="row"], [data-testid*="library-item"], [data-testid*="file"], [data-testid*="folder"]'
+      );
+      const checkboxCount = element.querySelectorAll(LIBRARY_CHECKABLE_SELECTOR).length;
+      const protectedIdentity = hasExactProtectedFolderText(element) || elementMentionsProtectedFolderId(element);
+
+      if (semanticItem && checkboxCount <= 4) return element;
+      if (protectedIdentity && checkboxCount > 0 && checkboxCount <= 4) return element;
+    }
+    return null;
+  }
+
+  function isLibrarySelectAllControl(control) {
+    if (!(control instanceof Element)) return false;
+    const candidates = [control, control.closest('label'), control.closest('button')].filter(Boolean);
+    for (const candidate of candidates) {
+      if (LIBRARY_SELECT_ALL_LABELS.has(normalizedLibraryLabel(candidate))) return true;
+    }
+    return false;
+  }
+
+  function isInsideProtectedLibraryFolder() {
+    if (!isChatGptLibraryLocation()) return false;
+    if (location.href.includes(LIBRARY_PROTECTED_FOLDER_ID)) return true;
+
+    // Fallback for route shapes that do not expose the folder id in the URL.
+    for (const element of document.querySelectorAll('h1, h2, [aria-current="page"], nav [aria-current], [data-testid*="breadcrumb"]')) {
+      if (normalizeText(element.textContent) === normalizeText(LIBRARY_PROTECTED_FOLDER_NAME)) return true;
+    }
+    return false;
+  }
+
+  function findProtectedLibraryTitleElement() {
+    if (!isInsideProtectedLibraryFolder()) return null;
+    const wanted = normalizeText(LIBRARY_PROTECTED_FOLDER_NAME);
+    const selectors = 'h1, h2, h3, [aria-current="page"], [data-testid*="breadcrumb"], nav span, nav div, span, strong';
+    for (const element of document.querySelectorAll(selectors)) {
+      if (!(element instanceof HTMLElement)) continue;
+      if (element.children.length !== 0) continue;
+      if (normalizeText(element.textContent) !== wanted) continue;
+      const rect = element.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) continue;
+      return element;
+    }
+    return null;
+  }
+
+  function updateProtectedLibraryEditModeButton() {
+    const button = document.getElementById(LIBRARY_EDIT_MODE_BUTTON_ID);
+    if (!(button instanceof HTMLButtonElement)) return;
+    const active = !!protectedLibraryEditMode;
+    button.setAttribute('aria-pressed', active ? 'true' : 'false');
+    button.setAttribute(LIBRARY_EDIT_MODE_BUTTON_ATTR, active ? 'true' : 'false');
+    button.textContent = active ? 'Read only mode' : 'Edit mode';
+    button.title = active
+      ? 'Return Protected Files to read-only mode'
+      : 'Enter password to enable editing';
+  }
+
+  function setProtectedLibraryEditMode(active) {
+    const next = !!active && isInsideProtectedLibraryFolder() && protectedRouteUnlocked;
+    protectedLibraryEditMode = next;
+    document.documentElement.classList.toggle(LIBRARY_EDIT_MODE_CLASS, next);
+    document.documentElement.classList.remove(LIBRARY_MENU_OPENING_CLASS);
+
+    // Undo any Safe-Mode menu pruning immediately when Edit Mode turns on.
+    if (next) {
+      for (const action of document.querySelectorAll(`[${LIBRARY_MENU_HIDDEN_ATTR}="true"]`)) {
+        action.removeAttribute(LIBRARY_MENU_HIDDEN_ATTR);
+      }
+      for (const root of document.querySelectorAll(`[${LIBRARY_MENU_READY_ATTR}="true"]`)) {
+        root.removeAttribute(LIBRARY_MENU_READY_ATTR);
+      }
+    }
+
+    updateProtectedLibraryEditModeButton();
+    scheduleProtectedLibraryReconcileBurst();
+  }
+
+  function enableProtectedLibraryEditMode() {
+    if (!isInsideProtectedLibraryFolder() || !protectedRouteUnlocked) return;
+    setProtectedLibraryEditMode(true);
+  }
+
+  function disableProtectedLibraryEditMode() {
+    setProtectedLibraryEditMode(false);
+  }
+
+  async function requestProtectedLibraryEditMode() {
+    if (!isInsideProtectedLibraryFolder() || !protectedRouteUnlocked) return;
+    if (protectedLibraryEditMode) {
+      disableProtectedLibraryEditMode();
+      return;
+    }
+
+    await beginNativePasswordFlow({
+      kind: 'library-edit-mode',
+      routeKey: 'library-protected-files',
+      title: LIBRARY_PROTECTED_EDIT_MODE_PROMPT,
+      returnUrl: location.href,
+      payload: {}
+    });
+  }
+
+  function positionProtectedLibraryEditModeButton(button, title) {
+    if (!(button instanceof HTMLButtonElement) || !(title instanceof HTMLElement)) return;
+    const rect = title.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+
+    const buttonRect = button.getBoundingClientRect();
+    const buttonHeight = buttonRect.height > 0 ? buttonRect.height : 32;
+    const viewportWidth = Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0);
+    const left = Math.min(Math.max(8, rect.right + 12), Math.max(8, viewportWidth - Math.max(buttonRect.width, 96) - 12));
+    const top = Math.max(8, rect.top + ((rect.height - buttonHeight) / 2));
+
+    button.style.left = `${Math.round(left)}px`;
+    button.style.top = `${Math.round(top)}px`;
+  }
+
+  function clearProtectedLibraryTransientUi() {
+    const button = document.getElementById(LIBRARY_EDIT_MODE_BUTTON_ID);
+    if (button) button.remove();
+
+    protectedLibraryEditMode = false;
+    protectedLibraryLastMenuIdentity = null;
+    document.documentElement.classList.remove(LIBRARY_EDIT_MODE_CLASS);
+    document.documentElement.classList.remove(LIBRARY_MENU_OPENING_CLASS);
+
+    // A Radix/portal file menu can briefly outlive the Library route that created it.
+    // Remove only transient per-file pruning markers here. The root Protected Files
+    // folder-menu marker is a separate permanent guard and must survive this cleanup.
+    for (const element of document.querySelectorAll(
+      `[${LIBRARY_MENU_HIDDEN_ATTR}], [${LIBRARY_MENU_READY_ATTR}]`
+    )) {
+      element.removeAttribute(LIBRARY_MENU_HIDDEN_ATTR);
+      element.removeAttribute(LIBRARY_MENU_READY_ATTR);
+    }
+  }
+
+  function cleanupProtectedLibraryUiOutsideFolder() {
+    if (isInsideProtectedLibraryFolder()) return false;
+    clearProtectedLibraryTransientUi();
+    return true;
+  }
+
+  function ensureProtectedLibraryEditModeButton() {
+    let button = document.getElementById(LIBRARY_EDIT_MODE_BUTTON_ID);
+    if (!isInsideProtectedLibraryFolder() || !protectedRouteUnlocked) {
+      clearProtectedLibraryTransientUi();
+      return;
+    }
+
+    const title = findProtectedLibraryTitleElement();
+    if (!title) {
+      if (button) button.style.visibility = 'hidden';
+      return;
+    }
+
+    if (!(button instanceof HTMLButtonElement) || !button.isConnected) {
+      button = document.createElement('button');
+      button.id = LIBRARY_EDIT_MODE_BUTTON_ID;
+      button.type = 'button';
+      button.className = 'bravefox-protected-library-edit-mode-button';
+      button.addEventListener('click', event => {
+        event.preventDefault();
+        event.stopPropagation();
+        void requestProtectedLibraryEditMode();
+      });
+
+      // Keep our control outside ChatGPT's React-owned tree. Injecting custom
+      // siblings into the breadcrumb can make the Library remount into skeletons.
+      (document.body || document.documentElement).appendChild(button);
+    }
+
+    updateProtectedLibraryEditModeButton();
+    button.style.visibility = 'visible';
+    positionProtectedLibraryEditModeButton(button, title);
+  }
+
+  function isProtectedLibraryControl(control) {
+    if (!(control instanceof Element) || !isChatGptLibraryLocation()) return false;
+    if (isLibrarySelectAllControl(control)) return false;
+
+    if (isInsideProtectedLibraryFolder()) return true;
+
+    const item = findLibraryItemContainer(control);
+    if (!item) return false;
+    return hasExactProtectedFolderText(item) || elementMentionsProtectedFolderId(item);
+  }
+
+  function libraryControlIsChecked(control) {
+    if (!(control instanceof Element)) return false;
+    if (control instanceof HTMLInputElement && control.type === 'checkbox') return control.checked;
+    if (normalizeText(control.getAttribute('aria-checked')) === 'true') return true;
+    if (normalizeText(control.getAttribute('data-state')) === 'checked') return true;
+    return false;
+  }
+
+  function markProtectedLibraryControl(control) {
+    if (!(control instanceof Element)) return;
+    control.setAttribute(LIBRARY_GUARD_ATTR, 'true');
+    control.setAttribute('data-bravefox-library-protected-title', 'Protected from Library deletion');
+  }
+
+  function clearProtectedLibraryControlMark(control) {
+    if (!(control instanceof Element)) return;
+    if (control.getAttribute(LIBRARY_GUARD_ATTR) !== 'true') return;
+    control.removeAttribute(LIBRARY_GUARD_ATTR);
+    control.removeAttribute('data-bravefox-library-protected-title');
+  }
+
+  function uncheckProtectedLibraryControl(control) {
+    if (!(control instanceof HTMLElement) || !libraryControlIsChecked(control)) return false;
+
+    libraryGuardBypassDepth += 1;
+    try {
+      // Use the site's own click handler so React's selection state is updated too.
+      control.click();
+    } catch {
+      return false;
+    } finally {
+      libraryGuardBypassDepth -= 1;
+    }
+    return true;
+  }
+
+  function getLibraryCheckableControls() {
+    return Array.from(document.querySelectorAll(LIBRARY_CHECKABLE_SELECTOR)).filter(element => element instanceof Element);
+  }
+
+
+  // === Library tab cleanup ======================================================
+  // The native "All" tab is kept native and moved into the first slot. The
+  // otherwise-unused Recommended tab is repurposed as a real Recently Deleted
+  // shortcut, preserving the native Library layout without inventing a fake bin.
+  const LIBRARY_RECOMMENDED_TAB_LABELS = new Set(['suositellut', 'recommended']);
+  const LIBRARY_ALL_TAB_LABELS = new Set(['kaikki', 'all']);
+  const LIBRARY_TAB_CONTEXT_LABELS = new Set([
+    'suositellut', 'recommended',
+    'suosikit', 'favorites',
+    'kansiot', 'folders',
+    'kuvat', 'images',
+    'kaikki', 'all'
+  ]);
+  const LIBRARY_TRASH_TAB_ATTR = 'data-bravefox-library-trash-tab';
+  const LIBRARY_ALL_TAB_ATTR = 'data-bravefox-library-all-tab';
+  const LIBRARY_TRASH_VIEW_CLASS = 'bravefox-library-trash-view';
+  let libraryDefaultAllNavigationHref = '';
+
+  function getLibraryTabControlLabel(control) {
+    if (!(control instanceof Element)) return '';
+    return normalizeText(control.textContent || control.getAttribute('aria-label') || '');
+  }
+
+  function countKnownLibraryTabs(root) {
+    if (!(root instanceof Element)) return 0;
+    const found = new Set();
+    for (const control of root.querySelectorAll('a, button, [role="tab"]')) {
+      const label = getLibraryTabControlLabel(control);
+      if (LIBRARY_TAB_CONTEXT_LABELS.has(label)) found.add(label);
+    }
+    return found.size;
+  }
+
+  function findLibraryTabStrip() {
+    const controls = Array.from(document.querySelectorAll('a, button, [role="tab"]'));
+    for (const control of controls) {
+      if (!LIBRARY_ALL_TAB_LABELS.has(getLibraryTabControlLabel(control))) continue;
+      let node = control.parentElement;
+      for (let depth = 0; node && depth < 6; depth += 1, node = node.parentElement) {
+        if (countKnownLibraryTabs(node) >= 4) return node;
+      }
+    }
+    return null;
+  }
+
+  function findLibraryTabControl(root, labels) {
+    if (!(root instanceof Element)) return null;
+    for (const control of root.querySelectorAll('a, button, [role="tab"]')) {
+      if (labels.has(getLibraryTabControlLabel(control))) return control;
+    }
+    return null;
+  }
+
+  function directChildWithin(root, element) {
+    if (!(root instanceof Element) || !(element instanceof Element)) return null;
+    let node = element;
+    while (node.parentElement && node.parentElement !== root) node = node.parentElement;
+    return node.parentElement === root ? node : element;
+  }
+
+  function setLibraryTabText(control, text) {
+    if (!(control instanceof Element)) return;
+    const leaves = Array.from(control.querySelectorAll('span, div, p')).filter(element => element.children.length === 0);
+    const target = leaves.find(element => LIBRARY_RECOMMENDED_TAB_LABELS.has(normalizeText(element.textContent)));
+    if (target) target.textContent = text;
+    else control.textContent = text;
+  }
+
+  function currentLibraryIsTrashView() {
+    if (location.pathname.replace(/\/+$/, '').toLowerCase() !== '/library') return false;
+    try {
+      return new URL(location.href).searchParams.get('deleted') === 'true';
+    } catch {
+      return false;
+    }
+  }
+
+  function shouldDefaultLibraryToAll() {
+    if (location.pathname.replace(/\/+$/, '').toLowerCase() !== '/library') return false;
+    let url;
+    try {
+      url = new URL(location.href);
+    } catch {
+      return false;
+    }
+    if (url.searchParams.get('deleted') === 'true') return false;
+    const tab = normalizeText(url.searchParams.get('tab'));
+    return !tab || tab === 'recommended';
+  }
+
+  function reconcileLibraryTabs() {
+    if (location.pathname.replace(/\/+$/, '').toLowerCase() !== '/library') {
+      document.documentElement.classList.remove(LIBRARY_TRASH_VIEW_CLASS);
+      return;
+    }
+
+    const strip = findLibraryTabStrip();
+    if (!strip) return;
+
+    const allControl = findLibraryTabControl(strip, LIBRARY_ALL_TAB_LABELS);
+    let recommendedControl = strip.querySelector(`[${LIBRARY_TRASH_TAB_ATTR}="true"]`);
+    if (!recommendedControl) recommendedControl = findLibraryTabControl(strip, LIBRARY_RECOMMENDED_TAB_LABELS);
+    if (!(allControl instanceof Element) || !(recommendedControl instanceof Element)) return;
+
+    allControl.setAttribute(LIBRARY_ALL_TAB_ATTR, 'true');
+    recommendedControl.setAttribute(LIBRARY_TRASH_TAB_ATTR, 'true');
+    setLibraryTabText(recommendedControl, 'Roskakori');
+
+    if (recommendedControl instanceof HTMLAnchorElement) {
+      recommendedControl.href = new URL('/library?deleted=true', location.origin).href;
+    } else {
+      recommendedControl.setAttribute('data-bravefox-library-trash-href', '/library?deleted=true');
+    }
+
+    const allNode = directChildWithin(strip, allControl);
+    const trashNode = directChildWithin(strip, recommendedControl);
+    if (allNode && trashNode) {
+      if (strip.firstElementChild !== allNode) strip.insertBefore(allNode, strip.firstElementChild);
+      if (strip.lastElementChild !== trashNode) strip.appendChild(trashNode);
+    }
+
+    const trashView = currentLibraryIsTrashView();
+    document.documentElement.classList.toggle(LIBRARY_TRASH_VIEW_CLASS, trashView);
+    recommendedControl.classList.toggle('bravefox-library-trash-tab-active', trashView);
+    if (trashView) {
+      recommendedControl.setAttribute('aria-current', 'page');
+      recommendedControl.setAttribute('aria-selected', 'true');
+      recommendedControl.setAttribute('data-state', 'active');
+      allControl.removeAttribute('aria-current');
+      allControl.setAttribute('aria-selected', 'false');
+      if (allControl.getAttribute('data-state') === 'active') allControl.setAttribute('data-state', 'inactive');
+    } else {
+      if (recommendedControl.getAttribute('aria-current') === 'page') recommendedControl.removeAttribute('aria-current');
+      recommendedControl.setAttribute('aria-selected', 'false');
+      if (recommendedControl.getAttribute('data-state') === 'active') recommendedControl.setAttribute('data-state', 'inactive');
+    }
+
+    // Opening Library itself used to land on Recommended. Once the native All tab
+    // exists, ask ChatGPT's own tab control to switch to All so its router/state stay
+    // authoritative. A full navigation fallback covers layouts where .click() is ignored.
+    if (shouldDefaultLibraryToAll() && libraryDefaultAllNavigationHref !== location.href) {
+      libraryDefaultAllNavigationHref = location.href;
+      const before = location.href;
+      try {
+        allControl.click();
+      } catch {
+        // Fall through to the navigation fallback below.
+      }
+      window.setTimeout(() => {
+        if (location.href !== before || !shouldDefaultLibraryToAll()) return;
+        location.replace(new URL('/library?tab=all', location.origin).href);
+      }, 120);
+    }
+  }
+
+  function handleLibraryTrashTabNavigation(event) {
+    if (!(event.target instanceof Element)) return;
+    const control = event.target.closest(`[${LIBRARY_TRASH_TAB_ATTR}="true"]`);
+    if (!control) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+    const target = new URL('/library?deleted=true', location.origin).href;
+    if (location.href !== target) location.assign(target);
+  }
+
+  function reconcileProtectedLibrarySelection() {
+    libraryGuardTimer = 0;
+
+    // The Edit Mode button lives outside ChatGPT's React tree so it cannot disturb
+    // Library rendering. That also means React will never remove it for us. Always
+    // perform route teardown before the early non-Library return.
+    cleanupProtectedLibraryUiOutsideFolder();
+    if (!isChatGptLibraryLocation()) return;
+
+    reconcileLibraryTabs();
+
+    let changed = false;
+    for (const control of getLibraryCheckableControls()) {
+      if (isProtectedLibraryControl(control)) {
+        markProtectedLibraryControl(control);
+        if (libraryControlIsChecked(control)) changed = uncheckProtectedLibraryControl(control) || changed;
+      } else {
+        clearProtectedLibraryControlMark(control);
+      }
+    }
+
+    hideProtectedLibraryFolderMenuTriggers();
+    ensureProtectedLibraryEditModeButton();
+    pruneProtectedLibraryFileMenus();
+    if (changed) scheduleProtectedLibraryReconcileBurst();
+  }
+
+  function scheduleProtectedLibraryReconcile(delay = 0) {
+    // Throttle instead of debounce. React can mutate the Library continuously while
+    // loading skeleton rows; repeatedly cancelling this timer can starve the page.
+    if (libraryGuardTimer) return;
+    libraryGuardTimer = window.setTimeout(reconcileProtectedLibrarySelection, delay);
+  }
+
+  function scheduleProtectedLibraryReconcileBurst() {
+    for (const delay of [0, 16, 50, 120, 250, 500, 900]) {
+      window.setTimeout(reconcileProtectedLibrarySelection, delay);
+    }
+  }
+
+  function protectedLibrarySelectionExists() {
+    if (!isChatGptLibraryLocation()) return false;
+    for (const control of getLibraryCheckableControls()) {
+      if (isProtectedLibraryControl(control) && libraryControlIsChecked(control)) return true;
+    }
+    return false;
+  }
+
+  function findCheckableFromEventTarget(target) {
+    if (!(target instanceof Element)) return null;
+    if (target.matches(LIBRARY_CHECKABLE_SELECTOR)) return target;
+    return target.closest(LIBRARY_CHECKABLE_SELECTOR);
+  }
+
+  function isLibraryDeleteAction(target) {
+    if (!(target instanceof Element) || !isChatGptLibraryLocation()) return false;
+    const action = target.closest('button, [role="button"], [role="menuitem"]');
+    if (!action) return false;
+
+    const label = normalizedLibraryLabel(action);
+    if (LIBRARY_DELETE_LABELS.has(label)) return true;
+    for (const word of LIBRARY_DELETE_LABELS) {
+      if (label === word || label.startsWith(`${word} `)) return true;
+    }
+    return false;
+  }
+
+  function getLibraryItemLeafTexts(item) {
+    if (!(item instanceof Element)) return [];
+    const values = [];
+    const seen = new Set();
+    for (const element of item.querySelectorAll('a, span, p, strong, div')) {
+      if (element.children.length !== 0) continue;
+      const raw = String(element.textContent || '').replace(/\s+/g, ' ').trim();
+      const normalized = normalizeText(raw);
+      if (!raw || !normalized || seen.has(normalized)) continue;
+      seen.add(normalized);
+      values.push({ raw, normalized });
+    }
+    return values;
+  }
+
+  function looksLikeLibraryMetadataText(value) {
+    const text = String(value || '').trim();
+    if (!text) return true;
+    if (/^[.·•…⋯]+$/.test(text)) return true;
+    if (/^\d{1,2}[.:]\d{2}(?::\d{2})?$/.test(text)) return true;
+    if (/^\d+(?:[.,]\d+)?\s*(?:b|kb|mb|gb|tb|kt|mt|gt|tt)$/i.test(text)) return true;
+    if (/^\d+(?:[.,]\d+)?$/.test(text)) return true;
+    return false;
+  }
+
+  function getProtectedLibraryItemIdentity(item) {
+    if (!(item instanceof Element)) return null;
+
+    let href = '';
+    for (const anchor of item.querySelectorAll('a[href]')) {
+      try {
+        const resolved = new URL(anchor.getAttribute('href'), location.href);
+        if (resolved.origin !== location.origin) continue;
+        href = resolved.href;
+        if (resolved.pathname.toLowerCase().startsWith('/library')) break;
+      } catch {
+        // Ignore malformed hrefs and keep the text identity fallback.
+      }
+    }
+
+    const leafTexts = getLibraryItemLeafTexts(item);
+    const fileNameCandidate = leafTexts.find(({ raw, normalized }) =>
+      raw.length <= 500 &&
+      !looksLikeLibraryMetadataText(raw) &&
+      !LIBRARY_DELETE_LABELS.has(normalized) &&
+      !LIBRARY_SELECT_ALL_LABELS.has(normalized)
+    );
+
+    const fileName = String(fileNameCandidate?.raw || '').slice(0, 500);
+    const rowText = String(item.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 1200);
+    if (!fileName && !href && !rowText) return null;
+
+    return { fileName, href: String(href || '').slice(0, 1200), rowText };
+  }
+
+  function libraryItemMatchesIdentity(item, identity) {
+    if (!(item instanceof Element) || !identity || typeof identity !== 'object') return false;
+
+    const wantedHref = String(identity.href || '').trim();
+    if (wantedHref) {
+      for (const anchor of item.querySelectorAll('a[href]')) {
+        try {
+          if (new URL(anchor.getAttribute('href'), location.href).href === wantedHref) return true;
+        } catch {
+          // Keep trying text identity below.
+        }
+      }
+    }
+
+    const wantedName = normalizeText(identity.fileName || '');
+    if (wantedName) {
+      for (const candidate of getLibraryItemLeafTexts(item)) {
+        if (candidate.normalized === wantedName) return true;
+      }
+    }
+
+    const wantedRowText = normalizeText(identity.rowText || '');
+    return !!wantedRowText && normalizeText(item.textContent) === wantedRowText;
+  }
+
+  function findProtectedLibraryItemContainer(element) {
+    if (!(element instanceof Element)) return null;
+
+    const semanticItem = findLibraryItemContainer(element);
+    if (semanticItem) return semanticItem;
+    if (!isInsideProtectedLibraryFolder()) return null;
+
+    let current = element;
+    for (let depth = 0; depth < 10 && current; depth += 1, current = current.parentElement) {
+      if (!(current instanceof Element)) break;
+      const checkboxCount = current.querySelectorAll(LIBRARY_CHECKABLE_SELECTOR).length;
+      if (checkboxCount !== 1) continue;
+      if (!String(current.textContent || '').trim()) continue;
+      if (!current.querySelector('button, [role="button"]')) continue;
+      return current;
+    }
+    return null;
+  }
+
+  function getProtectedLibraryItemContainers() {
+    const items = [];
+    const seen = new Set();
+    for (const control of getLibraryCheckableControls()) {
+      if (isLibrarySelectAllControl(control)) continue;
+      const item = findProtectedLibraryItemContainer(control);
+      if (!item || seen.has(item)) continue;
+      seen.add(item);
+      items.push(item);
+    }
+    return items;
+  }
+
+  function findProtectedLibraryItemByIdentity(identity) {
+    if (!isInsideProtectedLibraryFolder()) return null;
+    for (const item of getProtectedLibraryItemContainers()) {
+      if (libraryItemMatchesIdentity(item, identity)) return item;
+    }
+    return null;
+  }
+
+  function isLikelyLibraryMenuTrigger(button, row = null) {
+    if (!(button instanceof Element)) return false;
+    const item = row || findLibraryItemContainer(button) || findProtectedLibraryItemContainer(button);
+    if (!item) return false;
+    if (findCheckableFromEventTarget(button)) return false;
+
+    const hasPopup = normalizeText(button.getAttribute('aria-haspopup')) === 'menu';
+    const label = normalizedLibraryLabel(button);
+    if (hasPopup) return true;
+    if (/(more|options|menu|lisää|lisaa|valikko)/.test(label)) return true;
+
+    const buttons = Array.from(item.querySelectorAll('button, [role="button"]'))
+      .filter(candidate => !findCheckableFromEventTarget(candidate));
+    if (!buttons.length || buttons[buttons.length - 1] !== button) return false;
+
+    const visibleText = String(button.textContent || '').replace(/\s+/g, ' ').trim();
+    return !visibleText || /^[.·•…⋯]+$/.test(visibleText) || !!button.querySelector('svg');
+  }
+
+  function protectedLibraryFolderItemFromElement(element) {
+    if (!(element instanceof Element) || !isChatGptLibraryLocation() || isInsideProtectedLibraryFolder()) return null;
+    const item = findLibraryItemContainer(element) || element.closest('tr, li, article, [role="row"]');
+    if (!item) return null;
+    return (hasExactProtectedFolderText(item) || elementMentionsProtectedFolderId(item)) ? item : null;
+  }
+
+  function isProtectedLibraryFolderMenuTrigger(target) {
+    if (!(target instanceof Element) || !isChatGptLibraryLocation() || isInsideProtectedLibraryFolder()) return false;
+    const button = target.closest('button, [role="button"]');
+    if (!button) return false;
+    if (button.getAttribute(LIBRARY_FOLDER_MENU_HIDDEN_ATTR) === 'true') return true;
+    const item = protectedLibraryFolderItemFromElement(button);
+    return !!item && isLikelyLibraryMenuTrigger(button, item);
+  }
+
+  function hideProtectedLibraryFolderMenuTriggers() {
+    const hiddenSelector = `[${LIBRARY_FOLDER_MENU_HIDDEN_ATTR}="true"]`;
+    if (!isChatGptLibraryLocation() || isInsideProtectedLibraryFolder()) {
+      for (const button of document.querySelectorAll(hiddenSelector)) {
+        button.removeAttribute(LIBRARY_FOLDER_MENU_HIDDEN_ATTR);
+      }
+      return;
+    }
+
+    for (const button of document.querySelectorAll(hiddenSelector)) {
+      const item = protectedLibraryFolderItemFromElement(button);
+      if (!item || !isLikelyLibraryMenuTrigger(button, item)) {
+        button.removeAttribute(LIBRARY_FOLDER_MENU_HIDDEN_ATTR);
+      }
+    }
+
+    for (const control of getLibraryCheckableControls()) {
+      if (isLibrarySelectAllControl(control)) continue;
+      const item = findLibraryItemContainer(control);
+      if (!item || (!hasExactProtectedFolderText(item) && !elementMentionsProtectedFolderId(item))) continue;
+
+      for (const button of item.querySelectorAll('button, [role="button"]')) {
+        if (!isLikelyLibraryMenuTrigger(button, item)) continue;
+        button.setAttribute(LIBRARY_FOLDER_MENU_HIDDEN_ATTR, 'true');
+      }
+    }
+  }
+
+  function isProtectedLibraryMenuTrigger(button, item = null) {
+    if (!(button instanceof Element) || !isInsideProtectedLibraryFolder()) return false;
+    const row = item || findProtectedLibraryItemContainer(button);
+    return !!row && isLikelyLibraryMenuTrigger(button, row);
+  }
+
+  function isElementVisiblyRendered(element) {
+    if (!(element instanceof Element)) return false;
+    const rect = element.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return false;
+    const style = getComputedStyle(element);
+    return style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity || 1) !== 0;
+  }
+
+  function getProtectedLibraryIdentityNearMenuTrigger(button) {
+    if (!(button instanceof Element) || !isInsideProtectedLibraryFolder()) return null;
+
+    const buttonRect = button.getBoundingClientRect();
+    if (buttonRect.width <= 0 || buttonRect.height <= 0) return null;
+    const rowY = buttonRect.top + (buttonRect.height / 2);
+    let best = null;
+
+    for (const element of document.querySelectorAll('a, span, p, strong, div')) {
+      if (!(element instanceof HTMLElement) || element.children.length !== 0 || !isElementVisiblyRendered(element)) continue;
+      const rect = element.getBoundingClientRect();
+      if (rect.left >= buttonRect.left - 8) continue;
+      if (rowY < rect.top - 8 || rowY > rect.bottom + 8) continue;
+
+      const raw = String(element.textContent || '').replace(/\s+/g, ' ').trim();
+      const normalized = normalizeText(raw);
+      if (!raw || raw.length > 500 || looksLikeLibraryMetadataText(raw)) continue;
+      if (normalized === normalizeText(LIBRARY_PROTECTED_FOLDER_NAME)) continue;
+      if (normalized === 'nimi' || normalized === 'name' || normalized === 'muokattu' || normalized === 'modified' || normalized === 'koko' || normalized === 'size') continue;
+      if (LIBRARY_DELETE_LABELS.has(normalized) || LIBRARY_DISCUSS_LABELS.has(normalized) || LIBRARY_SELECT_ALL_LABELS.has(normalized)) continue;
+
+      const verticalDistance = Math.abs((rect.top + (rect.height / 2)) - rowY);
+      const extensionBonus = /\.[a-z0-9]{1,12}(?:\s|$)/i.test(raw) ? 140 : (raw.includes('.') ? 55 : 0);
+      const score = extensionBonus + Math.max(0, 70 - verticalDistance) + Math.min(35, raw.length / 8);
+      if (!best || score > best.score) best = { element, raw, score };
+    }
+
+    if (!best) return null;
+
+    let href = '';
+    const anchor = best.element.closest('a[href]');
+    if (anchor) {
+      try {
+        const resolved = new URL(anchor.getAttribute('href'), location.href);
+        if (resolved.origin === location.origin) href = resolved.href;
+      } catch {
+        // Filename remains a sufficient identity fallback.
+      }
+    }
+
+    return {
+      fileName: best.raw.slice(0, 500),
+      href: String(href || '').slice(0, 1200),
+      rowText: best.raw.slice(0, 1200)
+    };
+  }
+
+  function rememberProtectedLibraryMenuTarget(target) {
+    if (!(target instanceof Element) || !isInsideProtectedLibraryFolder()) return;
+    if (target.closest(`#${LIBRARY_EDIT_MODE_BUTTON_ID}`)) return;
+    const button = target.closest('button, [role="button"]');
+    if (!button) return;
+
+    if (protectedLibraryEditMode) {
+      document.documentElement.classList.remove(LIBRARY_MENU_OPENING_CLASS);
+      return;
+    }
+
+    const geometricIdentity = getProtectedLibraryIdentityNearMenuTrigger(button);
+    const item = findProtectedLibraryItemContainer(button);
+    if (!geometricIdentity && (!item || !isProtectedLibraryMenuTrigger(button, item))) return;
+    if (item && !isProtectedLibraryMenuTrigger(button, item) && !geometricIdentity) return;
+
+    protectedLibraryLastMenuIdentity = geometricIdentity || getProtectedLibraryItemIdentity(item);
+    if (protectedLibraryLastMenuIdentity) {
+      document.documentElement.classList.add(LIBRARY_MENU_OPENING_CLASS);
+      pruneProtectedLibraryFileMenus();
+      window.setTimeout(pruneProtectedLibraryFileMenus, 0);
+      window.setTimeout(pruneProtectedLibraryFileMenus, 30);
+      window.setTimeout(() => {
+        document.documentElement.classList.remove(LIBRARY_MENU_OPENING_CLASS);
+      }, 700);
+    }
+  }
+
+  function getExpandedProtectedLibraryMenuIdentity() {
+    if (!isInsideProtectedLibraryFolder()) return null;
+    if (protectedLibraryLastMenuIdentity) return protectedLibraryLastMenuIdentity;
+
+    const triggers = document.querySelectorAll(
+      'button[aria-haspopup="menu"][aria-expanded="true"], [role="button"][aria-haspopup="menu"][aria-expanded="true"]'
+    );
+    for (const trigger of triggers) {
+      const identity = getProtectedLibraryIdentityNearMenuTrigger(trigger);
+      if (identity) return identity;
+      const item = findProtectedLibraryItemContainer(trigger);
+      if (!item) continue;
+      const itemIdentity = getProtectedLibraryItemIdentity(item);
+      if (itemIdentity) return itemIdentity;
+    }
+    return null;
+  }
+
+  function getProtectedLibraryMenuAction(target) {
+    if (!(target instanceof Element)) return null;
+    return target.closest(
+      '[role="menuitem"], [role="menu"] button, [data-radix-menu-content] button, [data-slot*="menu-content"] button'
+    );
+  }
+
+  function getProtectedLibraryMenuRoot(action) {
+    if (!(action instanceof Element)) return null;
+    const direct = action.closest('[role="menu"], [data-radix-menu-content], [data-slot*="menu-content"]');
+    if (direct) return direct;
+
+    let current = action.parentElement;
+    for (let depth = 0; depth < 7 && current; depth += 1, current = current.parentElement) {
+      const actions = current.querySelectorAll('[role="menuitem"], button');
+      if (actions.length >= 2 && actions.length <= 24) return current;
+    }
+    return null;
+  }
+
+  function getProtectedLibraryMenuActions(root) {
+    if (!(root instanceof Element)) return [];
+    return Array.from(root.querySelectorAll('[role="menuitem"], button'))
+      .filter(action => action instanceof HTMLElement);
+  }
+
+  function protectedLibraryMenuRootHasDelete(root) {
+    return getProtectedLibraryMenuActions(root).some(action => isLibraryDeleteAction(action));
+  }
+
+  function isProtectedLibraryDiscussAction(action) {
+    if (!(action instanceof Element)) return false;
+    const label = normalizedLibraryLabel(action);
+    if (LIBRARY_DISCUSS_LABELS.has(label)) return true;
+    return label.startsWith('keskustele tästä ') || label.startsWith('keskustele tasta ') ||
+      label.startsWith('discuss this ') || label.startsWith('chat about this ');
+  }
+
+  function isAllowedProtectedLibraryMenuAction(action) {
+    if (protectedLibraryEditMode) return true;
+    return isProtectedLibraryDiscussAction(action);
+  }
+
+  function pruneProtectedLibraryFileMenus() {
+    const hiddenSelector = `[${LIBRARY_MENU_HIDDEN_ATTR}="true"]`;
+    const readySelector = `[${LIBRARY_MENU_READY_ATTR}="true"]`;
+    if (!isInsideProtectedLibraryFolder() || protectedLibraryEditMode) {
+      document.documentElement.classList.remove(LIBRARY_MENU_OPENING_CLASS);
+      for (const action of document.querySelectorAll(hiddenSelector)) action.removeAttribute(LIBRARY_MENU_HIDDEN_ATTR);
+      for (const root of document.querySelectorAll(readySelector)) root.removeAttribute(LIBRARY_MENU_READY_ATTR);
+      return;
+    }
+
+    const roots = new Set();
+    for (const deleteAction of document.querySelectorAll('[role="menuitem"], [role="menu"] button, [data-radix-menu-content] button, [data-slot*="menu-content"] button')) {
+      if (!(deleteAction instanceof Element) || !isLibraryDeleteAction(deleteAction)) continue;
+      const root = getProtectedLibraryMenuRoot(deleteAction);
+      if (root) roots.add(root);
+    }
+
+    let preparedMenu = false;
+    for (const root of roots) {
+      if (!protectedLibraryMenuRootHasDelete(root)) continue;
+      for (const action of getProtectedLibraryMenuActions(root)) {
+        if (isAllowedProtectedLibraryMenuAction(action)) {
+          action.removeAttribute(LIBRARY_MENU_HIDDEN_ATTR);
+        } else {
+          action.setAttribute(LIBRARY_MENU_HIDDEN_ATTR, 'true');
+        }
+      }
+      root.setAttribute(LIBRARY_MENU_READY_ATTR, 'true');
+      preparedMenu = true;
+    }
+
+    if (preparedMenu) {
+      document.documentElement.classList.remove(LIBRARY_MENU_OPENING_CLASS);
+    }
+  }
+
+  function isDisallowedProtectedLibraryMenuAction(target) {
+    if (protectedLibraryEditMode) return false;
+    if (!(target instanceof Element) || !isInsideProtectedLibraryFolder()) return false;
+    const action = getProtectedLibraryMenuAction(target);
+    if (!action) return false;
+    const root = getProtectedLibraryMenuRoot(action);
+    if (!root || !protectedLibraryMenuRootHasDelete(root)) return false;
+    return !isAllowedProtectedLibraryMenuAction(action);
+  }
+
+  function isProtectedLibraryThreeDotDeleteAction(target) {
+    if (!(target instanceof Element) || !isInsideProtectedLibraryFolder()) return false;
+    const menuAction = getProtectedLibraryMenuAction(target);
+    return !!menuAction && isLibraryDeleteAction(menuAction);
+  }
+
+  function findProtectedLibraryDeleteMenuItem() {
+    const candidates = document.querySelectorAll('[role="menuitem"], [role="menu"] button, [data-radix-menu-content] button');
+    for (const candidate of candidates) {
+      if (!(candidate instanceof HTMLElement)) continue;
+      if (!isLibraryDeleteAction(candidate)) continue;
+      const style = getComputedStyle(candidate);
+      if (style.display === 'none' || style.visibility === 'hidden') continue;
+      return candidate;
+    }
+    return null;
+  }
+
+  function findProtectedLibraryMenuTriggerForItem(item) {
+    if (!(item instanceof Element)) return null;
+    const buttons = Array.from(item.querySelectorAll('button, [role="button"]'));
+    for (const button of buttons) {
+      if (isProtectedLibraryMenuTrigger(button, item)) return button;
+    }
+    return null;
+  }
+
+  function findProtectedLibraryFileNameElement(fileName) {
+    const wanted = normalizeText(fileName || '');
+    if (!wanted) return null;
+    for (const element of document.querySelectorAll('a, span, p, strong, div')) {
+      if (!(element instanceof HTMLElement) || element.children.length !== 0 || !isElementVisiblyRendered(element)) continue;
+      if (normalizeText(element.textContent) === wanted) return element;
+    }
+    return null;
+  }
+
+  function findProtectedLibraryMenuTriggerNearFileName(fileName) {
+    const nameElement = findProtectedLibraryFileNameElement(fileName);
+    if (!nameElement) return null;
+
+    const nameRect = nameElement.getBoundingClientRect();
+    const rowY = nameRect.top + (nameRect.height / 2);
+    let best = null;
+
+    for (const button of document.querySelectorAll('button, [role="button"]')) {
+      if (!(button instanceof HTMLElement) || !isElementVisiblyRendered(button)) continue;
+      if (findCheckableFromEventTarget(button)) continue;
+      const rect = button.getBoundingClientRect();
+      if (rect.left <= nameRect.right) continue;
+      const verticalDistance = Math.abs((rect.top + (rect.height / 2)) - rowY);
+      if (verticalDistance > 28) continue;
+
+      const label = normalizedLibraryLabel(button);
+      const visibleText = String(button.textContent || '').replace(/\s+/g, ' ').trim();
+      const popupBonus = normalizeText(button.getAttribute('aria-haspopup')) === 'menu' ? 180 : 0;
+      const labelBonus = /(more|options|menu|lisää|lisaa|valikko)/.test(label) ? 120 : 0;
+      const iconBonus = (!visibleText || /^[.·•…⋯]+$/.test(visibleText) || !!button.querySelector('svg')) ? 55 : 0;
+      if (!popupBonus && !labelBonus && !iconBonus) continue;
+
+      const score = popupBonus + labelBonus + iconBonus + Math.min(80, rect.left / 30) - verticalDistance;
+      if (!best || score > best.score) best = { button, score };
+    }
+    return best?.button || null;
+  }
+
+  function findProtectedLibraryMenuTriggerForIdentity(identity) {
+    if (!identity || typeof identity !== 'object') return null;
+
+    const item = findProtectedLibraryItemByIdentity(identity);
+    if (item) {
+      const trigger = findProtectedLibraryMenuTriggerForItem(item);
+      if (trigger) return trigger;
+    }
+
+    return findProtectedLibraryMenuTriggerNearFileName(String(identity.fileName || ''));
+  }
+
+  function clickProtectedLibraryDeleteAfterUnlock(identity, attempt = 0) {
+    if (!isInsideProtectedLibraryFolder() || !protectedRouteUnlocked) return;
+
+    const menuTrigger = findProtectedLibraryMenuTriggerForIdentity(identity);
+    if (!menuTrigger) {
+      if (attempt < 40) window.setTimeout(() => clickProtectedLibraryDeleteAfterUnlock(identity, attempt + 1), 125);
+      return;
+    }
+
+    protectedLibraryLastMenuIdentity = identity;
+    menuTrigger.click();
+
+    let menuAttempt = 0;
+    const replayDelete = () => {
+      if (!isInsideProtectedLibraryFolder() || !protectedRouteUnlocked) return;
+      const deleteItem = findProtectedLibraryDeleteMenuItem();
+      if (!deleteItem) {
+        menuAttempt += 1;
+        if (menuAttempt < 30) window.setTimeout(replayDelete, 75);
+        return;
+      }
+
+      libraryDeleteReplayDepth += 1;
+      try {
+        deleteItem.click();
+      } finally {
+        queueMicrotask(() => {
+          libraryDeleteReplayDepth = Math.max(0, libraryDeleteReplayDepth - 1);
+        });
+      }
+    };
+    window.setTimeout(replayDelete, 0);
+  }
+
+  function resumeProtectedLibraryFileDelete(identity) {
+    if (!identity || typeof identity !== 'object') return;
+    clickProtectedLibraryDeleteAfterUnlock(identity, 0);
+  }
+
+  function passwordGateProtectedLibraryFileDelete(event) {
+    if (
+      libraryDeleteReplayDepth > 0 ||
+      event.type !== 'click' ||
+      !isInsideProtectedLibraryFolder() ||
+      !isProtectedLibraryThreeDotDeleteAction(event.target)
+    ) {
+      return false;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+
+    const identity = getExpandedProtectedLibraryMenuIdentity();
+    if (!identity) {
+      console.warn('[BraveFox Enhancer] Protected Files delete blocked: file identity could not be determined.');
+      return true;
+    }
+
+    void beginNativePasswordFlow({
+      kind: 'library-file-delete',
+      routeKey: 'library-protected-files',
+      title: LIBRARY_PROTECTED_FILE_DELETE_PROMPT,
+      returnUrl: location.href,
+      payload: identity
+    });
+    return true;
+  }
+
+  function blockProtectedLibraryPointerEvent(event) {
+    if (libraryGuardBypassDepth > 0 || !isChatGptLibraryLocation()) return;
+
+    if (isProtectedLibraryFolderMenuTrigger(event.target)) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      hideProtectedLibraryFolderMenuTriggers();
+      return;
+    }
+
+    rememberProtectedLibraryMenuTarget(event.target);
+    if (isDisallowedProtectedLibraryMenuAction(event.target)) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      pruneProtectedLibraryFileMenus();
+      return;
+    }
+
+    const control = findCheckableFromEventTarget(event.target);
+    if (control && isLibrarySelectAllControl(control) && isInsideProtectedLibraryFolder()) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      scheduleProtectedLibraryReconcileBurst();
+      return;
+    }
+    if (control && isProtectedLibraryControl(control)) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      scheduleProtectedLibraryReconcileBurst();
+      return;
+    }
+
+    // A delete action is blocked for this click if React has somehow left a protected
+    // item selected. The guard first removes it; the user can then click Delete again
+    // for the remaining ordinary selection. This closes the Select-All/delete race.
+    if (isLibraryDeleteAction(event.target) && protectedLibrarySelectionExists()) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      reconcileProtectedLibrarySelection();
+      scheduleProtectedLibraryReconcileBurst();
+      return;
+    }
+
+    const action = event.target instanceof Element
+      ? event.target.closest('button, [role="button"], label')
+      : null;
+    if (action && LIBRARY_SELECT_ALL_LABELS.has(normalizedLibraryLabel(action))) {
+      if (isInsideProtectedLibraryFolder()) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        scheduleProtectedLibraryReconcileBurst();
+        return;
+      }
+      scheduleProtectedLibraryReconcileBurst();
+    }
+  }
+
+  function blockProtectedLibraryKeyboardEvent(event) {
+    if (libraryGuardBypassDepth > 0 || !isChatGptLibraryLocation()) return;
+
+    if ((event.key === ' ' || event.key === 'Enter') && isProtectedLibraryFolderMenuTrigger(event.target)) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      hideProtectedLibraryFolderMenuTriggers();
+      return;
+    }
+
+    if ((event.key === ' ' || event.key === 'Enter') && isDisallowedProtectedLibraryMenuAction(event.target)) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      pruneProtectedLibraryFileMenus();
+      return;
+    }
+
+    const control = findCheckableFromEventTarget(event.target);
+    if (control && isLibrarySelectAllControl(control) && isInsideProtectedLibraryFolder() && (event.key === ' ' || event.key === 'Enter')) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      scheduleProtectedLibraryReconcileBurst();
+      return;
+    }
+    if (control && isProtectedLibraryControl(control) && (event.key === ' ' || event.key === 'Enter')) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      scheduleProtectedLibraryReconcileBurst();
+      return;
+    }
+
+    if ((event.key === 'Delete' || event.key === 'Backspace') && protectedLibrarySelectionExists()) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      reconcileProtectedLibrarySelection();
+      scheduleProtectedLibraryReconcileBurst();
+    }
+  }
+
+  function ensureProtectedLibraryGuardStyle() {
+    if (document.getElementById(LIBRARY_GUARD_STYLE_ID)) return;
+    const style = document.createElement('style');
+    style.id = LIBRARY_GUARD_STYLE_ID;
+    style.textContent = `
+      [${LIBRARY_GUARD_ATTR}="true"] {
+        opacity: 0.38 !important;
+        cursor: not-allowed !important;
+      }
+
+      [${LIBRARY_MENU_HIDDEN_ATTR}="true"],
+      [${LIBRARY_FOLDER_MENU_HIDDEN_ATTR}="true"] {
+        display: none !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+      }
+
+      html.${LIBRARY_MENU_OPENING_CLASS} [role="menu"],
+      html.${LIBRARY_MENU_OPENING_CLASS} [data-radix-menu-content],
+      html.${LIBRARY_MENU_OPENING_CLASS} [data-slot*="menu-content"] {
+        opacity: 0 !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+      }
+
+
+      .bravefox-protected-library-edit-mode-button {
+        appearance: none !important;
+        position: fixed !important;
+        z-index: 2147483000 !important;
+        border: 1px solid rgba(0, 0, 0, 0.16) !important;
+        border-radius: 8px !important;
+        background: rgba(255, 255, 255, 0.96) !important;
+        color: #111 !important;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05) !important;
+        font: inherit !important;
+        font-size: 13px !important;
+        font-weight: 600 !important;
+        line-height: 1 !important;
+        padding: 8px 11px !important;
+        margin: 0 !important;
+        cursor: pointer !important;
+        white-space: nowrap !important;
+      }
+
+      .bravefox-protected-library-edit-mode-button:hover {
+        background: rgba(0, 0, 0, 0.06) !important;
+      }
+
+      .bravefox-protected-library-edit-mode-button[${LIBRARY_EDIT_MODE_BUTTON_ATTR}="true"] {
+        background: #111 !important;
+        border-color: #111 !important;
+        color: #fff !important;
+      }
+    `;
+    (document.head || document.documentElement).appendChild(style);
+  }
+
+  function startProtectedLibraryGuard() {
+    ensureProtectedLibraryGuardStyle();
+
+    document.addEventListener('pointerdown', blockProtectedLibraryPointerEvent, true);
+    document.addEventListener('mousedown', blockProtectedLibraryPointerEvent, true);
+    document.addEventListener('click', handleLibraryTrashTabNavigation, true);
+    document.addEventListener('click', blockProtectedLibraryPointerEvent, true);
+    document.addEventListener('keydown', blockProtectedLibraryKeyboardEvent, true);
+    window.addEventListener('resize', () => scheduleProtectedLibraryReconcile(32), { passive: true });
+    window.addEventListener('scroll', () => scheduleProtectedLibraryReconcile(32), { capture: true, passive: true });
+
+    libraryGuardObserver = new MutationObserver(() => {
+      if (location.href !== libraryGuardLastHref) {
+        libraryGuardLastHref = location.href;
+        scheduleProtectedLibraryReconcileBurst();
+        return;
+      }
+      if (isChatGptLibraryLocation()) scheduleProtectedLibraryReconcile(40);
+    });
+
+    libraryGuardObserver.observe(document.documentElement, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ['checked', 'aria-checked', 'data-state']
+    });
+
+    // Route polling is intentionally tiny and covers SPA transitions where the DOM may
+    // not mutate until after the URL has changed.
+    window.setInterval(() => {
+      if (location.href === libraryGuardLastHref) return;
+      libraryGuardLastHref = location.href;
+      scheduleProtectedLibraryReconcileBurst();
+    }, 350);
+
+    scheduleProtectedLibraryReconcileBurst();
+  }
+
+  startProtectedLibraryGuard();
 
   console.log(
     `[BraveFox Enhancer] ChatGPT SPA/UI protection active (${IS_ANDROID ? 'Android-optimized' : 'desktop-optimized'}, low-overhead routing).`

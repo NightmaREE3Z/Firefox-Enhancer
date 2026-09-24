@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Content hiding and filtering
-// @version      2026-08-20
+// @version      2026-09-24
 // @description  Filter out stuff on the internet (Targeted Enforcer)
 // @match        *://xvideos.com/*
 // @match        *://*.xvideos.com/*
@@ -260,7 +260,7 @@
 	/ndre55/i, /ndr3s5/i, /ndr35s/i, /aifake/i, /iafake/i, /ai fake/i, /ia fake/i, /Denois/i, /De nois/i, /de-nois/i, /dr3ss/i, /dre5s/i, /dres5/i, /celebjihad/i, 
 	/celeb-jihad/i, /celebsunmasked/i, /unmaskedcelebs/i, /celebrityfakes4u/i, /celebrityfakesforyou/i, /celebrityfakes2you/i, /celebrityfakestoyou/i, /outfitswap/i, 
 	/swapoutfit/i, /outfit-swap/i, /swap-outfit/i, /aznude/i, /az_nude/i, /az-nude/i, /Fapello/i, /Daddio/i, /Gionna/i, /Giona/i, /Gion4/i, /G1ona/i, /Brianna Garcia/i, 
-	/gi0na/i, /Brie Garcia/i, /Nikki Garcia/i, /Bella Twin/i, /Samantha/i, /S4mantha/i, /sam4ntha/i, /s4m4ntha/i, /s4m4nth4/i, /sam4nth4/i, /s4manth4/i, /Irvin wrest/i, 
+	/gi0na/i, /Brie Garcia/i, /Nikki Garcia/i, /Bella Twin/i, /SamanthaWWE/i, /S4mantha/i, /sam4ntha/i, /s4m4ntha/i, /s4m4nth4/i, /sam4nth4/i, /s4manth4/i, /Irvin wrest/i, 
 	/Irvin rass/i, /Irvin WWE/i, /Irvin AEW/i, /Irvin TNA/i, /Irvin NJPW/i, /Irwin wrest/i, /Irwin rass/i, /Irwin WWE/i, /Irwin AEW/i, /Irwin TNA/i, /Irwin NJPW/i, 
 	/D4ddio/i, /dadd1o/i, /daddi0/i, /d4dd1o/i, /d4ddi0/i, /dadd10/i, /Sanna Marin sex/i, /Sanna Marin anal/i, /fappenist/i, /fappening/i, /nude leak/i, /naked leak/i, 
 	/bare leak/i, /cunt leak/i, /pussy image leak/i, /pussy photo leak/i, /pussy pic leak/i, /celeb leak/i, /porn leak/i, /onlyfans leak/i, /fantime leak/i, /Nood/i,
