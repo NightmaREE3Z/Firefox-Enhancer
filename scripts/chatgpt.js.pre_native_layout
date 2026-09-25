@@ -1,0 +1,2180 @@
+/* ChatGPT.js
+ * BraveFox Enhancer — ChatGPT SPA/sub-page protection and UI cleanup.
+ *
+ * Goals:
+ * - Keep protected ChatGPT routes behind BraveFox's existing password page.
+ * - Remove selected ChatGPT UI controls without a visible flash.
+ * - Stay friendly to long-lived ChatGPT tabs/PWAs: no always-on whole-page mutation
+ *   scanning while messages are streaming.
+ *
+ * Performance model:
+ * - Deterministic removals are CSS-first at document_start.
+ * - Route changes use browser navigation events plus a tiny always-on href comparison
+ *   fallback so ChatGPT SPA router changes cannot delay a protected-route gate.
+ * - MutationObserver is enabled only on routes that genuinely need live DOM policing
+ *   (Personalization, Plugins and GPT directory), rather than across every chat message mutation.
+ * - General menu cleanup runs only on startup/route changes and when menu-like controls
+ *   are opened.
+ */
+
+(() => {
+  'use strict';
+
+  if (window.top !== window) return;
+
+  // Resolve the actual WebExtension API by capability. Some installed-app/PWA
+  // environments may expose a non-extension `browser` global, so blindly preferring
+  // `browser` can hide Chrome's real `chrome.runtime` object.
+  const api = resolveExtensionApi();
+
+  function resolveExtensionApi() {
+    // Prefer the real Chromium extension object in the PWA, and require storage when
+    // possible because the plugin vault depends on persistent extension-local state.
+    const candidates = [globalThis.chrome, globalThis.browser];
+
+    for (const candidate of candidates) {
+      try {
+        if (
+          typeof candidate?.runtime?.getURL === 'function' &&
+          typeof candidate?.storage?.local?.get === 'function' &&
+          typeof candidate?.storage?.local?.set === 'function'
+        ) {
+          return candidate;
+        }
+      } catch {
+        // Keep trying.
+      }
+    }
+
+    for (const candidate of candidates) {
+      try {
+        if (typeof candidate?.runtime?.getURL === 'function') return candidate;
+      } catch {
+        // Keep trying.
+      }
+    }
+    return null;
+  }
+
+  const STYLE_ID = 'bravefox-chatgpt-style';
+  const GATED_CLASS = 'bravefox-chatgpt-gated';
+  const PERSONALIZATION_CLASS = 'bravefox-chatgpt-personalization';
+  const HIDDEN_CLASS = 'bravefox-chatgpt-hidden';
+
+  const PERSONALIZATION_PROMPT = 'ChatGPT Personalization settings are password protected';
+  const MEMORY_SUMMARY_PROMPT = 'Are you sure you want to do this? Enter password';
+
+  const PROTECTED_PATH_ROUTES = [
+    { key: 'plugins', path: '/plugins', title: 'ChatGPT Plugins are password protected' },
+    { key: 'gpts', path: '/gpts', title: 'ChatGPT GPTs are password protected' }
+  ];
+
+  const MEMORY_ENABLE_LABELS = new Set(['ota muisti käyttöön', 'enable memory']);
+  const MEMORY_SUMMARY_LABELS = ['muistiyhteenveto', 'memory summary', 'saved memories'];
+  const MANAGE_LABELS = new Set(['hallitse', 'manage']);
+  const ENHANCED_MEMORY_BUTTON_LABELS = new Set([
+    'kokeile parannettua muistia',
+    'try enhanced memory'
+  ]);
+  const LEGACY_MEMORY_BANNER_TEXT = [
+    'tämä on muistitoiminnon vanha versio',
+    'this is an older version of memory'
+  ];
+  const DELETE_ALL_MEMORY_LABELS = new Set([
+    'poista kaikki muistot',
+    'delete all memories'
+  ]);
+
+  const MODELS_TO_REMOVE = new Set([
+    'gpt-5 instant',
+    'gpt-5 thinking mini',
+    'gpt-5 thinking',
+    'o3',
+    'o4-mini'
+  ]);
+
+  // === Plugins vault ============================================================
+  // The supplied + button uses this sprite fragment. A card showing that + is an
+  // installable/uninstalled catalog entry; installed/connected cards use some other
+  // action state. BraveFox remembers the latter forever unless its storage is cleared.
+  const PLUGIN_VAULT_KEY = 'bravefoxChatGptPluginVault_v2';
+  const PLUGIN_VAULT_SEEDED_KEY = 'bravefoxChatGptPluginVaultSeeded_v2';
+  const PLUGIN_SAVED_SECTION_ID = 'bravefox-chatgpt-saved-plugins';
+  const PLUGIN_PLUS_ICON_FRAGMENT = '#6be74c';
+  const PLUGIN_INSTALLED_ACTION_ICON_FRAGMENT = '#623957';
+  const PLUGIN_INSTALL_PROMPT = 'Installing this saved ChatGPT plugin is password protected';
+  const PLUGIN_CARD_LINK_SELECTOR = 'a[href^="/plugins/"]';
+  const PLUGIN_INSTALLED_STATUS_TERMS = [
+    'installed', 'asennettu', 'connected', 'yhdistetty', 'enabled', 'käytössä'
+  ];
+  const PLUGIN_INSTALL_ARIA_TERMS = [
+    'install', 'asenna', 'add ', 'lisää', 'update to install', 'päivitä, jotta voit asentaa'
+  ];
+
+  // === GPT directory allowlist ==================================================
+  // Edit THIS ONE ARRAY to control which third-party GPTs stay visible on /gpts.
+  // Everything else is removed, except GPTs published by OpenAI/ChatGPT itself.
+  // Titles are normalized before matching, so punctuation/case differences are ignored.
+  const GPT_ALLOWLIST = [
+    'ScholarGPT',
+    'Consensus',
+    'AskYourPDF Research assistant',
+    'PDF Reader',
+    'SciSpace',
+    'YouTube Video Summarizer',
+    'DesignerGPT',
+    'Mia AI',
+    'Code',
+    'Mirror 4o',
+    'Code Copilot',
+    'Code GPT',
+    'Website AI Designer',
+    'SQL Expert (QueryGPT)',
+    'Ethical Hacker GPT',
+    'Website Generator',
+    'Website Builder, Generator & Creator AI',
+    'Unbound Limitless Storywriter',
+    'Translate GPT',
+    'Website & App Builder🔹Mobile App AI'
+  ];
+  const GPT_NATIVE_PUBLISHERS = ['openai', 'chatgpt'];
+  const GPT_CARD_SELECTOR = 'a.gizmo-link';
+  const GPT_SOURCE_SECTION_SELECTOR = 'div.h-fit.scroll-mt-28';
+  const GPT_APPROVED_SECTION_ID = 'bravefox-approved-gpts';
+  const GPT_APPROVED_SECTION_ATTR = 'data-bravefox-gpt-approved-section';
+  const GPTS_CURATING_CLASS = 'bravefox-gpts-curating';
+  const PLUGINS_CURATING_CLASS = 'bravefox-plugins-curating';
+  const GPT_APPROVED_TITLE = 'BraveFox Approved GPTs';
+  const GPT_APPROVED_SUBTITLE = 'Useful GPTs on this list';
+  const GPT_SHOW_MORE_LABELS = new Set(['näytä enemmän', 'show more']);
+  const GPT_MAX_SHOW_MORE_CLICKS = 4;
+  const GPT_MIN_CURATION_MS = 1200;
+  const GPT_HARD_CURATION_MS = 8000;
+
+  const IS_ANDROID = /Android/i.test(navigator.userAgent);
+  // Always-on route polling is only a location.href string comparison. It is cheap, and
+  // provides a deterministic fallback when ChatGPT's SPA navigation skips browser events.
+  const ROUTE_POLL_MS = IS_ANDROID ? 900 : 500;
+
+  let routeObserver = null;
+  let routePollTimer = 0;
+  let routeMaintenanceTimer = 0;
+  let activeProtectedRouteKey = null;
+  let protectedRouteUnlocked = false;
+  let routeAuthCheckInProgress = false;
+  let authRedirectRequested = false;
+  let pendingApprovedAction = null;
+  let lastUrl = location.href;
+  let routeCheckQueued = false;
+  let uiScanTimer = 0;
+  let uiScanRetryTimer = 0;
+  let sidebarPolishTimers = [];
+  let pluginVault = new Map();
+  let pluginVaultLoaded = false;
+  let pluginVaultLoadPromise = null;
+  let pluginVaultSeeded = false;
+  let gptApprovedSection = null;
+  let gptApprovedGrid = null;
+  let gptCurationStartedAt = 0;
+  let gptCurationLastActivityAt = 0;
+  let gptCurationRetryTimer = 0;
+  const gptApprovedKeys = new Set();
+  const gptShowMoreState = new WeakMap();
+
+  const replayAllowedButtons = new WeakSet();
+  const replayAllowedPluginButtons = new WeakSet();
+
+  // Pre-arm protected pages at document_start. On a direct /plugins or /gpts load,
+  // ChatGPT never gets a paint before BraveFox either consumes a one-time unlock grant
+  // or redirects the tab to the extension's native password page.
+  const initialProtectedRoute = getProtectedRouteDescriptor();
+  if (initialProtectedRoute) document.documentElement.classList.add(GATED_CLASS);
+  if (isPluginsPathname(location.pathname)) document.documentElement.classList.add(PLUGINS_CURATING_CLASS);
+  if (isGptsPathname(location.pathname)) document.documentElement.classList.add(GPTS_CURATING_CLASS);
+
+  injectStyles();
+  void synchronizeRoute();
+  installNavigationGuards();
+  installInteractionGuards();
+  configureRouteObserver();
+  scheduleGeneralUiScan(true);
+  scheduleSidebarPolishRetries();
+
+  function normalizeText(value) {
+    return String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
+  }
+
+  function normalizeLooseTitle(value) {
+    return String(value || '')
+      .normalize('NFKC')
+      .toLowerCase()
+      .replace(/[^a-z0-9äöå]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function includesAny(text, values) {
+    for (const value of values) {
+      if (text.includes(value)) return true;
+    }
+    return false;
+  }
+
+  function injectStyles() {
+    if (document.getElementById(STYLE_ID)) return;
+
+    const style = document.createElement('style');
+    style.id = STYLE_ID;
+    style.textContent = `
+      html.${GATED_CLASS},
+      html.${GATED_CLASS} body {
+        overflow: hidden !important;
+        background: #ffffff !important;
+      }
+
+      html.${GATED_CLASS} body {
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+
+      .${HIDDEN_CLASS} {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+
+      /* BraveFox ChatGPT navigation cleanup: no Plugins shortcut, no featured-plugin
+       * promo row, and no native More/Lisää menu flash before it is replaced by Images. */
+      a[data-testid="plugins-button"][data-sidebar-item="true"],
+      a[data-sidebar-item="true"][href="/plugins"],
+      a.interactive-button[href^="/plugins?category=featured"],
+      div[data-sidebar-item="true"][aria-haspopup="menu"]:has(use[href$="#dots-horizontal"]) {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+
+      a[data-bravefox-sidebar-images="true"] {
+        display: flex !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+      }
+
+      /* Hide the legacy-memory upgrade nag before ChatGPT can paint it. */
+      html.${PERSONALIZATION_CLASS}
+      div.border-token-border-light.bg-token-bg-elevated-secondary.flex.min-h-20.flex-col.items-start.gap-3.rounded-2xl.border.px-4.py-4 {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+
+      /* Hide the About-you menu button before it can paint. */
+      button[aria-label="Tietoja sinusta -valikko"],
+      button[aria-label^="Tietoja sinusta"][aria-haspopup="menu"],
+      button[aria-label="About you menu"],
+      button[aria-label^="About you"][aria-haspopup="menu"] {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+
+      /* The memory-summary overflow menu is rendered in a portal. */
+      html.${PERSONALIZATION_CLASS}
+      [role="menuitem"][data-color="danger"] {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+
+      /* /plugins stays in a paint-safe filtering lane. Native catalog sections/cards
+       * are invisible until JavaScript marks them as vault-approved. This also covers
+       * late React/lazy-load inserts, so a raw catalog card cannot flash after unlock. */
+      html.${PLUGINS_CURATING_CLASS} section:has(a[href^="/plugins/"]),
+      html.${PLUGINS_CURATING_CLASS} article:has(a[href^="/plugins/"]) {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+
+      html.${PLUGINS_CURATING_CLASS} section[data-bravefox-plugin-section-allowed="true"] {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+      }
+
+      html.${PLUGINS_CURATING_CLASS} article[data-bravefox-plugin-allowed] {
+        display: flex !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+      }
+
+      html.${PLUGINS_CURATING_CLASS} #${PLUGIN_SAVED_SECTION_ID},
+      html.${PLUGINS_CURATING_CLASS} #${PLUGIN_SAVED_SECTION_ID} .bravefox-saved-plugin-card {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+      }
+
+      html.${PLUGINS_CURATING_CLASS} #${PLUGIN_SAVED_SECTION_ID} .bravefox-saved-plugin-card {
+        display: flex !important;
+      }
+
+      #${PLUGIN_SAVED_SECTION_ID} {
+        margin: 0 0 24px 0 !important;
+        padding: 12px !important;
+        border: 1px solid rgba(127, 127, 127, 0.22) !important;
+        border-radius: 16px !important;
+      }
+
+      #${PLUGIN_SAVED_SECTION_ID} .bravefox-saved-plugin-grid {
+        display: grid !important;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)) !important;
+        gap: 8px !important;
+      }
+
+      #${PLUGIN_SAVED_SECTION_ID} .bravefox-saved-plugin-card {
+        position: relative !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 12px !important;
+        padding: 10px !important;
+        border-radius: 14px !important;
+        background: var(--main-surface-secondary, rgba(127, 127, 127, 0.08)) !important;
+      }
+
+      #${PLUGIN_SAVED_SECTION_ID} .bravefox-saved-plugin-card img {
+        width: 40px !important;
+        height: 40px !important;
+        border-radius: 10px !important;
+        object-fit: cover !important;
+        flex: 0 0 auto !important;
+      }
+
+      #${PLUGIN_SAVED_SECTION_ID} .bravefox-saved-plugin-link {
+        min-width: 0 !important;
+        flex: 1 1 auto !important;
+        text-decoration: none !important;
+        color: inherit !important;
+      }
+
+      #${PLUGIN_SAVED_SECTION_ID} .bravefox-saved-plugin-name {
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        white-space: nowrap !important;
+        font-weight: 600 !important;
+      }
+
+      #${PLUGIN_SAVED_SECTION_ID} .bravefox-saved-plugin-note {
+        opacity: 0.68 !important;
+        font-size: 12px !important;
+      }
+
+      #${PLUGIN_SAVED_SECTION_ID} .bravefox-saved-plugin-reinstall {
+        width: 32px !important;
+        height: 32px !important;
+        border: 0 !important;
+        border-radius: 999px !important;
+        cursor: pointer !important;
+        font-size: 22px !important;
+        line-height: 1 !important;
+      }
+
+      /* /gpts is a BraveFox-owned curated shelf. Hide ChatGPT's native category UI
+       * at paint time so rejected cards/sections never flash before JavaScript filters
+       * them. Only the donor shelf marked by BraveFox is allowed to become visible. */
+      html.${GPTS_CURATING_CLASS} div.sticky.top-14.z-10,
+      html.${GPTS_CURATING_CLASS} ${GPT_SOURCE_SECTION_SELECTOR}:not([${GPT_APPROVED_SECTION_ATTR}="true"]) {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+
+      html.${GPTS_CURATING_CLASS} [${GPT_APPROVED_SECTION_ATTR}="true"] {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+      }
+
+      /* The custom GPT shelf is BraveFox-owned, so do not inherit React's entrance
+       * animation state (opacity:0 / translateY) from recycled directory markup. */
+      #${GPT_APPROVED_SECTION_ID} > div[tabindex="0"] {
+        opacity: 1 !important;
+        transform: none !important;
+      }
+
+      #${GPT_APPROVED_SECTION_ID} a.gizmo-link {
+        min-height: 104px !important;
+      }
+
+      /* Expansion is automatic. Never show ChatGPT's Show more button in the custom shelf. */
+      html.${GPTS_CURATING_CLASS} [${GPT_APPROVED_SECTION_ATTR}="true"] button.btn-secondary.w-full {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+
+      /* Existing BraveFox ChatGPT presentation cleanup. */
+      [data-message-author-role="user"] .bg-token-main-surface-secondary {
+        background: none !important;
+        border: none !important;
+        box-shadow: none !important;
+      }
+
+      .user-message-bubble-color {
+        background-color: #cce4ff !important;
+        border-radius: 16px !important;
+        border: 1px solid #a0b8c8 !important;
+        margin-left: auto !important;
+        margin-right: 2% !important;
+        max-width: 98% !important;
+        padding: 12px !important;
+        box-sizing: border-box !important;
+      }
+
+      [data-message-author-role="assistant"] .prose.markdown {
+        background-color: #e9eaea !important;
+        border: 1px solid #cfcfcf !important;
+        border-radius: 16px !important;
+        margin-left: 2% !important;
+        max-width: 98% !important;
+        padding: 12px !important;
+        box-sizing: border-box !important;
+        color: #222 !important;
+      }
+
+      [data-message-author-role="assistant"] .text-token-text-secondary {
+        background: none !important;
+        border: none !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+        margin-top: 4px !important;
+      }
+
+      .CodeBlock-module__code--KUcqT div {
+        background-color: #ffffff !important;
+        border: none !important;
+        border-radius: 0 !important;
+      }
+
+      .CodeBlock-module__code--KUcqT code {
+        font-family: "Courier New", monospace !important;
+        font-size: 1rem !important;
+        color: #222 !important;
+      }
+
+      button[aria-label="Päivitä"] {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+    `;
+
+    (document.head || document.documentElement).appendChild(style);
+  }
+
+  function getProtectedRouteDescriptorForUrl(value) {
+    try {
+      const url = new URL(String(value || location.href), location.href);
+      if (url.origin !== location.origin) return null;
+
+      let hash = url.hash || '';
+      try {
+        hash = decodeURIComponent(hash);
+      } catch {
+        // A malformed hash should not break the extension.
+      }
+      if (normalizeText(hash).startsWith('#settings/personalization')) {
+        return { key: 'personalization', path: null, title: PERSONALIZATION_PROMPT };
+      }
+
+      const pathname = String(url.pathname || '/').toLowerCase().replace(/\/+$/, '') || '/';
+      for (const route of PROTECTED_PATH_ROUTES) {
+        if (pathname === route.path || pathname.startsWith(`${route.path}/`)) return route;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  function getProtectedRouteDescriptor() {
+    return getProtectedRouteDescriptorForUrl(location.href);
+  }
+
+  function isPersonalizationRoute() {
+    return getProtectedRouteDescriptor()?.key === 'personalization';
+  }
+
+  function isPluginsRoute() {
+    return getProtectedRouteDescriptor()?.key === 'plugins';
+  }
+
+  function isGptsRoute() {
+    return getProtectedRouteDescriptor()?.key === 'gpts';
+  }
+
+  function isPluginsPathname(pathname) {
+    const normalizedPath = String(pathname || '/').toLowerCase().replace(/\/+$/, '') || '/';
+    return normalizedPath === '/plugins' || normalizedPath.startsWith('/plugins/');
+  }
+
+  function isGptsPathname(pathname) {
+    const normalizedPath = String(pathname || '/').toLowerCase().replace(/\/+$/, '') || '/';
+    return normalizedPath === '/gpts' || normalizedPath.startsWith('/gpts/');
+  }
+
+  function resetGptCurationState() {
+    if (gptCurationRetryTimer) {
+      clearTimeout(gptCurationRetryTimer);
+      gptCurationRetryTimer = 0;
+    }
+    gptApprovedSection = null;
+    gptApprovedGrid = null;
+    gptCurationStartedAt = 0;
+    gptCurationLastActivityAt = 0;
+    gptApprovedKeys.clear();
+  }
+
+  function sendRuntimeMessage(message) {
+    return new Promise(resolve => {
+      try {
+        if (!api?.runtime?.sendMessage) {
+          resolve({ ok: false, error: 'Extension messaging is unavailable.' });
+          return;
+        }
+        api.runtime.sendMessage(message, response => {
+          const runtimeError = api.runtime.lastError;
+          if (runtimeError) {
+            resolve({ ok: false, error: runtimeError.message });
+            return;
+          }
+          resolve(response || { ok: false, error: 'No response from BraveFox background.' });
+        });
+      } catch (error) {
+        resolve({ ok: false, error: error?.message || String(error) });
+      }
+    });
+  }
+
+  function makeAuthRequestId() {
+    try {
+      if (globalThis.crypto?.randomUUID) return crypto.randomUUID();
+      const bytes = new Uint8Array(16);
+      globalThis.crypto?.getRandomValues?.(bytes);
+      return Array.from(bytes, value => value.toString(16).padStart(2, '0')).join('');
+    } catch {
+      return `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    }
+  }
+
+  function preArmProtectedRoute(descriptor) {
+    if (!descriptor) return;
+    document.documentElement.classList.add(GATED_CLASS);
+    document.documentElement.classList.toggle(PERSONALIZATION_CLASS, descriptor.key === 'personalization');
+    document.documentElement.classList.toggle(PLUGINS_CURATING_CLASS, descriptor.key === 'plugins');
+    document.documentElement.classList.toggle(GPTS_CURATING_CLASS, descriptor.key === 'gpts');
+  }
+
+  async function beginNativePasswordFlow({ kind = 'protected-route', routeKey, title, returnUrl = location.href, payload = {} }) {
+    if (authRedirectRequested) return false;
+    authRedirectRequested = true;
+    document.documentElement.classList.add(GATED_CLASS);
+
+    const response = await sendRuntimeMessage({
+      type: 'BRAVEFOX_CHATGPT_AUTH_BEGIN',
+      requestId: makeAuthRequestId(),
+      kind,
+      routeKey,
+      title,
+      returnUrl,
+      payload
+    });
+
+    if (!response?.ok) {
+      authRedirectRequested = false;
+      console.warn('[BraveFox Enhancer] Could not open native ChatGPT password page:', response?.error || response);
+      if (protectedRouteUnlocked) document.documentElement.classList.remove(GATED_CLASS);
+      return false;
+    }
+    return true;
+  }
+
+  async function consumeNativePasswordGrant() {
+    const response = await sendRuntimeMessage({ type: 'BRAVEFOX_CHATGPT_AUTH_CONSUME' });
+    return response?.ok && response?.unlocked ? response : null;
+  }
+
+  async function waitFor(ms) {
+    await new Promise(resolve => window.setTimeout(resolve, ms));
+  }
+
+  async function prepareUnlockedProtectedRoute(routeKey) {
+    if (routeKey === 'personalization') {
+      hideSensitiveMemoryControls(document);
+      cleanChatGptUi(document);
+      return;
+    }
+
+    if (routeKey === 'plugins') {
+      document.documentElement.classList.add(PLUGINS_CURATING_CLASS);
+      await applyPluginPagePolicy(document);
+      return;
+    }
+
+    if (routeKey === 'gpts') {
+      document.documentElement.classList.add(GPTS_CURATING_CLASS);
+      applyGptPagePolicy(document);
+      // The custom shelf is now created by BraveFox itself and normally exists on the
+      // first pass. Give React a very short grace window if <main> has not mounted yet.
+      const deadline = Date.now() + 900;
+      while (!gptApprovedSection?.isConnected && Date.now() < deadline) {
+        await waitFor(45);
+        applyGptPagePolicy(document);
+      }
+    }
+  }
+
+  function resumeMemorySummaryAfterUnlock(attempt = 0) {
+    if (!isPersonalizationRoute() || !protectedRouteUnlocked) return;
+    const button = findMemorySummaryManageButton();
+    if (button) {
+      replayManageClick(button);
+      return;
+    }
+    if (attempt < 24) window.setTimeout(() => resumeMemorySummaryAfterUnlock(attempt + 1), 125);
+  }
+
+  function findPluginInstallButtonByKey(pluginKey) {
+    for (const article of getPluginArticles(document)) {
+      const info = extractPluginCardInfo(article);
+      if (!info || info.key !== pluginKey) continue;
+      for (const button of article.querySelectorAll('button[type="button"], button')) {
+        if (isPluginInstallButton(button)) return button;
+      }
+    }
+    return null;
+  }
+
+  function resumePluginInstallAfterUnlock(pluginKey, attempt = 0) {
+    if (!isPluginsRoute() || !protectedRouteUnlocked || !pluginKey) return;
+    const button = findPluginInstallButtonByKey(pluginKey);
+    if (button) {
+      replayPluginInstall(button, pluginKey);
+      return;
+    }
+
+    if (attempt < 24) {
+      window.setTimeout(() => resumePluginInstallAfterUnlock(pluginKey, attempt + 1), 125);
+      return;
+    }
+
+    const savedEntry = pluginVault.get(pluginKey);
+    if (savedEntry?.href) location.assign(savedEntry.href);
+  }
+
+  function resumeApprovedPasswordAction(grant) {
+    if (!grant) return;
+    if (grant.kind === 'memory-summary') {
+      resumeMemorySummaryAfterUnlock();
+      return;
+    }
+    if (grant.kind === 'plugin-install') {
+      resumePluginInstallAfterUnlock(String(grant.payload?.pluginKey || ''));
+    }
+  }
+
+  async function synchronizeRoute() {
+    const descriptor = getProtectedRouteDescriptor();
+    const routeKey = descriptor?.key || null;
+    const onPersonalization = routeKey === 'personalization';
+    const onPlugins = routeKey === 'plugins';
+    const onGpts = routeKey === 'gpts';
+
+    document.documentElement.classList.toggle(PERSONALIZATION_CLASS, onPersonalization);
+    document.documentElement.classList.toggle(PLUGINS_CURATING_CLASS, onPlugins);
+    document.documentElement.classList.toggle(GPTS_CURATING_CLASS, onGpts);
+
+    if (routeKey !== activeProtectedRouteKey) {
+      const previousRouteKey = activeProtectedRouteKey;
+      activeProtectedRouteKey = routeKey;
+      protectedRouteUnlocked = false;
+      routeAuthCheckInProgress = false;
+      authRedirectRequested = false;
+      pendingApprovedAction = null;
+
+      if (previousRouteKey === 'plugins' && routeKey !== 'plugins') {
+        void finalizePluginVaultSeedIfReady();
+      }
+      if (previousRouteKey === 'gpts' && routeKey !== 'gpts') {
+        resetGptCurationState();
+      }
+    }
+
+    configureRouteObserver();
+
+    if (!descriptor) {
+      document.documentElement.classList.remove(GATED_CLASS);
+      return;
+    }
+
+    if (protectedRouteUnlocked) {
+      document.documentElement.classList.remove(GATED_CLASS);
+      return;
+    }
+
+    preArmProtectedRoute(descriptor);
+    if (routeAuthCheckInProgress || authRedirectRequested) return;
+
+    routeAuthCheckInProgress = true;
+    try {
+      const grant = await consumeNativePasswordGrant();
+      const current = getProtectedRouteDescriptor();
+      if (current?.key !== routeKey) return;
+
+      if (grant?.routeKey === routeKey) {
+        protectedRouteUnlocked = true;
+        authRedirectRequested = false;
+        pendingApprovedAction = grant;
+        await prepareUnlockedProtectedRoute(routeKey);
+        document.documentElement.classList.remove(GATED_CLASS);
+        scheduleGeneralUiScan(true);
+        const approvedAction = pendingApprovedAction;
+        pendingApprovedAction = null;
+        resumeApprovedPasswordAction(approvedAction);
+        return;
+      }
+
+      await beginNativePasswordFlow({
+        kind: 'protected-route',
+        routeKey,
+        title: descriptor.title,
+        returnUrl: location.href
+      });
+    } finally {
+      routeAuthCheckInProgress = false;
+    }
+  }
+
+  function queueRouteCheck() {
+    if (routeCheckQueued) return;
+    routeCheckQueued = true;
+    queueMicrotask(() => {
+      routeCheckQueued = false;
+      checkForRouteChange();
+    });
+  }
+
+  function checkForRouteChange() {
+    if (location.href === lastUrl) return false;
+    lastUrl = location.href;
+    void synchronizeRoute();
+    scheduleGeneralUiScan(true);
+    return true;
+  }
+
+  function installNavigationGuards() {
+    const handleNavigation = () => {
+      lastUrl = location.href;
+      void synchronizeRoute();
+      scheduleGeneralUiScan(true);
+      scheduleSidebarPolishRetries();
+    };
+
+    window.addEventListener('hashchange', handleNavigation, true);
+    window.addEventListener('popstate', handleNavigation, true);
+    window.addEventListener('pageshow', handleNavigation, true);
+    window.addEventListener('pagehide', () => {
+      if (isPluginsRoute()) void finalizePluginVaultSeedIfReady();
+    }, true);
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') checkForRouteChange();
+    }, true);
+
+    try {
+      if (globalThis.navigation?.addEventListener) {
+        globalThis.navigation.addEventListener('currententrychange', queueRouteCheck);
+      }
+    } catch {
+      // Navigation API support is optional.
+    }
+
+    // Always keep the tiny href-string fallback. ChatGPT has changed router behavior
+    // enough times that relying on one SPA event source is not worth another 3-second
+    // password-gate delay. No DOM scanning happens here.
+    routePollTimer = window.setInterval(checkForRouteChange, ROUTE_POLL_MS);
+  }
+
+  function installInteractionGuards() {
+    document.addEventListener('click', event => {
+      // Pre-empt normal left-click navigation into protected ChatGPT routes. This runs
+      // in capture phase before React's router, so the protected page never paints first.
+      if (event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
+        const anchor = getElementFromEvent(event, 'a[href]');
+        if (anchor) {
+          const targetUrl = new URL(anchor.getAttribute('href'), location.href);
+          const targetDescriptor = getProtectedRouteDescriptorForUrl(targetUrl.href);
+          const sameUnlockedLane =
+            targetDescriptor?.key &&
+            targetDescriptor.key === activeProtectedRouteKey &&
+            protectedRouteUnlocked;
+
+          if (targetDescriptor && !sameUnlockedLane) {
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation();
+            preArmProtectedRoute(targetDescriptor);
+            void beginNativePasswordFlow({
+              kind: 'protected-route',
+              routeKey: targetDescriptor.key,
+              title: targetDescriptor.title,
+              returnUrl: targetUrl.href
+            });
+            return;
+          }
+        }
+      }
+
+      const menuItem = getElementFromEvent(event, '[role="menuitem"]');
+      if (menuItem && isDeleteAllMemoriesItem(menuItem)) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        menuItem.remove();
+        return;
+      }
+
+      const button = getButtonFromEvent(event);
+      if (button && !replayAllowedButtons.has(button) && isMemorySummaryManageButton(button)) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+
+        void beginNativePasswordFlow({
+          kind: 'memory-summary',
+          routeKey: 'personalization',
+          title: MEMORY_SUMMARY_PROMPT,
+          returnUrl: location.href
+        });
+        return;
+      }
+
+      if (button && isPluginsRoute() && !replayAllowedPluginButtons.has(button) && isPluginInstallButton(button)) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        void protectPluginInstallAction(button);
+        return;
+      }
+
+      if (isLikelyMenuTrigger(event.target)) scheduleGeneralUiScan(false);
+    }, true);
+
+    document.addEventListener('keydown', event => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      if (isLikelyMenuTrigger(event.target)) scheduleGeneralUiScan(false);
+    }, true);
+  }
+
+  function isLikelyMenuTrigger(target) {
+    if (!(target instanceof Element)) return false;
+    return Boolean(target.closest(
+      'button[aria-haspopup="menu"], button[aria-haspopup="listbox"], [role="button"][aria-haspopup="menu"], [role="button"][aria-haspopup="listbox"]'
+    ));
+  }
+
+  function getElementFromEvent(event, selector) {
+    const path = typeof event.composedPath === 'function' ? event.composedPath() : [];
+    for (const node of path) {
+      if (node instanceof Element && node.matches(selector)) return node;
+    }
+    return event.target instanceof Element ? event.target.closest(selector) : null;
+  }
+
+  function getButtonFromEvent(event) {
+    const element = getElementFromEvent(event, 'button');
+    return element instanceof HTMLButtonElement ? element : null;
+  }
+
+  function isDeleteAllMemoriesItem(menuItem) {
+    return DELETE_ALL_MEMORY_LABELS.has(normalizeText(menuItem.textContent));
+  }
+
+  function isMemorySummaryManageButton(button) {
+    if (!isPersonalizationRoute() || !protectedRouteUnlocked) return false;
+    if (!MANAGE_LABELS.has(normalizeText(button.textContent))) return false;
+
+    let node = button;
+    for (let depth = 0; node && depth < 9; depth += 1, node = node.parentElement) {
+      const context = normalizeText(node.textContent);
+      if (MEMORY_SUMMARY_LABELS.some(label => context.includes(label))) return true;
+    }
+    return false;
+  }
+
+  function replayManageClick(originalButton) {
+    const button = originalButton?.isConnected ? originalButton : findMemorySummaryManageButton();
+    if (!button) return;
+
+    replayAllowedButtons.add(button);
+    try {
+      button.click();
+    } finally {
+      queueMicrotask(() => replayAllowedButtons.delete(button));
+    }
+  }
+
+  function findMemorySummaryManageButton() {
+    for (const button of document.querySelectorAll('button')) {
+      if (!MANAGE_LABELS.has(normalizeText(button.textContent))) continue;
+
+      let node = button;
+      for (let depth = 0; node && depth < 9; depth += 1, node = node.parentElement) {
+        const context = normalizeText(node.textContent);
+        if (MEMORY_SUMMARY_LABELS.some(label => context.includes(label))) return button;
+      }
+    }
+    return null;
+  }
+
+  function configureRouteObserver() {
+    const descriptor = getProtectedRouteDescriptor();
+    const routeKey = descriptor?.key || null;
+    const needsObserver =
+      routeKey === 'personalization' ||
+      routeKey === 'plugins' ||
+      routeKey === 'gpts';
+
+    if (!needsObserver) {
+      routeObserver?.disconnect();
+      routeObserver = null;
+      if (routeMaintenanceTimer) {
+        clearTimeout(routeMaintenanceTimer);
+        routeMaintenanceTimer = 0;
+      }
+      return;
+    }
+
+    if (routeObserver) return;
+
+    // Protected directory/settings pages can lazy-load a lot of React nodes. Batch all
+    // mutation bursts into one cheap route-specific maintenance pass rather than scanning
+    // every added subtree individually.
+    routeObserver = new MutationObserver(() => {
+      queueRouteCheck();
+      scheduleRouteMaintenance();
+    });
+
+    routeObserver.observe(document.documentElement, {
+      childList: true,
+      subtree: true
+    });
+
+    scheduleRouteMaintenance(0);
+  }
+
+  function scheduleRouteMaintenance(delay = 70) {
+    if (routeMaintenanceTimer) clearTimeout(routeMaintenanceTimer);
+    routeMaintenanceTimer = window.setTimeout(() => {
+      routeMaintenanceTimer = 0;
+      const route = getProtectedRouteDescriptor()?.key;
+      if (route === 'personalization') {
+        hideSensitiveMemoryControls(document);
+        cleanChatGptUi(document);
+      } else if (route === 'plugins') {
+        void applyPluginPagePolicy(document);
+      } else if (route === 'gpts') {
+        applyGptPagePolicy(document);
+      }
+    }, delay);
+  }
+
+  function scheduleGeneralUiScan(immediate = false) {
+    if (uiScanTimer) {
+      clearTimeout(uiScanTimer);
+      uiScanTimer = 0;
+    }
+    if (uiScanRetryTimer) {
+      clearTimeout(uiScanRetryTimer);
+      uiScanRetryTimer = 0;
+    }
+
+    const firstDelay = immediate ? 0 : 20;
+    uiScanTimer = window.setTimeout(() => {
+      uiScanTimer = 0;
+      runGeneralUiScan(document);
+    }, firstDelay);
+
+    // React portals can mount one task later than the click that opened them. One small
+    // retry is much cheaper than a permanent observer over the entire conversation DOM.
+    if (!immediate) {
+      uiScanRetryTimer = window.setTimeout(() => {
+        uiScanRetryTimer = 0;
+        runGeneralUiScan(document);
+      }, 140);
+    }
+  }
+
+  function runGeneralUiScan(scope) {
+    if (isPersonalizationRoute()) hideSensitiveMemoryControls(scope);
+    if (isPluginsRoute()) void applyPluginPagePolicy(document);
+    if (isGptsRoute()) applyGptPagePolicy(document);
+    cleanChatGptUi(scope);
+  }
+
+  function forEachMatch(scope, selector, callback) {
+    if (!scope) return;
+
+    if (scope instanceof Element && scope.matches(selector)) {
+      callback(scope);
+    }
+
+    if (typeof scope.querySelectorAll !== 'function') return;
+    for (const element of scope.querySelectorAll(selector)) {
+      callback(element);
+    }
+  }
+
+  function hideSensitiveMemoryControls(scope = document) {
+    if (!isPersonalizationRoute()) return;
+    hideMemoryEnableRows(scope);
+    hideEnhancedMemoryBanners(scope);
+    removeDeleteAllMemoriesItems(scope);
+  }
+
+  function hideMemoryEnableRows(scope = document) {
+    forEachMatch(scope, 'button[role="switch"]', switchButton => {
+      const container = switchButton.closest('.flex.justify-between.gap-2') || switchButton.parentElement;
+      if (!container) return;
+
+      const context = normalizeText(container.textContent);
+      if (!includesAny(context, MEMORY_ENABLE_LABELS)) return;
+
+      const row = findSettingRow(switchButton);
+      if (!row) return;
+      hideElement(row);
+    });
+  }
+
+  function findSettingRow(startNode) {
+    let node = startNode;
+    let outermostSwitchContainer = null;
+
+    for (let depth = 0; node && depth < 8; depth += 1, node = node.parentElement) {
+      if (node.querySelector?.('button[role="switch"]')) {
+        outermostSwitchContainer = node;
+      }
+      if (node.classList?.contains('border-token-border-light')) {
+        return node;
+      }
+    }
+    return outermostSwitchContainer;
+  }
+
+  function hideEnhancedMemoryBanners(scope = document) {
+    const cardSelector =
+      'div.border-token-border-light.bg-token-bg-elevated-secondary.flex.min-h-20.flex-col.items-start.gap-3.rounded-2xl.border.px-4.py-4';
+
+    forEachMatch(scope, cardSelector, card => {
+      const context = normalizeText(card.textContent);
+      const hasLegacyText = includesAny(context, LEGACY_MEMORY_BANNER_TEXT);
+      const hasUpgradeButton = includesAny(context, ENHANCED_MEMORY_BUTTON_LABELS);
+      if (hasLegacyText && hasUpgradeButton) hideElement(card);
+    });
+
+    forEachMatch(scope, 'button[type="button"]', button => {
+      if (!ENHANCED_MEMORY_BUTTON_LABELS.has(normalizeText(button.textContent))) return;
+
+      let card = button.closest('div.border-token-border-light.bg-token-bg-elevated-secondary');
+      if (!card) {
+        let node = button.parentElement;
+        for (let depth = 0; node && depth < 6; depth += 1, node = node.parentElement) {
+          const context = normalizeText(node.textContent);
+          if (includesAny(context, LEGACY_MEMORY_BANNER_TEXT)) {
+            card = node;
+            break;
+          }
+        }
+      }
+
+      if (card) hideElement(card);
+    });
+  }
+
+  function removeDeleteAllMemoriesItems(scope = document) {
+    forEachMatch(scope, '[role="menuitem"]', item => {
+      if (!isDeleteAllMemoriesItem(item)) return;
+      hideElement(item);
+      item.remove();
+    });
+  }
+
+  // === Persistent ChatGPT plugin vault =========================================
+
+  async function ensurePluginVaultLoaded() {
+    if (pluginVaultLoaded) return pluginVault;
+    if (pluginVaultLoadPromise) return pluginVaultLoadPromise;
+
+    pluginVaultLoadPromise = (async () => {
+      try {
+        const stored = await api?.storage?.local?.get?.([
+          PLUGIN_VAULT_KEY,
+          PLUGIN_VAULT_SEEDED_KEY
+        ]);
+        const rows = Array.isArray(stored?.[PLUGIN_VAULT_KEY]) ? stored[PLUGIN_VAULT_KEY] : [];
+        pluginVaultSeeded = stored?.[PLUGIN_VAULT_SEEDED_KEY] === true;
+        pluginVault = new Map();
+
+        for (const row of rows) {
+          if (!row || typeof row !== 'object') continue;
+          const key = getPluginKey(row.href || row.key);
+          if (!key) continue;
+          pluginVault.set(key, {
+            key,
+            href: row.href || key,
+            name: String(row.name || 'Saved plugin'),
+            iconSrc: String(row.iconSrc || ''),
+            description: String(row.description || ''),
+            cachedAt: Number(row.cachedAt) || Date.now()
+          });
+        }
+      } catch (error) {
+        console.warn('[BraveFox Enhancer] Failed to load ChatGPT plugin vault:', error);
+        pluginVault = new Map();
+      } finally {
+        pluginVaultLoaded = true;
+        pluginVaultLoadPromise = null;
+      }
+      return pluginVault;
+    })();
+
+    return pluginVaultLoadPromise;
+  }
+
+  async function savePluginVault() {
+    try {
+      if (!api?.storage?.local?.set) return;
+      const rows = Array.from(pluginVault.values())
+        .sort((a, b) => String(a.name).localeCompare(String(b.name)))
+        .map(entry => ({
+          key: entry.key,
+          href: entry.href,
+          name: entry.name,
+          iconSrc: entry.iconSrc,
+          description: entry.description,
+          cachedAt: entry.cachedAt
+        }));
+      await api.storage.local.set({ [PLUGIN_VAULT_KEY]: rows });
+    } catch (error) {
+      console.warn('[BraveFox Enhancer] Failed to save ChatGPT plugin vault:', error);
+    }
+  }
+
+  async function finalizePluginVaultSeedIfReady() {
+    await ensurePluginVaultLoaded();
+    if (pluginVaultSeeded || pluginVault.size === 0) return false;
+
+    try {
+      pluginVaultSeeded = true;
+      await api?.storage?.local?.set?.({ [PLUGIN_VAULT_SEEDED_KEY]: true });
+      console.log(
+        `[BraveFox Enhancer] Plugin vault baseline frozen with ${pluginVault.size} installed/active plugin(s).`
+      );
+      return true;
+    } catch (error) {
+      pluginVaultSeeded = false;
+      console.warn('[BraveFox Enhancer] Failed to freeze ChatGPT plugin vault baseline:', error);
+      return false;
+    }
+  }
+
+  function normalizePluginHref(value) {
+    try {
+      const parsed = new URL(String(value || ''), location.origin);
+      if (parsed.origin !== location.origin) return '';
+      const pathname = parsed.pathname.replace(/\/+$/, '');
+      if (!/^\/plugins\/[^/]+/i.test(pathname)) return '';
+      return `${pathname}${parsed.search || ''}`;
+    } catch {
+      return '';
+    }
+  }
+
+  function getPluginKey(value) {
+    const href = normalizePluginHref(value);
+    if (!href) return '';
+    return href.split('?')[0].toLowerCase();
+  }
+
+  function getPluginArticles(scope = document) {
+    const root = scope?.querySelectorAll ? scope : document;
+    const articles = root.querySelectorAll('article');
+    return Array.from(articles).filter(article => article.querySelector(PLUGIN_CARD_LINK_SELECTOR));
+  }
+
+  function getPluginLink(article) {
+    return article?.querySelector?.(PLUGIN_CARD_LINK_SELECTOR) || null;
+  }
+
+  function getPluginActionButton(article) {
+    if (!article?.querySelector) return null;
+    return article.querySelector('button[type="button"], button');
+  }
+
+  function isPluginPlusButton(button) {
+    if (!(button instanceof Element)) return false;
+    if (button.hasAttribute('data-bravefox-plugin-reinstall')) return true;
+    return Boolean(button.querySelector(`use[href$="${PLUGIN_PLUS_ICON_FRAGMENT}"]`));
+  }
+
+  function isPluginInstallButton(button) {
+    if (!(button instanceof Element)) return false;
+    if (button.hasAttribute('data-bravefox-plugin-reinstall')) return true;
+    if (isPluginPlusButton(button)) return true;
+
+    const aria = normalizeText(button.getAttribute('aria-label'));
+    return PLUGIN_INSTALL_ARIA_TERMS.some(term => aria.includes(term));
+  }
+
+  function isInstalledPluginActionButton(button) {
+    if (!(button instanceof Element)) return false;
+    if (isPluginInstallButton(button)) return false;
+
+    // Confirmed installed-card structure from ChatGPT:
+    //   <button aria-haspopup="menu" aria-label="GitHub: toiminnot">
+    //     ... <use href="...#623957">
+    //   </button>
+    // Prefer structural attributes over generated Radix IDs/classes.
+    const hasActionsMenu = button.getAttribute('aria-haspopup') === 'menu';
+    const hasInstalledActionSprite = Boolean(
+      button.querySelector(`use[href$="${PLUGIN_INSTALLED_ACTION_ICON_FRAGMENT}"]`)
+    );
+    const aria = normalizeText(button.getAttribute('aria-label'));
+    const hasActionsLabel =
+      aria.includes(': toiminnot') ||
+      aria.endsWith('toiminnot') ||
+      aria.includes(': actions') ||
+      aria.endsWith('actions');
+
+    if (hasActionsMenu && (hasInstalledActionSprite || hasActionsLabel)) return true;
+
+    // Language-independent fallback: an actions-menu button with the confirmed installed
+    // sprite is sufficient even if ChatGPT changes the visible aria-label wording.
+    if (hasActionsMenu && hasInstalledActionSprite) return true;
+
+    // Keep explicit installed/management wording as a secondary compatibility fallback.
+    return (
+      aria.includes('uninstall') ||
+      aria.includes('remove') ||
+      aria.includes('disconnect') ||
+      aria.includes('poista') ||
+      aria.includes('katkaise') ||
+      aria.includes('manage') ||
+      aria.includes('hallinnoi')
+    );
+  }
+
+  function isInstalledPluginCard(article) {
+    if (!(article instanceof Element) || article.hasAttribute('data-bravefox-saved-plugin')) return false;
+
+    // Do not infer installed state merely because a card has some non-plus button.
+    // The installed baseline is intentionally strict so the permanent vault cannot
+    // accidentally learn random catalog cards.
+    const buttons = article.querySelectorAll('button[type="button"], button');
+    for (const button of buttons) {
+      if (isInstalledPluginActionButton(button)) return true;
+    }
+
+    // Buttonless status rows are a weaker fallback used only when ChatGPT exposes an
+    // explicit installed/connected label.
+    const context = normalizeText(article.textContent);
+    return PLUGIN_INSTALLED_STATUS_TERMS.some(term => context.includes(term));
+  }
+
+  function extractPluginCardInfo(article) {
+    const link = getPluginLink(article);
+    if (!link) return null;
+
+    const href = normalizePluginHref(link.getAttribute('href'));
+    const key = getPluginKey(href);
+    if (!key) return null;
+
+    const icon = article.querySelector('[data-testid="plugin-icon-wrapper"] img, img');
+    const ariaName = String(link.getAttribute('aria-label') || '')
+      .replace(/^(avaa|open)\s+/i, '')
+      .trim();
+    const name = String(icon?.getAttribute('alt') || ariaName || key.split('/').pop() || 'Saved plugin').trim();
+
+    const descriptionNode = article.querySelector(
+      'div[class*="text-token-text-tertiary"][class*="line-clamp-1"], div[class*="line-clamp-1"][class*="text-[13px]"]'
+    );
+
+    return {
+      key,
+      href,
+      name,
+      iconSrc: String(icon?.getAttribute('src') || ''),
+      description: String(descriptionNode?.textContent || '').trim(),
+      cachedAt: Date.now()
+    };
+  }
+
+  function samePluginMetadata(a, b) {
+    return Boolean(
+      a && b &&
+      a.key === b.key &&
+      a.href === b.href &&
+      a.name === b.name &&
+      a.iconSrc === b.iconSrc &&
+      a.description === b.description
+    );
+  }
+
+  async function rememberInstalledPluginCards(scope = document) {
+    await ensurePluginVaultLoaded();
+    if (pluginVaultSeeded) return false;
+
+    let changed = false;
+
+    for (const article of getPluginArticles(scope)) {
+      if (!isInstalledPluginCard(article)) continue;
+      const info = extractPluginCardInfo(article);
+      if (!info) continue;
+
+      const previous = pluginVault.get(info.key);
+      if (!samePluginMetadata(previous, info)) {
+        pluginVault.set(info.key, info);
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      await savePluginVault();
+      console.log(`[BraveFox Enhancer] Plugin vault now remembers ${pluginVault.size} plugin(s).`);
+    }
+
+    return changed;
+  }
+
+  function updateCachedPluginMetadataFromAllowedCards(cards) {
+    let changed = false;
+
+    for (const article of cards) {
+      const info = extractPluginCardInfo(article);
+      if (!info || !pluginVault.has(info.key)) continue;
+
+      const previous = pluginVault.get(info.key);
+      const merged = {
+        ...previous,
+        href: info.href || previous.href,
+        name: info.name || previous.name,
+        iconSrc: info.iconSrc || previous.iconSrc,
+        description: info.description || previous.description,
+        cachedAt: previous.cachedAt || Date.now()
+      };
+      if (!samePluginMetadata(previous, merged)) {
+        pluginVault.set(info.key, merged);
+        changed = true;
+      }
+    }
+
+    return changed;
+  }
+
+  async function applyPluginPagePolicy(scope = document) {
+    if (!isPluginsRoute()) return;
+
+    document.documentElement.classList.add(PLUGINS_CURATING_CLASS);
+    await ensurePluginVaultLoaded();
+
+    for (const section of document.querySelectorAll('section[data-bravefox-plugin-section-allowed="true"]')) {
+      section.removeAttribute('data-bravefox-plugin-section-allowed');
+    }
+
+    // Capture installed/connected cards BEFORE anything is filtered. Once a plugin enters
+    // this vault, uninstalling it later does not remove the entry; its native + card (or a
+    // BraveFox fallback card) remains available for reinstall.
+    await rememberInstalledPluginCards(scope);
+
+    const cards = getPluginArticles(document);
+    const firstCatalogSection = cards[0]?.closest?.('section') || null;
+    const preferredMount = firstCatalogSection?.parentElement || null;
+    const seenAllowed = new Set();
+    const allowedNativeCards = [];
+    const touchedSections = new Set();
+
+    for (const article of cards) {
+      if (article.hasAttribute('data-bravefox-saved-plugin')) continue;
+
+      const info = extractPluginCardInfo(article);
+      if (!info || !pluginVault.has(info.key)) {
+        const section = article.closest('section');
+        if (section) touchedSections.add(section);
+        article.remove();
+        continue;
+      }
+
+      if (seenAllowed.has(info.key)) {
+        const section = article.closest('section');
+        if (section) touchedSections.add(section);
+        article.remove();
+        continue;
+      }
+
+      seenAllowed.add(info.key);
+      allowedNativeCards.push(article);
+      article.setAttribute('data-bravefox-plugin-allowed', info.key);
+      const allowedSection = article.closest('section');
+      if (allowedSection) allowedSection.setAttribute('data-bravefox-plugin-section-allowed', 'true');
+    }
+
+    if (updateCachedPluginMetadataFromAllowedCards(allowedNativeCards)) {
+      void savePluginVault();
+    }
+
+    for (const section of touchedSections) {
+      if (!section.isConnected || section.id === PLUGIN_SAVED_SECTION_ID) continue;
+      if (!section.querySelector(PLUGIN_CARD_LINK_SELECTOR)) section.remove();
+    }
+
+    renderMissingSavedPluginCards(seenAllowed, preferredMount, firstCatalogSection);
+  }
+
+  function renderMissingSavedPluginCards(nativeKeys, preferredMount = null, catalogAnchor = null) {
+    const previousSection = document.getElementById(PLUGIN_SAVED_SECTION_ID);
+
+    // Custom fallback cards are only needed on the main plugin directory, not on a
+    // plugin's individual detail page.
+    const pathname = String(location.pathname || '').replace(/\/+$/, '') || '/';
+    if (pathname.toLowerCase() !== '/plugins') {
+      previousSection?.remove();
+      return;
+    }
+
+    const missing = Array.from(pluginVault.values())
+      .filter(entry => !nativeKeys.has(entry.key))
+      .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+
+    if (!missing.length) {
+      previousSection?.remove();
+      return;
+    }
+
+    const signature = missing
+      .map(entry => `${entry.key}|${entry.name}|${entry.iconSrc}`)
+      .join('||');
+
+    // Avoid an observer feedback loop: our own cached section triggers one mutation when
+    // first inserted, but an unchanged signature must not be torn down and rebuilt again.
+    if (previousSection?.dataset?.bravefoxVaultSignature === signature) return;
+    previousSection?.remove();
+
+    const section = document.createElement('section');
+    section.dataset.bravefoxVaultSignature = signature;
+    section.id = PLUGIN_SAVED_SECTION_ID;
+
+    const heading = document.createElement('div');
+    heading.textContent = 'BraveFox saved plugins';
+    heading.style.cssText = 'font-weight:600;margin:0 0 10px 2px;';
+
+    const grid = document.createElement('div');
+    grid.className = 'bravefox-saved-plugin-grid';
+
+    for (const entry of missing) {
+      const article = document.createElement('article');
+      article.className = 'bravefox-saved-plugin-card';
+      article.setAttribute('data-bravefox-saved-plugin', entry.key);
+
+      if (entry.iconSrc) {
+        const img = document.createElement('img');
+        img.src = entry.iconSrc;
+        img.alt = entry.name;
+        article.appendChild(img);
+      }
+
+      const link = document.createElement('a');
+      link.className = 'bravefox-saved-plugin-link';
+      link.href = entry.href;
+
+      const name = document.createElement('div');
+      name.className = 'bravefox-saved-plugin-name';
+      name.textContent = entry.name;
+
+      const note = document.createElement('div');
+      note.className = 'bravefox-saved-plugin-note';
+      note.textContent = entry.description || 'Saved for reinstall';
+
+      link.append(name, note);
+
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'bravefox-saved-plugin-reinstall';
+      button.textContent = '+';
+      button.title = `Open ${entry.name} to reinstall`;
+      button.setAttribute('aria-label', `Open ${entry.name} to reinstall`);
+      button.setAttribute('data-bravefox-plugin-reinstall', entry.key);
+
+      article.append(link, button);
+      grid.appendChild(article);
+    }
+
+    section.append(heading, grid);
+
+    const firstNativeArticle = document.querySelector(`article ${PLUGIN_CARD_LINK_SELECTOR}`)?.closest('article');
+    const firstNativeSection = firstNativeArticle?.closest('section');
+    const host =
+      preferredMount ||
+      firstNativeSection?.parentElement ||
+      document.querySelector('main') ||
+      document.querySelector('[role="main"]') ||
+      document.body;
+    const anchor =
+      (catalogAnchor?.parentElement === host && catalogAnchor) ||
+      (firstNativeSection?.parentElement === host && firstNativeSection) ||
+      null;
+
+    if (anchor) {
+      host.insertBefore(section, anchor);
+    } else {
+      host.insertBefore(section, host.firstChild);
+    }
+  }
+
+  function getPluginKeyForButton(button) {
+    const savedKey = button?.getAttribute?.('data-bravefox-plugin-reinstall');
+    if (savedKey) return getPluginKey(savedKey);
+
+    const article = button?.closest?.('article');
+    const articleLink = article ? getPluginLink(article) : null;
+    const fromArticle = getPluginKey(articleLink?.getAttribute('href'));
+    if (fromArticle) return fromArticle;
+
+    return getPluginKey(location.pathname);
+  }
+
+  async function protectPluginInstallAction(button) {
+    await ensurePluginVaultLoaded();
+
+    const pluginKey = getPluginKeyForButton(button);
+    if (!pluginKey || !pluginVault.has(pluginKey)) {
+      // An install/+ control for a plugin that was never in the installed vault is not
+      // permitted to survive the filtered page.
+      button.remove();
+      return;
+    }
+
+    void beginNativePasswordFlow({
+      kind: 'plugin-install',
+      routeKey: 'plugins',
+      title: PLUGIN_INSTALL_PROMPT,
+      returnUrl: location.href,
+      payload: { pluginKey }
+    });
+  }
+
+  function replayPluginInstall(button, pluginKey) {
+    const savedEntry = pluginVault.get(pluginKey);
+
+    if (button?.hasAttribute?.('data-bravefox-plugin-reinstall')) {
+      if (savedEntry?.href) location.assign(savedEntry.href);
+      return;
+    }
+
+    if (!(button instanceof HTMLButtonElement) || !button.isConnected) {
+      if (savedEntry?.href) location.assign(savedEntry.href);
+      return;
+    }
+
+    replayAllowedPluginButtons.add(button);
+    try {
+      button.click();
+    } finally {
+      queueMicrotask(() => replayAllowedPluginButtons.delete(button));
+    }
+  }
+
+  // === GPT directory curation ===================================================
+
+  function getGptCards(scope = document) {
+    const root = scope?.querySelectorAll ? scope : document;
+    return Array.from(root.querySelectorAll(GPT_CARD_SELECTOR))
+      .filter(card => card.querySelector('img[alt="GPT Icon"], img[alt*="GPT"]'));
+  }
+
+  function getGptSections() {
+    return Array.from(document.querySelectorAll(GPT_SOURCE_SECTION_SELECTOR));
+  }
+
+  function extractGptCardInfo(card) {
+    const titleElement =
+      card.querySelector('div[class*="font-semibold"][class*="line-clamp"]') ||
+      card.querySelector('span[class*="font-semibold"][class*="line-clamp"]') ||
+      Array.from(card.querySelectorAll('div, span')).find(node =>
+        node.classList?.contains('font-semibold') && normalizeText(node.textContent)
+      );
+
+    const descriptionElement =
+      card.querySelector('span[class*="line-clamp-3"][class*="text-xs"]') ||
+      card.querySelector('span[class*="line-clamp-2"][class*="text-xs"]') ||
+      card.querySelector('span[class*="line-clamp"]');
+
+    let author = '';
+    for (const node of card.querySelectorAll('div, span')) {
+      const text = String(node.textContent || '').trim();
+      const normalized = normalizeText(text);
+      if (
+        normalized.startsWith('tekijä:') ||
+        normalized.startsWith('by ') ||
+        normalized.startsWith('by:') ||
+        normalized.startsWith('creator:') ||
+        normalized.startsWith('author:')
+      ) {
+        author = text;
+        break;
+      }
+    }
+
+    return {
+      title: String(titleElement?.textContent || '').trim(),
+      description: String(descriptionElement?.textContent || '').trim(),
+      author
+    };
+  }
+
+  function isAllowedGptCard(card) {
+    const info = extractGptCardInfo(card);
+    const looseTitle = normalizeLooseTitle(info.title);
+    const author = normalizeLooseTitle(info.author);
+
+    if (!looseTitle) return false;
+
+    // OpenAI/ChatGPT is the only publisher wildcard. Native GPTs stay visible even
+    // when their individual titles are not listed in GPT_ALLOWLIST.
+    if (GPT_NATIVE_PUBLISHERS.some(publisher => author.includes(publisher))) return true;
+
+    // Every third-party GPT must be explicitly present in the single editable array.
+    return GPT_ALLOWLIST.some(title => normalizeLooseTitle(title) === looseTitle);
+  }
+
+  function getGptSectionHeading(section) {
+    if (!(section instanceof Element)) return '';
+    const heading =
+      section.querySelector(':scope > div[tabindex="0"] div.text-xl.font-semibold') ||
+      section.querySelector(':scope > div[tabindex="0"] [class*="font-semibold"]') ||
+      section.querySelector('div.text-xl.font-semibold');
+    return String(heading?.textContent || '').trim();
+  }
+
+  function isChatGptDonorSection(section) {
+    const heading = normalizeLooseTitle(getGptSectionHeading(section));
+    if (
+      heading.includes('chatgpt n tekemät') ||
+      heading.includes('chatgpt n tekemat') ||
+      heading.includes('made by chatgpt') ||
+      heading.includes('created by chatgpt') ||
+      heading.includes('from chatgpt')
+    ) {
+      return true;
+    }
+
+    // Heading labels can change. A shelf whose rendered cards are all authored by
+    // ChatGPT/OpenAI is a safe fallback donor for the curated container.
+    const cards = getGptCards(section);
+    return cards.length > 0 && cards.every(card => {
+      const author = normalizeLooseTitle(extractGptCardInfo(card).author);
+      return GPT_NATIVE_PUBLISHERS.some(publisher => author.includes(publisher));
+    });
+  }
+
+  function findGptGrid(section) {
+    if (!(section instanceof Element)) return null;
+    return (
+      section.querySelector(':scope > .mt-4.mb-10 > .grid') ||
+      section.querySelector(':scope > div[class*="mt-4"][class*="mb-10"] > div.grid') ||
+      section.querySelector('div.grid.grid-cols-1') ||
+      section.querySelector('div.grid')
+    );
+  }
+
+  function normalizeApprovedGptSection(section) {
+    if (!(section instanceof Element)) return null;
+
+    section.id = GPT_APPROVED_SECTION_ID;
+    section.setAttribute(GPT_APPROVED_SECTION_ATTR, 'true');
+
+    let headingContainer = section.querySelector(':scope > div[data-bravefox-gpt-heading="true"]');
+    if (!headingContainer) {
+      headingContainer = section.querySelector(':scope > div[tabindex="0"]');
+    }
+    if (!headingContainer) {
+      headingContainer = document.createElement('div');
+      section.insertBefore(headingContainer, section.firstChild);
+    }
+
+    headingContainer.setAttribute('data-bravefox-gpt-heading', 'true');
+    headingContainer.setAttribute('tabindex', '0');
+    headingContainer.style.opacity = '1';
+    headingContainer.style.transform = 'none';
+
+    let title = headingContainer.querySelector(':scope > .text-xl.font-semibold');
+    if (!title) {
+      title = document.createElement('div');
+      title.className = 'text-xl font-semibold md:text-2xl';
+      headingContainer.appendChild(title);
+    }
+    title.textContent = GPT_APPROVED_TITLE;
+
+    let subtitle = headingContainer.querySelector(':scope > .text-token-text-tertiary.text-sm');
+    if (!subtitle) {
+      subtitle = document.createElement('div');
+      subtitle.className = 'text-token-text-tertiary text-sm md:text-base';
+      headingContainer.appendChild(subtitle);
+    }
+    subtitle.textContent = GPT_APPROVED_SUBTITLE;
+
+    // Kill detached/duplicate title or subtitle nodes left by an earlier donor-based
+    // build. Keep the single heading pair above and nothing else with the same text.
+    for (const duplicateTitle of section.querySelectorAll('div.text-xl.font-semibold, div[class*="text-xl"][class*="font-semibold"]')) {
+      if (duplicateTitle !== title && normalizeText(duplicateTitle.textContent) === normalizeText(GPT_APPROVED_TITLE)) {
+        duplicateTitle.remove();
+      }
+    }
+    for (const duplicateSubtitle of section.querySelectorAll('div.text-token-text-tertiary.text-sm, div[class*="text-token-text-tertiary"][class*="text-sm"]')) {
+      if (duplicateSubtitle !== subtitle && normalizeText(duplicateSubtitle.textContent) === normalizeText(GPT_APPROVED_SUBTITLE)) {
+        duplicateSubtitle.remove();
+      }
+    }
+
+    // If an older build left duplicate BraveFox heading wrappers behind, keep exactly one.
+    for (const candidate of Array.from(section.children)) {
+      if (candidate === headingContainer || !(candidate instanceof Element)) continue;
+      const text = normalizeText(candidate.textContent);
+      if (text.includes(normalizeText(GPT_APPROVED_TITLE)) && text.includes(normalizeText(GPT_APPROVED_SUBTITLE))) {
+        candidate.remove();
+      }
+    }
+
+    let content = section.querySelector(':scope > div[data-bravefox-gpt-content="true"]');
+    if (!content) {
+      content = Array.from(section.children).find(child =>
+        child instanceof Element && child.classList.contains('mt-4') && child.classList.contains('mb-10')
+      ) || null;
+    }
+    if (!content) {
+      content = document.createElement('div');
+      content.className = 'mt-4 mb-10';
+      section.appendChild(content);
+    }
+    content.setAttribute('data-bravefox-gpt-content', 'true');
+
+    let grid = findGptGrid(section);
+    if (!grid) {
+      grid = document.createElement('div');
+      grid.className = 'grid grid-cols-1 gap-x-1.5 gap-y-1 md:gap-x-2 md:gap-y-1.5 lg:grid-cols-2 lg:gap-x-3 lg:gap-y-2.5';
+      content.prepend(grid);
+    }
+
+    for (const button of content.querySelectorAll('button')) {
+      if (isGptShowMoreButton(button)) button.remove();
+    }
+
+    return grid;
+  }
+
+  function createApprovedGptSectionShell() {
+    const section = document.createElement('div');
+    section.className = 'h-fit scroll-mt-28 last:min-h-[calc(100vh-8rem)]';
+    section.id = GPT_APPROVED_SECTION_ID;
+    section.setAttribute(GPT_APPROVED_SECTION_ATTR, 'true');
+
+    const heading = document.createElement('div');
+    heading.setAttribute('tabindex', '0');
+    heading.setAttribute('data-bravefox-gpt-heading', 'true');
+    heading.style.opacity = '1';
+    heading.style.transform = 'none';
+
+    const title = document.createElement('div');
+    title.className = 'text-xl font-semibold md:text-2xl';
+    title.textContent = GPT_APPROVED_TITLE;
+
+    const subtitle = document.createElement('div');
+    subtitle.className = 'text-token-text-tertiary text-sm md:text-base';
+    subtitle.textContent = GPT_APPROVED_SUBTITLE;
+    heading.append(title, subtitle);
+
+    const content = document.createElement('div');
+    content.className = 'mt-4 mb-10';
+    content.setAttribute('data-bravefox-gpt-content', 'true');
+
+    const grid = document.createElement('div');
+    grid.className = 'grid grid-cols-1 gap-x-1.5 gap-y-1 md:gap-x-2 md:gap-y-1.5 lg:grid-cols-2 lg:gap-x-3 lg:gap-y-2.5';
+    content.appendChild(grid);
+    section.append(heading, content);
+    return { section, grid };
+  }
+
+  function prepareApprovedGptSection() {
+    if (gptApprovedSection?.isConnected && gptApprovedGrid?.isConnected) {
+      normalizeApprovedGptSection(gptApprovedSection);
+      return gptApprovedSection;
+    }
+
+    const existingSections = Array.from(document.querySelectorAll(`[${GPT_APPROVED_SECTION_ATTR}="true"], #${GPT_APPROVED_SECTION_ID}`));
+    const existing = existingSections.shift() || null;
+    for (const duplicate of existingSections) duplicate.remove();
+
+    if (existing) {
+      const grid = normalizeApprovedGptSection(existing);
+      if (grid) {
+        gptApprovedSection = existing;
+        gptApprovedGrid = grid;
+        return existing;
+      }
+      existing.remove();
+    }
+
+    // Do not wait for the far-down "Made by ChatGPT" shelf. That donor was the main
+    // reason /gpts could sit blank for tens of seconds on a cold/lazy load. BraveFox
+    // builds the same native-shaped shell immediately and harvests approved cards into it.
+    const sourceSections = getGptSections().filter(section =>
+      section.getAttribute(GPT_APPROVED_SECTION_ATTR) !== 'true'
+    );
+    const firstSource = sourceSections[0] || null;
+    const host = firstSource?.parentElement || document.querySelector('main') || document.querySelector('[role="main"]');
+    if (!host) return null;
+
+    const created = createApprovedGptSectionShell();
+    if (firstSource?.parentElement === host) host.insertBefore(created.section, firstSource);
+    else host.insertBefore(created.section, host.firstChild);
+
+    gptApprovedSection = created.section;
+    gptApprovedGrid = created.grid;
+    gptCurationLastActivityAt = Date.now();
+    return created.section;
+  }
+
+  function makeGptCardKey(card) {
+    const info = extractGptCardInfo(card);
+    const href = String(card.getAttribute('href') || '').trim();
+    if (href && href !== '#') return `href:${href}`;
+    return `text:${normalizeLooseTitle(info.title)}|${normalizeLooseTitle(info.author)}`;
+  }
+
+  function stripGptRankNumber(card) {
+    if (!(card instanceof Element)) return;
+    const first = card.firstElementChild;
+    if (!first) return;
+    const text = String(first.textContent || '').trim();
+    if (/^\d+$/.test(text) && !first.querySelector('img, svg')) {
+      first.remove();
+    }
+  }
+
+  function getGptCardWrapper(card) {
+    if (!(card instanceof Element)) return null;
+    const wrapper = card.closest('div[tabindex="0"]');
+    return wrapper && wrapper !== document.documentElement && wrapper !== document.body
+      ? wrapper
+      : card;
+  }
+
+  function normalizeApprovedGptCard(card, wrapper) {
+    if (!(card instanceof Element)) return;
+    stripGptRankNumber(card);
+
+    if (wrapper instanceof Element) {
+      wrapper.setAttribute('tabindex', '0');
+      wrapper.style.opacity = '1';
+      wrapper.style.transform = 'none';
+    }
+
+    // Use the compact two-column card geometry from ChatGPT's own GPT shelf even when
+    // the source card came from Featured or another category with a larger presentation.
+    card.className = 'gizmo-link cursor-pointer group hover:bg-token-main-surface-secondary flex h-[104px] items-center gap-2.5 overflow-hidden rounded-xl px-1 py-4 md:px-3 md:py-4 lg:px-3';
+  }
+
+  function harvestApprovedGpts() {
+    if (!gptApprovedGrid?.isConnected) return 0;
+
+    let changed = 0;
+    for (const card of getGptCards(document)) {
+      const wrapper = getGptCardWrapper(card);
+      if (!wrapper?.isConnected) continue;
+
+      if (!isAllowedGptCard(card)) {
+        // Anything not approved disappears immediately, even while its source shelf is hidden.
+        wrapper.remove();
+        changed += 1;
+        continue;
+      }
+
+      const key = makeGptCardKey(card);
+      const alreadyInApprovedGrid = gptApprovedGrid.contains(wrapper);
+
+      if (gptApprovedKeys.has(key) && !alreadyInApprovedGrid) {
+        wrapper.remove();
+        changed += 1;
+        continue;
+      }
+
+      gptApprovedKeys.add(key);
+      card.setAttribute('data-bravefox-gpt-allowed', 'true');
+      normalizeApprovedGptCard(card, wrapper);
+
+      if (!alreadyInApprovedGrid) {
+        gptApprovedGrid.appendChild(wrapper);
+        changed += 1;
+      }
+    }
+
+    if (changed) gptCurationLastActivityAt = Date.now();
+    return changed;
+  }
+
+  function isGptShowMoreButton(button) {
+    if (!(button instanceof HTMLButtonElement)) return false;
+    return GPT_SHOW_MORE_LABELS.has(normalizeText(button.textContent));
+  }
+
+  function expandGptSourceShelves() {
+    const now = Date.now();
+    let pending = false;
+    let clicked = false;
+
+    for (const section of getGptSections()) {
+      if (section === gptApprovedSection || section.getAttribute(GPT_APPROVED_SECTION_ATTR) === 'true') continue;
+
+      for (const button of section.querySelectorAll('button')) {
+        if (!isGptShowMoreButton(button) || button.disabled) continue;
+
+        const currentCardCount = getGptCards(section).length;
+        let state = gptShowMoreState.get(button);
+        if (!state) state = { count: 0, lastClickAt: 0, lastCardCount: -1 };
+
+        if (state.count >= GPT_MAX_SHOW_MORE_CLICKS) continue;
+        pending = true;
+
+        // Do not hammer the same React control four times while one network request is
+        // still in flight. Re-click only after cards actually grew, or after a 2.5s
+        // timeout indicates the previous click was swallowed.
+        const waitingForGrowth = state.lastClickAt > 0 && currentCardCount <= state.lastCardCount;
+        if (waitingForGrowth && now - state.lastClickAt < 2500) continue;
+        if (!waitingForGrowth && now - state.lastClickAt < 700) continue;
+
+        state.count += 1;
+        state.lastClickAt = now;
+        state.lastCardCount = currentCardCount;
+        gptShowMoreState.set(button, state);
+        try {
+          button.click();
+          clicked = true;
+        } catch {
+          // The maintenance pass will retry if React replaces the button.
+        }
+      }
+    }
+
+    if (clicked) gptCurationLastActivityAt = now;
+    return { pending, clicked };
+  }
+
+  function removeGptCategoryNavigation() {
+    for (const nav of document.querySelectorAll('div.sticky.top-14.z-10')) {
+      const scroller = nav.querySelector(':scope > div.no-scrollbar');
+      if (!scroller) continue;
+      const text = normalizeText(scroller.textContent);
+      const categoryHits = [
+        'huippuvalinnat', 'ohjelmointi', 'tutkimus ja analyysi', 'tuottavuus',
+        'programming', 'research & analysis', 'productivity', 'dall·e', 'writing', 'lifestyle'
+      ].filter(term => text.includes(term)).length;
+      if (categoryHits >= 2) nav.remove();
+    }
+  }
+
+  function removeOtherGptShelvesIfSettled(pendingShowMore) {
+    if (!gptApprovedSection?.isConnected) return false;
+
+    const now = Date.now();
+    const elapsed = now - gptCurationStartedAt;
+    const quietFor = now - gptCurationLastActivityAt;
+    const settled = elapsed >= GPT_MIN_CURATION_MS && !pendingShowMore && quietFor >= 650;
+    const hardStop = elapsed >= GPT_HARD_CURATION_MS;
+    if (!settled && !hardStop) return false;
+
+    for (const section of getGptSections()) {
+      if (section === gptApprovedSection) continue;
+      section.remove();
+    }
+
+    // The custom shelf is already fully expanded by BraveFox; its native control is dead weight.
+    for (const button of gptApprovedSection.querySelectorAll('button')) {
+      if (isGptShowMoreButton(button)) button.remove();
+    }
+    removeGptCategoryNavigation();
+    return true;
+  }
+
+  function scheduleGptCurationRetry(delay = 260) {
+    if (!isGptsRoute()) return;
+    if (gptCurationRetryTimer) clearTimeout(gptCurationRetryTimer);
+    gptCurationRetryTimer = window.setTimeout(() => {
+      gptCurationRetryTimer = 0;
+      applyGptPagePolicy(document);
+    }, delay);
+  }
+
+  function applyGptPagePolicy(scope = document) {
+    if (!isGptsRoute()) return;
+
+    document.documentElement.classList.add(GPTS_CURATING_CLASS);
+    if (!gptCurationStartedAt) {
+      gptCurationStartedAt = Date.now();
+      gptCurationLastActivityAt = gptCurationStartedAt;
+    }
+
+    const approvedSection = prepareApprovedGptSection();
+    if (!approvedSection) {
+      scheduleGptCurationRetry(120);
+      return;
+    }
+
+    removeGptCategoryNavigation();
+    harvestApprovedGpts();
+    const expansion = expandGptSourceShelves();
+
+    const finalized = removeOtherGptShelvesIfSettled(expansion.pending);
+
+    // A programmatic Show-more click normally causes a React mutation, but keep a short
+    // retry as insurance for slow PWA/network commits, shelves that replace buttons, and
+    // the final quiet-period cleanup after the last expansion click.
+    if (!finalized) {
+      scheduleGptCurationRetry(expansion.clicked ? 260 : 420);
+    }
+  }
+
+  function removePluginFeaturedPromo(scope = document) {
+    const root = scope?.querySelectorAll ? scope : document;
+    for (const link of root.querySelectorAll('a.interactive-button[href^="/plugins?category=featured"]')) {
+      link.remove();
+    }
+  }
+
+  function makeSidebarImagesItem(moreItem) {
+    const anchor = document.createElement('a');
+    anchor.tabIndex = 0;
+    anchor.setAttribute('data-fill', '');
+    anchor.className = 'group __menu-item hoverable gap-1.5 transition-colors keyboard-focused:focus-ring keyboard-focused:-outline-offset-2';
+    anchor.setAttribute('data-testid', 'sidebar-item-library');
+    anchor.setAttribute('data-sidebar-item', 'true');
+    anchor.setAttribute('data-bravefox-sidebar-images', 'true');
+    anchor.href = '/images';
+    anchor.setAttribute('data-discover', 'true');
+
+    const oldUse = moreItem?.querySelector?.('svg use')?.getAttribute('href') || '/cdn/assets/sprites-shell-0b456576.svg#dots-horizontal';
+    const imageSprite = oldUse.includes('#') ? `${oldUse.split('#')[0]}#images` : '/cdn/assets/sprites-shell-0b456576.svg#images';
+    const oldLabel = normalizeText(moreItem?.textContent);
+    const label = oldLabel.includes('lisää') ? 'Kuvat' : 'Images';
+
+    anchor.innerHTML = `
+      <div aria-hidden="true" class="relative flex items-center justify-center [opacity:var(--menu-item-icon-opacity,1)] icon">
+        <div class="absolute inset-0 flex items-center justify-center">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20" focusable="false" class="icon" aria-hidden="true">
+            <use href="${imageSprite}" fill="currentColor"></use>
+          </svg>
+        </div>
+      </div>
+      <div class="flex min-w-0 grow items-center gap-2.5">
+        <div class="truncate [&:has([data-marquee-text])]:min-w-0 [&:has([data-marquee-text])]:flex-1 [&:has([data-marquee-text])]:overflow-visible">${label}</div>
+      </div>`;
+    return anchor;
+  }
+
+  function polishSidebarNavigation() {
+    for (const pluginsButton of document.querySelectorAll(
+      'a[data-testid="plugins-button"][data-sidebar-item="true"], a[data-sidebar-item="true"][href="/plugins"]'
+    )) {
+      pluginsButton.remove();
+    }
+
+    const moreItems = Array.from(document.querySelectorAll('div[data-sidebar-item="true"][aria-haspopup="menu"]'))
+      .filter(item => item.querySelector('svg use[href$="#dots-horizontal"]'));
+
+    for (const moreItem of moreItems) {
+      const existingCustom = document.querySelector('a[data-bravefox-sidebar-images="true"]');
+      if (existingCustom) {
+        moreItem.remove();
+        continue;
+      }
+
+      const nativeImages = Array.from(document.querySelectorAll('a[data-sidebar-item="true"][href="/images"]'))
+        .find(item => !item.hasAttribute('data-bravefox-sidebar-images'));
+      const replacement = nativeImages || makeSidebarImagesItem(moreItem);
+      replacement.setAttribute('data-bravefox-sidebar-images', 'true');
+      moreItem.replaceWith(replacement);
+    }
+  }
+
+  function scheduleSidebarPolishRetries() {
+    for (const timer of sidebarPolishTimers) clearTimeout(timer);
+    sidebarPolishTimers = [];
+    for (const delay of [0, 100, 300, 800, 1600, 3200]) {
+      sidebarPolishTimers.push(window.setTimeout(() => {
+        polishSidebarNavigation();
+        removePluginFeaturedPromo(document);
+      }, delay));
+    }
+  }
+
+  function hideElement(element) {
+    element.classList.add(HIDDEN_CLASS);
+    element.setAttribute('aria-hidden', 'true');
+  }
+
+  function cleanChatGptUi(scope = document) {
+    polishSidebarNavigation();
+    removePluginFeaturedPromo(scope);
+    forEachMatch(scope, 'div[role="menuitem"]', item => {
+      const firstLine = normalizeText(String(item.textContent || '').split('\n')[0]);
+      if (MODELS_TO_REMOVE.has(firstLine)) item.remove();
+    });
+
+    hideElementsBySelectorAndText(
+      scope,
+      'button[type="button"].flex.items-center.gap-1.bg-transparent',
+      'hanki plus'
+    );
+    hideElementsBySelectorAndText(scope, 'div.truncate[dir="auto"]', 'free', true);
+    hideElementsBySelectorAndText(
+      scope,
+      'div.flex.items-center.gap-1.text-sm.font-semibold.opacity-70',
+      'muisti täynnä'
+    );
+  }
+
+  function hideElementsBySelectorAndText(scope, selector, expectedText, exact = false) {
+    forEachMatch(scope, selector, element => {
+      const text = normalizeText(element.textContent);
+      const matches = exact ? text === expectedText : text.includes(expectedText);
+      if (matches) hideElement(element);
+    });
+  }
+
+  console.log(
+    `[BraveFox Enhancer] ChatGPT SPA/UI protection active (${IS_ANDROID ? 'Android-optimized' : 'desktop-optimized'}, low-overhead routing).`
+  );
+})();
