@@ -3,7 +3,7 @@
 // Platform-exclusive behavior lives in modules/pc-esr.js and modules/fenix-nightly.js.
 
 import "./blocker/service.js";
-import { isCompletelyExcludedHostname, isCompletelyExcludedUrl } from "./blocker/shared.js";
+import { isCompletelyExcludedHostname, isCompletelyExcludedUrl, isGoogleMapsOrEarthUrl } from "./blocker/shared.js";
 import { getSettings, loadDataset } from "./blocker/storage.js";
 import { findTimeRuleBlock } from "./blocker/timers.js";
 
@@ -806,6 +806,8 @@ async function getFocusMasterTimeRuleRequestDecision(details) {
 }
 
 async function getRequestDecision(details) {
+  if (isGoogleMapsOrEarthUrl(details?.url)) return { cancel: false };
+
   try {
     // Focus Master Priority 2 Time Rules intentionally outrank Trusted Sites.
     // Firefox's blocking webRequest API lets us redirect before the destination

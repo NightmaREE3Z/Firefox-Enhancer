@@ -3,6 +3,28 @@
 
     // google.js of BraveFox Enhancer v29.1.0 Hybrid
 
+    function isGoogleMapsOrEarthUrl(value = window.location.href) {
+        try {
+            const parsed = new URL(String(value || ''));
+            const host = String(parsed.hostname || '')
+                .toLowerCase()
+                .replace(/\.$/, '')
+                .replace(/^www\./, '');
+            const pathname = String(parsed.pathname || '/').replace(/\/{2,}/g, '/').toLowerCase();
+            const googleBaseHost = /^google\.(?:[a-z]{2,3}|[a-z]{2,3}\.[a-z]{2})$/i;
+            const googleMapsOrEarthHost = /^(?:maps|earth)\.google\.(?:[a-z]{2,3}|[a-z]{2,3}\.[a-z]{2})$/i;
+
+            if (host === 'maps.app.goo.gl' || googleMapsOrEarthHost.test(host)) return true;
+            if (host === 'goo.gl') return pathname === '/maps' || pathname.startsWith('/maps/');
+            if (!googleBaseHost.test(host)) return false;
+
+            return pathname === '/maps' || pathname.startsWith('/maps/') ||
+                pathname === '/earth' || pathname.startsWith('/earth/');
+        } catch (e) {
+            return false;
+        }
+    }
+
     // === INSTANT NON-SEARCH GOOGLE APP ABORT ===
     // Gemini and Google Translate are standalone apps, not Google Search result pages.
     // BraveFox does not filter or modify them at all.
@@ -11,7 +33,8 @@
         .replace(/\.$/, '');
 
     if (initialGoogleHostname === 'gemini.google.com' ||
-        initialGoogleHostname.startsWith('translate.google.')) {
+        initialGoogleHostname.startsWith('translate.google.') ||
+        isGoogleMapsOrEarthUrl()) {
         return;
     }
 
@@ -741,6 +764,7 @@
 
     // === REGIONAL TLD REDIRECTOR ===
     function forceGoogleComAndFi() {
+        if (isGoogleMapsOrEarthUrl()) return false;
         try {
             const urlObj = new URL(window.location.href);
             const hostname = urlObj.hostname.toLowerCase();
@@ -905,7 +929,7 @@
 	/touchup/i, /touch up/i, /tush/i, /lex bl/i, /image ai/i, /edit ai/i, /deviant/i, /Lex Cabr/i, /Lex Carb/i, /Lex Kauf/i, /Lex Man/i, /nudecrawler/i, /unc1oth/i, /photo AI/i, 
 	/pict AI/i, /pics app/i, /picsart/i, /enhance image/i, /erootti/i, /vegi/i, /vegen/i, /faceswap/i, /DeepSeek/i, /deepnude ai/i, /deepnude-ai/i, /object/i, /Roxan/i, /Perez/i, 
 	/Mickie/i, /Micky/i, /vagena/i, /birppis/i,  /aitool/i, /Lana Perry/i, /Del Rey/i, /Tiffa/i, /Stratt/i, /puzz/i, /vulv/i, /clito/i, /clita/i, /cl1t/i, /cloth/i, /uncloth/i, 
-	/decloth/i, /rem cloth/i, /del cloth/i, /babyg/i, /eras cloth/i, /Bella/i, /Tiffy/i, /vagi/i, /vagene/i, /Del Ray/i, /CJ Lana/i, /generator/i, /Liv org/i, /Stee/i, /playboy/i, 
+	/decloth/i, /rem cloth/i, /del cloth/i, /babyg/i, /eras cloth/i, /Bella/i, /Tiffy/i, /vagi/i, /vagene/i, /Del Ray/i, /CJ Lana/i, /generator/i, /Liv org/i, /wedge/i, /playboy/i, 
 	/Stewart/i, /off pant/i, /rem pant/i, /Kristen Stewart/i, /Steward/i, /Brit Bake/i,  /pantie/i, /panty/i, /pants/i, /poses/i, /Sydnee/i, /del pant/i, /eras pant/i, /her pant/i, 
 	/she pant/i, /pussy/i, /Babe/i, /content adult/i, /porn/i, /editing/i, /AI Tool/i, /Chelsey/i, /Zel Veg/i, /Ch3l/i, /Sweeney/i, /input face/i, /upload face/i, /editor/i, /Twat/i,
 	/editation/i, /CJ Perry/i, /Lana WWE/i, /Lana Del Rey/i, /CJ WWE/i, /image app/i, /picture app/i, /edit app/i, /pic app/i, /photo app/i, /Perry WWE/i, /application/i, /Sxuel/i, 
@@ -963,7 +987,7 @@
 	/make img mov/i, /make ima mov/i, /gif pic/i, /gif pho/i, /gif img/i, /gif ima/i, /photo to gif/i, /image to gif/i, /pic to gif/i, /pic to vid/i, /photo to video/i, /image to video/i,  
 	/vld3/i, /v1d3/i, /g!f/i, /RemovingAI/i, /blowjob/i, /bjob/i, /mangoai/i, /mangoapp/i, /mango-app/i, /ai-app/i, /mangoanim/i, /mango anim/i, /mango-anim/i, /lantaai/i, /lantaaa/i, /EXGF/i,
 	/motionai/i, /chr0m/i, /m1um/i, /changemotion/i, /swapmotion/i, /motionsw/i, /motionc/i, /poseai/i, /AIblow/i, /AIsuck/i, /AI-suck/i, /drool/i, /RemovingAI/i, /bjob/i, /Down Marie/i, 
-	/blowjob/i, /BJob/i, /B-J0b/i, /B-Job/i, /Suckjob/i, /Suck-job/i,  /Suckj0b/i, /Suck-j0b/i, /SDuck/i, /Mouthjob/i, /Mouth-job/i, /MouthAI/i, /MouthinAI/i, /MouthingAI/i, /AIMouth/i, /wedge/i,
+	/blowjob/i, /BJob/i, /B-J0b/i, /B-Job/i, /Suckjob/i, /Suck-job/i,  /Suckj0b/i, /Suck-j0b/i, /SDuck/i, /Mouthjob/i, /Mouth-job/i, /MouthAI/i, /MouthinAI/i, /MouthingAI/i, /AIMouth/i, 
 	/BlowAI/i, /BlowsAI/i, /BlowingAI/i, /JobAI/i, /AIJob/i, /Mouthig/i, /ZuckCock/i, /ZuckC/i, /ZuckD/i, /ZuckP/i, /Zuckz/i, /Zucks/i, /Zuckc/i, /Zuzkc/i, /YouZuck/i, /EX-GF/i, /TitsAI/i,
 	/ZuckYou/i, /Cuck/i, /Guck/i, /Cheeks/i, /Sukc/i, /AISucc/i, /SuccAI/i, /Suqz/i, /Suqs/i, /Suqc/i, /Suqq/i, /Suqq/i, /Suqi/i, /Suqz/i, /Sucq/i, /cukc/i, /boob/i, /b0ob/i, /fagger/i, /wedgi/i,     
 	/titjob/i, /titti/i, /assjob/i, /buttjob/i, /wank/i, /w4nk/i, /tittt/i, /tiitt/i, /crotch/i, /thigh/i, /legjob/i, /asssex/i, /buttsex/i, /titsex/i, /buttsex/i, /ass sex/i, /butt sex/i, 
@@ -4125,7 +4149,7 @@
     }
 
     function doRedirect(triggerContext, triggerTerm) {
-        if (isRedirecting) return;
+        if (isRedirecting || isGoogleMapsOrEarthUrl()) return;
         logRedirect(triggerContext, triggerTerm);
         isRedirecting = true;
         try { if (domObserver) domObserver.disconnect(); } catch (e) {}
