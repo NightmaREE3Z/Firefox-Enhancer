@@ -203,6 +203,46 @@
     'more actions'
   ]);
 
+  // ChatGPT activity/reasoning panels. BraveFox keeps these collapsed by default, but
+  // a real user click/keyboard toggle permanently hands that specific panel back to ChatGPT.
+  const ANALYSIS_ACTIVITY_LABELS = new Set([
+    'analysoitu',
+    'analysoidaan',
+    'analyzed',
+    'analysed',
+    'analyzing',
+    'analysing'
+  ]);
+  const ANALYSIS_ACTIVITY_USER_ATTR = 'data-bravefox-analysis-user-controlled';
+  const ANALYSIS_ACTIVITY_PENDING_ATTR = 'data-bravefox-analysis-collapse-pending';
+
+  // ChatGPT mounts the sidebar in stages. Keep the early navigation rows hidden until
+  // the real Library button exists, then reveal that top group together. Recent chats stay
+  // hidden until the real Projects section exists, so both late-loading areas settle together.
+  const SIDEBAR_LIBRARY_LABELS = new Set(['kirjasto', 'library']);
+  const SIDEBAR_NEW_CHAT_LABELS = new Set(['uusi keskustelu', 'new chat']);
+  const SIDEBAR_SCHEDULED_LABELS = new Set([
+    'ajoitettu',
+    'ajastettu',
+    'ajastukset',
+    'scheduled',
+    'tasks'
+  ]);
+  const SIDEBAR_PROJECTS_LABELS = new Set(['projektit', 'projects']);
+  const SIDEBAR_RECENT_LABELS = new Set([
+    'viimeisimmät',
+    'viimeisimmat',
+    'recent',
+    'recents',
+    'recent chats'
+  ]);
+  const SIDEBAR_TOP_WAIT_CLASS = 'bravefox-sidebar-top-waiting';
+  const SIDEBAR_RECENTS_WAIT_CLASS = 'bravefox-sidebar-recents-waiting';
+  const SIDEBAR_STAGE_HIDDEN_ATTR = 'data-bravefox-sidebar-stage-hidden';
+  let sidebarTopStageReleased = false;
+  let sidebarRecentsStageReleased = false;
+  let sidebarStageFailOpenTimer = 0;
+
   const MODELS_TO_REMOVE = new Set([
     'gpt-5 instant',
     'gpt-5 thinking mini',
@@ -426,6 +466,7 @@
 
   const replayAllowedButtons = new WeakSet();
   const replayAllowedPluginButtons = new WeakSet();
+  const userControlledAnalysisActivityKeys = new Set();
   const nativeBannerCloseReplayAllowedButtons = new WeakSet();
   const thinkingEffortRepairing = new WeakSet();
   const exactReasoningRepairing = new WeakSet();
@@ -469,12 +510,19 @@
   if (isPluginsPathname(location.pathname)) document.documentElement.classList.add(PLUGINS_CURATING_CLASS);
   if (isGptsPathname(location.pathname)) document.documentElement.classList.add(GPTS_CURATING_CLASS);
 
+  // Arm both sidebar reveal gates before the first paint. The top gate opens when the
+  // real Library button mounts; the Recent gate opens when the real Projects section mounts.
+  document.documentElement.classList.add(SIDEBAR_TOP_WAIT_CLASS, SIDEBAR_RECENTS_WAIT_CLASS);
+
   injectStyles();
   void synchronizeRoute();
   installNavigationGuards();
   installInteractionGuards();
   installThinkingEffortEdgeLock();
   installEscapeHatchObserver();
+  maintainSidebarStageReveal(document);
+  armSidebarStageFailOpen();
+  collapseAnalysisActivityPanels(document);
   configureRouteObserver();
   scheduleGeneralUiScan(true);
   scheduleSidebarPolishRetries();
@@ -583,6 +631,8 @@
       /* BraveFox ChatGPT navigation cleanup: old + new sidebar generations.
        * These selectors run at document_start so removed destinations never flash. */
       button[data-sidebar-destination="builtin:customize"],
+      button[data-sidebar-destination="builtin:skills"],
+      button.sidebar-item[aria-haspopup="menu"]:has(svg path[d^="M4.1665 8.50146"]),
       nav:has(button[data-sidebar-destination="builtin:customize"])
         button[aria-haspopup="dialog"][data-slot="popover-trigger"]:has(svg path[d^="M4.16638 8.50146"]),
       aside:has(button[data-sidebar-destination="builtin:customize"])
@@ -604,6 +654,29 @@
         visibility: visible !important;
         opacity: 1 !important;
         pointer-events: auto !important;
+      }
+
+      /* Sidebar staged reveal. Header controls (ChatGPT logo/search/sidebar toggle) are
+       * intentionally untouched. Early navigation rows wait for the real Library button;
+       * Recent and its chat rows wait for the real Projects section. */
+      html.${SIDEBAR_TOP_WAIT_CLASS} nav a[data-sidebar-item="true"],
+      html.${SIDEBAR_TOP_WAIT_CLASS} aside a[data-sidebar-item="true"],
+      html.${SIDEBAR_TOP_WAIT_CLASS} [data-testid*="sidebar"] a[data-sidebar-item="true"],
+      html.${SIDEBAR_TOP_WAIT_CLASS} nav button[data-sidebar-destination],
+      html.${SIDEBAR_TOP_WAIT_CLASS} aside button[data-sidebar-destination],
+      html.${SIDEBAR_TOP_WAIT_CLASS} [data-testid*="sidebar"] button[data-sidebar-destination],
+      [${SIDEBAR_STAGE_HIDDEN_ATTR}="top"],
+      html.${SIDEBAR_RECENTS_WAIT_CLASS} nav a[href^="/c/"],
+      html.${SIDEBAR_RECENTS_WAIT_CLASS} nav a[href*="/c/"],
+      html.${SIDEBAR_RECENTS_WAIT_CLASS} aside a[href^="/c/"],
+      html.${SIDEBAR_RECENTS_WAIT_CLASS} aside a[href*="/c/"],
+      html.${SIDEBAR_RECENTS_WAIT_CLASS} [data-testid*="sidebar"] a[href^="/c/"],
+      html.${SIDEBAR_RECENTS_WAIT_CLASS} [data-testid*="sidebar"] a[href*="/c/"],
+      [${SIDEBAR_STAGE_HIDDEN_ATTR}="recent"] {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
       }
 
       /* Legacy-memory upgrade-card hiding is now handled in JavaScript only while
@@ -1892,6 +1965,13 @@
 
   function installInteractionGuards() {
     document.addEventListener('click', event => {
+      if (event.isTrusted) {
+        const analysisToggle = getElementFromEvent(event, 'button[aria-expanded][aria-labelledby]');
+        if (analysisToggle && isAnalysisActivityToggle(analysisToggle)) {
+          markAnalysisActivityUserControlled(analysisToggle);
+        }
+      }
+
       // Pre-empt normal left-click navigation into protected ChatGPT routes. This runs
       // in capture phase before React's router, so the protected page never paints first.
       if (event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
@@ -2044,6 +2124,13 @@
     }, true);
 
     document.addEventListener('keydown', event => {
+      if (event.isTrusted && (event.key === 'Enter' || event.key === ' ')) {
+        const analysisToggle = getElementFromEvent(event, 'button[aria-expanded][aria-labelledby]');
+        if (analysisToggle && isAnalysisActivityToggle(analysisToggle)) {
+          markAnalysisActivityUserControlled(analysisToggle);
+        }
+      }
+
       if (event.key === 'Escape') {
         if (dismissCustomChatGptBannerCloseMenu()) {
           event.preventDefault();
@@ -3599,8 +3686,21 @@
 
       escapeHatchObserver = new MutationObserver(mutations => {
         for (const mutation of mutations) {
+          if (mutation.type === 'attributes' && mutation.attributeName === 'aria-expanded') {
+            collapseAnalysisActivityPanels(mutation.target);
+            continue;
+          }
+
           for (const node of mutation.addedNodes) {
             if (!(node instanceof Element)) continue;
+
+            // MutationObserver callbacks run before the browser's next paint. Collapse new
+            // reasoning/activity panels here so expanded analysis does not become a scroll wall.
+            collapseAnalysisActivityPanels(node);
+
+            // Keep the sidebar's staged reveal synchronized before the browser paints new rows.
+            // Library releases the top navigation; Projects releases Recent + chat history.
+            if (mayAffectSidebarStageReveal(node)) maintainSidebarStageReveal(node);
 
             // Radix menus/settings dialogs are portal-mounted after the click that opens
             // them. The same already-cheap observer also notices top-level ChatGPT banners
@@ -3630,11 +3730,15 @@
             const relevantSidebarControl =
               node.matches?.(
                 'button[data-sidebar-destination="builtin:customize"], ' +
-                'button[aria-haspopup="dialog"][data-slot="popover-trigger"]'
+                'button[data-sidebar-destination="builtin:skills"], ' +
+                'button[aria-haspopup="dialog"][data-slot="popover-trigger"], ' +
+                'button.sidebar-item[aria-haspopup="menu"]'
               ) ||
               node.querySelector?.(
                 'button[data-sidebar-destination="builtin:customize"], ' +
-                'button[aria-haspopup="dialog"][data-slot="popover-trigger"]'
+                'button[data-sidebar-destination="builtin:skills"], ' +
+                'button[aria-haspopup="dialog"][data-slot="popover-trigger"], ' +
+                'button.sidebar-item[aria-haspopup="menu"]'
               );
             if (relevantSidebarControl) hideNewSidebarControls(node);
             if (memoryUiActive) hideSavedMemoryOverviewControls(node);
@@ -3684,7 +3788,9 @@
 
       escapeHatchObserver.observe(document.documentElement, {
         childList: true,
-        subtree: true
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['aria-expanded']
       });
     };
 
@@ -3714,6 +3820,106 @@
         applyGptPagePolicy(document);
       }
     }, delay);
+  }
+
+  function getAnalysisActivityLabel(button) {
+    if (!(button instanceof HTMLButtonElement)) return '';
+
+    const labelledBy = String(button.getAttribute('aria-labelledby') || '').trim();
+    if (labelledBy) {
+      const label = document.getElementById(labelledBy);
+      const text = normalizeText(label?.textContent);
+      if (text) return text;
+    }
+
+    return normalizeText(
+      button.parentElement?.querySelector?.('span[aria-live="polite"]')?.textContent
+    );
+  }
+
+  function isAnalysisActivityToggle(button) {
+    if (!(button instanceof HTMLButtonElement)) return false;
+    if (!button.hasAttribute('aria-expanded')) return false;
+    return ANALYSIS_ACTIVITY_LABELS.has(getAnalysisActivityLabel(button));
+  }
+
+  function getAnalysisActivityContainer(button) {
+    if (!(button instanceof HTMLButtonElement)) return null;
+    const header = button.parentElement;
+    if (!(header instanceof Element)) return button;
+    return header.parentElement instanceof Element ? header.parentElement : header;
+  }
+
+  function getAnalysisActivityKey(button) {
+    if (!(button instanceof HTMLButtonElement)) return '';
+    const labelledBy = String(button.getAttribute('aria-labelledby') || '').trim();
+    if (!labelledBy) return '';
+    return `${location.pathname}|${labelledBy}`;
+  }
+
+  function markAnalysisActivityUserControlled(button) {
+    if (!isAnalysisActivityToggle(button)) return false;
+
+    const key = getAnalysisActivityKey(button);
+    if (key) userControlledAnalysisActivityKeys.add(key);
+
+    button.setAttribute(ANALYSIS_ACTIVITY_USER_ATTR, 'true');
+    button.removeAttribute(ANALYSIS_ACTIVITY_PENDING_ATTR);
+    button.parentElement?.setAttribute?.(ANALYSIS_ACTIVITY_USER_ATTR, 'true');
+    getAnalysisActivityContainer(button)?.setAttribute?.(ANALYSIS_ACTIVITY_USER_ATTR, 'true');
+    return true;
+  }
+
+  function isAnalysisActivityUserControlled(button) {
+    if (!(button instanceof HTMLButtonElement)) return false;
+    if (button.getAttribute(ANALYSIS_ACTIVITY_USER_ATTR) === 'true') return true;
+    if (button.parentElement?.getAttribute?.(ANALYSIS_ACTIVITY_USER_ATTR) === 'true') return true;
+    if (getAnalysisActivityContainer(button)?.getAttribute?.(ANALYSIS_ACTIVITY_USER_ATTR) === 'true') return true;
+
+    const key = getAnalysisActivityKey(button);
+    return Boolean(key && userControlledAnalysisActivityKeys.has(key));
+  }
+
+  function collapseAnalysisActivityToggle(button) {
+    if (!isAnalysisActivityToggle(button)) return false;
+    if (button.getAttribute('aria-expanded') !== 'true') {
+      button.removeAttribute(ANALYSIS_ACTIVITY_PENDING_ATTR);
+      return false;
+    }
+    if (isAnalysisActivityUserControlled(button)) return false;
+    if (button.getAttribute(ANALYSIS_ACTIVITY_PENDING_ATTR) === 'true') return false;
+
+    button.setAttribute(ANALYSIS_ACTIVITY_PENDING_ATTR, 'true');
+    try {
+      button.click();
+      return true;
+    } catch {
+      button.removeAttribute(ANALYSIS_ACTIVITY_PENDING_ATTR);
+      return false;
+    }
+  }
+
+  function collapseAnalysisActivityPanels(scope = document) {
+    if (!scope) return;
+
+    if (scope instanceof HTMLButtonElement) {
+      collapseAnalysisActivityToggle(scope);
+    } else if (scope instanceof Element) {
+      const ownButton = scope.closest?.('button[aria-expanded][aria-labelledby]');
+      if (ownButton instanceof HTMLButtonElement) collapseAnalysisActivityToggle(ownButton);
+
+      // React may append the live label after the button. In that case the added node is
+      // the label/span rather than the header, so inspect its immediate parent for the toggle.
+      const siblingButton = scope.parentElement?.querySelector?.(
+        'button[aria-expanded="true"][aria-labelledby]'
+      );
+      if (siblingButton instanceof HTMLButtonElement) collapseAnalysisActivityToggle(siblingButton);
+    }
+
+    if (typeof scope.querySelectorAll !== 'function') return;
+    for (const button of scope.querySelectorAll('button[aria-expanded="true"][aria-labelledby]')) {
+      collapseAnalysisActivityToggle(button);
+    }
   }
 
   function scheduleGeneralUiScan(immediate = false) {
@@ -5155,21 +5361,28 @@
 
   function isNewSidebarExploreDotsButton(button) {
     if (!(button instanceof HTMLButtonElement)) return false;
-    if (button.getAttribute('aria-haspopup') !== 'dialog') return false;
-    if (button.getAttribute('data-slot') !== 'popover-trigger') return false;
+
+    const popupType = button.getAttribute('aria-haspopup');
+    const legacyPopover = popupType === 'dialog' && button.getAttribute('data-slot') === 'popover-trigger';
+    const currentSidebarMenu = popupType === 'menu' && button.classList.contains('sidebar-item');
+    if (!legacyPopover && !currentSidebarMenu) return false;
 
     const label = normalizeText(
       button.querySelector('.sr-only')?.textContent ||
-      button.getAttribute('aria-label')
+      button.getAttribute('aria-label') ||
+      button.textContent
     );
     if (label !== 'tutustu' && label !== 'explore') return false;
 
-    // Scope this to the sidebar by requiring the new Customize/Lisäosat destination
-    // somewhere in a reasonably close ancestor. Because that button is hard-hidden
-    // rather than removed, it remains a reliable structural marker.
+    // Scope this to the sidebar by requiring either generation of the Lisäosat/Customize
+    // destination somewhere in a reasonably close ancestor. Those buttons are hidden, not
+    // removed, so they remain reliable structural markers for the neighbouring dots menu.
     let node = button.parentElement;
     for (let depth = 0; node && depth < 8; depth += 1, node = node.parentElement) {
-      if (node.querySelector?.('button[data-sidebar-destination="builtin:customize"]')) {
+      if (
+        node.querySelector?.('button[data-sidebar-destination="builtin:customize"]') ||
+        node.querySelector?.('button[data-sidebar-destination="builtin:skills"]')
+      ) {
         return true;
       }
     }
@@ -5178,20 +5391,195 @@
   }
 
   function hideNewSidebarControls(scope = document) {
-    forEachMatch(scope, 'button[data-sidebar-destination="builtin:customize"]', button => {
-      hardHideEscapeHatch(button);
-      button.setAttribute('data-bravefox-sidebar-hidden', 'customize');
-    });
+    forEachMatch(
+      scope,
+      'button[data-sidebar-destination="builtin:customize"], button[data-sidebar-destination="builtin:skills"]',
+      button => {
+        hardHideEscapeHatch(button);
+        const destination = button.getAttribute('data-sidebar-destination') === 'builtin:skills'
+          ? 'skills'
+          : 'customize';
+        button.setAttribute('data-bravefox-sidebar-hidden', destination);
+      }
+    );
 
     forEachMatch(
       scope,
-      'button[aria-haspopup="dialog"][data-slot="popover-trigger"]',
+      'button[aria-haspopup="dialog"][data-slot="popover-trigger"], button.sidebar-item[aria-haspopup="menu"]',
       button => {
         if (!isNewSidebarExploreDotsButton(button)) return;
         hardHideEscapeHatch(button);
         button.setAttribute('data-bravefox-sidebar-hidden', 'explore-menu');
       }
     );
+  }
+
+  function getBraveFoxSidebarRoot(scope = document) {
+    const element = scope instanceof Element ? scope : null;
+    const directRoot = element?.closest?.('aside, nav, [data-testid*="sidebar"]');
+    if (
+      directRoot &&
+      directRoot.querySelector?.(
+        'button[data-sidebar-destination], button.sidebar-item, a[data-sidebar-item="true"]'
+      )
+    ) {
+      return directRoot;
+    }
+
+    const marker = (scope?.querySelector?.(
+      'button[data-sidebar-destination], button.sidebar-item, a[data-sidebar-item="true"]'
+    ) || document.querySelector(
+      'button[data-sidebar-destination], button.sidebar-item, a[data-sidebar-item="true"]'
+    ));
+    if (!marker) return null;
+    return marker.closest('aside, nav, [data-testid*="sidebar"]') || marker.parentElement;
+  }
+
+  function findExactSidebarTextElement(root, labels) {
+    if (!(root instanceof Element) || !labels) return null;
+    const selector = 'button, a, [role="button"], h2, h3, h4, div, span';
+    for (const element of root.querySelectorAll(selector)) {
+      const conversationAnchor = element.closest('a[href^="/c/"], a[href*="/c/"]');
+      if (conversationAnchor) continue;
+      if (labels.has(normalizeText(element.textContent))) return element;
+    }
+    return null;
+  }
+
+  function getTopmostExactTextWrapper(element) {
+    if (!(element instanceof Element)) return null;
+    const exactText = normalizeText(element.textContent);
+    let row = element;
+    for (let depth = 0; depth < 5; depth += 1) {
+      const parent = row.parentElement;
+      if (!parent) break;
+      if (parent.matches('aside, nav, [data-testid*="sidebar"]')) break;
+      if (normalizeText(parent.textContent) !== exactText) break;
+      row = parent;
+    }
+    return row;
+  }
+
+  function setSidebarStageHidden(element, stage, hidden) {
+    if (!(element instanceof Element)) return;
+    const row = getTopmostExactTextWrapper(element) || element;
+    if (hidden) {
+      row.setAttribute(SIDEBAR_STAGE_HIDDEN_ATTR, stage);
+      return;
+    }
+    if (row.getAttribute(SIDEBAR_STAGE_HIDDEN_ATTR) === stage) {
+      row.removeAttribute(SIDEBAR_STAGE_HIDDEN_ATTR);
+    }
+  }
+
+  function clearSidebarStageHidden(stage) {
+    for (const element of document.querySelectorAll(`[${SIDEBAR_STAGE_HIDDEN_ATTR}="${stage}"]`)) {
+      element.removeAttribute(SIDEBAR_STAGE_HIDDEN_ATTR);
+    }
+  }
+
+  function findSidebarLibraryElement(root) {
+    if (!(root instanceof Element)) return null;
+    return root.querySelector(
+      'a[href="/library"], a[href^="/library?"], ' +
+      'button[data-sidebar-destination="library"], button[data-sidebar-destination="builtin:library"]'
+    ) || findExactSidebarTextElement(root, SIDEBAR_LIBRARY_LABELS);
+  }
+
+  function isSidebarConversationAnchor(anchor) {
+    if (!(anchor instanceof HTMLAnchorElement)) return false;
+    const href = String(anchor.getAttribute('href') || '').trim();
+    if (!href) return false;
+    return /^\/c\/[^/?#]+(?:[/?#]|$)/i.test(href) || /\/c\/[^/?#]+(?:[/?#]|$)/i.test(href);
+  }
+
+  function getSidebarConversationRow(anchor, root) {
+    if (!(anchor instanceof Element) || !(root instanceof Element)) return null;
+    const row = anchor.closest('[data-sidebar-item="true"], .sidebar-item, li');
+    if (row && root.contains(row)) return row;
+    return anchor;
+  }
+
+  function hideSidebarTopRowsUntilLibrary(root) {
+    for (const labels of [SIDEBAR_NEW_CHAT_LABELS, SIDEBAR_SCHEDULED_LABELS]) {
+      const element = findExactSidebarTextElement(root, labels);
+      if (element) setSidebarStageHidden(element, 'top', true);
+    }
+  }
+
+  function hideSidebarRecentsUntilProjects(root) {
+    const recentHeader = findExactSidebarTextElement(root, SIDEBAR_RECENT_LABELS);
+    if (recentHeader) setSidebarStageHidden(recentHeader, 'recent', true);
+
+    for (const anchor of root.querySelectorAll('a[href]')) {
+      if (!isSidebarConversationAnchor(anchor)) continue;
+      const row = getSidebarConversationRow(anchor, root);
+      if (row) row.setAttribute(SIDEBAR_STAGE_HIDDEN_ATTR, 'recent');
+    }
+  }
+
+  function releaseSidebarTopStage() {
+    if (sidebarTopStageReleased) return;
+    sidebarTopStageReleased = true;
+    document.documentElement.classList.remove(SIDEBAR_TOP_WAIT_CLASS);
+    clearSidebarStageHidden('top');
+  }
+
+  function releaseSidebarRecentsStage() {
+    if (sidebarRecentsStageReleased) return;
+    sidebarRecentsStageReleased = true;
+    document.documentElement.classList.remove(SIDEBAR_RECENTS_WAIT_CLASS);
+    clearSidebarStageHidden('recent');
+  }
+
+  function releaseAllSidebarStages() {
+    releaseSidebarTopStage();
+    releaseSidebarRecentsStage();
+    if (sidebarStageFailOpenTimer) {
+      clearTimeout(sidebarStageFailOpenTimer);
+      sidebarStageFailOpenTimer = 0;
+    }
+  }
+
+  function armSidebarStageFailOpen() {
+    if (sidebarStageFailOpenTimer || (sidebarTopStageReleased && sidebarRecentsStageReleased)) return;
+    sidebarStageFailOpenTimer = window.setTimeout(() => {
+      sidebarStageFailOpenTimer = 0;
+      releaseSidebarTopStage();
+      releaseSidebarRecentsStage();
+    }, 7000);
+  }
+
+  function maintainSidebarStageReveal(scope = document) {
+    const root = getBraveFoxSidebarRoot(scope);
+    if (!root) return;
+
+    if (!sidebarTopStageReleased) {
+      if (findSidebarLibraryElement(root)) {
+        releaseSidebarTopStage();
+      } else {
+        hideSidebarTopRowsUntilLibrary(root);
+      }
+    }
+
+    if (!sidebarRecentsStageReleased) {
+      if (findExactSidebarTextElement(root, SIDEBAR_PROJECTS_LABELS)) {
+        releaseSidebarRecentsStage();
+      } else {
+        hideSidebarRecentsUntilProjects(root);
+      }
+    }
+
+    if (sidebarTopStageReleased && sidebarRecentsStageReleased && sidebarStageFailOpenTimer) {
+      clearTimeout(sidebarStageFailOpenTimer);
+      sidebarStageFailOpenTimer = 0;
+    }
+  }
+
+  function mayAffectSidebarStageReveal(node) {
+    if (!(node instanceof Element)) return false;
+    const root = getBraveFoxSidebarRoot(node);
+    return Boolean(root && (root === node || root.contains(node)));
   }
 
   function polishSidebarNavigation() {
@@ -5602,6 +5990,7 @@
     for (const delay of [0, 100, 300, 800, 1600, 3200]) {
       sidebarPolishTimers.push(window.setTimeout(() => {
         polishSidebarNavigation();
+        maintainSidebarStageReveal(document);
         removePluginFeaturedPromo(document);
       }, delay));
     }
@@ -6360,10 +6749,12 @@
     applyGoogleOnlyLoginPolicy(scope);
     applyAccountAndSettingsCleanup(scope);
     hideNewSidebarControls(scope);
+    collapseAnalysisActivityPanels(scope);
     applyConversationPresentation(scope);
     replaceCustomizableChatGptBannerText(scope);
     replaceFixedAssistantNoticeText(scope);
     polishSidebarNavigation();
+    maintainSidebarStageReveal(scope);
     removePluginFeaturedPromo(scope);
     enforceAllExactReasoningControls(scope);
     enforceThinkingEffortEdges(scope);

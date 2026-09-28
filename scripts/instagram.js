@@ -199,6 +199,31 @@
                     transition: none !important;
                 }
 
+                /* Lower-page Muse link: exact external destination only. */
+                div:has(> a[href="https://muse.ai/"]),
+                div:has(> a[href="https://muse.ai"]),
+                a[href="https://muse.ai/"],
+                a[href="https://muse.ai"] {
+                    display: none !important;
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                    width: 0 !important;
+                    min-width: 0 !important;
+                    max-width: 0 !important;
+                    height: 0 !important;
+                    min-height: 0 !important;
+                    max-height: 0 !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    overflow: hidden !important;
+                    position: absolute !important;
+                    left: -10000px !important;
+                    top: -10000px !important;
+                    transform: none !important;
+                    transition: none !important;
+                }
+
                 /* Profile Threads tag under usernames. Target the real Threads profile link, not IG's class soup. */
                 main header a[target="_blank"][href*="//www.threads.com/@"]:has(svg[aria-label="Threads"]),
                 main header a[target="_blank"][href*="//threads.com/@"]:has(svg[aria-label="Threads"]),

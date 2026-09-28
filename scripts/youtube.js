@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         YTClean
-// @version      2026-08-15
+// @date     	 2026-09-28
 // @description  Enhances my YouTube experience by blocking trackers and hiding garbage, such as shorts.
 // @match        https://*.youtube.com/*
 // @grant        none
@@ -8,6 +8,67 @@
 
 (function () {
     'use strict';
+
+    // ===== Critical no-glimpse hides: install before the heavier scanners initialize =====
+    function injectYTCriticalHideCSS() {
+        try {
+            if (document.documentElement.querySelector('style[data-ytclean-critical-hide-css]')) return;
+            const style = document.createElement('style');
+            style.type = 'text/css';
+            style.setAttribute('data-ytclean-critical-hide-css', '');
+            style.textContent = `
+                /* YouTube Premium statement/upsell banners. */
+                ytd-statement-banner-renderer:has(a[href^="/premium"]),
+                ytd-rich-section-renderer:has(ytd-statement-banner-renderer a[href^="/premium"]),
+                ytd-item-section-renderer:has(ytd-statement-banner-renderer a[href^="/premium"]) {
+                    display: none !important;
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                    height: 0 !important;
+                    min-height: 0 !important;
+                    max-height: 0 !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    overflow: hidden !important;
+                    content-visibility: hidden !important;
+                }
+
+                /* Shorts stay in YouTube's DOM so Polymer/IntersectionObserver can keep its
+                   continuation geometry intact, but they never receive paint or layout space. */
+                ytd-reel-shelf-renderer,
+                ytm-reel-shelf-renderer,
+                ytd-reel-item-renderer,
+                ytm-reel-item-renderer,
+                ytm-shorts-lockup-view-model,
+                ytd-shorts-lockup-view-model,
+                grid-shelf-view-model:has(ytm-shorts-lockup-view-model),
+                ytd-rich-shelf-renderer:has(ytm-shorts-lockup-view-model),
+                ytd-video-renderer:has(ytd-thumbnail a[href*="/shorts/"]),
+                ytd-grid-video-renderer:has(ytd-thumbnail a[href*="/shorts/"]),
+                ytd-rich-item-renderer:has(a[href*="/shorts/"]),
+                yt-lockup-view-model:has(a[href*="/shorts/"]),
+                ytm-lockup-view-model:has(a[href*="/shorts/"]),
+                .ytLockupViewModelHost:has(a[href*="/shorts/"]),
+                .ytLockupViewModelWrapper:has(a[href*="/shorts/"]),
+                [data-ytcleaner-shorts-content="1"] {
+                    display: none !important;
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                    height: 0 !important;
+                    min-height: 0 !important;
+                    max-height: 0 !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    overflow: hidden !important;
+                    content-visibility: hidden !important;
+                }
+            `;
+            (document.head || document.documentElement).appendChild(style);
+        } catch (e) {}
+    }
+    injectYTCriticalHideCSS();
 
     // === CHROME DEV CONSOLE LOGGING ===
     function devLog(message) {
@@ -799,29 +860,6 @@
                     content-visibility: visible !important;
                 }
 
-                #ytclean-search-scan-overlay {
-                    position: fixed !important;
-                    inset: 0 !important;
-                    z-index: 2147483646 !important;
-                    display: flex !important;
-                    align-items: center !important;
-                    justify-content: center !important;
-                    background: var(--yt-spec-base-background, #fff) !important;
-                    color: var(--yt-spec-text-primary, #0f0f0f) !important;
-                    font: 500 16px/1.35 Arial, sans-serif !important;
-                    pointer-events: all !important;
-                    opacity: 1 !important;
-                    visibility: visible !important;
-                    transition: none !important;
-                }
-
-                html:not(.ytclean-search-scanning) #ytclean-search-scan-overlay,
-                html:not(.ytclean-search-softgate) #ytclean-search-scan-overlay {
-                    display: none !important;
-                    visibility: hidden !important;
-                    opacity: 0 !important;
-                    pointer-events: none !important;
-                }
             `;
             (document.head || document.documentElement).appendChild(style);
         } catch (e) {}
@@ -902,28 +940,13 @@
     }
 
     function ensureYTSearchOverlay() {
-        try {
-            if (!document.documentElement) return null;
-            let overlay = document.getElementById('ytclean-search-scan-overlay');
-            if (!overlay) {
-                overlay = document.createElement('div');
-                overlay.id = 'ytclean-search-scan-overlay';
-                overlay.setAttribute('aria-hidden', 'true');
-                overlay.textContent = 'Loading…';
-                document.documentElement.appendChild(overlay);
-            }
-            return overlay;
-        } catch (e) {
-            return null;
-        }
+        return null;
     }
 
     function setYTSearchScanning(active) {
         try {
-            const canGate = updateYTSearchSoftGateClass();
-            if (!document.documentElement || !canGate) return;
-            if (active) ensureYTSearchOverlay();
-            document.documentElement.classList.toggle('ytclean-search-scanning', !!active);
+            updateYTSearchSoftGateClass();
+            document.documentElement?.classList.remove('ytclean-search-scanning');
         } catch (e) {}
     }
 
@@ -989,9 +1012,23 @@
         } catch (e) {}
     }
 
+    function hideYouTubePremiumStatementBanners() {
+        try {
+            const banners = document.querySelectorAll('ytd-statement-banner-renderer');
+            banners.forEach(banner => {
+                try {
+                    if (!banner.querySelector('a[href^="/premium"]')) return;
+                    const wrapper = banner.closest?.('ytd-rich-section-renderer, ytd-item-section-renderer') || banner;
+                    collapseYTHiddenUI(wrapper, true);
+                } catch (e) {}
+            });
+        } catch (e) {}
+    }
+
     function hideYouTubeNudgesAndShortsChips() {
         hideRecommendationNudges();
         hideSearchShortsChips();
+        hideYouTubePremiumStatementBanners();
     }
 
     let __ytSearchScanTimeout = null;
@@ -999,15 +1036,9 @@
     let __ytSearchScanNeedsOverlay = false;
 
     function shouldYTSearchScanUseOverlay(reason = '') {
-        const r = String(reason || '').toLowerCase();
-        // Do NOT flash the full-page overlay for routine interval/mutation scans.
-        // The CSS softgate already hides only unapproved cards, so background card rescans can be silent.
-        return !(
-            r === 'interval' ||
-            r === 'mutation-cards' ||
-            r === 'visibility' ||
-            r === 'dynamic-wrestling'
-        );
+        // The per-card search softgate already prevents unverified results from flashing.
+        // Keep navigation usable instead of covering the entire SPA with a synthetic Loading screen.
+        return false;
     }
 
     function releaseYTSearchOverlaySoon(delay = 160) {
@@ -1557,7 +1588,7 @@
             onEvent(window, 'yt-navigate-start', () => {
                 stopIntervals();
                 updateYTSearchSoftGateClass();
-                if (isYTSearchResultsPage()) setYTSearchScanning(true);
+                if (isYTSearchResultsPage()) setYTSearchScanning(false);
             }, false);
         } catch (e) {}
     }
@@ -1596,47 +1627,54 @@
         return elements;
     }
 
+    function markYTShortsContent(node) {
+        try {
+            if (!node || node.nodeType !== 1) return;
+            node.setAttribute('data-ytcleaner-shorts-content', '1');
+        } catch (e) {}
+    }
+
     function reelShelfFilter() {
-        const reels = document.querySelectorAll(
-            "ytd-reel-shelf-renderer, ytm-reel-shelf-renderer"
-        );
-        for (const reel of reels) {
-            reel.remove();
-        }
+        try {
+            document.querySelectorAll(
+                "ytd-reel-shelf-renderer, ytm-reel-shelf-renderer, ytd-reel-item-renderer, ytm-reel-item-renderer"
+            ).forEach(markYTShortsContent);
+        } catch (e) {}
     }
-    async function richShelfFilter() {
-        const selectors = [
-            "ytd-rich-shelf-renderer:has(h2>yt-icon:not([hidden]))",
-            "grid-shelf-view-model:has(ytm-shorts-lockup-view-model)"
-        ];
-        for (const s of selectors) {
-            const shelfs = await querySelectorAllPromise(s);
-            for (const shelf of shelfs) {
-                shelf.remove();
-            }
-        }
+
+    function richShelfFilter() {
+        try {
+            document.querySelectorAll([
+                "grid-shelf-view-model:has(ytm-shorts-lockup-view-model)",
+                "ytd-rich-shelf-renderer:has(ytm-shorts-lockup-view-model)",
+                "ytm-shorts-lockup-view-model",
+                "ytd-shorts-lockup-view-model"
+            ].join(', ')).forEach(markYTShortsContent);
+        } catch (e) {}
     }
+
     function shortsFilter() {
-        const shorts = document.querySelectorAll(
-            "ytd-video-renderer ytd-thumbnail a, ytd-grid-video-renderer ytd-thumbnail a, ytm-video-with-context-renderer a.media-item-thumbnail-container"
-        );
-        const tags = [
-            "YTD-VIDEO-RENDERER",
-            "YTD-GRID-VIDEO-RENDERER",
-            "YTM-VIDEO-WITH-CONTEXT-RENDERER"
-        ];
-        for (const i of shorts) {
-            if (i.href.indexOf("shorts") != -1) {
-                let node = i.parentNode;
-                while (node) {
-                    if (tags.includes(node.nodeName)) {
-                        node.remove();
-                        break;
-                    }
-                    node = node.parentNode;
-                }
-            }
-        }
+        try {
+            const anchors = document.querySelectorAll('a[href*="/shorts/"]');
+            anchors.forEach(anchor => {
+                try {
+                    const target = anchor.closest([
+                        'ytd-video-renderer',
+                        'ytd-grid-video-renderer',
+                        'ytd-rich-item-renderer',
+                        'yt-lockup-view-model',
+                        'ytm-lockup-view-model',
+                        '.ytLockupViewModelHost',
+                        '.ytLockupViewModelWrapper',
+                        'ytd-reel-item-renderer',
+                        'ytm-reel-item-renderer',
+                        'ytm-shorts-lockup-view-model',
+                        'ytd-shorts-lockup-view-model'
+                    ].join(', '));
+                    if (target) markYTShortsContent(target);
+                } catch (e) {}
+            });
+        } catch (e) {}
     }
 
     function convertShortsToVideoURL(url) {
@@ -1716,6 +1754,13 @@
 .youtube-shorts-block ytm-pivot-bar-item-renderer:has(.pivot-bar-item-tab.pivot-shorts){
     display: none !important;
 }
+.youtube-shorts-block ytd-guide-entry-renderer:has(a#endpoint[href*="/shorts"]),
+.youtube-shorts-block ytd-mini-guide-entry-renderer:has(a#endpoint[href*="/shorts"]),
+.youtube-shorts-block [data-ytcleaner-shorts-content="1"]{
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+}
 #block.youtube-shorts-block{
     color: white;
     margin: 6px 0;
@@ -1729,9 +1774,6 @@
 #block.youtube-shorts-block>svg{
     fill: white;
     margin: auto;
-}
-ytd-continuation-item-renderer:not(:last-child){
-    display: none;
 }
 @media screen and (min-width:600px){
     #block.youtube-shorts-block{
@@ -1757,11 +1799,11 @@ ytd-continuation-item-renderer:not(:last-child){
         } catch (e) {}
     }
 
-    async function removeShortsOnPage() {
+    function removeShortsOnPage() {
         try {
             if (!__shortsConfig.hideShortsVideos) return;
             reelShelfFilter();
-            await richShelfFilter();
+            richShelfFilter();
             shortsFilter();
         } catch (e) {}
     }
@@ -1796,21 +1838,9 @@ ytd-continuation-item-renderer:not(:last-child){
         try {
             if (__ytShortsObsInstalled) return;
             __ytShortsObsInstalled = true;
-
-            const install = async () => {
-                const target = await querySelectorPromise('#content, #app') || document.body || document.documentElement;
-                if (!target) return;
-                const observer = trackObserver(new MutationObserver(() => {
-                    removeShortsOnPage();
-                    addOpenInWatchButton();
-                    hideShortsGuideEntries();
-                }));
-                observer.observe(target, { childList: true, subtree: true });
-                removeShortsOnPage();
-                hideShortsGuideEntries();
-                devLog('Shorts DOM observer started');
-            };
-            install();
+            removeShortsOnPage();
+            hideShortsGuideEntries();
+            devLog('Shorts no-glimpse CSS/fallback initialized');
         } catch (e) {}
     }
 
@@ -1834,7 +1864,6 @@ ytd-continuation-item-renderer:not(:last-child){
     function scheduleMainIntervals() {
         addInterval(() => { if (!document.hidden) hideBannedVideoCards(); }, 250);
         addInterval(() => { if (!document.hidden) enforceSanity(); }, 500); 
-        addInterval(() => { if (!document.hidden) removeShortsOnPage(); }, 300);
         addInterval(() => { if (!document.hidden) { removeAdblockPopups(); hideYouTubeNudgesAndShortsChips(); } }, 500);
         addInterval(() => { if (!document.hidden) addOpenInWatchButton(); }, 600);
         addInterval(() => { if (!document.hidden) handlePopupButtons(); }, 1000);

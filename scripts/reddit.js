@@ -518,6 +518,7 @@
                 visibility: hidden !important;
             }
             
+            recent-posts,
             reddit-recent-pages,
             shreddit-recent-communities,
             div[data-testid="community-list"],
@@ -543,6 +544,29 @@
                 pointer-events: none !important;
             }
             
+            /* RedGIFs is blocked at DNS level in this setup, so Reddit's embedded iframe
+               can only render a browser error page. Collapse the media slot itself so the
+               failed iframe never leaves a black/error box behind, while keeping the post. */
+            shreddit-post[domain*="redgifs.com"] [slot="post-media-container"],
+            shreddit-post[content-href*="redgifs.com"] [slot="post-media-container"],
+            [slot="post-media-container"]:has(shreddit-embed[providername="RedGIFs"]),
+            [slot="post-media-container"]:has(shreddit-embed[html*="redgifs.com/ifr/"]),
+            shreddit-embed[providername="RedGIFs"],
+            shreddit-embed[html*="redgifs.com/ifr/"],
+            iframe[src*="redgifs.com/ifr/"] {
+                display: none !important;
+                visibility: hidden !important;
+                opacity: 0 !important;
+                height: 0 !important;
+                min-height: 0 !important;
+                max-height: 0 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                border: 0 !important;
+                overflow: hidden !important;
+                pointer-events: none !important;
+            }
+
             a[href="/answers/"],
             a[href^="/answers"],
             faceplate-tracker[noun="gen_guides_sidebar"],
@@ -2168,12 +2192,67 @@
         }
     }
 
-    function clearRecentPages() {
+    const recentPostsClearState = new WeakMap();
+
+    function hideAndClearRecentPostsPanel(root = document) {
         try {
-            localStorage.setItem('recent-subreddits-store', '[]');
-            localStorage.removeItem('recent-communities-store');
-            localStorage.removeItem('recent-communities');
-            localStorage.removeItem('reddit-recent-pages');
+            const hosts = [];
+
+            if (root && root.nodeType === 1 && root.matches?.('recent-posts')) {
+                hosts.push(root);
+            }
+
+            if (root && root.querySelectorAll) {
+                const found = root.querySelectorAll('recent-posts');
+                for (let i = 0; i < found.length; i++) {
+                    hosts.push(found[i]);
+                }
+            }
+
+            for (let i = 0; i < hosts.length; i++) {
+                const host = hosts[i];
+                if (!host) continue;
+
+                try {
+                    host.style.setProperty('display', 'none', 'important');
+                    host.style.setProperty('visibility', 'hidden', 'important');
+                    host.style.setProperty('opacity', '0', 'important');
+                    host.style.setProperty('height', '0', 'important');
+                    host.style.setProperty('min-height', '0', 'important');
+                    host.style.setProperty('max-height', '0', 'important');
+                    host.style.setProperty('overflow', 'hidden', 'important');
+                    host.style.setProperty('margin', '0', 'important');
+                    host.style.setProperty('padding', '0', 'important');
+                    host.style.setProperty('pointer-events', 'none', 'important');
+                } catch {}
+
+                const signature = String(host.getAttribute?.('recent-post-ids') || '').trim();
+                if (!signature || signature === '[]') continue;
+
+                const shadow = host.shadowRoot;
+                if (!shadow) continue;
+
+                const tracker = shadow.querySelector('faceplate-tracker[noun="clear_recent_module"]');
+                const button = tracker?.querySelector('button');
+                if (!button || typeof button.click !== 'function') continue;
+
+                const now = Date.now();
+                const previous = recentPostsClearState.get(host);
+                const sameSignature = !!(previous && previous.signature === signature);
+                const attempts = sameSignature ? previous.attempts : 0;
+                const lastClick = sameSignature ? previous.lastClick : 0;
+
+                if (attempts >= 3 || (sameSignature && now - lastClick < 1500)) continue;
+
+                recentPostsClearState.set(host, {
+                    signature,
+                    attempts: attempts + 1,
+                    lastClick: now
+                });
+
+                button.click();
+                devLog('🧹 Cleared Reddit Recent Posts module');
+            }
         } catch (e) {}
     }
 
@@ -2228,7 +2307,6 @@
             }
         } catch (e) {}
         
-        clearRecentPages();
     }
 
     function checkAndHideNSFWClassElements() {
@@ -2304,11 +2382,11 @@
         processShadowDOM();
         processAllUnapprovedPosts();
         processSearchCommunities();
+        hideAndClearRecentPostsPanel();
         
         if (!isUrlAllowed()) {
             hideJoinNowPosts();
             checkForAdultContentTag();
-            clearRecentPages();
             hideRecentCommunitiesSection();
         }
         
@@ -2360,6 +2438,7 @@
                     processAllUnapprovedPosts();
                     processSearchCommunities();
                     hideAnswersButton();
+                    hideAndClearRecentPostsPanel();
                 }
                 window.requestIdleCallback(idleCallback, { timeout: 3000 });
             };
@@ -2371,6 +2450,7 @@
                     processAllUnapprovedPosts();
                     processSearchCommunities();
                     hideAnswersButton();
+                    hideAndClearRecentPostsPanel();
                 });
             }, 3000);
             intervalIds.add(backgroundInterval);
@@ -2406,11 +2486,17 @@
                 mutation.target.tagName === 'SHREDDIT-SEARCH-DROPDOWN') {
                 needsSearchUpdate = true;
             }
+
+            if (mutation.type === 'attributes' && mutation.attributeName === 'recent-post-ids') {
+                hideAndClearRecentPostsPanel(mutation.target);
+            }
             
             const addedLimit = Math.min(mutation.addedNodes.length, 15);
             for (let j = 0; j < addedLimit; j++) {
                 const node = mutation.addedNodes[j];
                 if (!node || node.nodeType !== 1) continue;
+
+                hideAndClearRecentPostsPanel(node);
                 
                 if (node.tagName && node.matches) {
                     for (let k = 0; k < selectorsToDelete.length; k++) {
@@ -2508,7 +2594,8 @@
     observer.observe(document.documentElement, {
         childList: true,
         subtree: true,
-        attributes: false,
+        attributes: true,
+        attributeFilter: ['recent-post-ids'],
         characterData: false
     });
 
@@ -2533,6 +2620,7 @@
 
     hideBannedSubredditsFromSearch();
     hideBannedSubredditsFromAllSearchDropdowns();
+    hideAndClearRecentPostsPanel();
 
     let currentUrl = window.location.href;
     const urlCheckInterval = setInterval(() => {

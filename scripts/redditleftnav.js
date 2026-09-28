@@ -253,11 +253,6 @@
           });
         } catch {}
       });
-
-      try { localStorage.setItem('recent-subreddits-store', '[]'); } catch {}
-      try { localStorage.removeItem('recent-communities-store'); } catch {}
-      try { localStorage.removeItem('recent-communities'); } catch {}
-      try { localStorage.removeItem('reddit-recent-pages'); } catch {}
     } catch {}
   }
 
