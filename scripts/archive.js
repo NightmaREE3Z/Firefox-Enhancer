@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CleanArchives
-// @version      2026-07-28
+// @version      2026-10-01
 // @description  Redirects specific archive pages (and xcancel.com search) to the appropriate front page when banned terms are detected.
 // @match        *://web.archive.org/*
 // @match        *://archive.org/*
@@ -97,6 +97,273 @@
         return 'front page';
     };
 
+    // === BraveFox central URL policy client ========================================
+    // background.js owns the canonical allow/block lists. Finite rules are mirrored as a
+    // tiny snapshot; the potentially huge fetched hosts files stay in the service worker
+    // and are queried in batches/cached locally instead of becoming thousands of regexes.
+    const ARD_CENTRAL_POLICY_SNAPSHOT_TYPE = 'BRAVEFOX_GET_CENTRAL_URL_POLICY_SNAPSHOT';
+    const ARD_CENTRAL_POLICY_CLASSIFY_TYPE = 'BRAVEFOX_CLASSIFY_CENTRAL_URLS';
+    let ARD_centralPolicySnapshot = {
+        allowedHosts: [],
+        allowedPathRules: [],
+        blockedSites: [],
+        blockedTLDs: []
+    };
+    const ARD_centralPolicyVerdictCache = new Map();
+    const ARD_centralPolicyPending = new Set();
+    let ARD_centralPolicyFlushTimer = 0;
+    let ARD_centralPolicyContentRefresh = null;
+
+    function ARD_centralPolicyRuntime() {
+        try {
+            if (globalThis.chrome?.runtime?.sendMessage) return globalThis.chrome.runtime;
+            if (globalThis.browser?.runtime?.sendMessage) return globalThis.browser.runtime;
+        } catch (e) {}
+        return null;
+    }
+
+    function ARD_normalizeCentralPolicyHost(value) {
+        return String(value || '').trim().toLowerCase().replace(/^www\./, '').replace(/\.$/, '');
+    }
+
+    function ARD_normalizeCentralPolicyURL(value) {
+        const raw = String(value || '').trim();
+        if (!raw) return '';
+        try {
+            let parsed = null;
+            if (/^https?:\/\//i.test(raw)) {
+                parsed = new URL(raw);
+            } else if (/^\/\//.test(raw)) {
+                parsed = new URL(`https:${raw}`);
+            } else if (/^(?:[a-z0-9-]+\.)+[a-z]{2,}(?:[\/:?#]|$)/i.test(raw)) {
+                parsed = new URL(`https://${raw}`);
+            } else if (raw.startsWith('/')) {
+                parsed = new URL(raw, window.location.origin);
+            } else {
+                return '';
+            }
+            if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '';
+            return parsed.href;
+        } catch (e) {
+            return '';
+        }
+    }
+
+    function ARD_centralPolicySnapshotVerdict(value) {
+        const href = ARD_normalizeCentralPolicyURL(value);
+        if (!href) return '';
+
+        try {
+            const parsed = new URL(href);
+            const host = ARD_normalizeCentralPolicyHost(parsed.hostname);
+            const pathname = String(parsed.pathname || '/').replace(/\/{2,}/g, '/');
+
+            for (const domainValue of ARD_centralPolicySnapshot.allowedHosts || []) {
+                const domain = ARD_normalizeCentralPolicyHost(domainValue);
+                if (domain && (host === domain || host.endsWith(`.${domain}`))) return 'allow';
+            }
+
+            for (const rule of ARD_centralPolicySnapshot.allowedPathRules || []) {
+                const ruleHost = ARD_normalizeCentralPolicyHost(rule?.host);
+                let prefix = String(rule?.pathPrefix || '/').trim();
+                if (!prefix.startsWith('/')) prefix = `/${prefix}`;
+                prefix = prefix.replace(/\/{2,}/g, '/').replace(/\/$/, '') || '/';
+                if (host === ruleHost && (pathname === prefix || pathname.startsWith(`${prefix}/`))) return 'allow';
+            }
+
+            for (const fragment of ARD_centralPolicySnapshot.blockedSites || []) {
+                if (fragment && href.includes(String(fragment))) return 'block';
+            }
+
+            const lowerHost = host.toLowerCase();
+            for (const tld of ARD_centralPolicySnapshot.blockedTLDs || []) {
+                if (tld && lowerHost.endsWith(String(tld).toLowerCase())) return 'block';
+            }
+        } catch (e) {}
+
+        return '';
+    }
+
+    function ARD_centralPolicyCachedVerdict(value) {
+        const href = ARD_normalizeCentralPolicyURL(value);
+        if (!href) return '';
+
+        const snapshotVerdict = ARD_centralPolicySnapshotVerdict(href);
+        if (snapshotVerdict) return snapshotVerdict;
+
+        if (ARD_centralPolicyVerdictCache.has(href)) {
+            return ARD_centralPolicyVerdictCache.get(href) || '';
+        }
+
+        ARD_queueCentralPolicyURL(href);
+        return '';
+    }
+
+    function ARD_onCentralPolicyUpdated() {
+        window.setTimeout(() => {
+            try { checkCurrentArchivedTargetAgainstCentralPolicy(); } catch (e) {}
+            try { scanCentralBlockedArchiveLinks(); } catch (e) {}
+            try { ARD_centralPolicyContentRefresh?.(); } catch (e) {}
+        }, 0);
+    }
+
+    function ARD_flushCentralPolicyURLs() {
+        ARD_centralPolicyFlushTimer = 0;
+        const runtime = ARD_centralPolicyRuntime();
+        if (!runtime || !ARD_centralPolicyPending.size) return;
+
+        const urls = Array.from(ARD_centralPolicyPending).slice(0, 192);
+        urls.forEach(url => ARD_centralPolicyPending.delete(url));
+
+        try {
+            runtime.sendMessage({ type: ARD_CENTRAL_POLICY_CLASSIFY_TYPE, urls }, response => {
+                try { void globalThis.chrome?.runtime?.lastError; } catch (e) {}
+                let changed = false;
+                if (response?.ok && Array.isArray(response.verdicts)) {
+                    for (const verdict of response.verdicts) {
+                        const href = ARD_normalizeCentralPolicyURL(verdict?.url);
+                        if (!href) continue;
+                        const action = verdict?.action === 'allow' || verdict?.action === 'block' ? verdict.action : 'none';
+                        const previous = ARD_centralPolicyVerdictCache.get(href);
+                        ARD_centralPolicyVerdictCache.set(href, action);
+                        if (action !== 'none' && previous !== action) changed = true;
+                    }
+                }
+                if (changed) ARD_onCentralPolicyUpdated();
+                if (ARD_centralPolicyPending.size) ARD_queueCentralPolicyFlush();
+            });
+        } catch (e) {
+            if (ARD_centralPolicyPending.size) ARD_queueCentralPolicyFlush();
+        }
+    }
+
+    function ARD_queueCentralPolicyFlush() {
+        if (ARD_centralPolicyFlushTimer) return;
+        ARD_centralPolicyFlushTimer = window.setTimeout(ARD_flushCentralPolicyURLs, 8);
+    }
+
+    function ARD_queueCentralPolicyURL(value) {
+        const href = ARD_normalizeCentralPolicyURL(value);
+        if (!href || ARD_centralPolicyVerdictCache.has(href) || ARD_centralPolicyPending.has(href)) return;
+        ARD_centralPolicyPending.add(href);
+        ARD_queueCentralPolicyFlush();
+    }
+
+    function ARD_loadCentralPolicySnapshot() {
+        const runtime = ARD_centralPolicyRuntime();
+        if (!runtime) return;
+        try {
+            runtime.sendMessage({ type: ARD_CENTRAL_POLICY_SNAPSHOT_TYPE }, response => {
+                try { void globalThis.chrome?.runtime?.lastError; } catch (e) {}
+                if (!response?.ok || !response.snapshot) return;
+                ARD_centralPolicySnapshot = {
+                    allowedHosts: Array.isArray(response.snapshot.allowedHosts) ? response.snapshot.allowedHosts.slice() : [],
+                    allowedPathRules: Array.isArray(response.snapshot.allowedPathRules) ? response.snapshot.allowedPathRules.map(rule => ({ ...rule })) : [],
+                    blockedSites: Array.isArray(response.snapshot.blockedSites) ? response.snapshot.blockedSites.slice() : [],
+                    blockedTLDs: Array.isArray(response.snapshot.blockedTLDs) ? response.snapshot.blockedTLDs.slice() : []
+                };
+                ARD_centralPolicyVerdictCache.clear();
+                ARD_onCentralPolicyUpdated();
+            });
+        } catch (e) {}
+    }
+
+    ARD_loadCentralPolicySnapshot();
+    try {
+        globalThis.chrome?.storage?.onChanged?.addListener((changes, areaName) => {
+            if (areaName !== 'local' || (!changes.lastUpdate && !changes.hostsChunks && !changes.hostsTotal)) return;
+            ARD_centralPolicyVerdictCache.clear();
+            ARD_centralPolicyPending.clear();
+            ARD_loadCentralPolicySnapshot();
+        });
+    } catch (e) {}
+
+
+    function getWaybackTargetURL(value = window.location.href) {
+        try {
+            const parsed = new URL(String(value || ''), window.location.href);
+            const host = String(parsed.hostname || '').toLowerCase();
+            if (host !== 'web.archive.org' && host !== 'wayback.archive.org') return '';
+
+            const match = String(parsed.pathname || '').match(/^\/web\/(?:[^/]+)\/(https?:\/\/.+)$/i);
+            if (!match || !match[1]) return '';
+            try { return decodeURIComponent(match[1]); } catch (e) { return match[1]; }
+        } catch (e) {
+            return '';
+        }
+    }
+
+    function getArchiveCentralURLCandidates(value = '') {
+        const output = [];
+        const add = candidate => {
+            const href = ARD_normalizeCentralPolicyURL(candidate);
+            if (href && !output.includes(href)) output.push(href);
+        };
+
+        const raw = String(value || '').trim();
+        if (!raw) return output;
+        const waybackTarget = getWaybackTargetURL(raw);
+        if (waybackTarget) add(waybackTarget);
+        add(raw);
+
+        try {
+            const decoded = tryDecode(raw);
+            if (decoded !== raw) {
+                const decodedWaybackTarget = getWaybackTargetURL(decoded);
+                if (decodedWaybackTarget) add(decodedWaybackTarget);
+                add(decoded);
+            }
+        } catch (e) {}
+
+        return output;
+    }
+
+    function archiveCentralPolicyVerdict(value = '') {
+        const candidates = getArchiveCentralURLCandidates(value);
+        let sawAllow = false;
+        for (const candidate of candidates) {
+            const verdict = ARD_centralPolicyCachedVerdict(candidate);
+            if (verdict === 'block') return 'block';
+            if (verdict === 'allow') sawAllow = true;
+        }
+        return sawAllow ? 'allow' : '';
+    }
+
+    function checkCurrentArchivedTargetAgainstCentralPolicy() {
+        const target = getWaybackTargetURL(window.location.href);
+        if (!target) return false;
+        if (archiveCentralPolicyVerdict(target) !== 'block') return false;
+        redirectToHome();
+        return true;
+    }
+
+    function hardHideArchiveCentralBlockedLink(link) {
+        if (!(link instanceof Element)) return;
+        link.setAttribute('data-bravefox-central-url-blocked', 'true');
+        link.style.setProperty('display', 'none', 'important');
+        link.style.setProperty('visibility', 'hidden', 'important');
+        link.style.setProperty('opacity', '0', 'important');
+        link.style.setProperty('pointer-events', 'none', 'important');
+    }
+
+    function scanCentralBlockedArchiveLinks(scope = document) {
+        if (!scope || typeof scope.querySelectorAll !== 'function') return 0;
+        const links = [];
+        if (scope instanceof Element && scope.matches?.('a[href]')) links.push(scope);
+        links.push(...scope.querySelectorAll('a[href]'));
+
+        let hidden = 0;
+        for (const link of links) {
+            if (!(link instanceof Element) || link.getAttribute('data-bravefox-central-url-blocked') === 'true') continue;
+            const rawHref = link.getAttribute('href') || link.href || '';
+            if (!rawHref) continue;
+            if (archiveCentralPolicyVerdict(rawHref) !== 'block') continue;
+            hardHideArchiveCentralBlockedLink(link);
+            hidden++;
+        }
+        return hidden;
+    }
+
     // Simple, literal-match redirect: If we are exactly on archive.org root, send to web.archive.org
     const isTopContext = (() => { try { return window.top === window; } catch { return true; } })();
     const isExactRoot = (url) => {
@@ -114,6 +381,11 @@
         try { safeTop.location.replace('https://web.archive.org/'); } catch { window.location.replace('https://web.archive.org/'); }
         return;
     }
+
+    window.setTimeout(() => {
+        try { checkCurrentArchivedTargetAgainstCentralPolicy(); } catch (e) {}
+        try { scanCentralBlockedArchiveLinks(); } catch (e) {}
+    }, 0);
 
     // Define the terms to search for in the URL
     const terms = [
@@ -1001,6 +1273,13 @@
 
                         if (!lowerContent) return;
 
+                        if (archiveCentralPolicyVerdict(content) === 'block') {
+                            console.log(`BraveFox central URL policy blocked an archived/search destination. Redirecting you to ${getSiteLabel()}.`);
+                            redirectToHome();
+                            redirected = true;
+                            return;
+                        }
+
                         if (containsForbiddenKeywords(lowerContent)) {
                             console.log(`Get the fuck out of here with that! (AI boundary / combined rules) Redirecting you to ${getSiteLabel()}.`);
                             redirectToHome();
@@ -1045,6 +1324,13 @@
                         const content = getEditableValue(el);
                         if (!content) continue;
 
+                        if (archiveCentralPolicyVerdict(content) === 'block') {
+                            console.log(`BraveFox central URL policy blocked a contenteditable destination. Redirecting you to ${getSiteLabel()}.`);
+                            redirectToHome();
+                            redirected = true;
+                            break;
+                        }
+
                         if (containsRestricted(content)) {
                             console.log(`Get the fuck out of here with that! (contenteditable) Redirecting you to ${getSiteLabel()}.`);
                             redirectToHome();
@@ -1060,6 +1346,8 @@
             return redirected;
         };
 
+        ARD_centralPolicyContentRefresh = checkContentForRestrictedWords;
+
         // Run once immediately
         checkContentForRestrictedWords();
 
@@ -1067,7 +1355,10 @@
         let inputTimer = 0;
         const triggerCheck = () => {
             clearTimeout(inputTimer);
-            inputTimer = setTimeout(() => checkContentForRestrictedWords(), 120);
+            inputTimer = setTimeout(() => {
+                checkContentForRestrictedWords();
+                scanCentralBlockedArchiveLinks();
+            }, 120);
         };
 
         // Use composedPath to reliably find the real editable field (works with shadow DOM)
@@ -1108,6 +1399,14 @@
                     if (!isEditableField(field)) continue;
                     const val = getEditableValue(field);
                     if (!val) continue;
+                    if (archiveCentralPolicyVerdict(val) === 'block') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        e.stopImmediatePropagation?.();
+                        console.log(`BraveFox central URL policy blocked a submitted destination. Redirecting you to ${getSiteLabel()}.`);
+                        redirectToHome();
+                        return;
+                    }
                     if (containsRestricted(val)) {
                         e.preventDefault();
                         e.stopPropagation();
@@ -1121,7 +1420,14 @@
         }, true);
 
         // Observe DOM changes so late-loaded inputs are covered without relying solely on a timer
-        const mo = new MutationObserver(() => triggerCheck());
+        const mo = new MutationObserver(mutations => {
+            triggerCheck();
+            for (const mutation of mutations) {
+                for (const node of mutation.addedNodes || []) {
+                    if (node instanceof Element) scanCentralBlockedArchiveLinks(node);
+                }
+            }
+        });
         try {
             mo.observe(document.documentElement || document.body, { childList: true, subtree: true, characterData: false });
         } catch {}
@@ -1145,6 +1451,5 @@
     // Start the content checking process
     waitForDOM();
 
-})();
-
 // End of userscript
+})();

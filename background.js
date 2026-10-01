@@ -6,6 +6,8 @@ import "./blocker/service.js";
 import { isCompletelyExcludedHostname, isCompletelyExcludedUrl, isGoogleMapsOrEarthUrl } from "./blocker/shared.js";
 import { getSettings, loadDataset } from "./blocker/storage.js";
 import { findTimeRuleBlock } from "./blocker/timers.js";
+import { findBlockedHost, getHostsStatus as getFocusMasterHostsStatus, updateHosts as updateFocusMasterHosts } from "./blocker/hosts.js";
+import { getTrustedSiteDescriptors } from "./blocker/trusted-sites.js";
 
 const LOG_PREFIX = "[BraveFox Background]";
 const HOSTS_META_KEY = "bravefoxHostsMetaV2";
@@ -455,6 +457,126 @@ async function shouldBlockUrl(url) {
   } catch (_) {
     return false;
   }
+}
+
+// === Central URL policy bridge ================================================
+// Shared content scripts (google.js, facebook.js, archive.js) use this bridge so
+// Firefox PC/ESR and Fenix Nightly receive the same central URL verdicts as the
+// Chromium build. Finite rules are mirrored in the snapshot; the potentially
+// huge fetched-host dataset remains inside blocker/hosts.js and is queried here.
+const BRAVEFOX_CENTRAL_URL_POLICY_SNAPSHOT_TYPE = "BRAVEFOX_GET_CENTRAL_URL_POLICY_SNAPSHOT";
+const BRAVEFOX_CENTRAL_URL_POLICY_CLASSIFY_TYPE = "BRAVEFOX_CLASSIFY_CENTRAL_URLS";
+const BRAVEFOX_CENTRAL_URL_POLICY_MAX_BATCH = 256;
+
+function braveFoxCentralUrlPolicyTldBlocked(hostname, tlds) {
+  const host = normalizeHostname(hostname);
+  if (!host) return false;
+  return (Array.isArray(tlds) ? tlds : []).some(tld => {
+    const suffix = String(tld || "").trim().toLowerCase();
+    return suffix && host.endsWith(suffix);
+  });
+}
+
+async function getBraveFoxCentralUrlPolicySnapshot() {
+  const dataset = await loadDataset();
+  const trusted = getTrustedSiteDescriptors();
+  const hostStatus = await getFocusMasterHostsStatus().catch(() => ({ count: 0 }));
+
+  return {
+    allowedHosts: Array.from(new Set([
+      ...ALLOWED_SITES,
+      ...(Array.isArray(trusted?.domains) ? trusted.domains : [])
+    ])),
+    allowedPathRules: Array.isArray(trusted?.pathRules)
+      ? trusted.pathRules.map(rule => ({ ...rule }))
+      : [],
+    blockedSites: blockedSites.slice(),
+    blockedTLDs: Array.isArray(dataset?.tlds) ? dataset.tlds.slice() : [],
+    fetchedHostsCount: Number(hostStatus?.count || 0)
+  };
+}
+
+async function classifyBraveFoxCentralUrl(value, dataset = null) {
+  const raw = String(value || "").trim();
+  if (!raw) return { action: "none", url: "", hostname: "" };
+
+  let parsed = null;
+  try {
+    parsed = new URL(raw);
+  } catch (_) {
+    try {
+      if (/^(?:[a-z0-9-]+\.)+[a-z]{2,}(?:[\/:?#]|$)/i.test(raw)) {
+        parsed = new URL(`https://${raw}`);
+      }
+    } catch (_) {}
+  }
+
+  if (!parsed || (parsed.protocol !== "http:" && parsed.protocol !== "https:")) {
+    return { action: "none", url: raw, hostname: "" };
+  }
+
+  const href = parsed.href;
+  const hostname = normalizeHostname(parsed.hostname);
+
+  if (isCompletelyExcludedUrl(href)) {
+    return { action: "allow", url: href, hostname, source: "trusted-sites" };
+  }
+
+  if (isAllowlistedHostname(hostname)) {
+    return { action: "allow", url: href, hostname, source: "allowedSites" };
+  }
+
+  if (matchesStaticBlockedSite(href)) {
+    return { action: "block", url: href, hostname, source: "background-block-policy" };
+  }
+
+  const activeDataset = dataset || await loadDataset();
+  if (braveFoxCentralUrlPolicyTldBlocked(hostname, activeDataset?.tlds)) {
+    return { action: "block", url: href, hostname, source: "blockedTLDs" };
+  }
+
+  try {
+    const blockedHost = await findBlockedHost(href);
+    if (blockedHost) {
+      return { action: "block", url: href, hostname, source: "fetched-hosts", blockedHost };
+    }
+  } catch (error) {
+    console.warn(`${LOG_PREFIX} Central URL host classification failed:`, error);
+  }
+
+  return { action: "none", url: href, hostname, source: "none" };
+}
+
+async function classifyBraveFoxCentralUrls(values) {
+  const input = Array.isArray(values) ? values : [];
+  const urls = Array.from(new Set(
+    input.map(value => String(value || "").trim()).filter(Boolean)
+  )).slice(0, BRAVEFOX_CENTRAL_URL_POLICY_MAX_BATCH);
+
+  const dataset = await loadDataset();
+  const verdicts = [];
+  for (const url of urls) {
+    verdicts.push(await classifyBraveFoxCentralUrl(url, dataset));
+  }
+
+  const hostStatus = await getFocusMasterHostsStatus().catch(() => ({ count: 0 }));
+  return {
+    ok: true,
+    verdicts,
+    fetchedHostsCount: Number(hostStatus?.count || 0)
+  };
+}
+
+
+// Shared content scripts already watch BraveFox's legacy `lastUpdate` key to drop
+// their per-tab URL verdict caches. Mirror the new Focus Master dataset/hosts
+// generations into that compatibility signal so Firefox tabs update live too.
+if (browser.storage?.onChanged) {
+  browser.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName !== "local") return;
+    if (!changes?.["bfb:hosts-meta:v1"] && !changes?.[STORAGE_KEYS.localDataset]) return;
+    void browser.storage.local.set({ lastUpdate: Date.now() }).catch(() => {});
+  });
 }
 
 function parseHostsLine(rawLine) {
@@ -929,13 +1051,19 @@ browser.runtime.onStartup.addListener(() => {
 });
 
 browser.runtime.onMessage.addListener(message => {
-  if (message?.type === "bravefox:update-hosts") return updateBlocklist();
-  if (message?.type === "bravefox:hosts-status") {
-    return Promise.resolve({
-      count: hostsCache.length,
-      lastUpdated: hostsMeta?.lastUpdated || 0,
-      sourceStats: hostsMeta?.sourceStats || null
-    });
+  // Route the compatibility hooks through the shared Focus Master host service used by
+  // both Firefox PC/ESR and Fenix Nightly. The older background-local fetcher remains
+  // inert compatibility code and can no longer bypass the fast cache/fallback path.
+  if (message?.type === "bravefox:update-hosts") return updateFocusMasterHosts();
+  if (message?.type === "bravefox:hosts-status") return getFocusMasterHostsStatus();
+  if (message?.type === BRAVEFOX_CENTRAL_URL_POLICY_SNAPSHOT_TYPE) {
+    return getBraveFoxCentralUrlPolicySnapshot()
+      .then(snapshot => ({ ok: true, snapshot }))
+      .catch(error => ({ ok: false, error: String(error?.message || error) }));
+  }
+  if (message?.type === BRAVEFOX_CENTRAL_URL_POLICY_CLASSIFY_TYPE) {
+    return classifyBraveFoxCentralUrls(message.urls)
+      .catch(error => ({ ok: false, error: String(error?.message || error), verdicts: [] }));
   }
   if (message?.type === "bravefox:extension-update-status") {
     return getBraveFoxExtensionUpdateStatus(Boolean(message.force)).catch(error => ({

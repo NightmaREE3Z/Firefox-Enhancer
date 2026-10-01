@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name         FBCleaner 27.7.1
-// @date      	 2026-09-20
+// @name         FBCleaner 29.2.0
+// @date      	 2026-10-01
 // @description  Makes my Facebook experience less terrible.
 // @match        *://*.facebook.com/*
 // @grant        none
@@ -3854,6 +3854,201 @@ const rememberFBCurrentVanityProfileAsBlocked = (inputUrl = window.location.href
     }
 }
 
+
+// === BraveFox central URL policy client ========================================
+// background.js owns the canonical allow/block lists. Finite rules are mirrored as a
+// tiny snapshot; the potentially huge fetched hosts files stay in the service worker
+// and are queried in batches/cached locally instead of becoming thousands of regexes.
+const FB_CENTRAL_POLICY_SNAPSHOT_TYPE = 'BRAVEFOX_GET_CENTRAL_URL_POLICY_SNAPSHOT';
+const FB_CENTRAL_POLICY_CLASSIFY_TYPE = 'BRAVEFOX_CLASSIFY_CENTRAL_URLS';
+let FB_centralPolicySnapshot = {
+    allowedHosts: [],
+    allowedPathRules: [],
+    blockedSites: [],
+    blockedTLDs: []
+};
+const FB_centralPolicyVerdictCache = new Map();
+const FB_centralPolicyPending = new Set();
+let FB_centralPolicyFlushTimer = 0;
+
+function FB_centralPolicyRuntime() {
+    try {
+        if (globalThis.chrome?.runtime?.sendMessage) return globalThis.chrome.runtime;
+        if (globalThis.browser?.runtime?.sendMessage) return globalThis.browser.runtime;
+    } catch (e) {}
+    return null;
+}
+
+function FB_normalizeCentralPolicyHost(value) {
+    return String(value || '').trim().toLowerCase().replace(/^www\./, '').replace(/\.$/, '');
+}
+
+function FB_normalizeCentralPolicyURL(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    try {
+        let parsed = null;
+        if (/^https?:\/\//i.test(raw)) {
+            parsed = new URL(raw);
+        } else if (/^\/\//.test(raw)) {
+            parsed = new URL(`https:${raw}`);
+        } else if (/^(?:[a-z0-9-]+\.)+[a-z]{2,}(?:[\/:?#]|$)/i.test(raw)) {
+            parsed = new URL(`https://${raw}`);
+        } else if (raw.startsWith('/')) {
+            parsed = new URL(raw, window.location.origin);
+        } else {
+            return '';
+        }
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '';
+        return parsed.href;
+    } catch (e) {
+        return '';
+    }
+}
+
+function FB_centralPolicySnapshotVerdict(value) {
+    const href = FB_normalizeCentralPolicyURL(value);
+    if (!href) return '';
+
+    try {
+        const parsed = new URL(href);
+        const host = FB_normalizeCentralPolicyHost(parsed.hostname);
+        const pathname = String(parsed.pathname || '/').replace(/\/{2,}/g, '/');
+
+        for (const domainValue of FB_centralPolicySnapshot.allowedHosts || []) {
+            const domain = FB_normalizeCentralPolicyHost(domainValue);
+            if (domain && (host === domain || host.endsWith(`.${domain}`))) return 'allow';
+        }
+
+        for (const rule of FB_centralPolicySnapshot.allowedPathRules || []) {
+            const ruleHost = FB_normalizeCentralPolicyHost(rule?.host);
+            let prefix = String(rule?.pathPrefix || '/').trim();
+            if (!prefix.startsWith('/')) prefix = `/${prefix}`;
+            prefix = prefix.replace(/\/{2,}/g, '/').replace(/\/$/, '') || '/';
+            if (host === ruleHost && (pathname === prefix || pathname.startsWith(`${prefix}/`))) return 'allow';
+        }
+
+        for (const fragment of FB_centralPolicySnapshot.blockedSites || []) {
+            if (fragment && href.includes(String(fragment))) return 'block';
+        }
+
+        const lowerHost = host.toLowerCase();
+        for (const tld of FB_centralPolicySnapshot.blockedTLDs || []) {
+            if (tld && lowerHost.endsWith(String(tld).toLowerCase())) return 'block';
+        }
+    } catch (e) {}
+
+    return '';
+}
+
+function FB_centralPolicyCachedVerdict(value) {
+    const href = FB_normalizeCentralPolicyURL(value);
+    if (!href) return '';
+
+    const snapshotVerdict = FB_centralPolicySnapshotVerdict(href);
+    if (snapshotVerdict) return snapshotVerdict;
+
+    if (FB_centralPolicyVerdictCache.has(href)) {
+        return FB_centralPolicyVerdictCache.get(href) || '';
+    }
+
+    FB_queueCentralPolicyURL(href);
+    return '';
+}
+
+function FB_onCentralPolicyUpdated() {
+    try {
+        document.querySelectorAll('[data-fbcleaner-urlsig]').forEach(node => {
+            node.removeAttribute('data-fbcleaner-urlsig');
+        });
+        document.querySelectorAll('.fb-search-processed').forEach(node => {
+            node.classList.remove('fb-search-processed', 'fb-search-approved');
+            node.removeAttribute('data-processed-key-v32');
+        });
+        document.querySelectorAll('[data-fb-v25-scan-complete="1"]').forEach(node => {
+            if (node.classList.contains('fb-post-banned') || node.classList.contains('fb-element-banned')) return;
+            node.removeAttribute('data-fb-v25-scan-complete');
+            node.classList.remove('fb-post-approved', 'fb-feed-unit-approved');
+        });
+    } catch (e) {}
+    window.setTimeout(() => {
+        try { processSearchResults(); } catch (e) {}
+        try { deleteBlockedElements(); } catch (e) {}
+        try { auditHydratedTopFeedPosts(); } catch (e) {}
+    }, 0);
+}
+
+function FB_flushCentralPolicyURLs() {
+    FB_centralPolicyFlushTimer = 0;
+    const runtime = FB_centralPolicyRuntime();
+    if (!runtime || !FB_centralPolicyPending.size) return;
+
+    const urls = Array.from(FB_centralPolicyPending).slice(0, 192);
+    urls.forEach(url => FB_centralPolicyPending.delete(url));
+
+    try {
+        runtime.sendMessage({ type: FB_CENTRAL_POLICY_CLASSIFY_TYPE, urls }, response => {
+            try { void globalThis.chrome?.runtime?.lastError; } catch (e) {}
+            let changed = false;
+            if (response?.ok && Array.isArray(response.verdicts)) {
+                for (const verdict of response.verdicts) {
+                    const href = FB_normalizeCentralPolicyURL(verdict?.url);
+                    if (!href) continue;
+                    const action = verdict?.action === 'allow' || verdict?.action === 'block' ? verdict.action : 'none';
+                    const previous = FB_centralPolicyVerdictCache.get(href);
+                    FB_centralPolicyVerdictCache.set(href, action);
+                    if (action !== 'none' && previous !== action) changed = true;
+                }
+            }
+            if (changed) FB_onCentralPolicyUpdated();
+            if (FB_centralPolicyPending.size) FB_queueCentralPolicyFlush();
+        });
+    } catch (e) {
+        if (FB_centralPolicyPending.size) FB_queueCentralPolicyFlush();
+    }
+}
+
+function FB_queueCentralPolicyFlush() {
+    if (FB_centralPolicyFlushTimer) return;
+    FB_centralPolicyFlushTimer = window.setTimeout(FB_flushCentralPolicyURLs, 8);
+}
+
+function FB_queueCentralPolicyURL(value) {
+    const href = FB_normalizeCentralPolicyURL(value);
+    if (!href || FB_centralPolicyVerdictCache.has(href) || FB_centralPolicyPending.has(href)) return;
+    FB_centralPolicyPending.add(href);
+    FB_queueCentralPolicyFlush();
+}
+
+function FB_loadCentralPolicySnapshot() {
+    const runtime = FB_centralPolicyRuntime();
+    if (!runtime) return;
+    try {
+        runtime.sendMessage({ type: FB_CENTRAL_POLICY_SNAPSHOT_TYPE }, response => {
+            try { void globalThis.chrome?.runtime?.lastError; } catch (e) {}
+            if (!response?.ok || !response.snapshot) return;
+            FB_centralPolicySnapshot = {
+                allowedHosts: Array.isArray(response.snapshot.allowedHosts) ? response.snapshot.allowedHosts.slice() : [],
+                allowedPathRules: Array.isArray(response.snapshot.allowedPathRules) ? response.snapshot.allowedPathRules.map(rule => ({ ...rule })) : [],
+                blockedSites: Array.isArray(response.snapshot.blockedSites) ? response.snapshot.blockedSites.slice() : [],
+                blockedTLDs: Array.isArray(response.snapshot.blockedTLDs) ? response.snapshot.blockedTLDs.slice() : []
+            };
+            FB_centralPolicyVerdictCache.clear();
+            FB_onCentralPolicyUpdated();
+        });
+    } catch (e) {}
+}
+
+FB_loadCentralPolicySnapshot();
+try {
+    globalThis.chrome?.storage?.onChanged?.addListener((changes, areaName) => {
+        if (areaName !== 'local' || (!changes.lastUpdate && !changes.hostsChunks && !changes.hostsTotal)) return;
+        FB_centralPolicyVerdictCache.clear();
+        FB_centralPolicyPending.clear();
+        FB_loadCentralPolicySnapshot();
+    });
+} catch (e) {}
+
 const blockedUrls = [
     /profile\.php\?id=100000639309471&sk=photos/,
     /profile\.php\?id=100000639309471&sk=photos_by/,
@@ -4846,6 +5041,11 @@ const getRegexBlockedWords = () => regexBlockedWords;
 
 // Function to get allowed URLs (maintain function signature)
 const getAllowedUrls = () => allowedUrls;
+const isAllowedUrl = (value = '') => {
+    if (isFBCentralAllowedURL(value)) return true;
+    const text = String(value || '');
+    return allowedUrls.some(pattern => testRegexPattern(pattern, text));
+};
 
 // Function to clean the current URL
 const cleanUrl = () => {
@@ -5007,10 +5207,75 @@ const getSanitizedPathSearchForMatching = (inputUrl = window.location.href) => {
     }
 };
 
+const getFBCentralURLCandidates = (value = '') => {
+    const output = [];
+    const add = (candidate) => {
+        const href = FB_normalizeCentralPolicyURL(candidate);
+        if (href && !output.includes(href)) output.push(href);
+    };
+
+    const decoded = safeDecodeFBValue(value);
+    const raw = String(decoded || '').trim();
+    if (!raw) return output;
+
+    try {
+        const direct = new URL(raw, window.location.origin);
+        if (direct.protocol === 'http:' || direct.protocol === 'https:') {
+            add(direct.href);
+            if (/facebook\.com$/i.test(direct.hostname) || /\.facebook\.com$/i.test(direct.hostname)) {
+                ['u', 'url', 'href', 'target'].forEach(key => {
+                    const embedded = direct.searchParams.get(key);
+                    if (embedded) add(safeDecodeFBValue(embedded));
+                });
+            }
+        }
+    } catch (e) {}
+
+    const urlRegex = /https?:\/\/[^\s"'<>]+/gi;
+    let match = null;
+    while ((match = urlRegex.exec(raw)) && output.length < 32) add(match[0]);
+    return output;
+};
+
+const hasFBCentralBlockedURL = (value = '') => {
+    const candidates = getFBCentralURLCandidates(value);
+    return candidates.some(candidate => FB_centralPolicyCachedVerdict(candidate) === 'block');
+};
+
+const isFBCentralAllowedURL = (value = '') => {
+    const candidates = getFBCentralURLCandidates(value);
+    return candidates.some(candidate => FB_centralPolicyCachedVerdict(candidate) === 'allow');
+};
+
+const stripFBCentralAllowedURLSignals = (value = '') => {
+    let text = String(value || '');
+    const candidates = getFBCentralURLCandidates(text);
+
+    for (const candidate of candidates) {
+        if (FB_centralPolicyCachedVerdict(candidate) !== 'allow') continue;
+        const variants = new Set([
+            candidate,
+            safeDecodeFBValue(candidate),
+            candidate.replace(/^https?:\/\//i, ''),
+            candidate.replace(/^https?:\/\//i, '').replace(/\/$/, ''),
+            candidate.replace(/\/$/, '')
+        ]);
+        for (const variant of variants) {
+            if (!variant) continue;
+            text = text.split(variant).join(' ');
+        }
+    }
+
+    return text;
+};
+
 const matchesBlockedUrlCandidates = (value = '') => {
     try {
+        if (hasFBCentralBlockedURL(value)) return true;
         const decoded = safeDecodeFBValue(value);
-        return matchesAnyBlockedUrl(decoded) || matchesAnyBlockedUrl(String(value || ''));
+        const filteredDecoded = stripFBCentralAllowedURLSignals(decoded);
+        const filteredRaw = stripFBCentralAllowedURLSignals(String(value || ''));
+        return matchesAnyBlockedUrl(filteredDecoded) || matchesAnyBlockedUrl(filteredRaw);
     } catch (e) {
         return matchesAnyBlockedUrl(value);
     }
@@ -7258,7 +7523,7 @@ const postHasBlockedLinksOrFbids = (post) => {
                 el.getAttribute && el.getAttribute('data-store') || '',
                 el.getAttribute && el.getAttribute('data-ft') || ''
             ].join(' '));
-            if (matchesAnyBlockedFbid(signal) || matchesAnyBlockedUrl(signal)) return true;
+            if (matchesAnyBlockedFbid(signal) || matchesBlockedUrlCandidates(signal)) return true;
         }
     } catch (e) {}
     return false;
@@ -7763,8 +8028,8 @@ const processSearchResults = () => {
                     if (matchesAnyActiveRegex(signal)) isBlocked = true;
                     if (!isBlocked && resultHasBlockedProfileAlias) isBlocked = true;
                     if (!isBlocked && matchesAnyBlockedFbid(`${signal} ${hrefs}`)) isBlocked = true;
-                    if (!isBlocked && matchesAnyBlockedUrl(`${signal} ${hrefs}`)) isBlocked = true;
-                    if (!isBlocked && matchesAnyBlockedUrl(percentSpacedSignal)) isBlocked = true;
+                    if (!isBlocked && matchesBlockedUrlCandidates(`${signal} ${hrefs}`)) isBlocked = true;
+                    if (!isBlocked && matchesBlockedUrlCandidates(percentSpacedSignal)) isBlocked = true;
                     if (!isBlocked && matchesBlockedUrlCandidates(`${hrefs} ${signal}`)) isBlocked = true;
 
                     if (isBlocked) {
@@ -9888,7 +10153,7 @@ const scrubBlockedFriendAndContactCards = (root = document) => {
         };
 
         const isBlockedSignal = (signal) => {
-            return matchesAnyActiveRegex(signal) || matchesAnyBlockedFbid(signal) || matchesAnyBlockedUrl(signal);
+            return matchesAnyActiveRegex(signal) || matchesAnyBlockedFbid(signal) || matchesBlockedUrlCandidates(signal);
         };
 
         // v50: use the single canonical friends-surface classifier.
@@ -10816,7 +11081,7 @@ const scrubBlockedLikesOverlayRows = () => {
         const isBlockedSignal = (signal) => {
             const raw = String(signal || '');
             const normalized = normalizeFBText(raw);
-            return matchesAnyActiveRegex(normalized) || matchesAnyBlockedFbid(raw) || matchesAnyBlockedUrl(raw);
+            return matchesAnyActiveRegex(normalized) || matchesAnyBlockedFbid(raw) || matchesBlockedUrlCandidates(raw);
         };
 
         const isLikelyProfileLink = (link) => {
@@ -11258,7 +11523,7 @@ const auditTopFeedPostsForLateBlockedSignals = () => {
                 .join(' ');
 
             const signal = normalizeFBText(text + ' ' + attrSignals);
-            const blocked = postHasAIInfoTag(post) || hasRestrictedFeedCTAOrReels(post) || matchesAnyActiveRegex(signal) || matchesAnyBlockedFbid(signal) || matchesAnyBlockedUrl(signal);
+            const blocked = postHasAIInfoTag(post) || hasRestrictedFeedCTAOrReels(post) || matchesAnyActiveRegex(signal) || matchesAnyBlockedFbid(signal) || matchesBlockedUrlCandidates(signal);
 
             if (blocked) {
                 banPostAfterScan(post, postHasAIInfoTag(post) ? 'Facebook AI-info disclosure tag settling audit' : 'late hydrated blocked signal');

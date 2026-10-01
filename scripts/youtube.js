@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         YTClean
-// @date     	 2026-09-28
+// @date     	 2026-10-01
 // @description  Enhances my YouTube experience by blocking trackers and hiding garbage, such as shorts.
 // @match        https://*.youtube.com/*
 // @grant        none
@@ -43,7 +43,11 @@
                 ytm-shorts-lockup-view-model,
                 ytd-shorts-lockup-view-model,
                 grid-shelf-view-model:has(ytm-shorts-lockup-view-model),
+                grid-shelf-view-model:has(ytd-shorts-lockup-view-model),
+                grid-shelf-view-model:has(a[href*="/shorts/"]),
                 ytd-rich-shelf-renderer:has(ytm-shorts-lockup-view-model),
+                ytd-rich-shelf-renderer:has(ytd-shorts-lockup-view-model),
+                ytd-rich-shelf-renderer:has(a[href*="/shorts/"]),
                 ytd-video-renderer:has(ytd-thumbnail a[href*="/shorts/"]),
                 ytd-grid-video-renderer:has(ytd-thumbnail a[href*="/shorts/"]),
                 ytd-rich-item-renderer:has(a[href*="/shorts/"]),
@@ -770,6 +774,13 @@
 
     const ytVideoCardSelector = videoContainers.join(', ');
     const ytVideoTitleSelector = ytVideoTitleSelectors.join(', ');
+    const ytSearchCardFamilySelector = [
+        'ytd-video-renderer',
+        'yt-lockup-view-model',
+        'ytm-lockup-view-model',
+        '.ytLockupViewModelHost',
+        '.ytLockupViewModelWrapper'
+    ].join(', ');
 
     function injectYTCardHideCSS() {
         try {
@@ -841,13 +852,10 @@
                 html.ytclean-search-softgate ytd-search ytd-video-renderer:not(.ytclean-card-approved):not(.ytclean-card-banned):not([data-ytcleaner-approved-card="1"]):not([data-ytcleaner-banned-card="1"]),
                 html.ytclean-search-softgate ytd-search yt-lockup-view-model:not(.ytclean-card-approved):not(.ytclean-card-banned):not([data-ytcleaner-approved-card="1"]):not([data-ytcleaner-banned-card="1"]),
                 html.ytclean-search-softgate ytd-search .ytLockupViewModelHost:not(.ytclean-card-approved):not(.ytclean-card-banned):not([data-ytcleaner-approved-card="1"]):not([data-ytcleaner-banned-card="1"]),
-                html.ytclean-search-softgate ytd-search .ytLockupViewModelWrapper:not(.ytclean-card-approved):not(.ytclean-card-banned):not([data-ytcleaner-approved-card="1"]):not([data-ytcleaner-banned-card="1"]),
-                html.ytclean-search-softgate ytd-search ytd-reel-shelf-renderer:not(.ytclean-card-approved):not(.ytclean-card-banned):not([data-ytcleaner-approved-card="1"]):not([data-ytcleaner-banned-card="1"]),
-                html.ytclean-search-softgate ytd-search ytd-rich-shelf-renderer:not(.ytclean-card-approved):not(.ytclean-card-banned):not([data-ytcleaner-approved-card="1"]):not([data-ytcleaner-banned-card="1"]) {
+                html.ytclean-search-softgate ytd-search .ytLockupViewModelWrapper:not(.ytclean-card-approved):not(.ytclean-card-banned):not([data-ytcleaner-approved-card="1"]):not([data-ytcleaner-banned-card="1"]) {
                     visibility: hidden !important;
                     opacity: 0 !important;
                     pointer-events: none !important;
-                    content-visibility: hidden !important;
                     transition: none !important;
                     animation: none !important;
                 }
@@ -857,7 +865,6 @@
                     visibility: visible !important;
                     opacity: 1 !important;
                     pointer-events: auto !important;
-                    content-visibility: visible !important;
                 }
 
             `;
@@ -1216,7 +1223,6 @@
                 try {
                     if (!node || isYTProtectedTextZone(node)) return;
                     push(node.textContent || '');
-                    push(node.innerText || '');
                     push(node.getAttribute?.('aria-label') || '');
                     push(node.getAttribute?.('title') || '');
                     push(node.getAttribute?.('alt') || '');
@@ -1268,10 +1274,28 @@
         }
     }
 
+    function getYTSearchCardFamilyRoot(target) {
+        try {
+            if (!target || !target.closest || !isYTSearchResultsPage()) return target;
+            const searchRoot = target.closest('ytd-search');
+            if (!searchRoot) return target;
+
+            let root = target;
+            let cursor = target;
+            while (cursor && cursor !== searchRoot) {
+                if (cursor.matches?.(ytSearchCardFamilySelector)) root = cursor;
+                cursor = cursor.parentElement;
+            }
+            return root;
+        } catch (e) {
+            return target;
+        }
+    }
+
     function getVideoCardHideTarget(el) {
         try {
             if (!el || !el.closest || isYTProtectedTextZone(el)) return null;
-            const target = el.closest([
+            let target = el.closest([
                 'yt-lockup-view-model',
                 'ytm-lockup-view-model',
                 'ytd-compact-video-renderer',
@@ -1296,6 +1320,12 @@
                 '[class*="ytLockupViewModel"]'
             ].join(', '));
             if (!target || isYTProtectedTextZone(target)) return null;
+
+            // Search results can expose several nested representations of the same video card.
+            // Always classify/collapse the outer card so an inner lockup cannot be approved while
+            // its parent remains hidden by the no-glimpse softgate.
+            target = getYTSearchCardFamilyRoot(target);
+            if (!target || isYTProtectedTextZone(target)) return null;
             return target;
         } catch (e) {
             return null;
@@ -1306,12 +1336,26 @@
         try {
             if (!target || !target.style || isYTProtectedTextZone(target)) return;
             if (target.classList?.contains('ytclean-card-banned') || target.getAttribute?.('data-ytcleaner-banned-card') === '1') return;
-            target.classList?.add('ytclean-card-approved');
-            target.setAttribute?.('data-ytcleaner-approved-card', '1');
-            target.style.removeProperty('visibility');
-            target.style.removeProperty('opacity');
-            target.style.removeProperty('pointer-events');
-            target.style.removeProperty('content-visibility');
+
+            const targets = new Set([target]);
+            if (isYTSearchResultsPage()) {
+                const root = getYTSearchCardFamilyRoot(target);
+                if (root) {
+                    targets.add(root);
+                    root.querySelectorAll?.(ytSearchCardFamilySelector).forEach(node => targets.add(node));
+                }
+            }
+
+            targets.forEach(node => {
+                if (!node || !node.style || isYTProtectedTextZone(node)) return;
+                if (node.classList?.contains('ytclean-card-banned') || node.getAttribute?.('data-ytcleaner-banned-card') === '1') return;
+                node.classList?.add('ytclean-card-approved');
+                node.setAttribute?.('data-ytcleaner-approved-card', '1');
+                node.style.removeProperty('visibility');
+                node.style.removeProperty('opacity');
+                node.style.removeProperty('pointer-events');
+                node.style.removeProperty('content-visibility');
+            });
         } catch (e) {}
     }
 
@@ -1370,11 +1414,8 @@
         return candidates;
     }
 
-    function hideBannedVideoCards() {
+    function classifyVideoCardTargets(elements) {
         try {
-            injectYTCardHideCSS();
-
-            const elements = collectVideoCardCandidates();
             let hiddenCount = 0;
             const seen = new WeakSet();
 
@@ -1408,6 +1449,38 @@
             if (hiddenCount > 0) {
                 devLog(`Hidden ${hiddenCount} video cards/playlist items with banned content`);
             }
+        } catch (err) {
+            console.log('Error classifying video cards: ' + err.message);
+        }
+    }
+
+    function collectVideoCardCandidatesFromNode(node) {
+        const candidates = [];
+        const seen = new Set();
+        const add = (candidate) => {
+            try {
+                const target = getVideoCardHideTarget(candidate);
+                if (!target || seen.has(target)) return;
+                seen.add(target);
+                candidates.push(target);
+            } catch (e) {}
+        };
+
+        try {
+            if (!(node instanceof Element) || isYTProtectedTextZone(node)) return candidates;
+            add(node);
+
+            const descendants = node.querySelectorAll?.(ytVideoCardSelector + ', ' + ytVideoTitleSelector);
+            descendants?.forEach(add);
+        } catch (e) {}
+
+        return candidates;
+    }
+
+    function hideBannedVideoCards() {
+        try {
+            injectYTCardHideCSS();
+            classifyVideoCardTargets(collectVideoCardCandidates());
         } catch (err) {
             console.log('Error hiding video cards: ' + err.message);
         }
@@ -1477,7 +1550,7 @@
             __ytPopupObsInstalled = true;
 
             const observer = trackObserver(new MutationObserver((mutations) => {
-                let sawNewCards = false;
+                const changedCards = new Set();
                 mutations.forEach((mutation) => {
                     if (mutation.addedNodes.length > 0) {
                         mutation.addedNodes.forEach((node) => {
@@ -1508,29 +1581,21 @@
                                     }
                                 });
 
-                                if (!sawNewCards && node.querySelectorAll && !isYTProtectedTextZone(node)) {
-                                    try {
-                                        if (getVideoCardHideTarget(node)) {
-                                            sawNewCards = true;
-                                        } else {
-                                            const possibleCards = node.querySelectorAll(ytVideoCardSelector + ', ' + ytVideoTitleSelector);
-                                            for (const possible of possibleCards) {
-                                                if (getVideoCardHideTarget(possible)) {
-                                                    sawNewCards = true;
-                                                    break;
-                                                }
-                                            }
-                                        }
-                                    } catch (e) {}
+                                if (!isYTProtectedTextZone(node)) {
+                                    collectVideoCardCandidatesFromNode(node).forEach(card => changedCards.add(card));
                                 }
                             }
                         });
                     }
                 });
                 hideYouTubeNudgesAndShortsChips();
-                if (sawNewCards) {
+                removeShortsOnPage();
+                if (changedCards.size > 0) {
+                    // MutationObserver callbacks run before the next paint. Classify only the
+                    // affected cards here so banned additions stay no-glimpse without repeatedly
+                    // rescanning the entire YouTube document.
+                    classifyVideoCardTargets(changedCards);
                     scheduleYTSearchScan('mutation-cards');
-                    hideBannedVideoCards();
                 }
             }));
 
@@ -1563,6 +1628,7 @@
             onEvent(window, 'popstate', () => window.dispatchEvent(new Event('locationchange')), false);
 
             onEvent(window, 'locationchange', () => {
+                if (!document.hidden) startIntervals(scheduleMainIntervals);
                 updateYTSearchSoftGateClass();
                 scheduleYTSearchScan('locationchange');
                 enforceSanity();
@@ -1575,8 +1641,10 @@
             }, false);
 
             onEvent(window, 'yt-navigate-finish', () => {
+                if (!document.hidden) startIntervals(scheduleMainIntervals);
                 updateYTSearchSoftGateClass();
                 scheduleYTSearchScan('yt-navigate-finish');
+                scheduleYTPostNavigationRescans();
                 enforceSanity();
                 hideBannedVideoCards();
                 hideYouTubeNudgesAndShortsChips();
@@ -1646,7 +1714,11 @@
         try {
             document.querySelectorAll([
                 "grid-shelf-view-model:has(ytm-shorts-lockup-view-model)",
+                "grid-shelf-view-model:has(ytd-shorts-lockup-view-model)",
+                "grid-shelf-view-model:has(a[href*='/shorts/'])",
                 "ytd-rich-shelf-renderer:has(ytm-shorts-lockup-view-model)",
+                "ytd-rich-shelf-renderer:has(ytd-shorts-lockup-view-model)",
+                "ytd-rich-shelf-renderer:has(a[href*='/shorts/'])",
                 "ytm-shorts-lockup-view-model",
                 "ytd-shorts-lockup-view-model"
             ].join(', ')).forEach(markYTShortsContent);
@@ -1862,14 +1934,34 @@
 
     // Periodic tasks with lifecycle tracking
     function scheduleMainIntervals() {
-        addInterval(() => { if (!document.hidden) hideBannedVideoCards(); }, 250);
+        // Mutations classify new/recycled cards before paint. Keep a slower full-document
+        // reconciliation only as insurance for unusual Polymer updates that add no child nodes.
+        addInterval(() => { if (!document.hidden) hideBannedVideoCards(); }, 1250);
         addInterval(() => { if (!document.hidden) enforceSanity(); }, 500); 
-        addInterval(() => { if (!document.hidden) { removeAdblockPopups(); hideYouTubeNudgesAndShortsChips(); } }, 500);
+        addInterval(() => { if (!document.hidden) { removeAdblockPopups(); hideYouTubeNudgesAndShortsChips(); removeShortsOnPage(); } }, 500);
         addInterval(() => { if (!document.hidden) addOpenInWatchButton(); }, 600);
         addInterval(() => { if (!document.hidden) handlePopupButtons(); }, 1000);
         addInterval(() => { if (!document.hidden) hideShortsGuideEntries(); }, 1200);
         addInterval(() => { if (!document.hidden) enforceShortsRedirect(); }, 1500);
     }
+
+    function scheduleYTPostNavigationRescans() {
+        // YouTube hydrates search lockups in stages. Give the softgate several chances to
+        // classify cards after title/channel/thumbnail metadata arrives, without ever showing
+        // an unscanned card first. These also re-apply the existing Shorts hide/redirect policy.
+        [80, 220, 500, 900, 1500].forEach(delay => {
+            addTimeout(() => {
+                if (document.hidden) return;
+                updateYTSearchSoftGateClass();
+                hideBannedVideoCards();
+                hideYouTubeNudgesAndShortsChips();
+                removeShortsOnPage();
+                hideShortsGuideEntries();
+                enforceShortsRedirect();
+            }, delay);
+        });
+    }
+
     startIntervals(scheduleMainIntervals);
 
     addTimeout(removeAdblockPopups, 1000);

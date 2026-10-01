@@ -20,6 +20,7 @@ const DATASET_SCHEMA = 3;
 const GITHUB_CONFIG_KEY = 'bfb:github-sync-config';
 const VALID_PROFILES = new Set(['haukkis', 'tapsa']);
 const REMOTE_BASE = 'https://raw.githubusercontent.com/NightmaREE3Z/Focus-Master/refs/heads/BraveFox/blocker/lists/';
+const REMOTE_FETCH_TIMEOUT_MS = 4500;
 
 function normalizeProfileId(value) { return VALID_PROFILES.has(value) ? value : 'haukkis'; }
 function termsFilename(profileId) { return normalizeProfileId(profileId) === 'tapsa' ? 'blockedTermsDad.csv' : 'blockedTerms.csv'; }
@@ -60,11 +61,18 @@ function filenameForKind(kind, profileId) {
 async function fetchRemoteList(kind, profileId) {
   const filename = filenameForKind(kind, profileId);
   const url = `${REMOTE_BASE}${filename}`;
-  const response = await fetch(`${url}?bravefox_refresh=${Date.now()}`, {
-    cache: 'no-store', credentials: 'omit', headers: { Accept: 'text/plain' }
-  });
-  if (!response.ok) throw new Error(`Remote Focus Master ${kind} list failed (HTTP ${response.status}).`);
-  return parseListText(await response.text(), kind);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REMOTE_FETCH_TIMEOUT_MS);
+  try {
+    const response = await fetch(`${url}?bravefox_refresh=${Date.now()}`, {
+      signal: controller.signal,
+      cache: 'no-store', credentials: 'omit', headers: { Accept: 'text/plain' }
+    });
+    if (!response.ok) throw new Error(`Remote Focus Master ${kind} list failed (HTTP ${response.status}).`);
+    return parseListText(await response.text(), kind);
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 export async function loadRemoteFirstLists(profileId = null) {

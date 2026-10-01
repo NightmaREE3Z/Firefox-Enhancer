@@ -59,6 +59,7 @@
   const STYLE_ID = 'bravefox-chatgpt-style';
   const GATED_CLASS = 'bravefox-chatgpt-gated';
   const PERSONALIZATION_CLASS = 'bravefox-chatgpt-personalization';
+  const ACCOUNT_SETTINGS_CLASS = 'bravefox-chatgpt-account-settings';
   const MEMORY_MODAL_CLASS = 'bravefox-chatgpt-memory-modal';
   const HIDDEN_CLASS = 'bravefox-chatgpt-hidden';
 
@@ -106,6 +107,9 @@
     'customisation'
   ]);
 
+  const DELETE_ACCOUNT_LABELS = new Set(['poista tili', 'delete account']);
+  const DELETE_ACCOUNT_BUTTON_LABELS = new Set(['poista', 'delete']);
+
   // === Account-menu upgrade label =============================================
   // Edit replacementText to whatever you want shown in the profile/account menu.
   // BraveFox changes only the visible label; ChatGPT's native click behavior remains.
@@ -117,6 +121,8 @@
   const ACCOUNT_UPGRADE_MENU_NATIVE_LABELS = new Set([
     'korota tilausluokkaa',
     'päivitä tilaus',
+    'päivitä sopimus',
+    'paivita sopimus',
     'upgrade plan',
     'upgrade your plan',
     'upgrade subscription',
@@ -124,7 +130,8 @@
   ]);
 
   // === Billing subscription row ===============================================
-  // Applies only on https://chatgpt.com/settings/billing
+  // Supports both the native /settings/billing page and the legacy mobile
+  // #settings/Billing / #settings/Subscription modal routes.
   //
   // Set any field to a string to replace that visible text.
   // Keep it null to leave ChatGPT's live/native value alone.
@@ -162,6 +169,8 @@
   const BILLING_UPDATE_BUTTON_LABELS = new Set([
     'päivitä tilaus',
     'paivita tilaus',
+    'päivitä',
+    'paivita',
     'update plan',
     'manage plan',
     'manage subscription',
@@ -424,6 +433,7 @@
   const GPT_HARD_CURATION_MS = 8000;
 
   const IS_ANDROID = /Android/i.test(navigator.userAgent);
+  const IS_FIREFOX_ANDROID = IS_ANDROID && /Firefox\//i.test(navigator.userAgent);
   // Always-on route polling is only a location.href string comparison. It is cheap, and
   // provides a deterministic fallback when ChatGPT's SPA navigation skips browser events.
   const ROUTE_POLL_MS = IS_ANDROID ? 900 : 500;
@@ -502,6 +512,10 @@
   if (initialProtectedRoute?.modal === PERSONALIZATION_MEMORY_MODAL) {
     document.documentElement.classList.add(MEMORY_MODAL_CLASS);
   }
+
+  // Account cleanup is paint-time too. Arm both the native /settings/account page and
+  // the legacy Firefox Android #settings/Account modal before ChatGPT can paint it.
+  document.documentElement.classList.toggle(ACCOUNT_SETTINGS_CLASS, isAccountSettingsRoute());
 
   if (descriptorRequiresPassword(initialProtectedRoute)) {
     document.documentElement.classList.add(GATED_CLASS);
@@ -622,6 +636,28 @@
       [role="menuitem"][href^="/settings/personalization"],
       [role="menuitem"]:has(a[href^="/settings/personalization"]),
       a[href="/plugins"]:has(use[href*="#all-products"]) {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+
+      /* Account > Delete account. This is deliberately CSS-first so the destructive
+       * row never gets a painted frame on the native account page. The legacy Android
+       * modal is additionally handled by the document-start observer below because its
+       * historical markup has rotated more often than the native settings-row component. */
+      html.${ACCOUNT_SETTINGS_CLASS}
+      section:has(div[class~="@container/settings-row"] button.text-chart-red),
+      html.${ACCOUNT_SETTINGS_CLASS}
+      div[class~="@container/settings-row"]:has(button.text-chart-red),
+      html.${ACCOUNT_SETTINGS_CLASS}
+      div.border-token-border-light.flex.min-h-15.items-center.border-b:has(button.btn-danger),
+      html.${ACCOUNT_SETTINGS_CLASS}
+      div.border-token-border-light.flex.min-h-15.items-center.border-b:has(button[class*="danger"]),
+      html.${ACCOUNT_SETTINGS_CLASS}
+      div.border-token-border-light.flex.min-h-15.items-center.border-b:has(button[class*="text-red"]),
+      html.${ACCOUNT_SETTINGS_CLASS}
+      [data-bravefox-delete-account-row-hidden="true"] {
         display: none !important;
         visibility: hidden !important;
         opacity: 0 !important;
@@ -1733,6 +1769,7 @@
     }
 
     document.documentElement.classList.toggle(PERSONALIZATION_CLASS, onPersonalization);
+    document.documentElement.classList.toggle(ACCOUNT_SETTINGS_CLASS, isAccountSettingsRoute());
     document.documentElement.classList.toggle(MEMORY_MODAL_CLASS, onMemoryModal);
     document.documentElement.classList.toggle(PLUGINS_CURATING_CLASS, onPlugins);
     document.documentElement.classList.toggle(GPTS_CURATING_CLASS, onGpts);
@@ -1929,6 +1966,13 @@
               descriptor?.modal === PERSONALIZATION_MEMORY_MODAL
             );
 
+            // Account-page cleanup must be armed before SPA navigation commits too,
+            // otherwise React can paint the destructive row for one frame.
+            document.documentElement.classList.toggle(
+              ACCOUNT_SETTINGS_CLASS,
+              isAccountSettingsRoute(destinationUrl)
+            );
+
             const sameUnlockedLane =
               descriptor?.key &&
               descriptor.key === activeProtectedRouteKey &&
@@ -2120,7 +2164,10 @@
         return;
       }
 
-      if (isLikelyMenuTrigger(event.target)) scheduleGeneralUiScan(false);
+      // Firefox Android is particularly sensitive to synchronous whole-document work
+      // immediately after a tap. The always-on portal observer already catches newly
+      // mounted menus there, so keep the legacy fallback scan for non-Android clients only.
+      if (!IS_ANDROID && isLikelyMenuTrigger(event.target)) scheduleGeneralUiScan(false);
     }, true);
 
     document.addEventListener('keydown', event => {
@@ -2141,7 +2188,7 @@
       }
 
       if (event.key !== 'Enter' && event.key !== ' ') return;
-      if (isLikelyMenuTrigger(event.target)) scheduleGeneralUiScan(false);
+      if (!IS_ANDROID && isLikelyMenuTrigger(event.target)) scheduleGeneralUiScan(false);
     }, true);
   }
 
@@ -2459,11 +2506,15 @@
   }
 
   function shouldHideCustomChatGptBannerForModel(banner) {
+    // Compatibility fail-open: Firefox Android has shown timing-sensitive banner mounts.
+    // Keep notices visible there rather than deleting them before first paint. Native
+    // close still works; persisted BraveFox auto-hide remains enabled elsewhere.
+    if (IS_FIREFOX_ANDROID) return false;
     const modelSlug = getCurrentChatGptBannerModelSlug(banner);
     return Boolean(modelSlug && hiddenChatGptBannerModelSlugs.has(modelSlug));
   }
 
-  function getExactReasoningControl(target = null) {
+  function getExactReasoningControl(target = null, allowGlobalFallback = true) {
     if (target instanceof Element) {
       const direct = target.closest(THINKING_EFFORT_EXACT_CONTROL_SELECTOR);
       if (direct instanceof Element) return direct;
@@ -2474,6 +2525,8 @@
       const nested = popup?.querySelector?.(THINKING_EFFORT_EXACT_CONTROL_SELECTOR);
       if (nested instanceof Element) return nested;
     }
+
+    if (!allowGlobalFallback) return null;
 
     const controls = Array.from(document.querySelectorAll(THINKING_EFFORT_EXACT_CONTROL_SELECTOR))
       .filter(control => control instanceof HTMLElement && control.isConnected)
@@ -2700,7 +2753,7 @@
     document.addEventListener('pointerdown', event => {
       if (thinkingEffortVisualRepairing) return;
 
-      const exactControl = getExactReasoningControl(event.target);
+      const exactControl = getExactReasoningControl(event.target, false);
       if (exactControl) {
         const exactRoot = getExactReasoningPowerRoot(exactControl);
         const target = event.target instanceof Element ? event.target : null;
@@ -2717,7 +2770,7 @@
 
       if (thinkingEffortVisualPointerTargetsInstant(event)) {
         cancelBlockedEdgeInteraction(event);
-        window.setTimeout(() => enforceThinkingEffortVisualPopup(event.target), 0);
+        window.setTimeout(() => enforceThinkingEffortVisualPopup(event.target, false), 0);
         return;
       }
 
@@ -2727,7 +2780,7 @@
         return;
       }
 
-      const slider = findThinkingEffortSliderForEvent(event);
+      const slider = findThinkingEffortSliderForEvent(event, false);
       if (!slider) return;
 
       activeThinkingEffortSlider = slider;
@@ -2783,8 +2836,8 @@
       }
       activeThinkingEffortSlider = null;
       activeThinkingEffortPointerId = null;
-      window.setTimeout(() => enforceThinkingEffortVisualPopup(event.target), 0);
-      window.setTimeout(() => enforceThinkingEffortVisualPopup(event.target), 50);
+      window.setTimeout(() => enforceThinkingEffortVisualPopup(event.target, false), 0);
+      window.setTimeout(() => enforceThinkingEffortVisualPopup(event.target, false), 50);
     };
 
     document.addEventListener('pointerup', finishPointerInteraction, true);
@@ -2793,7 +2846,7 @@
     document.addEventListener('click', event => {
       if (thinkingEffortVisualRepairing) return;
 
-      const exactControl = getExactReasoningControl(event.target);
+      const exactControl = getExactReasoningControl(event.target, false);
       if (exactControl) {
         const exactRoot = getExactReasoningPowerRoot(exactControl);
         const target = event.target instanceof Element ? event.target : null;
@@ -2812,7 +2865,7 @@
 
       if (thinkingEffortVisualPointerTargetsInstant(event)) {
         cancelBlockedEdgeInteraction(event);
-        window.setTimeout(() => enforceThinkingEffortVisualPopup(event.target), 0);
+        window.setTimeout(() => enforceThinkingEffortVisualPopup(event.target, false), 0);
         return;
       }
 
@@ -2832,7 +2885,7 @@
         }
       }
 
-      const slider = findThinkingEffortSliderForEvent(event);
+      const slider = findThinkingEffortSliderForEvent(event, false);
       if (!slider || !Number.isFinite(event.clientX)) return;
       if (!pointerTargetsBlockedEdge(slider, event.clientX)) return;
 
@@ -2841,7 +2894,7 @@
     }, true);
 
     document.addEventListener('keydown', event => {
-      const exactControl = getExactReasoningControl(event.target);
+      const exactControl = getExactReasoningControl(event.target, false);
       if (exactControl) {
         const value = readExactReasoningValue(exactControl);
         const key = String(event.key || '');
@@ -2882,7 +2935,7 @@
         }
       }
 
-      const slider = findThinkingEffortSliderForEvent(event);
+      const slider = findThinkingEffortSliderForEvent(event, false);
       if (!slider) return;
 
       const key = String(event.key || '');
@@ -2920,13 +2973,13 @@
 
     for (const eventName of ['input', 'change', 'focusin']) {
       document.addEventListener(eventName, event => {
-        const exactControl = getExactReasoningControl(event.target);
+        const exactControl = getExactReasoningControl(event.target, false);
         if (exactControl && isExactReasoningInstant(exactControl)) {
           if (eventName !== 'focusin') cancelBlockedEdgeInteraction(event);
           enforceExactReasoningFloor(exactControl);
         }
 
-        const slider = findThinkingEffortSliderForEvent(event);
+        const slider = findThinkingEffortSliderForEvent(event, false);
         if (!slider) return;
         if (eventName !== 'focusin' && (isThinkingEffortInstant(slider) || isThinkingEffortPro(slider))) {
           cancelBlockedEdgeInteraction(event);
@@ -3134,7 +3187,7 @@
     return candidates[0]?.element || null;
   }
 
-  function findThinkingEffortVisualPopup(target = null) {
+  function findThinkingEffortVisualPopup(target = null, allowGlobalFallback = true) {
     const inspect = element => {
       if (!(element instanceof HTMLElement) || !element.isConnected) return null;
       const rect = element.getBoundingClientRect?.();
@@ -3156,6 +3209,8 @@
       }
     }
 
+    if (!allowGlobalFallback) return null;
+
     // Small, visible popovers only. This intentionally avoids scanning large page
     // regions whose prose may happen to contain the words Instant/Medium/High.
     for (const candidate of document.querySelectorAll(
@@ -3172,7 +3227,7 @@
 
   function getThinkingEffortVisualTrackRectForEvent(event) {
     const target = event?.target instanceof Element ? event.target : null;
-    const popup = findThinkingEffortVisualPopup(target);
+    const popup = findThinkingEffortVisualPopup(target, false);
     if (!popup) return null;
     const track = findThinkingEffortVisualTrack(popup, target);
     if (!(track instanceof HTMLElement)) return null;
@@ -3223,8 +3278,11 @@
     }
   }
 
-  function enforceThinkingEffortVisualPopup(target = null) {
-    const popup = findThinkingEffortVisualPopup(target instanceof Element ? target : null);
+  function enforceThinkingEffortVisualPopup(target = null, allowGlobalFallback = true) {
+    const popup = findThinkingEffortVisualPopup(
+      target instanceof Element ? target : null,
+      allowGlobalFallback
+    );
     if (!popup || getThinkingEffortPopupTier(popup) !== 'instant') return false;
     const track = findThinkingEffortVisualTrack(popup, target instanceof Element ? target : null);
     if (!track) return false;
@@ -3234,7 +3292,7 @@
     return dispatchThinkingEffortTrackPoint(track, 0.50);
   }
 
-  function findThinkingEffortSliderForEvent(event) {
+  function findThinkingEffortSliderForEvent(event, allowGlobalFallback = true) {
     const path = typeof event?.composedPath === 'function' ? event.composedPath() : [];
     const seen = new Set();
 
@@ -3268,6 +3326,8 @@
         }
       }
     }
+
+    if (!allowGlobalFallback) return null;
 
     // Final fallback: if exactly one visible reasoning-effort slider exists in the
     // open UI, it is the picker being interacted with.
@@ -3747,15 +3807,13 @@
               node.matches?.('[role="dialog"], [role="menu"], [role="listbox"], [data-state="open"]') ||
               node.querySelector?.('[role="dialog"], [role="menu"], [role="listbox"], [data-state="open"]')
             ) {
-              window.setTimeout(() => enforceThinkingEffortVisualPopup(node), 0);
+              window.setTimeout(() => enforceThinkingEffortVisualPopup(node, false), 0);
             }
 
-            const relevantBillingRow =
-              isBillingSettingsRoute() &&
-              (
-                node.matches?.('div[class~="@container/settings-row"]') ||
-                node.querySelector?.('div[class~="@container/settings-row"]')
-              );
+            const relevantDeleteAccountUi = mayContainDeleteAccountSettingsUi(node);
+            if (relevantDeleteAccountUi) hideDeleteAccountSettingsUi(node);
+
+            const relevantBillingRow = mayContainBillingSubscriptionUi(node);
 
             if (relevantBillingRow) customizeBillingSubscriptionRow(node);
 
@@ -3770,15 +3828,26 @@
               !relevantConversationMessage &&
               !relevantSidebarControl &&
               !relevantMemoryUpgradeBanner &&
+              !relevantDeleteAccountUi &&
               !relevantBillingRow
             ) {
               continue;
             }
 
-            if (relevantBanner) replaceCustomizableChatGptBannerText(node);
+            if (relevantBanner) {
+              if (IS_FIREFOX_ANDROID) {
+                window.setTimeout(() => {
+                  if (node.isConnected) replaceCustomizableChatGptBannerText(node);
+                  else replaceCustomizableChatGptBannerText(document);
+                }, 48);
+              } else {
+                replaceCustomizableChatGptBannerText(node);
+              }
+            }
             if (relevantAssistantNotice) replaceFixedAssistantNoticeText(node);
+            if (relevantDeleteAccountUi) hideDeleteAccountSettingsUi(node);
             if (relevantBillingRow) customizeBillingSubscriptionRow(node);
-            if (!relevantEscapeHatch) continue;
+            if (!relevantEscapeHatch && !relevantDeleteAccountUi) continue;
 
             applyAccountAndSettingsCleanup(node);
             if (isPersonalizationRoute()) hideSensitiveMemoryControls(node);
@@ -5642,11 +5711,151 @@
     element.style.setProperty('pointer-events', 'none', 'important');
   }
 
+  function isAccountSettingsRoute(value = location.href) {
+    try {
+      const url = new URL(String(value || location.href), location.href);
+      const pathname = String(url.pathname || '/').toLowerCase().replace(/\/+$/, '') || '/';
+      if (pathname === '/settings/account') return true;
+
+      // Firefox Android can still receive the legacy settings modal. Keep the matcher
+      // narrow to Account so unrelated #settings tabs do not inherit this policy.
+      let hash = String(url.hash || '').trim().toLowerCase();
+      try {
+        hash = decodeURIComponent(hash);
+      } catch {
+        // Keep the raw hash if malformed escaping slips through.
+      }
+
+      if (/^#settings\/(?:account|profile)(?:[/?&]|$)/.test(hash)) return true;
+      return /^#settings\?(?:[^&]+&)*(?:tab|section|page)=(?:account|profile)(?:&|$)/.test(hash);
+    } catch {
+      return false;
+    }
+  }
+
+  function findDeleteAccountLabelLeaves(scope = document) {
+    if (!(scope instanceof Element) && scope !== document) return [];
+
+    const leaves = [];
+    const collect = element => {
+      if (!(element instanceof Element)) return;
+      if (element.children.length !== 0) return;
+      if (!DELETE_ACCOUNT_LABELS.has(normalizeText(element.textContent))) return;
+      leaves.push(element);
+    };
+
+    if (scope instanceof Element) collect(scope);
+    for (const element of scope.querySelectorAll?.('div, span, p, label') || []) collect(element);
+    return leaves;
+  }
+
+  function findDeleteAccountRowFromLabel(label) {
+    if (!(label instanceof Element)) return null;
+
+    let candidate = label.parentElement;
+    let depth = 0;
+    while (candidate instanceof HTMLElement && depth < 8) {
+      const deleteButton = Array.from(candidate.querySelectorAll('button')).find(button =>
+        DELETE_ACCOUNT_BUTTON_LABELS.has(normalizeText(button.textContent))
+      );
+
+      if (deleteButton) return candidate;
+      if (candidate.matches('[role="dialog"], main, body')) break;
+      candidate = candidate.parentElement;
+      depth += 1;
+    }
+
+    return null;
+  }
+
+  function expandDeleteAccountHideTarget(row) {
+    if (!(row instanceof HTMLElement)) return row;
+
+    // Native account settings wraps the one destructive row in a dedicated card/section.
+    // Collapse those single-child wrappers too so no empty rounded border remains behind.
+    let target = row;
+    if (!row.matches('div[class~="@container/settings-row"]')) return target;
+
+    let candidate = row.parentElement;
+    let depth = 0;
+    while (candidate instanceof HTMLElement && depth < 3) {
+      if (candidate.matches('[role="dialog"], main, body')) break;
+      if (candidate.children.length !== 1 || candidate.firstElementChild !== target) break;
+      target = candidate;
+      candidate = candidate.parentElement;
+      depth += 1;
+    }
+
+    if (
+      candidate instanceof HTMLElement &&
+      candidate.tagName === 'SECTION' &&
+      candidate.children.length === 1 &&
+      candidate.firstElementChild === target
+    ) {
+      target = candidate;
+    }
+
+    return target;
+  }
+
+  function hideDeleteAccountSettingsUi(scope = document) {
+    if (!isAccountSettingsRoute()) return false;
+
+    let changed = false;
+    for (const label of findDeleteAccountLabelLeaves(scope)) {
+      const row = findDeleteAccountRowFromLabel(label);
+      if (!(row instanceof HTMLElement)) continue;
+
+      row.setAttribute('data-bravefox-delete-account-row-hidden', 'true');
+      hardHideEscapeHatch(row);
+
+      const target = expandDeleteAccountHideTarget(row);
+      if (target instanceof HTMLElement && target !== row) {
+        target.setAttribute('data-bravefox-delete-account-row-hidden', 'true');
+        hardHideEscapeHatch(target);
+      }
+      changed = true;
+    }
+
+    return changed;
+  }
+
+  function mayContainDeleteAccountSettingsUi(scope) {
+    if (!isAccountSettingsRoute()) return false;
+    if (!(scope instanceof Element)) return false;
+
+    if (
+      scope.matches?.('[data-bravefox-delete-account-row-hidden="true"]') ||
+      scope.querySelector?.('[data-bravefox-delete-account-row-hidden="true"]')
+    ) {
+      return true;
+    }
+
+    if (DELETE_ACCOUNT_LABELS.has(normalizeText(scope.textContent)) && scope.children.length === 0) {
+      return true;
+    }
+
+    return findDeleteAccountLabelLeaves(scope).length > 0;
+  }
+
   function isBillingSettingsRoute(value = location.href) {
     try {
       const url = new URL(String(value || location.href), location.href);
       const pathname = String(url.pathname || '/').toLowerCase().replace(/\/+$/, '') || '/';
-      return pathname === '/settings/billing';
+      if (pathname === '/settings/billing') return true;
+
+      // Firefox Android can still receive ChatGPT's legacy settings modal, which keeps
+      // pathname at / and selects Billing through the hash instead. Accept both names
+      // seen across the old UI generations without treating every #settings page as billing.
+      let hash = String(url.hash || '').trim().toLowerCase();
+      try {
+        hash = decodeURIComponent(hash);
+      } catch {
+        // Keep the raw hash if malformed escaping slips through.
+      }
+
+      if (/^#settings\/(?:billing|subscription)(?:[/?&]|$)/.test(hash)) return true;
+      return /^#settings\?(?:[^&]+&)*(?:tab|section|page)=(?:billing|subscription)(?:&|$)/.test(hash);
     } catch {
       return false;
     }
@@ -5720,8 +5929,109 @@
     return true;
   }
 
+  function getBillingTextLeaves(scope) {
+    if (!(scope instanceof Element) && scope !== document) return [];
+
+    const leaves = [];
+    if (scope instanceof Element && scope.matches?.('div, span, p')) leaves.push(scope);
+    if (typeof scope.querySelectorAll === 'function') {
+      leaves.push(...scope.querySelectorAll('div, span, p'));
+    }
+
+    return leaves.filter(element => element.children.length === 0);
+  }
+
+  function isNativeBillingPlanText(value) {
+    return BILLING_NATIVE_PLAN_LABELS.has(normalizeText(value));
+  }
+
+  function isNativeBillingRenewalText(value) {
+    const text = normalizeText(value);
+    return BILLING_RENEWAL_TEXT_PREFIXES.some(prefix => text.startsWith(prefix));
+  }
+
+  function isNativeBillingUpdateButton(button) {
+    return button instanceof HTMLButtonElement &&
+      BILLING_UPDATE_BUTTON_LABELS.has(normalizeText(button.textContent));
+  }
+
+  function billingContainerHasNativeSignals(container) {
+    if (!(container instanceof HTMLElement)) return false;
+
+    const leaves = getBillingTextLeaves(container);
+    const hasPlan = leaves.some(element => isNativeBillingPlanText(element.textContent));
+    const hasRenewal = leaves.some(element => isNativeBillingRenewalText(element.textContent));
+
+    // Plan + renewal is the stable subscription fingerprint on both layouts. The update
+    // button is intentionally optional because some account tiers/load states mount it late.
+    return hasPlan && hasRenewal;
+  }
+
+  function findLegacyBillingSubscriptionRow(scope = document) {
+    const searchRoot = scope instanceof Element || scope === document ? scope : document;
+    const planLeaves = getBillingTextLeaves(searchRoot)
+      .filter(element => isNativeBillingPlanText(element.textContent));
+
+    for (const planLeaf of planLeaves) {
+      let candidate = planLeaf.parentElement;
+      let depth = 0;
+
+      while (candidate instanceof HTMLElement && depth < 9) {
+        if (billingContainerHasNativeSignals(candidate)) {
+          candidate.setAttribute('data-bravefox-billing-subscription-row', 'true');
+          candidate.setAttribute('data-bravefox-billing-layout', 'legacy');
+          return candidate;
+        }
+
+        // A legacy settings dialog is the widest container we ever need to inspect. Do not
+        // climb into the entire ChatGPT page if the subscription fingerprint is incomplete.
+        if (candidate.matches('[role="dialog"]')) break;
+        candidate = candidate.parentElement;
+        depth += 1;
+      }
+    }
+
+    return null;
+  }
+
+  function mayContainBillingSubscriptionUi(scope) {
+    if (!isBillingSettingsRoute()) return false;
+    if (!(scope instanceof Element)) return false;
+
+    if (
+      scope.matches?.('div[class~="@container/settings-row"], [data-bravefox-billing-subscription-row="true"]') ||
+      scope.querySelector?.('div[class~="@container/settings-row"], [data-bravefox-billing-subscription-row="true"]')
+    ) {
+      return true;
+    }
+
+    const leaves = getBillingTextLeaves(scope);
+    if (
+      leaves.some(element =>
+        isNativeBillingPlanText(element.textContent) ||
+        isNativeBillingRenewalText(element.textContent)
+      )
+    ) {
+      return true;
+    }
+
+    return Array.from(scope.querySelectorAll?.('button') || []).some(isNativeBillingUpdateButton);
+  }
+
   function findBillingSubscriptionRow(scope = document) {
     if (!isBillingSettingsRoute()) return null;
+
+    if (
+      scope instanceof HTMLElement &&
+      scope.getAttribute('data-bravefox-billing-subscription-row') === 'true'
+    ) {
+      return scope;
+    }
+
+    const markedRow = typeof scope?.querySelector === 'function'
+      ? scope.querySelector('[data-bravefox-billing-subscription-row="true"]')
+      : null;
+    if (markedRow instanceof HTMLElement) return markedRow;
 
     const rows = [];
     if (scope instanceof Element && scope.matches?.('div[class~="@container/settings-row"]')) {
@@ -5735,31 +6045,25 @@
       if (!(row instanceof HTMLElement)) continue;
       if (row.getAttribute('data-bravefox-billing-subscription-row') === 'true') return row;
 
-      const leaves = Array.from(row.querySelectorAll('div, span, p'))
-        .filter(element => element.children.length === 0);
-
-      const hasPlan = leaves.some(element =>
-        BILLING_NATIVE_PLAN_LABELS.has(normalizeText(element.textContent))
-      );
-
-      const hasRenewal = leaves.some(element => {
-        const text = normalizeText(element.textContent);
-        return BILLING_RENEWAL_TEXT_PREFIXES.some(prefix => text.startsWith(prefix));
-      });
-
-      const hasUpdateButton = Array.from(row.querySelectorAll('button')).some(button =>
-        BILLING_UPDATE_BUTTON_LABELS.has(normalizeText(button.textContent))
-      );
+      const leaves = getBillingTextLeaves(row);
+      const hasPlan = leaves.some(element => isNativeBillingPlanText(element.textContent));
+      const hasRenewal = leaves.some(element => isNativeBillingRenewalText(element.textContent));
+      const hasUpdateButton = Array.from(row.querySelectorAll('button')).some(isNativeBillingUpdateButton);
 
       // Require the plan name and one additional subscription-specific cue so another
       // settings row cannot accidentally become the customization target.
       if (!hasPlan || (!hasRenewal && !hasUpdateButton)) continue;
 
       row.setAttribute('data-bravefox-billing-subscription-row', 'true');
+      row.setAttribute('data-bravefox-billing-layout', 'native');
       return row;
     }
 
-    return null;
+    // The legacy Firefox Android modal has no @container/settings-row wrapper. Find the
+    // smallest ancestor containing the native plan + renewal pair instead of relying on
+    // unstable generated classes.
+    return findLegacyBillingSubscriptionRow(scope) ||
+      (scope === document ? null : findLegacyBillingSubscriptionRow(document));
   }
 
   function customizeBillingSubscriptionRow(scope = document) {
@@ -5772,17 +6076,15 @@
       .filter(element => element.children.length === 0);
 
     const planNode = leaves.find(element =>
-      BILLING_NATIVE_PLAN_LABELS.has(normalizeText(element.textContent))
+      isNativeBillingPlanText(element.textContent)
     ) || row.querySelector('[data-bravefox-billing-plan-text="true"]');
 
-    const renewalNode = leaves.find(element => {
-      const text = normalizeText(element.textContent);
-      return BILLING_RENEWAL_TEXT_PREFIXES.some(prefix => text.startsWith(prefix));
-    }) || row.querySelector('[data-bravefox-billing-renewal-text="true"]');
+    const renewalNode = leaves.find(element =>
+      isNativeBillingRenewalText(element.textContent)
+    ) || row.querySelector('[data-bravefox-billing-renewal-text="true"]');
 
-    const updateButton = Array.from(row.querySelectorAll('button')).find(button =>
-      BILLING_UPDATE_BUTTON_LABELS.has(normalizeText(button.textContent))
-    ) || row.querySelector('button[data-bravefox-billing-update-button="true"]');
+    const updateButton = Array.from(row.querySelectorAll('button')).find(isNativeBillingUpdateButton) ||
+      row.querySelector('button[data-bravefox-billing-update-button="true"]');
 
     if (planNode instanceof Element) {
       planNode.setAttribute('data-bravefox-billing-plan-text', 'true');
@@ -5874,6 +6176,7 @@
   function applyAccountAndSettingsCleanup(scope = document) {
     if (!scope || typeof scope.querySelectorAll !== 'function') return;
 
+    hideDeleteAccountSettingsUi(scope);
     customizeBillingSubscriptionRow(scope);
 
     // Account/profile menu: Personalization / Yksilöinti. Radix mounts this menu in a
@@ -6415,6 +6718,10 @@
 
   function mayContainCustomizableChatGptBanner(scope) {
     try {
+      if (!(scope instanceof Element)) return false;
+      // Cheap text gate first. Most mutations are normal chat/UI nodes and cannot
+      // possibly be a retirement banner; avoid querySelectorAll('p, span, div') on them.
+      if (!getMatchingChatGptBannerRule(scope.textContent)) return false;
       return collectCustomizableChatGptBanners(scope).length > 0;
     } catch {
       return false;
@@ -6439,7 +6746,11 @@
       let target = null;
 
       const textCandidates = Array.from(banner.querySelectorAll('div, p, span'))
-        .filter(candidate => !candidate.querySelector('button'))
+        // On Firefox Android React often mounts banners incrementally. Replacing
+        // textContent on a wrapper with child elements can delete React-owned nodes
+        // mid-commit and make the entire notice disappear. Leaf-only is fail-safe:
+        // if no safe leaf contains the complete match, leave the native text alone.
+        .filter(candidate => candidate.children.length === 0)
         .reverse();
 
       for (const candidate of textCandidates) {

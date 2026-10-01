@@ -1,9 +1,15 @@
 // ==UserScript==
 // @name         Content hiding and filtering
-// @version      2026-09-24
+// @version      2026-10-01
 // @description  Filter out stuff on the internet (Targeted Enforcer)
 // @match        *://xvideos.com/*
 // @match        *://*.xvideos.com/*
+// @match        *://redtube.com/*
+// @match        *://*.redtube.com/*
+// @match        *://redtube.net/*
+// @match        *://*.redtube.net/*
+// @match        *://redtube.com.br/*
+// @match        *://*.redtube.com.br/*
 // @match        *://tenor.com/*
 // @match        *://*.tenor.com/*
 // @grant        none
@@ -14,9 +20,10 @@
 
 
     // === SITE ROUTING ===
-    // filtering.js has two deliberately isolated jobs:
-    //   1) full XVideos filtering; and
-    //   2) a tiny Tenor search-submit guard.
+    // filtering.js has three deliberately isolated jobs:
+    //   1) full XVideos filtering;
+    //   2) lightweight no-glimpse RedTube result-card filtering; and
+    //   3) a tiny Tenor search-submit guard.
     // It must remain completely dormant everywhere else, even when an extension manifest from an
     // older build still injects the file broadly.
     const BRAVEFOX_FILTERING_HOST = String(window.location.hostname || '')
@@ -26,8 +33,15 @@
         BRAVEFOX_FILTERING_HOST.endsWith('.xvideos.com');
     const BRAVEFOX_IS_TENOR = BRAVEFOX_FILTERING_HOST === 'tenor.com' ||
         BRAVEFOX_FILTERING_HOST.endsWith('.tenor.com');
+    const BRAVEFOX_IS_REDTUBE =
+        BRAVEFOX_FILTERING_HOST === 'redtube.com' ||
+        BRAVEFOX_FILTERING_HOST.endsWith('.redtube.com') ||
+        BRAVEFOX_FILTERING_HOST === 'redtube.net' ||
+        BRAVEFOX_FILTERING_HOST.endsWith('.redtube.net') ||
+        BRAVEFOX_FILTERING_HOST === 'redtube.com.br' ||
+        BRAVEFOX_FILTERING_HOST.endsWith('.redtube.com.br');
 
-    if (!BRAVEFOX_IS_XVIDEOS && !BRAVEFOX_IS_TENOR) return;
+    if (!BRAVEFOX_IS_XVIDEOS && !BRAVEFOX_IS_TENOR && !BRAVEFOX_IS_REDTUBE) return;
 
     // === FOCUS MASTER REMOTE TERMS ===
     // Keep this remote layer semantically aligned with Focus Master's blockedTerms.csv handling:
@@ -233,7 +247,7 @@
 	/guy-guy/i, /homo/i, /grandpa/i, /grandma/i, /aunty/i, /piss/i, /pee/i, /crap/i, /shit/i, /fece/i, /Cuckold/i, /Bikini/i, /Lingerie/i, /Hentai/i, /Animation/i, 
 	/Artific/i, /Intel/i, /male-/i, /africa/i, /japan/i, /china/i, /chine/i, /twerk/i, /strip/i, /whori/i, /muscular/i, /-male/i, /male-/i, /shemale/i, /shemale/i, 
 	/old-young/i, /young-old/i, /old-vs-young/i, /Nude AI/i, /nudi AI/i, /software/i, /undre AI/i, /Nud3/i, /Nud1/i, /Naked AI/i, /-AI/i, /AI-/i, /-AI-/i, /AI App/i, 
-	/-App/i, /App-/i, /Appli/i, /-IA/i, /IA-/i, /-IA-/i, /Serrano/i, /Russia/i,
+	/-App/i, /App-/i, /Appli/i, /-IA/i, /IA-/i, /-IA-/i, /Serrano/i, /Russia/i, /Russian/i, /Transg/i, /Transv/i,
 
 
         // Symbols and standalone abbreviations
@@ -241,7 +255,7 @@
 
 
         // Boundaried Regex blocklist
-        /\bMLM\b/i, /\bLLM\b/i, /\bAI\b/i, /\bAsia\b/i, /\bAsian\b/i, /\bMale\b/i, /\bOld\b/i, /\bIA\b/i, /\bZoey\b/i,
+        /\bMLM\b/i, /\bLLM\b/i, /\bAI\b/i, /\bAsia\b/i, /\bAsian\b/i, /\bMale\b/i, /\bOld\b/i, /\bIA\b/i, /\bZoey\b/i, /\bTrans\b/i, /\bGay\b/i,
 
 
         // Blocksite consistency list (every term from blocksite list)
@@ -262,17 +276,16 @@
 	/swapoutfit/i, /outfit-swap/i, /swap-outfit/i, /aznude/i, /az_nude/i, /az-nude/i, /Fapello/i, /Daddio/i, /Gionna/i, /Giona/i, /Gion4/i, /G1ona/i, /Brianna Garcia/i, 
 	/gi0na/i, /Brie Garcia/i, /Nikki Garcia/i, /Bella Twin/i, /SamanthaWWE/i, /S4mantha/i, /sam4ntha/i, /s4m4ntha/i, /s4m4nth4/i, /sam4nth4/i, /s4manth4/i, /Irvin wrest/i, 
 	/Irvin rass/i, /Irvin WWE/i, /Irvin AEW/i, /Irvin TNA/i, /Irvin NJPW/i, /Irwin wrest/i, /Irwin rass/i, /Irwin WWE/i, /Irwin AEW/i, /Irwin TNA/i, /Irwin NJPW/i, 
-	/D4ddio/i, /dadd1o/i, /daddi0/i, /d4dd1o/i, /d4ddi0/i, /dadd10/i, /Sanna Marin sex/i, /Sanna Marin anal/i, /fappenist/i, /fappening/i, /nude leak/i, /naked leak/i, 
+	/D4ddio/i, /dadd1o/i, /daddi0/i, /d4dd1o/i, /d4ddi0/i, /dadd10/i, /Sanna Marin sex/i, /Sanna Marin anal/i, /fappenist/i, /fappening/i, /pxxxrn/i, /diva the butt/i, 
 	/bare leak/i, /cunt leak/i, /pussy image leak/i, /pussy photo leak/i, /pussy pic leak/i, /celeb leak/i, /porn leak/i, /onlyfans leak/i, /fantime leak/i, /Nood/i,
 	/JustForFans leak/i, /FanCentro leak/i, /MYM leak/i, /Unfiltrd leak/i, /Loyalfans leak/i, /Ismygirl leak/i, /Friendsonly leak/i, /Modelhub leak/i, /myFanPark leak/i, 
 	/iFans leak/i, /Fanso leak/i, /Mygirlfund leak/i, /AdultNode leak/i, /Uncensored leak/i, /Unfiltered leak/i, /Fanvue leak/i, /Okfans leak/i, /Manyvids leak/i, 
 	/Scrile connect leak/i, /Flirtback leak/i, /Scrile content leak/i, /picwish/i, /snapedit/i, /Carbrera/i, /undiewear/i, /und1es/i, /undi3s/i, /undie5/i, /und13s/i, 
 	/und1e5/i, /undi35/i, /swimwear/i, /sw1mw/i, /5wimw/i, /sw1mwe4r/i, /sw1mw34r/i, /remov underwear/i, /remov undie/i, /remov boxers/i, /delet underwear/i, /poses/i,
 	/Fansly leak/i, /delet bikini/i, /eras swimwear/i, /remov swimwear/i, /delet swimwear/i, /remov suit/i, /delet suit/i, /eras suit/i, /remov bra/i, /delet bra/i, 
-	/delet pant/i, /delet boxers/i, /delet undie/i, /delet cloth/i, /eras cloth/i, /based labs/i, /basedlabs/i, /Glutes/i, /Coarse vid/i, /Coarse pic/i, /c0arse/i, 
-	/co4rse/i, /coar5e/i, /coars3/i, /noodi/i, /b1kin1/i, /b!kin1/i, /b1kin!/i, /b!kin!/i, /Bella fantas/i, /St3phan/i, /st3ph4n/i, /steph4n/i, /Steph Nicole/i, 
-	/Chigvintsev/i, /Immodest/i, /Nethers/i, /Nether regions/i, /posing/i, /p0s1ng/i, /p05ing/i, /WWE onlyfans/i, /AEW onlyfans/i, /NJPW onlyfans/i, /TNA onlyfans/i, 
-	/smexy/i, /sm3xy/i, /Bella/i, /Point 0f View/i, /b0oty/i, /bo0ty/i, /Lady Part/i, /Femal part/i, /Girl part/i, /Genital/i, /Fannie/i, /Fannys/i, /skimp/i, /sk1mp/i, 
+	/delet pant/i, /delet boxers/i, /delet undie/i, /delet cloth/i, /eras cloth/i, /based labs/i, /basedlabs/i, /noodi/i, /b1kin1/i, /b!kin1/i, /b1kin!/i, /b!kin!/i, 	
+	/Chigvintsev/i, /WWE onlyfans/i, /AEW onlyfans/i, /NJPW onlyfans/i, /TNA onlyfans/i, /Bella fantas/i, /St3phan/i, /st3ph4n/i, /steph4n/i, /Steph Nicole/i, /sk1mp/i, 
+	/smexy/i, /sm3xy/i, /Bella/i, /Point 0f View/i, /b0oty/i, /bo0ty/i, /Lady Part/i, /Femal part/i, /Girl part/i, /Genital/i, /Fannie/i, /Fannys/i, /skimp/i, /eras photo/i, 
 	/5kimp/i, /generativ/i, /gener AI/i, /ejaculat/i,/5quirt/i, /squ1rt/i, /squir7/i, /squ1r7/i, /5quir7/i, /5qu1rt/i, /Mercedes Mon/i, /Sasha/i, /B4nks/i, /NJPW tush/i, 
 	/AEW tush/i, /TNA tush/i, /WWE tush/i, /NJPW vulva/i, /AEW vulva/i, /TNA vulva/i, /WWE vulva/i, /mak1n out/i, /m4kin out/i, /m4k1n out/i, /makin 0ut/i, /mak1n 0ut/i, 
 	/m4kin 0ut/i, /m4k1n 0ut/i, /Nikk Bell/i, /Niki Bell/i, /Zelin Veg/i, /d3epn/i, /de3pn/i, /Nude_AI/i, /noowd/i, /deee/i, /deppp/i, /pus5y/i, /pu5sy/i, /Nude-AI/i, 
@@ -291,15 +304,15 @@
 	/f4nsly/i, /0nlynsfw/i, /onlynsfw/i, /deepai/i, /deep-ai/i, /deep\+ai/i, /deep\?ai/i, /deep=ai/i, /deep_ai/i, /gen nude/i, /nude gen/i, /genaratenud/i, /gen_nude/i, 
 	/generate_nud/i, /g3nerate_nud/i, /g3n3rat/i, /nudgen/i, /nudegen/i, /nudesgen/i, /nudes gen/i, /nde gen/i, /nude gn/i, /nde gn/i, /creat girlf/i, /creat gf/i, /creategf/i, 
 	/mak gf/i, /mak girlf/i, /Girlfriend AI/i, /nudgener/i, /nudi gen/i, /gen3raten/i, /gen3rat3n/i, /live3d/i, /aiexotic/i, /ai exotic/i, /ai-exotic/i, /nsfwart/i, /nsfw art/i, 
-	/nsfw art gen/i, /ero Artificial intelligence/i, /Artificial intelligence gen/i, /babe5/i, /Artificial intelligence g3n/i, /generat3/i, /genrat/i, /nude5/i, /waif/i, /cr34te/i, 
-	/cr3ate/i, /cr3a7e/i, /cr3at/i, /creat1/i, /Artificial intelligence porn/i, /creat3/i, /Artificial intelligence ero/i, /bebe5/i, /nubee/i, /nub3e/i, /nube3/i, /pxxrn/i, /pxxxrn/i, 
+	/nsfw art gen/i, /ero Artificial intelligence/i, /Artificial intelligence gen/i, /babe5/i, /Artificial intelligence g3n/i, /generat3/i, /genrat/i, /nude5/i, /waif/i,  
+	/cr3ate/i, /cr3a7e/i, /cr3at/i, /creat1/i, /Artificial intelligence porn/i, /creat3/i, /Artificial intelligence ero/i, /bebe5/i, /nubee/i, /nub3e/i, /nube3/i, /pxxrn/i,
 	/poorn/i, /penetr\*\*e/i, /Lex Bliss/i, /createporn/i, /vidnoz/i, /creat porn/i, /porn journey/i, /bussy/i, /pornjourney/i, /frosting ai/i, /fr0st ai/i, /fr0st a1/i, /pornjoy/i, 
 	/porn joy/i, /pornj0y/i, /porn j0y/i, /only-babe/i, /onlybabe/i, /ai p0rn/i, /ai corn/i, /priv3/i, /aip0rn/i, /bus5y/i, /bu5sy/i, /privee/i, /prive/i, /r3m0ve/i, /remov3/i, 
 	/r3m AI/i, /rem cloth/i, /cloth rem/i, /pant rem/i, /rem pant/i, /pant eras/i, /pant del/i, /frosting\?ai/i, /frosting=ai/i, /frosting-ai/i, /ai onl/i, /porm/i, /un pant/i, 
 	/de pant/i, /depant/i, /remdress/i, /rem dress/i, /dress rem/i, /dressrem/i, /rem bra/i, /rem boxers/i, /deldress/i, /de dress/i, /dress de/i, /dressde/i, /del bik/i, /rem bik/i, 
 	/eras bik/i, /dress eras/i, /clit\*/i, /clito\*/i, /\*litor\*/i, /\*litori/i, /clitori\*/i, /clitor\*/i, /pl3as/i, /pl345sure/i, /g3nit/i, /ai tush/i, /L3X Bliss/i, /Bl1ss/i, 
 	/L3X Bl1ss/i, /pl345ur3/i, /vulv\*/i, /\*ulva/i, /Mercede Bank/i, /pl345ure/i, /m\*stu/i, /mas\*u/i, /mast\*r/i, /vag\*\*a/i, /Artific Intellig/i, /v\*\*ina/i, /\*agina/i, 
-	/vagin\*/i, /vagi\*n/i, /puss\*/i, /puss3/i, /pussee/i, /pu5si/i, /puss1/i, /squ1r/i, /s\*uir/i, /squir\*/i, /\*quir/i, /squ\*r/i, /squi\*/i, /sq\*ir/i, /5quir\*/i, /eras photo/i, 
+	/vagin\*/i, /vagi\*n/i, /puss\*/i, /puss3/i, /pussee/i, /pu5si/i, /puss1/i, /squ1r/i, /s\*uir/i, /squir\*/i, /\*quir/i, /squ\*r/i, /squi\*/i, /sq\*ir/i, /5quir\*/i, 
 	/eras pic/i, /midjourney/i, /mid journey/i, /prompthero/i, /prompt hero/i, /midjourn3y/i, /creat nud/i, /gen nud/i, /convert nud/i, /conversion nud/i, /nud someone/i, /cr3at nud/i,
 	/nud some else pic/i, /nud someone pic/i, /AI suit/i, /nud person p/i, /nud people p/i, /nud person i/i, /nak convert/i, /nak conversion/i, /nud someone i/i, /nud some else i/i, 
 	/nud someone p/i, /cre\*te/i, /cre4t nud/i, /crea7 nud/i, /cr347 nud/i, /nud app/i, /m\*k nud/i, /\*ak nud/i, /m4k nud/i, /m&k3 nud/i, /m&ke nud/i, /c\*eate/i, /cr\*ate/i, 
@@ -309,7 +322,7 @@
 	/e\*plicit/i, /ex\*licit/i, /exp\*icit/i, /expl\*cit/i, /exp!ic/i, /expl!c/i, /3xpl!c/i, /expl1c/i, /horni/i, /horn1/i, /h0rny/i, /whor1/i, /wh0re/i, /whor3/i, /dirti/i, /dirt\*/i,  
 	/d1rti/i, /conv3rt/i, /conv3rs/i, /c0nver/i, /d1rtl/i, /dlrt1/i, /dlrt!/i, /dlrti/i, /dlrty/i, /d!rti/i, /dir\*i/i, /dir\*y/i, /who\*ing/i, /deepmok/i, /nuk1f/i, /nuk3f/i,  
 	/deepnugif/i, /deepnukeif/i, /deepnugeif/i, /deepn00/i, /deepnoo/i, /diep/i, /nudi app/i, /nude app/i, /ned1f/i, /nedif/i, /nedeif/i, /nudeif/i, /nootify/i, /ned!f/i, /diva vulva/i,
-	/artificial intelligence/i, /art intel/i, /ai booty/i, /ai butt/i, /ai horny/i, /diva vag/i, /diva pussy/i, /diva naked/i, /diva nude/i, /diva anal/i, /diva horny/i, /diva the butt/i, 
+	/artificial intelligence/i, /art intel/i, /ai booty/i, /ai butt/i, /ai horny/i, /diva vag/i, /diva pussy/i, /diva naked/i, /diva nude/i, /diva anal/i, /diva horny/i, /cr34te/i,
 	/AI explicit/i, /AI explic/i, /Art explic/i, /A1 explic/i, /al explic/i, /al lntel/i, /cl0at/i, /elliecha0tic/i, /AI sensu/i, /off cloth/i, /off robe/i, /Off dress/i, /Off pant/i, 
 	/off bra/i, /off swimwear/i, /off lingerie/i, /off boxers/i, /off swimsuit/i, /AI Uncens/i, /Al uncens/i, /A1 uncens/i, /IA nude/i, /AI censor/i, /A\* censor/i, /Al censor/i, 
 	/A1 censor/i, /Al unfilt/i, /A1 unflit/i, /AI unfilt/i, /unf1lt/i, /unfllt/i, /unf!lt/i, /\*l tool/i, /\*I tool/i, /A\* tool/i, /IA nud/i, /cloth chan web/i, /cloth chan app/i, 
@@ -476,8 +489,748 @@
         checkCurrentUrl();
     }
 
+    function installBraveFoxRedTubeFilter() {
+        if (window.__braveFoxRedTubeFilteringInstalled) return;
+        window.__braveFoxRedTubeFilteringInstalled = true;
+
+        const REDTUBE_STATE_ATTR = 'data-bravefox-redtube-filter-state';
+        const REDTUBE_FILTER_REVISION = 'redtube-card-category-v2';
+        const REDTUBE_REVISION_ATTR = 'data-bravefox-redtube-filter-revision';
+        const REDTUBE_CATEGORY_STATE_ATTR = 'data-bravefox-redtube-category-filter-state';
+        const REDTUBE_CATEGORY_REVISION_ATTR = 'data-bravefox-redtube-category-filter-revision';
+        const REDTUBE_CARD_SELECTOR_PARTS = [
+            'li.thumbnail-card[data-video-id]',
+            'li.videoblock_list[data-video-id]',
+            'li.js_thumbContainer[data-video-id]',
+            'li[id^="mrv_"][data-video-id]'
+        ];
+        const REDTUBE_CATEGORY_SELECTOR_PARTS = [
+            'li.category_item',
+            'li.category_tracker_item',
+            'li[id^="categories_list_block_"]'
+        ];
+        const REDTUBE_CARD_SELECTOR = REDTUBE_CARD_SELECTOR_PARTS.join(', ');
+        const REDTUBE_CATEGORY_SELECTOR = REDTUBE_CATEGORY_SELECTOR_PARTS.join(', ');
+        const redTubeBlockedRegexWords = createStaticBlockedRegexWords();
+        let redTubeDynamicWrestlerRegexWords = [];
+        let redTubeDynamicWrestlerSignature = '';
+        let redTubeObserver = null;
+        let removeRedTubeStorageListener = null;
+        let redTubeRedirecting = false;
+
+        const redTubeDynamicWrestlerExclusions = new Set([
+            'melina', 'melina-perez', 'aj-lee', 'aj', 'becky-lynch', 'becky', 'katarina', 'jojo'
+        ]);
+
+        const escapeRedTubeRegex = value =>
+            String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+        const redTubeContainsBlockedContent = value => {
+            const text = String(value || '');
+            if (!text) return false;
+
+            return redTubeBlockedRegexWords.some(regex => regexMatches(regex, text)) ||
+                   redTubeDynamicWrestlerRegexWords.some(regex => regexMatches(regex, text)) ||
+                   containsFocusMasterBlockedTerm(text);
+        };
+
+        function buildRedTubeDynamicWrestlerPatterns(urls) {
+            const patterns = [];
+            const seenNames = new Set();
+
+            (Array.isArray(urls) ? urls : []).forEach(url => {
+                try {
+                    const parts = String(url).split('/').filter(Boolean);
+                    if (!parts.length) return;
+
+                    const slug = decodeURIComponent(parts[parts.length - 1]).toLowerCase().trim();
+                    if (!slug || redTubeDynamicWrestlerExclusions.has(slug)) return;
+
+                    const nameParts = slug
+                        .split(/[-_\s]+/)
+                        .map(part => part.trim())
+                        .filter(Boolean);
+                    if (!nameParts.length) return;
+
+                    const normalizedName = nameParts.join(' ');
+                    if (seenNames.has(normalizedName)) return;
+                    seenNames.add(normalizedName);
+
+                    const flexibleName = nameParts.map(escapeRedTubeRegex).join('[\\s_-]+');
+                    patterns.push(new RegExp('\\b' + flexibleName + '\\b', 'i'));
+                } catch (e) {}
+            });
+
+            return patterns;
+        }
+
+        function installRedTubeDynamicWrestlerBans(urls) {
+            const normalizedUrls = Array.isArray(urls)
+                ? [...new Set(urls.map(value => String(value).toLowerCase()).filter(Boolean))].sort()
+                : [];
+            const signature = normalizedUrls.join('\n');
+            if (signature === redTubeDynamicWrestlerSignature) return;
+
+            redTubeDynamicWrestlerSignature = signature;
+            redTubeDynamicWrestlerRegexWords = buildRedTubeDynamicWrestlerPatterns(normalizedUrls);
+            filterRedTubeCards(true);
+            filterRedTubeCategories(true);
+            checkRedTubeSearchRoute();
+        }
+
+        function loadRedTubeDynamicWrestlerBans() {
+            const handleResult = result => {
+                try {
+                    const urls = result && Array.isArray(result.wrestling_women_urls)
+                        ? result.wrestling_women_urls
+                        : [];
+                    installRedTubeDynamicWrestlerBans(urls);
+                } catch (e) {}
+            };
+
+            try {
+                if (typeof browser !== 'undefined' && browser.storage && browser.storage.local) {
+                    Promise.resolve(browser.storage.local.get(['wrestling_women_urls']))
+                        .then(handleResult)
+                        .catch(() => {});
+                    return;
+                }
+
+                if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+                    chrome.storage.local.get(['wrestling_women_urls'], result => {
+                        try {
+                            const lastError = chrome.runtime && chrome.runtime.lastError;
+                            if (lastError) return;
+                        } catch (e) {}
+                        handleResult(result || {});
+                    });
+                }
+            } catch (e) {}
+        }
+
+        function installRedTubeStorageListener() {
+            const onChanged = (changes, areaName) => {
+                if (areaName && areaName !== 'local') return;
+                if (!changes || !Object.prototype.hasOwnProperty.call(changes, 'wrestling_women_urls')) return;
+
+                const change = changes.wrestling_women_urls || {};
+                installRedTubeDynamicWrestlerBans(change.newValue || []);
+            };
+
+            try {
+                if (typeof browser !== 'undefined' && browser.storage && browser.storage.onChanged) {
+                    browser.storage.onChanged.addListener(onChanged);
+                    removeRedTubeStorageListener = () => {
+                        try { browser.storage.onChanged.removeListener(onChanged); } catch (e) {}
+                    };
+                    return;
+                }
+
+                if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged) {
+                    chrome.storage.onChanged.addListener(onChanged);
+                    removeRedTubeStorageListener = () => {
+                        try { chrome.storage.onChanged.removeListener(onChanged); } catch (e) {}
+                    };
+                }
+            } catch (e) {}
+        }
+
+        function redTubeSelectorWithSuffix(suffix) {
+            return REDTUBE_CARD_SELECTOR_PARTS
+                .map(selector => `html.bravefox-redtube-filtering-active ${selector}${suffix}`)
+                .join(',\n');
+        }
+
+        function redTubeCategorySelectorWithSuffix(suffix) {
+            return REDTUBE_CATEGORY_SELECTOR_PARTS
+                .map(selector => `html.bravefox-redtube-filtering-active ${selector}${suffix}`)
+                .join(',\n');
+        }
+
+        function injectRedTubeNoGlimpseCSS() {
+            try {
+                if (!document.documentElement) return false;
+                document.documentElement.classList.add('bravefox-redtube-filtering-active');
+
+                const existing = document.getElementById('bravefox-redtube-filtering-no-glimpse');
+                if (existing && existing.getAttribute('data-bravefox-style-revision') === REDTUBE_FILTER_REVISION) {
+                    return true;
+                }
+                if (existing) existing.remove();
+
+                const pending = REDTUBE_CARD_SELECTOR_PARTS
+                    .map(selector =>
+                        `html.bravefox-redtube-filtering-active ${selector}:not([${REDTUBE_STATE_ATTR}="clean"]):not([${REDTUBE_STATE_ATTR}="blocked"])`
+                    )
+                    .join(',\n');
+                const pendingCategories = REDTUBE_CATEGORY_SELECTOR_PARTS
+                    .map(selector =>
+                        `html.bravefox-redtube-filtering-active ${selector}:not([${REDTUBE_CATEGORY_STATE_ATTR}="clean"]):not([${REDTUBE_CATEGORY_STATE_ATTR}="blocked"])`
+                    )
+                    .join(',\n');
+
+                const style = document.createElement('style');
+                style.id = 'bravefox-redtube-filtering-no-glimpse';
+                style.setAttribute('data-bravefox-style-revision', REDTUBE_FILTER_REVISION);
+                style.textContent = `
+                    ${redTubeSelectorWithSuffix('')} {
+                        transition: none !important;
+                        animation: none !important;
+                    }
+
+                    /* Pending cards keep their native layout box so RedTube can lazy-load their
+                       thumbnail/metadata, but nothing is visible or clickable until classified. */
+                    ${pending} {
+                        visibility: hidden !important;
+                        opacity: 0 !important;
+                        pointer-events: none !important;
+                        transition: none !important;
+                        animation: none !important;
+                    }
+
+                    ${redTubeSelectorWithSuffix(`[${REDTUBE_STATE_ATTR}="blocked"]`)} {
+                        display: none !important;
+                        visibility: hidden !important;
+                        opacity: 0 !important;
+                        pointer-events: none !important;
+                        height: 0 !important;
+                        min-height: 0 !important;
+                        max-height: 0 !important;
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        overflow: hidden !important;
+                        transition: none !important;
+                        animation: none !important;
+                    }
+
+                    ${redTubeSelectorWithSuffix(`[${REDTUBE_STATE_ATTR}="clean"]`)} {
+                        visibility: visible !important;
+                        opacity: 1 !important;
+                        pointer-events: auto !important;
+                        transition: none !important;
+                        animation: none !important;
+                    }
+
+                    ${redTubeCategorySelectorWithSuffix('')} {
+                        transition: none !important;
+                        animation: none !important;
+                    }
+
+                    /* Category tiles use the same no-glimpse contract as video cards. Keep their
+                       native layout while RedTube hydrates the label/thumbnail, then reveal only clean tiles. */
+                    ${pendingCategories} {
+                        visibility: hidden !important;
+                        opacity: 0 !important;
+                        pointer-events: none !important;
+                        transition: none !important;
+                        animation: none !important;
+                    }
+
+                    ${redTubeCategorySelectorWithSuffix(`[${REDTUBE_CATEGORY_STATE_ATTR}="blocked"]`)} {
+                        display: none !important;
+                        visibility: hidden !important;
+                        opacity: 0 !important;
+                        pointer-events: none !important;
+                        height: 0 !important;
+                        min-height: 0 !important;
+                        max-height: 0 !important;
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        overflow: hidden !important;
+                        transition: none !important;
+                        animation: none !important;
+                    }
+
+                    ${redTubeCategorySelectorWithSuffix(`[${REDTUBE_CATEGORY_STATE_ATTR}="clean"]`)} {
+                        visibility: visible !important;
+                        opacity: 1 !important;
+                        pointer-events: auto !important;
+                        transition: none !important;
+                        animation: none !important;
+                    }
+
+                    /* Keep the orientation selector visually intact, but do not present it as an
+                       interactive control. Event capture below is the authoritative click/touch guard. */
+                    html.bravefox-redtube-filtering-active #orient_container,
+                    html.bravefox-redtube-filtering-active #orient_container * {
+                        cursor: default !important;
+                    }
+                `;
+
+                (document.head || document.documentElement).appendChild(style);
+                return true;
+            } catch (e) {
+                return false;
+            }
+        }
+
+        function getRedTubeCardSearchText(card) {
+            if (!card || !card.querySelector) return '';
+
+            const values = [];
+            const push = value => {
+                const text = String(value || '').replace(/\s+/g, ' ').trim();
+                if (text) values.push(text);
+            };
+
+            push(card.getAttribute('data-uploader-name'));
+            push(card.getAttribute('data-uploader-type'));
+
+            const title = card.querySelector(
+                'a.video-title-text, a.tm_video_title, .video-title-wrapper a[title]'
+            );
+            if (title) {
+                push(title.textContent);
+                push(title.getAttribute('title'));
+            }
+
+            const author = card.querySelector(
+                '.author-title-container a.author-title-text, a.author-title-text'
+            );
+            if (author) {
+                push(author.textContent);
+                push(author.getAttribute('title'));
+            }
+
+            const performers = card.querySelector('.performers-list');
+            if (performers) {
+                push(performers.textContent);
+                performers.querySelectorAll('a[title], a[href]').forEach(link => {
+                    push(link.textContent);
+                    push(link.getAttribute('title'));
+                });
+            }
+
+            const thumb = card.querySelector(
+                'picture.video_thumb_image img, img.js_thumbImageTag, img.img_video_list'
+            );
+            if (thumb) {
+                push(thumb.getAttribute('alt'));
+                push(thumb.getAttribute('title'));
+            }
+
+            return values.join(' ').replace(/\s+/g, ' ').trim();
+        }
+
+        function getRedTubeCategorySearchText(category) {
+            if (!category || !category.querySelector) return '';
+
+            const values = [];
+            const push = value => {
+                const text = String(value || '').replace(/\s+/g, ' ').trim();
+                if (text) values.push(text);
+            };
+
+            const name = category.querySelector('.tm_cat_name, .category_item_link strong, .category_item_link');
+            if (name) {
+                push(name.textContent);
+                push(name.getAttribute && name.getAttribute('title'));
+            }
+
+            const links = category.querySelectorAll('a.category_item_link[href], a.category_thumb_link[href], a.tm_cat_link[href]');
+            links.forEach(link => {
+                push(link.textContent);
+                push(link.getAttribute('title'));
+                push(link.getAttribute('aria-label'));
+                try {
+                    const parsed = new URL(link.getAttribute('href') || '', window.location.origin);
+                    push(decodeURIComponent(parsed.pathname).replace(/[-_./]+/g, ' '));
+                } catch (e) {}
+            });
+
+            const image = category.querySelector('img.category_item_image, img.tm_cat_thumb, img[alt]');
+            if (image) {
+                push(image.getAttribute('alt'));
+                push(image.getAttribute('title'));
+            }
+
+            return values.join(' ').replace(/\s+/g, ' ').trim();
+        }
+
+        function setRedTubeCategoryState(category, state, logText) {
+            if (!category || !category.setAttribute) return;
+
+            category.setAttribute(REDTUBE_CATEGORY_STATE_ATTR, state);
+            category.setAttribute(REDTUBE_CATEGORY_REVISION_ATTR, REDTUBE_FILTER_REVISION);
+
+            if (state === 'blocked') {
+                category.setAttribute('aria-hidden', 'true');
+                if (category.getAttribute('data-bravefox-redtube-category-block-logged') !== '1') {
+                    category.setAttribute('data-bravefox-redtube-category-block-logged', '1');
+                    console.log(`No-glimpse blocked RedTube category: ${String(logText || '').trim()}`);
+                }
+            } else {
+                category.removeAttribute('aria-hidden');
+                category.removeAttribute('data-bravefox-redtube-category-block-logged');
+            }
+        }
+
+        function filterRedTubeCategory(category, force = false) {
+            if (!category || !category.matches || !category.matches(REDTUBE_CATEGORY_SELECTOR)) return;
+
+            const currentState = category.getAttribute(REDTUBE_CATEGORY_STATE_ATTR) || '';
+            const currentRevision = category.getAttribute(REDTUBE_CATEGORY_REVISION_ATTR) || '';
+            if (!force && currentRevision === REDTUBE_FILTER_REVISION &&
+                (currentState === 'clean' || currentState === 'blocked')) {
+                return;
+            }
+
+            const searchableText = getRedTubeCategorySearchText(category);
+            if (!searchableText) return;
+
+            setRedTubeCategoryState(
+                category,
+                redTubeContainsBlockedContent(searchableText) ? 'blocked' : 'clean',
+                searchableText
+            );
+        }
+
+        function filterRedTubeCategories(force = false) {
+            try {
+                injectRedTubeNoGlimpseCSS();
+                document.querySelectorAll(REDTUBE_CATEGORY_SELECTOR).forEach(category => {
+                    filterRedTubeCategory(category, force);
+                });
+            } catch (e) {}
+        }
+
+        function setRedTubeCardState(card, state, logText) {
+            if (!card || !card.setAttribute) return;
+
+            card.setAttribute(REDTUBE_STATE_ATTR, state);
+            card.setAttribute(REDTUBE_REVISION_ATTR, REDTUBE_FILTER_REVISION);
+
+            if (state === 'blocked') {
+                card.setAttribute('aria-hidden', 'true');
+                if (card.getAttribute('data-bravefox-redtube-block-logged') !== '1') {
+                    card.setAttribute('data-bravefox-redtube-block-logged', '1');
+                    console.log(`No-glimpse blocked RedTube video result: ${String(logText || '').trim()}`);
+                }
+            } else {
+                card.removeAttribute('aria-hidden');
+                card.removeAttribute('data-bravefox-redtube-block-logged');
+            }
+        }
+
+        function filterRedTubeCard(card, force = false) {
+            if (!card || !card.matches || !card.matches(REDTUBE_CARD_SELECTOR)) return;
+
+            const currentState = card.getAttribute(REDTUBE_STATE_ATTR) || '';
+            const currentRevision = card.getAttribute(REDTUBE_REVISION_ATTR) || '';
+            if (!force && currentRevision === REDTUBE_FILTER_REVISION &&
+                (currentState === 'clean' || currentState === 'blocked')) {
+                return;
+            }
+
+            const searchableText = getRedTubeCardSearchText(card);
+            if (!searchableText) return;
+
+            setRedTubeCardState(
+                card,
+                redTubeContainsBlockedContent(searchableText) ? 'blocked' : 'clean',
+                searchableText
+            );
+        }
+
+        function filterRedTubeCards(force = false) {
+            try {
+                injectRedTubeNoGlimpseCSS();
+                document.querySelectorAll(REDTUBE_CARD_SELECTOR).forEach(card => {
+                    filterRedTubeCard(card, force);
+                });
+            } catch (e) {}
+        }
+
+        function collectRedTubeCategoriesFromNode(node, categories) {
+            const element = node && node.nodeType === Node.ELEMENT_NODE
+                ? node
+                : node && node.parentElement;
+            if (!element) return;
+
+            const category = element.closest && element.closest(REDTUBE_CATEGORY_SELECTOR);
+            if (category) categories.add(category);
+
+            if (element.matches && element.matches(REDTUBE_CATEGORY_SELECTOR)) categories.add(element);
+            if (element.querySelectorAll) {
+                element.querySelectorAll(REDTUBE_CATEGORY_SELECTOR).forEach(candidate => categories.add(candidate));
+            }
+        }
+
+        function collectRedTubeCardsFromNode(node, cards) {
+            const element = node && node.nodeType === Node.ELEMENT_NODE
+                ? node
+                : node && node.parentElement;
+            if (!element) return;
+
+            const card = element.closest && element.closest(REDTUBE_CARD_SELECTOR);
+            if (card) cards.add(card);
+
+            if (element.matches && element.matches(REDTUBE_CARD_SELECTOR)) cards.add(element);
+            if (element.querySelectorAll) {
+                element.querySelectorAll(REDTUBE_CARD_SELECTOR).forEach(candidate => cards.add(candidate));
+            }
+        }
+
+        function isRedTubeWatchPage() {
+            return /^\/\d+\/?$/i.test(String(window.location.pathname || ''));
+        }
+
+        function getRedTubeSearchQueryFromUrl() {
+            if (isRedTubeWatchPage()) return '';
+
+            try {
+                const url = new URL(window.location.href);
+                for (const name of ['search', 'q', 'query', 'k']) {
+                    const value = url.searchParams.get(name);
+                    if (value && value.trim()) return value.trim();
+                }
+
+                const match = url.pathname.match(/^\/search\/([^/?#]+)\/?$/i);
+                if (match) return decodeURIComponent(match[1]).replace(/[-_+]+/g, ' ').trim();
+            } catch (e) {}
+
+            return '';
+        }
+
+        function redirectRedTubeHome(event = null) {
+            if (redTubeRedirecting) return true;
+
+            if (event) {
+                try { event.preventDefault(); } catch (e) {}
+                try { event.stopImmediatePropagation(); } catch (e) {}
+                try { event.stopPropagation(); } catch (e) {}
+            }
+
+            redTubeRedirecting = true;
+            try { window.stop && window.stop(); } catch (e) {}
+            try { window.location.replace(window.location.origin + '/'); }
+            catch (e) { window.location.href = window.location.origin + '/'; }
+            return true;
+        }
+
+        function blockRedTubeSearchQuery(query, event = null) {
+            const text = String(query || '').trim();
+            if (!text || !redTubeContainsBlockedContent(text)) return false;
+            return redirectRedTubeHome(event);
+        }
+
+        function checkRedTubeSearchRoute() {
+            if (redTubeRedirecting) return;
+            blockRedTubeSearchQuery(getRedTubeSearchQueryFromUrl(), null);
+        }
+
+        function installRedTubeSearchGuards() {
+            if (window.__braveFoxRedTubeSearchGuardsInstalled) return;
+            window.__braveFoxRedTubeSearchGuardsInstalled = true;
+
+            const getSearchInput = node => {
+                try {
+                    if (!node) return null;
+                    if (node.matches && node.matches('input[name="search"], input[name="q"], input[name="query"]')) {
+                        return node;
+                    }
+                    return node.querySelector
+                        ? node.querySelector('input[name="search"], input[name="q"], input[name="query"]')
+                        : null;
+                } catch (e) {
+                    return null;
+                }
+            };
+
+            document.addEventListener('submit', event => {
+                const form = event.target && event.target.closest ? event.target.closest('form') : null;
+                const input = getSearchInput(form);
+                if (!input) return;
+                blockRedTubeSearchQuery(input.value, event);
+            }, true);
+
+            document.addEventListener('keydown', event => {
+                if (event.key !== 'Enter') return;
+                const input = getSearchInput(event.target);
+                if (!input || input !== event.target) return;
+                blockRedTubeSearchQuery(input.value, event);
+            }, true);
+        }
+
+        function disableRedTubeOrientationControl() {
+            try {
+                const control = document.querySelector('#orient_container');
+                if (!control) return;
+
+                control.setAttribute('aria-disabled', 'true');
+                control.setAttribute('aria-expanded', 'false');
+                control.setAttribute('tabindex', '-1');
+
+                control.querySelectorAll('a, button, [tabindex]').forEach(element => {
+                    element.setAttribute('aria-disabled', 'true');
+                    element.setAttribute('tabindex', '-1');
+                });
+
+                const dropdown = control.querySelector('.dropdown_orientation');
+                if (dropdown && dropdown.style.display !== 'none') {
+                    dropdown.style.display = 'none';
+                }
+            } catch (e) {}
+        }
+
+        function installRedTubeOrientationGuard() {
+            if (window.__braveFoxRedTubeOrientationGuardInstalled) return;
+            window.__braveFoxRedTubeOrientationGuardInstalled = true;
+
+            const blockOrientationInteraction = event => {
+                try {
+                    const target = event.target && event.target.closest
+                        ? event.target.closest('#orient_container')
+                        : null;
+                    if (!target) return;
+
+                    if (event.type === 'keydown' && ![
+                        'Enter', ' ', 'Spacebar', 'ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight'
+                    ].includes(event.key)) {
+                        return;
+                    }
+
+                    try { event.preventDefault(); } catch (e) {}
+                    try { event.stopImmediatePropagation(); } catch (e) {}
+                    try { event.stopPropagation(); } catch (e) {}
+                    disableRedTubeOrientationControl();
+                } catch (e) {}
+            };
+
+            ['pointerdown', 'mousedown', 'touchstart', 'click', 'auxclick', 'dblclick', 'keydown']
+                .forEach(type => document.addEventListener(type, blockOrientationInteraction, true));
+
+            disableRedTubeOrientationControl();
+        }
+
+        function ensureRedTubeObserver() {
+            if (!document.documentElement) {
+                setTimeout(ensureRedTubeObserver, 50);
+                return;
+            }
+            if (redTubeObserver) return;
+
+            redTubeObserver = new MutationObserver(records => {
+                const cards = new Set();
+                const categories = new Set();
+
+                records.forEach(record => {
+                    if (record.type === 'childList') {
+                        record.addedNodes.forEach(node => {
+                            collectRedTubeCardsFromNode(node, cards);
+                            collectRedTubeCategoriesFromNode(node, categories);
+                        });
+                        return;
+                    }
+
+                    collectRedTubeCardsFromNode(record.target, cards);
+                    collectRedTubeCategoriesFromNode(record.target, categories);
+                });
+
+                cards.forEach(card => filterRedTubeCard(card, false));
+                categories.forEach(category => filterRedTubeCategory(category, true));
+                disableRedTubeOrientationControl();
+            });
+
+            redTubeObserver.observe(document.documentElement, {
+                childList: true,
+                subtree: true,
+                characterData: true,
+                attributes: true,
+                attributeFilter: [
+                    'title', 'alt', 'href', 'aria-label', 'data-uploader-name', 'data-uploader-type',
+                    'data-video-id', 'data-category_id', 'data-category-id'
+                ]
+            });
+        }
+
+        function installRedTubeHistoryHooks() {
+            if (window.__braveFoxRedTubeHistoryHooksInstalled) return;
+            window.__braveFoxRedTubeHistoryHooksInstalled = true;
+
+            ['pushState', 'replaceState'].forEach(method => {
+                try {
+                    const original = history[method];
+                    if (typeof original !== 'function') return;
+
+                    history[method] = function() {
+                        const result = original.apply(this, arguments);
+                        queueMicrotask(() => {
+                            redTubeRedirecting = false;
+                            checkRedTubeSearchRoute();
+                            filterRedTubeCards(false);
+                            filterRedTubeCategories(false);
+                            disableRedTubeOrientationControl();
+                        });
+                        return result;
+                    };
+                } catch (e) {}
+            });
+
+            window.addEventListener('popstate', () => {
+                redTubeRedirecting = false;
+                checkRedTubeSearchRoute();
+                filterRedTubeCards(false);
+                filterRedTubeCategories(false);
+                disableRedTubeOrientationControl();
+            }, true);
+            window.addEventListener('pageshow', () => {
+                redTubeRedirecting = false;
+                checkRedTubeSearchRoute();
+                filterRedTubeCards(false);
+                filterRedTubeCategories(false);
+                disableRedTubeOrientationControl();
+            }, true);
+        }
+
+        injectRedTubeNoGlimpseCSS();
+        ensureRedTubeObserver();
+        installRedTubeHistoryHooks();
+        installRedTubeSearchGuards();
+        installRedTubeOrientationGuard();
+        loadRedTubeDynamicWrestlerBans();
+        installRedTubeStorageListener();
+        checkRedTubeSearchRoute();
+        filterRedTubeCards(false);
+        filterRedTubeCategories(false);
+        disableRedTubeOrientationControl();
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => {
+                filterRedTubeCards(false);
+                filterRedTubeCategories(false);
+                disableRedTubeOrientationControl();
+            }, { once: true });
+        }
+
+        window.addEventListener(FOCUS_MASTER_BLOCKED_TERMS_UPDATED_EVENT, () => {
+            filterRedTubeCards(true);
+            filterRedTubeCategories(true);
+            checkRedTubeSearchRoute();
+        }, true);
+
+        window.addEventListener('pagehide', event => {
+            if (event.persisted) return;
+            if (redTubeObserver) {
+                try { redTubeObserver.disconnect(); } catch (e) {}
+                redTubeObserver = null;
+            }
+            if (typeof removeRedTubeStorageListener === 'function') {
+                try { removeRedTubeStorageListener(); } catch (e) {}
+                removeRedTubeStorageListener = null;
+            }
+        }, true);
+
+        console.log('BraveFox RedTube filtering enabled.');
+    }
+
     if (BRAVEFOX_IS_TENOR) {
         installBraveFoxTenorSearchGuard();
+        return;
+    }
+
+    if (BRAVEFOX_IS_REDTUBE) {
+        installBraveFoxRedTubeFilter();
         return;
     }
 

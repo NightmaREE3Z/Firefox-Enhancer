@@ -1,7 +1,7 @@
 (function () {
     'use strict';
 
-    // google.js of BraveFox Enhancer v29.1.0 Hybrid
+    // google.js of BraveFox Enhancer v29.2.0 Hybrid
 
     function isGoogleMapsOrEarthUrl(value = window.location.href) {
         try {
@@ -37,6 +37,54 @@
         isGoogleMapsOrEarthUrl()) {
         return;
     }
+
+    // === DOCUMENT-START ORGANIC RESULT DEFAULT GATE ===
+    // Central host classification is asynchronous, so "hide after detection" can still flash a
+    // server-rendered/hydrating result for a frame. Install the gate stylesheet before the rest of
+    // the filtering engine initializes: a recognisable organic result is invisible by default and
+    // becomes paintable only after google.js explicitly marks its result shell `ready`.
+    //
+    // Keep layout enabled while pending. Google can hydrate titles/snippets and lazy content normally;
+    // only paint/input are suppressed. This intentionally avoids content-visibility/display:none.
+    (function installGoogleCentralPolicyDocumentStartGate() {
+        try {
+            const styleId = 'googlejs-central-policy-default-gate';
+            if (document.getElementById(styleId)) return;
+
+            const primaryResultSignal = [
+                'a[jsname="UWckNb"][href]',
+                '.yuRUbf > a[href]',
+                'a[href] > h3',
+                'a[href] h3',
+                'h3 a[href]'
+            ].join(', ');
+            const shellSelectors = [
+                '.MjjYud', '.g', '.tF2Cxc', '.Gx5Zad', '.SoaBEf', '.M8OgIe', '.N54PNb',
+                '[data-snhf]', 'article', 'li', '.Ww4FFb', '.kb0PBd', '.yuRUbf'
+            ];
+            const pendingSelectors = [];
+            for (const boundary of ['#search', '#rso', '#res']) {
+                for (const shell of shellSelectors) {
+                    pendingSelectors.push(
+                        `${boundary} ${shell}:has(${primaryResultSignal}):not([data-googlejs-central-policy-state="ready"])`
+                    );
+                }
+            }
+
+            const style = document.createElement('style');
+            style.id = styleId;
+            style.textContent = `
+                ${pendingSelectors.join(',\n                ')} {
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                    transition: none !important;
+                    animation: none !important;
+                }
+            `;
+            (document.documentElement || document.head).appendChild(style);
+        } catch (e) {}
+    })();
 
     // === DEBUG CONFIG (0 = off, 1 = on) ===
     const DEBUG = 0;
@@ -929,7 +977,7 @@
 	/touchup/i, /touch up/i, /tush/i, /lex bl/i, /image ai/i, /edit ai/i, /deviant/i, /Lex Cabr/i, /Lex Carb/i, /Lex Kauf/i, /Lex Man/i, /nudecrawler/i, /unc1oth/i, /photo AI/i, 
 	/pict AI/i, /pics app/i, /picsart/i, /enhance image/i, /erootti/i, /vegi/i, /vegen/i, /faceswap/i, /DeepSeek/i, /deepnude ai/i, /deepnude-ai/i, /object/i, /Roxan/i, /Perez/i, 
 	/Mickie/i, /Micky/i, /vagena/i, /birppis/i,  /aitool/i, /Lana Perry/i, /Del Rey/i, /Tiffa/i, /Stratt/i, /puzz/i, /vulv/i, /clito/i, /clita/i, /cl1t/i, /cloth/i, /uncloth/i, 
-	/decloth/i, /rem cloth/i, /del cloth/i, /babyg/i, /eras cloth/i, /Bella/i, /Tiffy/i, /vagi/i, /vagene/i, /Del Ray/i, /CJ Lana/i, /generator/i, /Liv org/i, /wedge/i, /playboy/i, 
+	/decloth/i, /rem cloth/i, /del cloth/i, /babyg/i, /eras cloth/i, /Bella/i, /Tiffy/i, /vagi/i, /vagene/i, /Del Ray/i, /CJ Lana/i, /generator/i, /Liv org/i, /Stee/i, /playboy/i, 
 	/Stewart/i, /off pant/i, /rem pant/i, /Kristen Stewart/i, /Steward/i, /Brit Bake/i,  /pantie/i, /panty/i, /pants/i, /poses/i, /Sydnee/i, /del pant/i, /eras pant/i, /her pant/i, 
 	/she pant/i, /pussy/i, /Babe/i, /content adult/i, /porn/i, /editing/i, /AI Tool/i, /Chelsey/i, /Zel Veg/i, /Ch3l/i, /Sweeney/i, /input face/i, /upload face/i, /editor/i, /Twat/i,
 	/editation/i, /CJ Perry/i, /Lana WWE/i, /Lana Del Rey/i, /CJ WWE/i, /image app/i, /picture app/i, /edit app/i, /pic app/i, /photo app/i, /Perry WWE/i, /application/i, /Sxuel/i, 
@@ -987,7 +1035,7 @@
 	/make img mov/i, /make ima mov/i, /gif pic/i, /gif pho/i, /gif img/i, /gif ima/i, /photo to gif/i, /image to gif/i, /pic to gif/i, /pic to vid/i, /photo to video/i, /image to video/i,  
 	/vld3/i, /v1d3/i, /g!f/i, /RemovingAI/i, /blowjob/i, /bjob/i, /mangoai/i, /mangoapp/i, /mango-app/i, /ai-app/i, /mangoanim/i, /mango anim/i, /mango-anim/i, /lantaai/i, /lantaaa/i, /EXGF/i,
 	/motionai/i, /chr0m/i, /m1um/i, /changemotion/i, /swapmotion/i, /motionsw/i, /motionc/i, /poseai/i, /AIblow/i, /AIsuck/i, /AI-suck/i, /drool/i, /RemovingAI/i, /bjob/i, /Down Marie/i, 
-	/blowjob/i, /BJob/i, /B-J0b/i, /B-Job/i, /Suckjob/i, /Suck-job/i,  /Suckj0b/i, /Suck-j0b/i, /SDuck/i, /Mouthjob/i, /Mouth-job/i, /MouthAI/i, /MouthinAI/i, /MouthingAI/i, /AIMouth/i, 
+	/blowjob/i, /BJob/i, /B-J0b/i, /B-Job/i, /Suckjob/i, /Suck-job/i,  /Suckj0b/i, /Suck-j0b/i, /SDuck/i, /Mouthjob/i, /Mouth-job/i, /MouthAI/i, /MouthinAI/i, /MouthingAI/i, /AIMouth/i, /wedge/i,
 	/BlowAI/i, /BlowsAI/i, /BlowingAI/i, /JobAI/i, /AIJob/i, /Mouthig/i, /ZuckCock/i, /ZuckC/i, /ZuckD/i, /ZuckP/i, /Zuckz/i, /Zucks/i, /Zuckc/i, /Zuzkc/i, /YouZuck/i, /EX-GF/i, /TitsAI/i,
 	/ZuckYou/i, /Cuck/i, /Guck/i, /Cheeks/i, /Sukc/i, /AISucc/i, /SuccAI/i, /Suqz/i, /Suqs/i, /Suqc/i, /Suqq/i, /Suqq/i, /Suqi/i, /Suqz/i, /Sucq/i, /cukc/i, /boob/i, /b0ob/i, /fagger/i, /wedgi/i,     
 	/titjob/i, /titti/i, /assjob/i, /buttjob/i, /wank/i, /w4nk/i, /tittt/i, /tiitt/i, /crotch/i, /thigh/i, /legjob/i, /asssex/i, /buttsex/i, /titsex/i, /buttsex/i, /ass sex/i, /butt sex/i, 
@@ -1363,6 +1411,321 @@
 	/\bCT\b/i, /\bGPT(?:[-\s]?[0-9A-Za-z.]+)?\b/i,
     ];
 
+
+
+    // === BraveFox central URL policy client ========================================
+    // background.js owns the canonical allow/block lists. Finite rules are mirrored as a
+    // tiny snapshot; the potentially huge fetched hosts files stay in the service worker
+    // and are queried in batches/cached locally instead of becoming thousands of regexes.
+    const GJ_CENTRAL_POLICY_SNAPSHOT_TYPE = 'BRAVEFOX_GET_CENTRAL_URL_POLICY_SNAPSHOT';
+    const GJ_CENTRAL_POLICY_CLASSIFY_TYPE = 'BRAVEFOX_CLASSIFY_CENTRAL_URLS';
+    let GJ_centralPolicySnapshot = {
+        allowedHosts: [],
+        allowedPathRules: [],
+        blockedSites: [],
+        blockedTLDs: []
+    };
+    const GJ_centralPolicyVerdictCache = new Map();
+    const GJ_centralPolicyPending = new Set();
+    let GJ_centralPolicyFlushTimer = 0;
+
+    function GJ_centralPolicyRuntime() {
+        try {
+            if (globalThis.browser?.runtime?.sendMessage) return globalThis.browser.runtime;
+            if (globalThis.chrome?.runtime?.sendMessage) return globalThis.chrome.runtime;
+        } catch (e) {}
+        return null;
+    }
+
+    const GJ_centralPolicyDebug = {
+        lastMessageType: '',
+        lastResponseAt: 0,
+        lastError: '',
+        fetchedHostsCount: 0,
+        bundledHostsCount: 0
+    };
+
+    function GJ_sendCentralPolicyMessage(message, retry = 0) {
+        const runtime = GJ_centralPolicyRuntime();
+        if (!runtime) return Promise.resolve(null);
+
+        GJ_centralPolicyDebug.lastMessageType = String(message?.type || '');
+        GJ_centralPolicyDebug.lastError = '';
+
+        return new Promise(resolve => {
+            let settled = false;
+            let timeoutId = 0;
+
+            const finish = (response, error = '') => {
+                if (settled) return;
+                settled = true;
+                if (timeoutId) window.clearTimeout(timeoutId);
+                if (error) GJ_centralPolicyDebug.lastError = String(error);
+                if (response) {
+                    GJ_centralPolicyDebug.lastResponseAt = Date.now();
+                    GJ_centralPolicyDebug.fetchedHostsCount = Number(response?.fetchedHostsCount || response?.snapshot?.fetchedHostsCount || 0);
+                    GJ_centralPolicyDebug.bundledHostsCount = Number(response?.bundledHostsCount || response?.snapshot?.bundledHostsCount || 0);
+                }
+                resolve(response || null);
+            };
+
+            timeoutId = window.setTimeout(() => finish(null, 'central-policy-timeout'), 6000);
+
+            try {
+                let callbackUsed = false;
+                const callback = response => {
+                    callbackUsed = true;
+                    let runtimeError = '';
+                    try { runtimeError = globalThis.chrome?.runtime?.lastError?.message || ''; } catch (e) {}
+                    finish(response, runtimeError);
+                };
+
+                const maybePromise = runtime.sendMessage(message, callback);
+                if (maybePromise && typeof maybePromise.then === 'function') {
+                    maybePromise.then(response => finish(response)).catch(error => {
+                        if (!callbackUsed) finish(null, error?.message || String(error));
+                    });
+                }
+            } catch (firstError) {
+                try {
+                    const maybePromise = runtime.sendMessage(message);
+                    if (maybePromise && typeof maybePromise.then === 'function') {
+                        maybePromise.then(response => finish(response)).catch(error => finish(null, error?.message || String(error)));
+                    } else {
+                        finish(null, firstError?.message || String(firstError));
+                    }
+                } catch (secondError) {
+                    finish(null, secondError?.message || firstError?.message || String(secondError || firstError));
+                }
+            }
+        }).then(response => {
+            if (response || retry >= 1) return response;
+            return new Promise(resolve => window.setTimeout(resolve, 120))
+                .then(() => GJ_sendCentralPolicyMessage(message, retry + 1));
+        });
+    }
+
+    try {
+        window.GoogleJS = window.GoogleJS || {};
+        window.GoogleJS.getCentralPolicyDebug = () => ({ ...GJ_centralPolicyDebug });
+        window.GoogleJS.testCentralPolicy = async value => {
+            const href = GJ_normalizeCentralPolicyURL(value);
+            if (!href) return { ok: false, error: 'invalid-url', value: String(value || '') };
+            const response = await GJ_sendCentralPolicyMessage({
+                type: GJ_CENTRAL_POLICY_CLASSIFY_TYPE,
+                urls: [href]
+            });
+            return {
+                ok: Boolean(response?.ok),
+                href,
+                verdict: Array.isArray(response?.verdicts) ? response.verdicts[0] || null : null,
+                debug: { ...GJ_centralPolicyDebug }
+            };
+        };
+    } catch (e) {}
+
+    function GJ_normalizeCentralPolicyHost(value) {
+        return String(value || '').trim().toLowerCase().replace(/^www\./, '').replace(/\.$/, '');
+    }
+
+    function GJ_normalizeCentralPolicyURL(value) {
+        const raw = String(value || '').trim();
+        if (!raw) return '';
+        try {
+            let parsed = null;
+            if (/^https?:\/\//i.test(raw)) {
+                parsed = new URL(raw);
+            } else if (/^\/\//.test(raw)) {
+                parsed = new URL(`https:${raw}`);
+            } else if (/^(?:[a-z0-9-]+\.)+[a-z]{2,}(?:[\/:?#]|$)/i.test(raw)) {
+                parsed = new URL(`https://${raw}`);
+            } else if (raw.startsWith('/')) {
+                parsed = new URL(raw, window.location.origin);
+            } else {
+                return '';
+            }
+            if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '';
+            return parsed.href;
+        } catch (e) {
+            return '';
+        }
+    }
+
+
+    // Google increasingly renders a clean destination hostname while the clickable anchor can be
+    // a Google-owned tracking/translation wrapper. Hosts-file policy must therefore inspect both
+    // the actual href and the destination text that Google presents to the user.
+    function GJ_extractCentralPolicyURLsFromText(value) {
+        const input = String(value || '');
+        if (!input) return [];
+
+        const found = new Set();
+        const add = rawValue => {
+            const raw = String(rawValue || '').trim().replace(/[),.;:!?]+$/g, '');
+            if (!raw) return;
+            const href = GJ_normalizeCentralPolicyURL(raw);
+            if (href) found.add(href);
+        };
+
+        try {
+            const explicitUrls = input.match(/https?:\/\/[^\s"'<>\[\]{}()]+/gi) || [];
+            explicitUrls.forEach(add);
+        } catch (e) {}
+
+        try {
+            // Covers Google's breadcrumb/display form too (for example runway.com or
+            // app.runwayml.com) when the scheme is omitted from rendered text.
+            const bareHosts = input.match(/\b(?:www\.)?(?:[a-z0-9](?:[a-z0-9-]{0,62})\.)+[a-z]{2,63}\b/gi) || [];
+            bareHosts.forEach(host => add(`https://${host}`));
+        } catch (e) {}
+
+        return Array.from(found);
+    }
+
+    function GJ_centralPolicySnapshotVerdict(value) {
+        const href = GJ_normalizeCentralPolicyURL(value);
+        if (!href) return '';
+
+        try {
+            const parsed = new URL(href);
+            const host = GJ_normalizeCentralPolicyHost(parsed.hostname);
+            const pathname = String(parsed.pathname || '/').replace(/\/{2,}/g, '/');
+
+            for (const domainValue of GJ_centralPolicySnapshot.allowedHosts || []) {
+                const domain = GJ_normalizeCentralPolicyHost(domainValue);
+                if (domain && (host === domain || host.endsWith(`.${domain}`))) return 'allow';
+            }
+
+            for (const rule of GJ_centralPolicySnapshot.allowedPathRules || []) {
+                const ruleHost = GJ_normalizeCentralPolicyHost(rule?.host);
+                let prefix = String(rule?.pathPrefix || '/').trim();
+                if (!prefix.startsWith('/')) prefix = `/${prefix}`;
+                prefix = prefix.replace(/\/{2,}/g, '/').replace(/\/$/, '') || '/';
+                if (host === ruleHost && (pathname === prefix || pathname.startsWith(`${prefix}/`))) return 'allow';
+            }
+
+            for (const fragment of GJ_centralPolicySnapshot.blockedSites || []) {
+                if (fragment && href.includes(String(fragment))) return 'block';
+            }
+
+            const lowerHost = host.toLowerCase();
+            for (const tld of GJ_centralPolicySnapshot.blockedTLDs || []) {
+                if (tld && lowerHost.endsWith(String(tld).toLowerCase())) return 'block';
+            }
+        } catch (e) {}
+
+        return '';
+    }
+
+    function GJ_centralPolicyCachedVerdict(value) {
+        const href = GJ_normalizeCentralPolicyURL(value);
+        if (!href) return '';
+
+        const snapshotVerdict = GJ_centralPolicySnapshotVerdict(href);
+        if (snapshotVerdict) return snapshotVerdict;
+
+        if (GJ_centralPolicyVerdictCache.has(href)) {
+            return GJ_centralPolicyVerdictCache.get(href) || '';
+        }
+
+        GJ_queueCentralPolicyURL(href);
+        return '';
+    }
+
+    function GJ_onCentralPolicyUpdated() {
+        try {
+            document.querySelectorAll('[data-gj-cache], [data-gj-cache-img]').forEach(node => {
+                node.removeAttribute('data-gj-cache');
+                node.removeAttribute('data-gj-cache-img');
+            });
+        } catch (e) {}
+        window.setTimeout(() => {
+            try { mainFilteringThrottled(); } catch (e) {}
+        }, 0);
+    }
+
+    function GJ_flushCentralPolicyURLs() {
+        GJ_centralPolicyFlushTimer = 0;
+        if (!GJ_centralPolicyPending.size) return;
+
+        const urls = Array.from(GJ_centralPolicyPending).slice(0, 192);
+        urls.forEach(url => GJ_centralPolicyPending.delete(url));
+
+        GJ_sendCentralPolicyMessage({ type: GJ_CENTRAL_POLICY_CLASSIFY_TYPE, urls }).then(response => {
+            let changed = false;
+
+            if (response?.ok && Array.isArray(response.verdicts)) {
+                for (const verdict of response.verdicts) {
+                    const href = GJ_normalizeCentralPolicyURL(verdict?.url);
+                    if (!href) continue;
+                    const action = verdict?.action === 'allow' || verdict?.action === 'block' ? verdict.action : 'none';
+                    const previous = GJ_centralPolicyVerdictCache.get(href);
+                    GJ_centralPolicyVerdictCache.set(href, action);
+                    // Pending no-glimpse result cards must be revisited even when the final
+                    // central verdict is `none`/clean. Otherwise a clean card could remain
+                    // hidden forever simply because only block/allow transitions triggered refreshes.
+                    if (previous !== action) changed = true;
+                }
+            } else {
+                // A missing background response must never become a permanent clean verdict.
+                // Put the URLs back into the queue and try again on the next short pass.
+                urls.forEach(url => {
+                    if (!GJ_centralPolicyVerdictCache.has(url)) GJ_centralPolicyPending.add(url);
+                });
+                if (GJ_centralPolicyPending.size) {
+                    window.setTimeout(GJ_queueCentralPolicyFlush, 300);
+                }
+                return;
+            }
+
+            if (changed) GJ_onCentralPolicyUpdated();
+            if (GJ_centralPolicyPending.size) GJ_queueCentralPolicyFlush();
+        }).catch(() => {
+            urls.forEach(url => {
+                if (!GJ_centralPolicyVerdictCache.has(url)) GJ_centralPolicyPending.add(url);
+            });
+            if (GJ_centralPolicyPending.size) window.setTimeout(GJ_queueCentralPolicyFlush, 300);
+        });
+    }
+
+    function GJ_queueCentralPolicyFlush() {
+        if (GJ_centralPolicyFlushTimer) return;
+        GJ_centralPolicyFlushTimer = 1;
+        queueMicrotask(GJ_flushCentralPolicyURLs);
+    }
+
+    function GJ_queueCentralPolicyURL(value) {
+        const href = GJ_normalizeCentralPolicyURL(value);
+        if (!href || GJ_centralPolicyVerdictCache.has(href) || GJ_centralPolicyPending.has(href)) return;
+        GJ_centralPolicyPending.add(href);
+        GJ_queueCentralPolicyFlush();
+    }
+
+    function GJ_loadCentralPolicySnapshot() {
+        GJ_sendCentralPolicyMessage({ type: GJ_CENTRAL_POLICY_SNAPSHOT_TYPE }).then(response => {
+            if (!response?.ok || !response.snapshot) return;
+            GJ_centralPolicySnapshot = {
+                allowedHosts: Array.isArray(response.snapshot.allowedHosts) ? response.snapshot.allowedHosts.slice() : [],
+                allowedPathRules: Array.isArray(response.snapshot.allowedPathRules) ? response.snapshot.allowedPathRules.map(rule => ({ ...rule })) : [],
+                blockedSites: Array.isArray(response.snapshot.blockedSites) ? response.snapshot.blockedSites.slice() : [],
+                blockedTLDs: Array.isArray(response.snapshot.blockedTLDs) ? response.snapshot.blockedTLDs.slice() : []
+            };
+            GJ_centralPolicyVerdictCache.clear();
+            GJ_centralPolicyPending.clear();
+            GJ_onCentralPolicyUpdated();
+        }).catch(() => {});
+    }
+
+    GJ_loadCentralPolicySnapshot();
+    try {
+        const storageApi = globalThis.browser?.storage || globalThis.chrome?.storage;
+        storageApi?.onChanged?.addListener((changes, areaName) => {
+            if (areaName !== 'local' || (!changes.lastUpdate && !changes.hostsChunks && !changes.hostsTotal && !changes['bfb:hosts-meta:v1'])) return;
+            GJ_centralPolicyVerdictCache.clear();
+            GJ_centralPolicyPending.clear();
+            GJ_loadCentralPolicySnapshot();
+        });
+    } catch (e) {}
 
     // Result URL allowances are anchored regexes. Anchoring the scheme and host
     // prevents lookalike URLs such as youtube.com.example.org from being allowed.
@@ -3319,6 +3682,7 @@
         try {
             const parsed = new URL(String(url), window.location.origin);
             if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+            if (GJ_centralPolicyCachedVerdict(parsed.href) === 'allow') return true;
             return Boolean(testRegexList(allowedResultURLs, parsed.href));
         } catch (e) {
             return false;
@@ -3327,6 +3691,7 @@
 
     function matchesBlockedResultURLPattern(url) {
         if (!url) return false;
+        if (GJ_centralPolicyCachedVerdict(url) === 'block') return true;
         for (let i = 0; i < blockedResultURLPatterns.length; ++i) {
             blockedResultURLPatterns[i].lastIndex = 0;
             if (blockedResultURLPatterns[i].test(url)) return true;
@@ -3349,6 +3714,7 @@
         try {
             if (url.startsWith('http')) testUrl = url.replace(/#imgrc=[^\s]*/g, '');
         } catch(e) {}
+        if (GJ_centralPolicyCachedVerdict(testUrl) === 'block') return true;
         for (let i = 0; i < blockedImageURLPatterns.length; ++i) {
             blockedImageURLPatterns[i].lastIndex = 0;
             if (blockedImageURLPatterns[i].test(testUrl)) return true;
@@ -3635,13 +4001,22 @@
 
     function decideResultPolicy(url, text, isImage = false) {
         let candidates = getResultURLCandidates(url);
+
+        // Organic Google cards can expose the real destination only in rendered breadcrumb/text
+        // while the anchor itself points through a Google wrapper. Feed those displayed destinations
+        // into the same URL policy so BraveFoxHosts/legacyFox remain authoritative for web results.
+        try {
+            GJ_extractCentralPolicyURLsFromText(decodeRepeatedly(String(text || '')))
+                .forEach(candidate => candidates.push(candidate));
+        } catch (e) {}
+
         if (isImage) {
             try {
                 extractUrlsFromSignal(decodeRepeatedly(String(text || '')))
                     .forEach(candidate => candidates.push(candidate));
-                candidates = Array.from(new Set(candidates));
             } catch (e) {}
         }
+        candidates = Array.from(new Set(candidates));
         const urlSignal = candidates.join(' ');
         const signal = `${text || ''} ${urlSignal}`.trim();
 
@@ -3667,6 +4042,17 @@
             if (blockedImageURL || matchesBlockedImageURLPattern(urlSignal)) {
                 return makePolicyDecision(POLICY_ACTION.HIDE, 'image', 'blocked-image-url', blockedImageURL || urlSignal, signal);
             }
+        }
+
+        // Central hosts-file decisions are a hard URL deny. Keep this above allowedResultURLs so a
+        // domain explicitly present in BraveFoxHosts/legacyFox cannot be rescued by a local result
+        // allowance. The first pass queues unknown candidates; the async verdict invalidates the
+        // card cache and this same branch removes the card on the immediate follow-up pass.
+        const centralBlockedURL = candidates.find(candidate =>
+            GJ_centralPolicyCachedVerdict(candidate) === 'block'
+        );
+        if (centralBlockedURL) {
+            return makePolicyDecision(POLICY_ACTION.HIDE, isImage ? 'image' : 'result', 'central-hosts', centralBlockedURL, signal);
         }
 
         const priorityBlockedURL = candidates.find(matchesPriorityBlockedResultURLPattern);
@@ -4559,6 +4945,245 @@ function swapSearchTabs() {
     }
 
 
+    // === CENTRAL-HOST NO-GLIMPSE RESULT GATE ======================================
+    // The central hosts verdict is asynchronous. Mark each real organic result shell pending
+    // before paint so BraveFoxHosts/legacyFox matches never flash briefly on screen while the
+    // background classifies them. Do NOT use content-visibility here: Google must still be free
+    // to hydrate/layout the card while it is invisible.
+    const GOOGLEJS_CENTRAL_GATE_ATTR = 'data-googlejs-central-policy-state';
+    const GOOGLEJS_CENTRAL_GATE_STYLE_ID = 'googlejs-central-policy-no-glimpse';
+    const GOOGLEJS_CENTRAL_GATE_SHELL_SELECTOR = [
+        ...GOOGLE_WEB_OUTER_RESULT_SHELL_SELECTORS,
+        '.Ww4FFb',
+        '.kb0PBd',
+        '.yuRUbf'
+    ].join(',');
+    let googleCentralGateObserver = null;
+    let googleCentralGateScanQueued = false;
+
+    function ensureGoogleCentralPolicyGateStyle() {
+        if (document.getElementById(GOOGLEJS_CENTRAL_GATE_STYLE_ID)) return;
+        try {
+            const style = document.createElement('style');
+            style.id = GOOGLEJS_CENTRAL_GATE_STYLE_ID;
+            style.textContent = `
+                [${GOOGLEJS_CENTRAL_GATE_ATTR}="pending"] {
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                    transition: none !important;
+                    animation: none !important;
+                }
+                [${GOOGLEJS_CENTRAL_GATE_ATTR}="blocked"] {
+                    display: none !important;
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                    transition: none !important;
+                    animation: none !important;
+                }
+                [${GOOGLEJS_CENTRAL_GATE_ATTR}="ready"] {
+                    visibility: visible !important;
+                    opacity: 1 !important;
+                    pointer-events: auto !important;
+                    transition: none !important;
+                    animation: none !important;
+                }
+            `;
+            (document.head || document.documentElement).appendChild(style);
+        } catch (e) {}
+    }
+
+    function getGoogleResultCentralPolicyCandidates(url, text) {
+        let candidates = getResultURLCandidates(url);
+        try {
+            GJ_extractCentralPolicyURLsFromText(decodeRepeatedly(String(text || '')))
+                .forEach(candidate => candidates.push(candidate));
+        } catch (e) {}
+        return Array.from(new Set(candidates.map(GJ_normalizeCentralPolicyURL).filter(Boolean)));
+    }
+
+    function getGoogleResultCentralPolicyGateState(url, text) {
+        const candidates = getGoogleResultCentralPolicyCandidates(url, text);
+        let pending = false;
+
+        for (const candidate of candidates) {
+            const snapshotVerdict = GJ_centralPolicySnapshotVerdict(candidate);
+            if (snapshotVerdict === 'block') return 'blocked';
+            if (snapshotVerdict === 'allow') continue;
+
+            if (GJ_centralPolicyVerdictCache.has(candidate)) {
+                if (GJ_centralPolicyVerdictCache.get(candidate) === 'block') return 'blocked';
+                continue;
+            }
+
+            pending = true;
+            GJ_queueCentralPolicyURL(candidate);
+        }
+
+        return pending ? 'pending' : 'ready';
+    }
+
+    function getGoogleWebResultRenderedSignal(result, link) {
+        try {
+            const heading = link && (link.querySelector('h3') || link.closest('h3'));
+            const titleText = String((heading && (heading.textContent || heading.innerText)) ||
+                (link && (link.textContent || link.innerText)) || '');
+            const linkTitle = String((link && link.getAttribute('title')) || '');
+            return [result?.textContent || result?.innerText || '', titleText, linkTitle]
+                .join(' ')
+                .replace(/\s+/g, ' ')
+                .trim()
+                .toLowerCase();
+        } catch (e) {
+            return '';
+        }
+    }
+
+    function getGoogleCentralPolicyGateShellFamily(result, link) {
+        const shells = new Set();
+        try {
+            if (result && result.isConnected) shells.add(result);
+            if (!link || !link.closest) return shells;
+
+            const boundary = link.closest('#search, #rso, #res');
+            let node = link.parentElement;
+            let depth = 0;
+            while (node && node !== boundary && depth < 14) {
+                if (node.matches?.(GOOGLEJS_CENTRAL_GATE_SHELL_SELECTOR)) {
+                    const headingCount = countResultHeadingsWithin(node);
+                    const primaryCount = countPrimaryResultLinksWithin(node);
+                    if (headingCount <= 1 && primaryCount <= 1) shells.add(node);
+                }
+                node = node.parentElement;
+                depth++;
+            }
+        } catch (e) {}
+        return shells;
+    }
+
+    function setGoogleCentralPolicyGateShellState(result, link, state) {
+        const normalizedState = state === 'ready' ? 'ready' : state === 'blocked' ? 'blocked' : 'pending';
+        const shells = getGoogleCentralPolicyGateShellFamily(result, link);
+        shells.forEach(shell => {
+            try {
+                shell.setAttribute(GOOGLEJS_CENTRAL_GATE_ATTR, normalizedState);
+                if (normalizedState === 'ready') shell.removeAttribute('aria-hidden');
+                else shell.setAttribute('aria-hidden', 'true');
+            } catch (e) {}
+        });
+    }
+
+    function syncGoogleWebResultCentralPolicyGate(result, link, suppliedText = '') {
+        try {
+            if (!result || !result.isConnected || !link) return 'ready';
+            const resultUrl = link.href && !link.href.startsWith('data:') ? link.href : '';
+            const resultText = suppliedText || getGoogleWebResultRenderedSignal(result, link);
+            const state = getGoogleResultCentralPolicyGateState(resultUrl, resultText);
+
+            // Set the state on every single-result shell in the ancestor family. The document-start
+            // CSS can match more than one nested Google wrapper, so approving only one wrapper can
+            // otherwise leave an inner/outer layer invisibly gated.
+            setGoogleCentralPolicyGateShellState(result, link, state);
+            return state;
+        } catch (e) {
+            return 'ready';
+        }
+    }
+
+    function releaseSharedGoogleCentralPolicyGateShells() {
+        try {
+            const selectors = [];
+            for (const boundary of ['#search', '#rso', '#res']) {
+                selectors.push(`${boundary} ${GOOGLEJS_CENTRAL_GATE_SHELL_SELECTOR}`);
+            }
+            document.querySelectorAll(selectors.join(',')).forEach(shell => {
+                // A wrapper containing multiple organic results is a shared bucket, not one card.
+                // Never let the document-start gate blank the entire bucket; its individual child
+                // result shells remain independently gated/classified.
+                if (countResultHeadingsWithin(shell) > 1 || countPrimaryResultLinksWithin(shell) > 1) {
+                    shell.setAttribute(GOOGLEJS_CENTRAL_GATE_ATTR, 'ready');
+                    shell.removeAttribute('aria-hidden');
+                }
+            });
+        } catch (e) {}
+    }
+
+    function gateGoogleOrganicResultsImmediately() {
+        ensureGoogleCentralPolicyGateStyle();
+        try {
+            releaseSharedGoogleCentralPolicyGateShells();
+            collectGoogleWebResultCards().forEach((link, result) => {
+                syncGoogleWebResultCentralPolicyGate(result, link);
+            });
+        } catch (e) {}
+    }
+
+    function queueGoogleCentralGateScan() {
+        if (googleCentralGateScanQueued) return;
+        googleCentralGateScanQueued = true;
+        queueMicrotask(() => {
+            googleCentralGateScanQueued = false;
+            gateGoogleOrganicResultsImmediately();
+        });
+    }
+
+    function preGateGoogleCentralPolicyMutationNode(node) {
+        try {
+            const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
+            if (!element) return;
+
+            const links = new Set();
+            const nearestLink = element.closest?.('a[href]');
+            if (nearestLink && isGoogleWebPrimaryResultLink(nearestLink)) links.add(nearestLink);
+            if (element.matches?.(GOOGLE_WEB_LOCAL_PRIMARY_LINK_SELECTOR) && isGoogleWebPrimaryResultLink(element)) {
+                links.add(element);
+            }
+            element.querySelectorAll?.(GOOGLE_WEB_LOCAL_PRIMARY_LINK_SELECTOR).forEach(link => {
+                if (isGoogleWebPrimaryResultLink(link)) links.add(link);
+            });
+
+            links.forEach(link => {
+                const result = findGoogleWebResultContainer(link);
+                if (result) setGoogleCentralPolicyGateShellState(result, link, 'pending');
+            });
+        } catch (e) {}
+    }
+
+    function installGoogleCentralPolicyEarlyGateObserver() {
+        if (googleCentralGateObserver) return;
+        ensureGoogleCentralPolicyGateStyle();
+        try {
+            googleCentralGateObserver = new MutationObserver(mutations => {
+                // MutationObserver callbacks run before rendering. Strip any stale `ready` state from
+                // recycled/new result shells synchronously in this callback, then do the heavier
+                // classification in one queued microtask. This closes the SPA/recycled-node flash gap.
+                for (const mutation of mutations) {
+                    if (mutation.type === 'attributes') {
+                        preGateGoogleCentralPolicyMutationNode(mutation.target);
+                        continue;
+                    }
+                    preGateGoogleCentralPolicyMutationNode(mutation.target);
+                    mutation.addedNodes?.forEach(preGateGoogleCentralPolicyMutationNode);
+                }
+                queueGoogleCentralGateScan();
+            });
+            googleCentralGateObserver.observe(document.documentElement, {
+                childList: true,
+                subtree: true,
+                characterData: true,
+                attributes: true,
+                attributeFilter: ['href']
+            });
+            queueGoogleCentralGateScan();
+        } catch (e) {}
+    }
+
+    // Install during script evaluation rather than waiting for DOMContentLoaded. MutationObserver
+    // callbacks run before the next paint, which is what turns async central-host filtering into a
+    // true no-glimpse gate instead of a visible-then-disappearing cleanup.
+    installGoogleCentralPolicyEarlyGateObserver();
+
     function getGoogleWebResultOuterShellFromCard(card) {
         try {
             if (!card || !card.closest) return card;
@@ -4881,8 +5506,10 @@ function swapSearchTabs() {
                         .toLowerCase();
 
                     const resultUrl = link && link.href && !link.href.startsWith('data:') ? link.href : '';
+                    const centralGateState = syncGoogleWebResultCentralPolicyGate(result, link, resultText);
                     const cacheKey = resultText.length + ':' + resultUrl;
-                    if (result.getAttribute('data-gj-cache') === cacheKey) {
+                    if (centralGateState !== 'pending' &&
+                        result.getAttribute('data-gj-cache') === cacheKey) {
                         googleWebResultAudit.keptCards++;
                         return;
                     }
@@ -4899,8 +5526,15 @@ function swapSearchTabs() {
                             });
                         }
                         removeGoogleWebResultCardCompletely(result);
+                    } else if (centralGateState === 'pending') {
+                        // Local policy found nothing wrong, but the authoritative hosts verdict has
+                        // not returned yet. Keep the card invisible and deliberately uncached so the
+                        // follow-up central-policy pass can either reveal it or remove it.
+                        result.removeAttribute('data-gj-cache');
+                        result.setAttribute('data-googlejs-organic-card', '1');
                     } else {
                         googleWebResultAudit.keptCards++;
+                        setGoogleCentralPolicyGateShellState(result, link, 'ready');
                         result.setAttribute('data-gj-cache', cacheKey);
                         result.setAttribute('data-googlejs-organic-card', '1');
                     }
