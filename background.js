@@ -6,8 +6,9 @@ import "./blocker/service.js";
 import { isCompletelyExcludedHostname, isCompletelyExcludedUrl, isGoogleMapsOrEarthUrl } from "./blocker/shared.js";
 import { getSettings, loadDataset } from "./blocker/storage.js";
 import { findTimeRuleBlock } from "./blocker/timers.js";
-import { findBlockedHost, getHostsStatus as getFocusMasterHostsStatus, updateHosts as updateFocusMasterHosts } from "./blocker/hosts.js";
+import { findBlockedHost, findHardBlockedHost, getHostsStatus as getFocusMasterHostsStatus, updateHosts as updateFocusMasterHosts } from "./blocker/hosts.js";
 import { getTrustedSiteDescriptors } from "./blocker/trusted-sites.js";
+import { hasScopedLinkRulesForUrl, matchLink, matchTld } from "./blocker/matcher.js";
 
 const LOG_PREFIX = "[BraveFox Background]";
 const HOSTS_META_KEY = "bravefoxHostsMetaV2";
@@ -443,17 +444,21 @@ function isBlockedByHosts(hostname) {
   return false;
 }
 
-async function shouldBlockUrl(url) {
+async function shouldHardBlockUrl(url) {
   try {
     const parsed = new URL(url);
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
-    if (isCompletelyExcludedUrl(url)) return false;
-    const hostname = normalizeHostname(parsed.hostname);
-    if (!hostname || isAllowlistedHostname(hostname)) return false;
     if (matchesStaticBlockedSite(url)) return true;
-    // Focus Master 1.2.0 owns fetched-host enforcement in blocker/service.js so
-    // manual Blocker rules and TrustedSites can outrank the blunt host fallback.
+    return Boolean(await findHardBlockedHost(url));
+  } catch (_) {
     return false;
+  }
+}
+
+async function shouldBlockUrl(url) {
+  try {
+    const verdict = await classifyBraveFoxCentralUrl(url);
+    return verdict?.action === "block";
   } catch (_) {
     return false;
   }
@@ -482,6 +487,12 @@ async function getBraveFoxCentralUrlPolicySnapshot() {
   const trusted = getTrustedSiteDescriptors();
   const hostStatus = await getFocusMasterHostsStatus().catch(() => ({ count: 0 }));
 
+  const finiteBlockedSites = Array.from(new Set([
+    ...blockedSites,
+    ...(Array.isArray(dataset?.links) ? dataset.links : []),
+    ...(Array.isArray(dataset?.paths) ? dataset.paths : [])
+  ]));
+
   return {
     allowedHosts: Array.from(new Set([
       ...ALLOWED_SITES,
@@ -490,9 +501,11 @@ async function getBraveFoxCentralUrlPolicySnapshot() {
     allowedPathRules: Array.isArray(trusted?.pathRules)
       ? trusted.pathRules.map(rule => ({ ...rule }))
       : [],
-    blockedSites: blockedSites.slice(),
+    blockedSites: finiteBlockedSites,
     blockedTLDs: Array.isArray(dataset?.tlds) ? dataset.tlds.slice() : [],
-    fetchedHostsCount: Number(hostStatus?.count || 0)
+    fetchedHostsCount: Number(hostStatus?.count || 0),
+    hardFetchedHostsCount: Number(hostStatus?.hardCount || 0),
+    supplementalFetchedHostsCount: Number(hostStatus?.supplementalCount || 0)
   };
 }
 
@@ -518,6 +531,22 @@ async function classifyBraveFoxCentralUrl(value, dataset = null) {
   const href = parsed.href;
   const hostname = normalizeHostname(parsed.hostname);
 
+  // Hard shields are intentionally evaluated before Trusted Sites. The static
+  // background list protects path/query-specific impulse blocks, while
+  // BraveFoxHosts + legacyFox provide a remotely maintained whole-host floor.
+  if (matchesStaticBlockedSite(href)) {
+    return { action: "block", url: href, hostname, source: "background-hardcoded-shield" };
+  }
+
+  try {
+    const hardBlockedHost = await findHardBlockedHost(href);
+    if (hardBlockedHost) {
+      return { action: "block", url: href, hostname, source: "hard-fetched-hosts", blockedHost: hardBlockedHost };
+    }
+  } catch (error) {
+    console.warn(`${LOG_PREFIX} Central URL hard-host classification failed:`, error);
+  }
+
   if (isCompletelyExcludedUrl(href)) {
     return { action: "allow", url: href, hostname, source: "trusted-sites" };
   }
@@ -526,19 +555,31 @@ async function classifyBraveFoxCentralUrl(value, dataset = null) {
     return { action: "allow", url: href, hostname, source: "allowedSites" };
   }
 
-  if (matchesStaticBlockedSite(href)) {
-    return { action: "block", url: href, hostname, source: "background-block-policy" };
-  }
-
   const activeDataset = dataset || await loadDataset();
-  if (braveFoxCentralUrlPolicyTldBlocked(hostname, activeDataset?.tlds)) {
-    return { action: "block", url: href, hostname, source: "blockedTLDs" };
+
+  const tldRule = matchTld(href, Array.isArray(activeDataset?.tlds) ? activeDataset.tlds : []);
+  if (tldRule) {
+    return { action: "block", url: href, hostname, source: "blockedTLDs", matched: tldRule };
   }
 
+  const linkRule = matchLink(href, Array.isArray(activeDataset?.links) ? activeDataset.links : []);
+  if (linkRule) {
+    return { action: "block", url: href, hostname, source: "blockedLinks", matched: linkRule };
+  }
+
+  const pathRule = matchLink(href, Array.isArray(activeDataset?.paths) ? activeDataset.paths : []);
+  if (pathRule) {
+    return { action: "block", url: href, hostname, source: "blockedPaths", matched: pathRule };
+  }
+
+  // StevenBlack is the supplemental/blunt layer. Hosts with explicit live path
+  // rules remain under surgical control instead of becoming whole-domain blocks.
   try {
-    const blockedHost = await findBlockedHost(href);
-    if (blockedHost) {
-      return { action: "block", url: href, hostname, source: "fetched-hosts", blockedHost };
+    if (!hasScopedLinkRulesForUrl(href, Array.isArray(activeDataset?.paths) ? activeDataset.paths : [])) {
+      const blockedHost = await findBlockedHost(href);
+      if (blockedHost) {
+        return { action: "block", url: href, hostname, source: "fetched-hosts", blockedHost };
+      }
     }
   } catch (error) {
     console.warn(`${LOG_PREFIX} Central URL host classification failed:`, error);
@@ -929,6 +970,17 @@ async function getFocusMasterTimeRuleRequestDecision(details) {
 
 async function getRequestDecision(details) {
   if (isGoogleMapsOrEarthUrl(details?.url)) return { cancel: false };
+
+  try {
+    // Firefox has an additional blocking webRequest path outside blocker/service.js.
+    // Mirror the immutable shield order here so Trusted Sites cannot create a
+    // side door around either the compiled background rules or hard hosts feeds.
+    if (await shouldHardBlockUrl(details?.url)) {
+      return platformModule?.blockedResponse?.(details) || { cancel: true };
+    }
+  } catch (error) {
+    console.warn(`${LOG_PREFIX} Hard-shield request check failed:`, error);
+  }
 
   try {
     // Focus Master Priority 2 Time Rules intentionally outrank Trusted Sites.

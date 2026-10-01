@@ -1,24 +1,42 @@
 import { browser } from './api.js';
-import { isCompletelyExcludedHostname, isCompletelyExcludedUrl } from './shared.js';
+import { isCompletelyExcludedUrl } from './shared.js';
 
 const LOG_PREFIX = '[BraveFox Focus Master Hosts]';
-const META_KEY = 'bfb:hosts-meta:v1';
-const CHUNK_PREFIX = 'bfb:hosts-chunk:v1:';
+const SOURCE_META_PREFIX = 'bfb:hosts-source-meta:v2:';
+const SOURCE_CHUNK_PREFIX = 'bfb:hosts-source-chunk:v2:';
 const ALARM_NAME = 'bfb-hosts-refresh';
 const CHUNK_SIZE = 5000;
 const REMOTE_TIMEOUT_MS = 4500;
 const REMOTE_RETRIES_WITH_FALLBACK = 1;
 const REMOTE_RETRIES_NO_FALLBACK = 2;
 const REMOTE_RETRY_DELAY_MS = 750;
+
+// BraveFoxHosts + legacyFox form the remotely maintainable hard-host shield.
+// Their bundled copies are cold-start/offline fallbacks. StevenBlack remains a
+// normal supplemental layer so Trusted Sites and scoped path rules can outrank it.
 const SOURCES = [
-  { id: 'BraveFoxHosts', url: 'https://raw.githubusercontent.com/NightmaREE3Z/Focus-Master/refs/heads/BraveFox/blocker/lists/BraveFoxHosts', fallbackPath: 'blocker/lists/BraveFoxHosts' },
-  { id: 'StevenBlack', url: 'https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/fakenews-porn/hosts' },
-  { id: 'legacyFox', url: 'https://raw.githubusercontent.com/NightmaREE3Z/Focus-Master/refs/heads/BraveFox/blocker/lists/legacyFox', fallbackPath: 'blocker/lists/legacyFox' }
+  {
+    id: 'BraveFoxHosts',
+    tier: 'hard',
+    url: 'https://raw.githubusercontent.com/NightmaREE3Z/Focus-Master/refs/heads/BraveFox/blocker/lists/BraveFoxHosts',
+    fallbackPath: 'blocker/lists/BraveFoxHosts'
+  },
+  {
+    id: 'StevenBlack',
+    tier: 'supplemental',
+    url: 'https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/fakenews-porn/hosts'
+  },
+  {
+    id: 'legacyFox',
+    tier: 'hard',
+    url: 'https://raw.githubusercontent.com/NightmaREE3Z/Focus-Master/refs/heads/BraveFox/blocker/lists/legacyFox',
+    fallbackPath: 'blocker/lists/legacyFox'
+  }
 ];
 
-let cachedHosts = null;
+let cachedHardHosts = null;
+let cachedSupplementalHosts = null;
 let updatePromise = null;
-let bundledBaselineMergedIntoCache = false;
 
 function normalizeHost(value) {
   return String(value || '').trim().toLowerCase().replace(/^\.+|\.+$/g, '');
@@ -62,168 +80,193 @@ async function fetchText(url, timeoutMs = REMOTE_TIMEOUT_MS) {
   }
 }
 
-async function fetchSource(source) {
-  const attempts = source.fallbackPath ? REMOTE_RETRIES_WITH_FALLBACK : REMOTE_RETRIES_NO_FALLBACK;
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    try {
-      const text = await fetchText(`${source.url}?bravefox_refresh=${Date.now()}`);
-      const hosts = parseHostsText(text);
-      if (!hosts.length) throw new Error('Remote list contained no usable hosts.');
-      return { hosts, origin: 'remote' };
-    } catch (remoteError) {
-      console.warn(`${LOG_PREFIX} ${source.id} remote attempt ${attempt}/${attempts} failed:`, remoteError);
-      if (attempt < attempts) await sleep(REMOTE_RETRY_DELAY_MS);
-    }
-  }
-
-  if (source.fallbackPath) {
-    try {
-      const hosts = parseHostsText(await fetchText(browser.runtime.getURL(source.fallbackPath), 0));
-      if (hosts.length) {
-        console.warn(`${LOG_PREFIX} ${source.id}: remote unavailable, using bundled fallback.`);
-        return { hosts, origin: 'bundled-fallback' };
-      }
-    } catch (fallbackError) {
-      console.warn(`${LOG_PREFIX} ${source.id} bundled fallback failed:`, fallbackError);
-    }
-  }
-
-  return { hosts: [], origin: 'unavailable' };
+function sourceMetaKey(source) {
+  return `${SOURCE_META_PREFIX}${source.id}`;
 }
 
-async function loadBundledBaseline() {
-  const seen = new Set();
-  for (const source of SOURCES) {
-    if (!source.fallbackPath) continue;
-    try {
-      const hosts = parseHostsText(await fetchText(browser.runtime.getURL(source.fallbackPath), 0));
-      for (const host of hosts) {
-        if (!isCompletelyExcludedHostname(host)) seen.add(host);
-      }
-    } catch (error) {
-      console.warn(`${LOG_PREFIX} Bundled ${source.id} baseline failed:`, error);
-    }
-  }
-  return [...seen].sort();
+function sourceChunkPrefix(source) {
+  return `${SOURCE_CHUNK_PREFIX}${source.id}:`;
 }
 
-async function mergeWithBundledBaseline(hosts) {
-  const seen = new Set(Array.isArray(hosts) ? hosts : []);
-  const bundled = await loadBundledBaseline();
-  for (const host of bundled) {
-    if (!isCompletelyExcludedHostname(host)) seen.add(host);
-  }
-  return [...seen].sort();
+function sourceChunkKey(source, index) {
+  return `${sourceChunkPrefix(source)}${index}`;
 }
 
-async function saveHosts(hosts, sourceStats = null) {
-  const old = await browser.storage.local.get(null);
-  const oldKeys = Object.keys(old).filter(key => key.startsWith(CHUNK_PREFIX));
+async function saveSourceHosts(source, hosts, origin) {
+  const normalized = [...new Set((Array.isArray(hosts) ? hosts : []).map(normalizeHost).filter(Boolean))].sort();
+  const allStorage = await browser.storage.local.get(null);
+  const prefix = sourceChunkPrefix(source);
+  const oldKeys = Object.keys(allStorage).filter(key => key.startsWith(prefix));
   const payload = {};
   let chunks = 0;
-  for (let index = 0; index < hosts.length; index += CHUNK_SIZE) {
-    payload[`${CHUNK_PREFIX}${chunks}`] = hosts.slice(index, index + CHUNK_SIZE);
+
+  for (let index = 0; index < normalized.length; index += CHUNK_SIZE) {
+    payload[sourceChunkKey(source, chunks)] = normalized.slice(index, index + CHUNK_SIZE);
     chunks += 1;
   }
-  payload[META_KEY] = { chunks, count: hosts.length, updatedAt: Date.now(), sourceStats };
+
+  payload[sourceMetaKey(source)] = {
+    schema: 2,
+    tier: source.tier,
+    chunks,
+    count: normalized.length,
+    updatedAt: Date.now(),
+    origin: String(origin || 'unknown')
+  };
+
   await browser.storage.local.set(payload);
   const keep = new Set(Object.keys(payload));
   const stale = oldKeys.filter(key => !keep.has(key));
   if (stale.length) await browser.storage.local.remove(stale);
+  return normalized;
 }
 
-async function loadHosts() {
-  const metaResult = await browser.storage.local.get(META_KEY);
-  const meta = metaResult[META_KEY];
-  if (!meta?.chunks) return [];
-  const keys = Array.from({ length: Number(meta.chunks) }, (_, index) => `${CHUNK_PREFIX}${index}`);
+async function loadSourceHosts(source) {
+  const meta = (await browser.storage.local.get(sourceMetaKey(source)))[sourceMetaKey(source)];
+  if (!meta || Number(meta.chunks) <= 0) return [];
+  const keys = Array.from({ length: Number(meta.chunks) }, (_, index) => sourceChunkKey(source, index));
   const data = await browser.storage.local.get(keys);
   const hosts = [];
   for (const key of keys) {
     if (Array.isArray(data[key])) hosts.push(...data[key]);
   }
-  return hosts;
+  return [...new Set(hosts.map(normalizeHost).filter(Boolean))].sort();
+}
+
+async function loadBundledSource(source) {
+  if (!source.fallbackPath) return [];
+  try {
+    return [...new Set(parseHostsText(await fetchText(browser.runtime.getURL(source.fallbackPath), 0)))].sort();
+  } catch (error) {
+    console.warn(`${LOG_PREFIX} ${source.id} bundled fallback failed:`, error);
+    return [];
+  }
+}
+
+async function fetchRemoteSource(source) {
+  const attempts = source.fallbackPath ? REMOTE_RETRIES_WITH_FALLBACK : REMOTE_RETRIES_NO_FALLBACK;
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const text = await fetchText(`${source.url}?bravefox_refresh=${Date.now()}`);
+      const hosts = [...new Set(parseHostsText(text))].sort();
+      if (!hosts.length) throw new Error('Remote list contained no usable hosts.');
+      return hosts;
+    } catch (error) {
+      lastError = error;
+      console.warn(`${LOG_PREFIX} ${source.id} remote attempt ${attempt}/${attempts} failed:`, error);
+      if (attempt < attempts) await sleep(REMOTE_RETRY_DELAY_MS);
+    }
+  }
+
+  throw lastError || new Error(`${source.id} remote source unavailable.`);
+}
+
+async function resolveSource(source) {
+  try {
+    const hosts = await fetchRemoteSource(source);
+    await saveSourceHosts(source, hosts, 'remote');
+    return { hosts, origin: 'remote' };
+  } catch (remoteError) {
+    const cached = await loadSourceHosts(source).catch(() => []);
+    if (cached.length) {
+      console.warn(`${LOG_PREFIX} ${source.id}: remote unavailable, using last-known-good cache.`);
+      return { hosts: cached, origin: 'cache' };
+    }
+
+    const bundled = await loadBundledSource(source);
+    if (bundled.length) {
+      console.warn(`${LOG_PREFIX} ${source.id}: no cache available, using bundled fallback.`);
+      await saveSourceHosts(source, bundled, 'bundled-fallback').catch(() => {});
+      return { hosts: bundled, origin: 'bundled-fallback' };
+    }
+
+    console.warn(`${LOG_PREFIX} ${source.id} unavailable and has no usable cache/fallback:`, remoteError);
+    return { hosts: [], origin: 'unavailable' };
+  }
+}
+
+function buildTierHosts(sourceResults, tier) {
+  const seen = new Set();
+  for (const { source, hosts } of sourceResults) {
+    if (source.tier !== tier) continue;
+    for (const host of hosts) {
+      const normalized = normalizeHost(host);
+      if (normalized) seen.add(normalized);
+    }
+  }
+  return [...seen].sort();
+}
+
+async function loadImmediateTierCaches() {
+  const sourceResults = [];
+  for (const source of SOURCES) {
+    let hosts = await loadSourceHosts(source).catch(() => []);
+    let origin = hosts.length ? 'cache' : 'unavailable';
+
+    if (!hosts.length && source.fallbackPath) {
+      hosts = await loadBundledSource(source);
+      if (hosts.length) {
+        origin = 'bundled-fallback';
+        await saveSourceHosts(source, hosts, origin).catch(() => {});
+      }
+    }
+
+    sourceResults.push({ source, hosts, origin });
+  }
+
+  cachedHardHosts = buildTierHosts(sourceResults, 'hard');
+  cachedSupplementalHosts = buildTierHosts(sourceResults, 'supplemental');
+  return sourceResults;
 }
 
 export async function updateHosts() {
   if (updatePromise) return updatePromise;
   updatePromise = (async () => {
-    const seen = new Set();
-    const sourceStats = {};
-    let partialRefresh = false;
-
+    const sourceResults = [];
     for (const source of SOURCES) {
-      const result = await fetchSource(source);
-      sourceStats[source.id] = { origin: result.origin, count: result.hosts.length };
-      if (result.origin === 'unavailable') partialRefresh = true;
-      for (const host of result.hosts) {
-        if (!isCompletelyExcludedHostname(host) && !seen.has(host)) seen.add(host);
-      }
+      const result = await resolveSource(source);
+      sourceResults.push({ source, ...result });
     }
 
-    const existing = cachedHosts || await loadHosts();
-    if (partialRefresh && existing.length) {
-      for (const host of existing) {
-        if (!isCompletelyExcludedHostname(host)) seen.add(host);
-      }
-      console.warn(`${LOG_PREFIX} Partial refresh: previous cached generation was merged to avoid an offline gap.`);
+    cachedHardHosts = buildTierHosts(sourceResults, 'hard');
+    cachedSupplementalHosts = buildTierHosts(sourceResults, 'supplemental');
+
+    if (!cachedHardHosts.length && !cachedSupplementalHosts.length) {
+      throw new Error('No hosts source, cache or bundled fallback could be loaded.');
     }
 
-    if (!seen.size) {
-      if (existing.length) {
-        const mergedExisting = await mergeWithBundledBaseline(existing);
-        cachedHosts = mergedExisting;
-        bundledBaselineMergedIntoCache = true;
-        return mergedExisting;
-      }
-      throw new Error('No hosts source or bundled fallback could be loaded.');
-    }
-
-    // The packaged BraveFoxHosts + legacyFox files are an authoritative baseline,
-    // not merely an offline fallback. Always union them with the fetched generation.
-    const hosts = await mergeWithBundledBaseline([...seen]);
-    await saveHosts(hosts, sourceStats);
-    cachedHosts = hosts;
-    bundledBaselineMergedIntoCache = true;
-    return hosts;
+    return {
+      hard: cachedHardHosts,
+      supplemental: cachedSupplementalHosts
+    };
   })().finally(() => { updatePromise = null; });
   return updatePromise;
 }
 
 async function ensureHosts() {
-  if (!cachedHosts) cachedHosts = await loadHosts();
-
-  if (!cachedHosts.length) {
-    cachedHosts = await updateHosts();
-    bundledBaselineMergedIntoCache = true;
-    return cachedHosts;
-  }
-
-  if (!bundledBaselineMergedIntoCache) {
-    cachedHosts = await mergeWithBundledBaseline(cachedHosts);
-    bundledBaselineMergedIntoCache = true;
-  }
-
-  return cachedHosts;
+  if (!cachedHardHosts || !cachedSupplementalHosts) await loadImmediateTierCaches();
+  return {
+    hard: cachedHardHosts || [],
+    supplemental: cachedSupplementalHosts || []
+  };
 }
 
 function binaryHas(sorted, value) {
-  let low = 0, high = sorted.length - 1;
+  let low = 0;
+  let high = sorted.length - 1;
   while (low <= high) {
     const mid = (low + high) >> 1;
     const current = sorted[mid];
     if (current === value) return true;
-    if (current < value) low = mid + 1; else high = mid - 1;
+    if (current < value) low = mid + 1;
+    else high = mid - 1;
   }
   return false;
 }
 
-export async function findBlockedHost(urlValue) {
-  if (isCompletelyExcludedUrl(urlValue)) return '';
-  let host;
-  try { host = normalizeHost(new URL(String(urlValue || '')).hostname); } catch { return ''; }
-  if (!host) return '';
-  const hosts = await ensureHosts();
+function findHostInSorted(host, hosts) {
   const labels = host.split('.');
   for (let index = 0; index < labels.length - 1; index += 1) {
     const candidate = labels.slice(index).join('.');
@@ -232,53 +275,72 @@ export async function findBlockedHost(urlValue) {
   return '';
 }
 
-export async function getHostsStatus() {
-  if (!cachedHosts) {
-    try { cachedHosts = await loadHosts(); } catch { cachedHosts = []; }
+async function parseCandidateHost(urlValue) {
+  try {
+    return normalizeHost(new URL(String(urlValue || '')).hostname);
+  } catch {
+    return '';
   }
-  let meta = null;
-  try { meta = (await browser.storage.local.get(META_KEY))[META_KEY] || null; } catch {}
+}
+
+// Hard-host feeds deliberately ignore TrustedSites.csv. This is the remotely
+// maintainable shield tier and sits beside the compiled HARD_CODED_LINKS floor.
+export async function findHardBlockedHost(urlValue) {
+  const host = await parseCandidateHost(urlValue);
+  if (!host) return '';
+  const { hard } = await ensureHosts();
+  return findHostInSorted(host, hard);
+}
+
+// Supplemental hosts remain a normal blocker layer. Trusted Sites can bypass
+// these entries, and callers may also suppress them for scoped path/query rules.
+export async function findBlockedHost(urlValue) {
+  if (isCompletelyExcludedUrl(urlValue)) return '';
+  const host = await parseCandidateHost(urlValue);
+  if (!host) return '';
+  const { supplemental } = await ensureHosts();
+  return findHostInSorted(host, supplemental);
+}
+
+export async function getHostsStatus() {
+  const { hard, supplemental } = await ensureHosts();
+  const sourceStats = {};
+  let lastUpdated = 0;
+
+  for (const source of SOURCES) {
+    try {
+      const meta = (await browser.storage.local.get(sourceMetaKey(source)))[sourceMetaKey(source)] || null;
+      if (!meta) continue;
+      sourceStats[source.id] = {
+        tier: source.tier,
+        origin: String(meta.origin || 'unknown'),
+        count: Number(meta.count || 0),
+        updatedAt: Number(meta.updatedAt || 0)
+      };
+      lastUpdated = Math.max(lastUpdated, Number(meta.updatedAt || 0));
+    } catch {}
+  }
+
   return {
-    count: cachedHosts?.length || 0,
-    lastUpdated: Number(meta?.updatedAt || 0),
-    sourceStats: meta?.sourceStats || null
+    count: hard.length + supplemental.length,
+    hardCount: hard.length,
+    supplementalCount: supplemental.length,
+    lastUpdated,
+    sourceStats
   };
 }
 
 export async function initializeHosts() {
-  try { cachedHosts = await loadHosts(); } catch {}
-
-  // The packaged baseline is authoritative even when an older cached generation exists.
-  // Merge it immediately so freshly bundled entries take effect on PC and Android without
-  // waiting for GitHub or the next scheduled refresh.
   try {
-    const beforeCount = Array.isArray(cachedHosts) ? cachedHosts.length : 0;
-    cachedHosts = await mergeWithBundledBaseline(cachedHosts || []);
-    bundledBaselineMergedIntoCache = true;
-
-    if (cachedHosts.length && cachedHosts.length !== beforeCount) {
-      await saveHosts(cachedHosts, {
-        startup: {
-          origin: beforeCount ? 'cache+bundled-baseline' : 'bundled-baseline',
-          count: cachedHosts.length
-        }
-      });
-    }
-
-    if (!beforeCount && cachedHosts.length) {
-      console.log(`${LOG_PREFIX} Loaded ${cachedHosts.length} bundled hosts as the immediate PC/Android baseline.`);
+    const initial = await loadImmediateTierCaches();
+    const hardCount = cachedHardHosts?.length || 0;
+    const supplementalCount = cachedSupplementalHosts?.length || 0;
+    if (hardCount || supplementalCount) {
+      const origins = initial.map(entry => `${entry.source.id}:${entry.origin}`).join(', ');
+      console.log(`${LOG_PREFIX} Immediate hosts ready: ${hardCount} hard + ${supplementalCount} supplemental (${origins}).`);
     }
   } catch (error) {
-    console.warn(`${LOG_PREFIX} Bundled startup baseline failed:`, error);
-  }
-
-  if (!cachedHosts?.length) {
-    try {
-      cachedHosts = await updateHosts();
-      bundledBaselineMergedIntoCache = true;
-    } catch (error) {
-      console.warn(`${LOG_PREFIX} Initial hosts refresh failed:`, error);
-    }
+    console.warn(`${LOG_PREFIX} Immediate cache/fallback load failed:`, error);
   }
 
   browser.alarms.create(ALARM_NAME, { periodInMinutes: 60 });
@@ -286,5 +348,7 @@ export async function initializeHosts() {
 }
 
 browser.alarms.onAlarm.addListener(alarm => {
-  if (alarm.name === ALARM_NAME) void updateHosts().catch(error => console.warn(`${LOG_PREFIX} Refresh failed:`, error));
+  if (alarm.name === ALARM_NAME) {
+    void updateHosts().catch(error => console.warn(`${LOG_PREFIX} Refresh failed:`, error));
+  }
 });

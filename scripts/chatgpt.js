@@ -609,6 +609,16 @@
         pointer-events: none !important;
       }
 
+      /* ChatGPT home suggested prompts. Hide the complete suggestion wrapper at
+       * document_start so React never gets a painted suggestion row onto the page. */
+      section[class~="group/home-suggestions"],
+      div:has(> section[class~="group/home-suggestions"]) {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+
       /* Google-only ChatGPT sign-in lane. These are paint-time selectors, so the
        * disallowed auth paths never get a one-frame cameo while React mounts them.
        * Google itself is intentionally untouched. */
@@ -1283,9 +1293,11 @@
       const pathname = String(url.pathname || '/').toLowerCase().replace(/\/+$/, '') || '/';
       if (pathname === PERSONALIZATION_PATH || pathname.startsWith(`${PERSONALIZATION_PATH}/`)) {
         const modal = normalizeText(url.searchParams.get('modal'));
-        const instructions = normalizeText(url.searchParams.get(PERSONALIZATION_INSTRUCTIONS_PARAM));
         const memoryModal = modal === PERSONALIZATION_MEMORY_MODAL;
-        const chatGptInstructions = instructions === PERSONALIZATION_CHATGPT_INSTRUCTIONS;
+        // Treat the `instructions` query key itself as the protected instructions lane.
+        // This covers ?instructions, ?instructions=, ChatGPT, Codex and future tabs without
+        // tying the password gate to OpenAI's current tab names.
+        const chatGptInstructions = url.searchParams.has(PERSONALIZATION_INSTRUCTIONS_PARAM);
         const basePersonalization = !memoryModal && !chatGptInstructions;
         return {
           key: 'personalization',
@@ -3278,18 +3290,71 @@
     }
   }
 
+  function isFinnishThinkingEffortUi(popup = null) {
+    if (/^fi(?:-|$)/i.test(String(document.documentElement.lang || ''))) return true;
+
+    let node = popup instanceof Element ? popup : null;
+    for (let depth = 0; node && depth < 5; depth += 1, node = node.parentElement) {
+      const context = normalizeText(node.textContent);
+      if (context.includes('päättelypanostus') || context.includes('paattelypanostus')) return true;
+    }
+
+    return false;
+  }
+
+  function repairThinkingEffortPopupLocalization(popup) {
+    if (!(popup instanceof Element) || !popup.isConnected || !isFinnishThinkingEffortUi(popup)) {
+      return false;
+    }
+
+    const replacements = new Map([
+      ['instant', 'Välitön'],
+      ['medium', 'Keskitaso'],
+      ['high', 'Korkea']
+    ]);
+    const walker = document.createTreeWalker(popup, NodeFilter.SHOW_TEXT);
+    let changed = false;
+    let node = walker.nextNode();
+
+    while (node) {
+      const value = String(node.nodeValue || '');
+      const match = value.match(/^(\s*)(instant|medium|high)(\s*)$/i);
+      if (match) {
+        const replacement = replacements.get(match[2].toLowerCase());
+        if (replacement) {
+          node.nodeValue = `${match[1]}${replacement}${match[3]}`;
+          changed = true;
+        }
+      }
+      node = walker.nextNode();
+    }
+
+    return changed;
+  }
+
   function enforceThinkingEffortVisualPopup(target = null, allowGlobalFallback = true) {
     const popup = findThinkingEffortVisualPopup(
       target instanceof Element ? target : null,
       allowGlobalFallback
     );
-    if (!popup || getThinkingEffortPopupTier(popup) !== 'instant') return false;
+    if (!popup) return false;
+
+    const tier = getThinkingEffortPopupTier(popup);
+    repairThinkingEffortPopupLocalization(popup);
+    if (tier !== 'instant') return false;
+
     const track = findThinkingEffortVisualTrack(popup, target instanceof Element ? target : null);
     if (!track) return false;
 
     // Aim squarely at an interior stop. This is a fallback for revamp variants that
     // render a visual track but expose no usable role=slider/range state to BraveFox.
-    return dispatchThinkingEffortTrackPoint(track, 0.50);
+    const repaired = dispatchThinkingEffortTrackPoint(track, 0.50);
+    if (repaired) {
+      for (const delay of [0, 40, 100, 180]) {
+        window.setTimeout(() => repairThinkingEffortPopupLocalization(popup), delay);
+      }
+    }
+    return repaired;
   }
 
   function findThinkingEffortSliderForEvent(event, allowGlobalFallback = true) {

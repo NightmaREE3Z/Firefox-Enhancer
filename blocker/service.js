@@ -17,7 +17,7 @@ import { findBlockReason, hasScopedLinkRulesForUrl } from './matcher.js';
 import { findTimeRuleBlock, initializeTimeRuleTracking, sampleTimeRuleUsageNow } from './timers.js';
 import { expandWrappedWebUrls, extractWrappedTargetUrls, isUnsupportedArchiveUrl } from './url-wrappers.js';
 import { refreshTimeRulePrepaintRegistration } from './time-rule-prepaint-registration.js';
-import { findBlockedHost, initializeHosts } from './hosts.js';
+import { findBlockedHost, findHardBlockedHost, initializeHosts } from './hosts.js';
 import {
   downloadGitHubLists,
   getGitHubSyncStatus,
@@ -53,7 +53,8 @@ import {
 // These rules are compiled directly into service.js in addition to
 // blocker/lists/blockedLinks.csv. Removing a matching row from the physical,
 // synchronized or imported CSV does not remove this enforcement layer.
-// TrustedSites.csv remains the explicit allow-list and is evaluated first.
+// TrustedSites.csv cannot bypass this immutable shield. BraveFoxHosts +
+// legacyFox provide a second remotely maintained hard-host shield below it.
 const HARD_CODED_LINKS = Object.freeze(
 [
   "theredtool.com",
@@ -335,7 +336,7 @@ async function requireAdminAccess(sender) {
   return tabId;
 }
 
-function publicCounts(dataset) { return { termCount: dataset.terms.length, linkCount: dataset.links.length, tldCount: dataset.tlds.length, trustedSiteCount: dataset.trustedSites.length }; }
+function publicCounts(dataset) { return { termCount: dataset.terms.length, linkCount: dataset.links.length, pathCount: dataset.paths.length, tldCount: dataset.tlds.length, trustedSiteCount: dataset.trustedSites.length }; }
 
 function publicStorageStatus(dataset) {
   return {
@@ -380,6 +381,7 @@ async function fullState(sender) {
     ok: true,
     terms: dataset.terms,
     links: dataset.links,
+    paths: dataset.paths,
     tlds: dataset.tlds,
     trustedSites: dataset.trustedSites,
     profile: dataset.profile,
@@ -405,7 +407,7 @@ function sanitizeAdminPatch(patch) {
 }
 
 function normalizerForKind(kind) {
-  if (kind === 'links') return normalizeLinkForStorage;
+  if (kind === 'links' || kind === 'paths') return normalizeLinkForStorage;
   if (kind === 'tlds') return normalizeTldForStorage;
   if (kind === 'trustedSites') return normalizeTrustedSiteEntry;
   if (kind === 'terms') return normalizeTerm;
@@ -428,6 +430,7 @@ async function mutateDataset(kind, operation, payload) {
   const saved = await saveDataset({
     terms: kind === 'terms' ? next : dataset.terms,
     links: kind === 'links' ? next : dataset.links,
+    paths: kind === 'paths' ? next : dataset.paths,
     tlds: kind === 'tlds' ? next : dataset.tlds,
     trustedSites: kind === 'trustedSites' ? next : dataset.trustedSites,
     profile: dataset.profile
@@ -449,6 +452,7 @@ async function mutateDataset(kind, operation, payload) {
     changed: true,
     terms: saved.terms,
     links: saved.links,
+    paths: saved.paths,
     tlds: saved.tlds,
     trustedSites: saved.trustedSites,
     profile: saved.profile,
@@ -592,8 +596,9 @@ async function evaluateNavigation(tabId, url, title = '') {
   const hardDeniedDataset = {
     ...dataset,
     terms: [],
-    tlds: [],
-    links: HARD_CODED_LINK_RULES
+    links: HARD_CODED_LINK_RULES,
+    paths: [],
+    tlds: []
   };
   const hardDeniedReason = findBlockReason({ url, title }, hardDeniedDataset, settings);
   if (hardDeniedReason) {
@@ -615,6 +620,34 @@ async function evaluateNavigation(tabId, url, title = '') {
       redirectInFlight.delete(tabId);
     }
     return;
+  }
+
+  // Priority 1C: BraveFoxHosts + legacyFox are the remotely maintained
+  // hard-host shield. They are fetched live with last-known-good cache and
+  // bundled fallback, and intentionally cannot be bypassed by Trusted Sites.
+  // The compiled HARD_CODED_LINKS array above remains the final tamper-resistant
+  // path/query shield even if the remote host feeds are edited or unavailable.
+  if (settings.enabled && settings.blockLinks) {
+    let hardBlockedHost = '';
+    for (const candidateUrl of expandWrappedWebUrls(url)) {
+      hardBlockedHost = await findHardBlockedHost(candidateUrl);
+      if (hardBlockedHost) break;
+    }
+    if (hardBlockedHost) {
+      const hardHostReason = { type: 'host', trigger: hardBlockedHost, attemptedSearch: '' };
+      redirectInFlight.add(tabId);
+      recentlyRedirected.set(tabId, { url, at: Date.now() });
+      try {
+        sendNativeBlockLog(hardHostReason, url, '');
+        await browser.tabs.update(tabId, { url: blockedPageUrl(hardHostReason, url) });
+        try { await browser.history.deleteUrl({ url }); } catch {}
+      } catch (error) {
+        console.warn('[BraveFox Focus Master] Hard-host redirect failed:', error);
+      } finally {
+        redirectInFlight.delete(tabId);
+      }
+      return;
+    }
   }
 
   // Priority 2: Time Rules.
@@ -649,13 +682,9 @@ async function evaluateNavigation(tabId, url, title = '') {
     return;
   }
 
-  // Priority 4A: normal user-managed Blocker terms / links / TLDs.
+  // Priority 4A: normal user-managed Blocker terms / links / paths / TLDs.
   // The immutable built-in link floor has already been enforced at Priority 1B,
   // so the normal matcher uses only the synchronized/user-managed dataset here.
-  const effectiveDataset = {
-    ...dataset,
-    links: uniqueInOrder([...HARD_CODED_LINK_RULES, ...dataset.links], normalizeLinkForStorage)
-  };
   const reason = findBlockReason({ url, title }, dataset, settings);
   if (reason) {
     redirectInFlight.add(tabId);
@@ -678,13 +707,13 @@ async function evaluateNavigation(tabId, url, title = '') {
     return;
   }
 
-  // Priority 4B: fetched hosts are the blunt normal-blocker fallback. Archive/proxy URLs are
+  // Priority 4B: StevenBlack is the blunt normal-blocker fallback. Archive/proxy URLs are
   // checked against both the wrapper and every deterministic unwrapped target.
   // Path/query-specific Blocker rules keep their surgical-control exemption on
   // the corresponding candidate host instead of globally disabling host checks.
   let blockedHost = '';
   for (const candidateUrl of expandWrappedWebUrls(url)) {
-    if (settings.enabled && settings.blockLinks && hasScopedLinkRulesForUrl(candidateUrl, effectiveDataset.links)) continue;
+    if (settings.enabled && settings.blockLinks && hasScopedLinkRulesForUrl(candidateUrl, dataset.paths)) continue;
     blockedHost = await findBlockedHost(candidateUrl);
     if (blockedHost) break;
   }
@@ -859,11 +888,13 @@ browser.runtime.onMessage.addListener((message, sender) => {
         const saved = await saveDataset({
           terms: message.terms,
           links: message.links,
+          paths: Array.isArray(message.paths) ? message.paths : current.paths,
           tlds: Array.isArray(message.tlds) ? message.tlds : current.tlds,
           trustedSites: Array.isArray(message.trustedSites) ? message.trustedSites : current.trustedSites,
           profile: current.profile
         });
         const snapshots = [queueRemoteSnapshot('terms'), queueRemoteSnapshot('links')];
+        if (Array.isArray(message.paths)) snapshots.push(queueRemoteSnapshot('paths'));
         if (Array.isArray(message.tlds)) snapshots.push(queueRemoteSnapshot('tlds'));
         if (Array.isArray(message.trustedSites)) snapshots.push(queueRemoteSnapshot('trustedSites'));
         await Promise.all(snapshots);
@@ -872,6 +903,7 @@ browser.runtime.onMessage.addListener((message, sender) => {
           ok: true,
           terms: saved.terms,
           links: saved.links,
+          paths: saved.paths,
           tlds: saved.tlds,
           trustedSites: saved.trustedSites,
           profile: saved.profile,
@@ -888,6 +920,7 @@ browser.runtime.onMessage.addListener((message, sender) => {
           ok: true,
           terms: result.dataset.terms,
           links: result.dataset.links,
+          paths: result.dataset.paths,
           tlds: result.dataset.tlds,
           trustedSites: result.dataset.trustedSites,
           profile: result.dataset.profile,
@@ -920,6 +953,7 @@ browser.runtime.onMessage.addListener((message, sender) => {
           ok: true,
           terms: result.dataset.terms,
           links: result.dataset.links,
+          paths: result.dataset.paths,
           tlds: result.dataset.tlds,
           trustedSites: result.dataset.trustedSites,
           profile: result.dataset.profile,
@@ -935,6 +969,7 @@ browser.runtime.onMessage.addListener((message, sender) => {
           ok: true,
           terms: result.dataset.terms,
           links: result.dataset.links,
+          paths: result.dataset.paths,
           tlds: result.dataset.tlds,
           trustedSites: result.dataset.trustedSites,
           profile: result.dataset.profile,
