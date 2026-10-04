@@ -476,58 +476,190 @@ Never provide or suggest icacls/takeown commands, even if asked, unless I'm acti
                 // Get React native setter to bypass synthetic events proxy
                 const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
 
+                const normalizeDomain = (value) => (value || '').replace(/^\*\./, '').trim().toLowerCase();
+                const getRandomImportCooldown = () => 900 + Math.floor(Math.random() * 601);
+
+                const getLiveFormElements = () => {
+                    const liveForm = document.querySelector('form[action="#submit"]');
+                    const liveInput = liveForm ? liveForm.querySelector('input') : null;
+                    return { liveForm, liveInput };
+                };
+
+                const isDomainVisible = (domain) => {
+                    const normalizedDomain = normalizeDomain(domain);
+                    return Array.from(document.querySelectorAll('.list-group-item span.notranslate')).some(item => {
+                        return normalizeDomain(item.textContent) === normalizedDomain;
+                    });
+                };
+
+                const getNextDNSFeedbackText = () => {
+                    const { liveForm, liveInput } = getLiveFormElements();
+                    if (!liveForm) return '';
+
+                    const scope = liveForm.closest('.card') || liveForm.parentElement || liveForm;
+                    const feedbackSelectors = [
+                        '[role="alert"]',
+                        '[aria-live="assertive"]',
+                        '[aria-live="polite"]',
+                        '.invalid-feedback',
+                        '.form-control-feedback',
+                        '.text-danger',
+                        '.text-error'
+                    ];
+
+                    const feedback = Array.from(scope.querySelectorAll(feedbackSelectors.join(',')))
+                        .filter(node => node !== liveInput)
+                        .map(node => (node.textContent || '').trim())
+                        .filter(Boolean)
+                        .join(' | ');
+
+                    if (feedback) return feedback;
+
+                    const scopeText = (scope.textContent || '').trim();
+                    if (/this domain has already been added\.?/i.test(scopeText)) {
+                        return 'This domain has already been added.';
+                    }
+
+                    return '';
+                };
+
+                const clearNextDNSInput = async () => {
+                    const { liveInput } = getLiveFormElements();
+                    if (!liveInput) return false;
+
+                    nativeInputValueSetter.call(liveInput, '');
+                    liveInput.dispatchEvent(new Event('input', { bubbles: true }));
+                    liveInput.dispatchEvent(new Event('change', { bubbles: true }));
+                    await new Promise(r => setTimeout(r, 150));
+                    return true;
+                };
+
+                const waitForNextDNSResult = async (domain, timeoutMs = 10000) => {
+                    const normalizedDomain = normalizeDomain(domain);
+                    const startTime = Date.now();
+
+                    while (Date.now() - startTime < timeoutMs) {
+                        if (isDomainVisible(domain)) {
+                            return { status: 'added', message: '' };
+                        }
+
+                        const { liveInput } = getLiveFormElements();
+                        const feedbackText = getNextDNSFeedbackText();
+                        const normalizedFeedback = feedbackText.toLowerCase();
+
+                        if (
+                            liveInput &&
+                            normalizeDomain(liveInput.value) === normalizedDomain &&
+                            normalizedFeedback.includes('already been added')
+                        ) {
+                            return { status: 'already-added', message: feedbackText };
+                        }
+
+                        const inputLooksInvalid = !!liveInput && (
+                            liveInput.getAttribute('aria-invalid') === 'true' ||
+                            liveInput.classList.contains('is-invalid')
+                        );
+
+                        if (inputLooksInvalid && feedbackText) {
+                            return { status: 'error', message: feedbackText };
+                        }
+
+                        await new Promise(r => setTimeout(r, 100));
+                    }
+
+                    return { status: 'timeout', message: '' };
+                };
+
                 let successCount = 0;
+                let alreadyAddedCount = 0;
+                let retryCount = 0;
                 
                 for (let i = 0; i < domains.length; i++) {
                     const domain = domains[i];
-                    try {
-                        // 1. Focus the input box
-                        input.focus();
+                    let domainConfirmed = false;
+                    let attempt = 0;
 
-                        // 2. Add URL directly via native setter
-                        nativeInputValueSetter.call(input, domain);
-                        
-                        // Dispatch input/change events for React to register the value
-                        input.dispatchEvent(new Event('input', { bubbles: true }));
-                        input.dispatchEvent(new Event('change', { bubbles: true }));
-                        
-                        // 3. Short wait to let React internally register the state change
-                        await new Promise(r => setTimeout(r, 100));
-                        
-                        // 4. Simulate the enter press
-                        const enterEventOpts = {
-                            key: 'Enter',
-                            code: 'Enter',
-                            keyCode: 13,
-                            which: 13,
-                            bubbles: true,
-                            cancelable: true
-                        };
-                        input.dispatchEvent(new KeyboardEvent('keydown', enterEventOpts));
-                        input.dispatchEvent(new KeyboardEvent('keypress', enterEventOpts));
-                        input.dispatchEvent(new KeyboardEvent('keyup', enterEventOpts));
-                        
-                        // Hard dispatch the form submission as a final fallback
-                        if (typeof form.requestSubmit === 'function') {
-                            form.requestSubmit();
-                        } else {
-                            form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+                    while (!domainConfirmed) {
+                        attempt++;
+
+                        try {
+                            if (isDomainVisible(domain)) {
+                                successCount++;
+                                domainConfirmed = true;
+                                console.log(`BraveFox: Already present ${successCount}/${domains.length}: ${domain}`);
+                                break;
+                            }
+
+                            const { liveForm, liveInput } = getLiveFormElements();
+
+                            if (!liveForm || !liveInput) {
+                                retryCount++;
+                                console.warn(`BraveFox: NextDNS form is temporarily unavailable while processing ${domain}. Retrying attempt ${attempt}.`);
+                            } else {
+                                // 1. Clear any stale value/validation state left by the previous attempt
+                                nativeInputValueSetter.call(liveInput, '');
+                                liveInput.dispatchEvent(new Event('input', { bubbles: true }));
+                                liveInput.dispatchEvent(new Event('change', { bubbles: true }));
+                                await new Promise(r => setTimeout(r, 150));
+
+                                // 2. Focus and enter the domain through React's native input setter
+                                liveInput.focus();
+                                nativeInputValueSetter.call(liveInput, domain);
+                                liveInput.dispatchEvent(new Event('input', { bubbles: true }));
+                                liveInput.dispatchEvent(new Event('change', { bubbles: true }));
+
+                                // 3. Give React time to register the value before submitting
+                                await new Promise(r => setTimeout(r, 250));
+
+                                // 4. Submit exactly once. Avoid the old Enter + requestSubmit double-submit path.
+                                if (typeof liveForm.requestSubmit === 'function') {
+                                    liveForm.requestSubmit();
+                                } else {
+                                    liveForm.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+                                }
+
+                                liveInput.blur();
+
+                                // 5. Do not advance until NextDNS confirms the domain is present or says it already exists.
+                                const result = await waitForNextDNSResult(domain);
+
+                                if (result.status === 'added') {
+                                    successCount++;
+                                    domainConfirmed = true;
+                                    console.log(`BraveFox: Imported ${successCount}/${domains.length}: ${domain}`);
+                                } else if (result.status === 'already-added') {
+                                    successCount++;
+                                    alreadyAddedCount++;
+                                    domainConfirmed = true;
+                                    console.log(`BraveFox: Confirmed already added ${successCount}/${domains.length}: ${domain}`);
+                                    await clearNextDNSInput();
+                                } else {
+                                    retryCount++;
+                                    const reason = result.message || (result.status === 'timeout' ? 'No confirmation within 10 seconds.' : 'Unknown NextDNS error.');
+                                    console.warn(`BraveFox: ${domain} was not confirmed on attempt ${attempt}: ${reason} Retrying the same domain.`);
+                                    await clearNextDNSInput();
+                                }
+                            }
+                        } catch (err) {
+                            retryCount++;
+                            console.error(`BraveFox: Attempt ${attempt} failed for ${domain}. Retrying the same domain:`, err);
+                            await clearNextDNSInput();
                         }
 
-                        // Blur input
-                        input.blur();
-                        
-                        successCount++;
-                        console.log(`BraveFox: Imported ${successCount}/${domains.length}: ${domain}`);
-                        
-                        // 5. Long wait to let the server respond and React clear the input field
-                        await new Promise(r => setTimeout(r, 600));
-                    } catch (err) {
-                        console.error(`BraveFox: Failed to import domain ${domain}:`, err);
+                        if (!domainConfirmed) {
+                            const retryCooldownMs = getRandomImportCooldown();
+                            console.log(`BraveFox: Waiting ${retryCooldownMs}ms before retrying ${domain}.`);
+                            await new Promise(r => setTimeout(r, retryCooldownMs));
+                        }
                     }
+
+                    // 6. Random cooldown after a confirmed domain before advancing to the next one
+                    const cooldownMs = getRandomImportCooldown();
+                    console.log(`BraveFox: Waiting ${cooldownMs}ms before the next domain.`);
+                    await new Promise(r => setTimeout(r, cooldownMs));
                 }
                 
-                alert(`BraveFox: Successfully imported ${successCount} domains!`);
+                alert(`BraveFox: Confirmed ${successCount} domains in NextDNS! ${alreadyAddedCount} were already present. Retries used: ${retryCount}.`);
             };
             reader.readAsText(file);
         },
