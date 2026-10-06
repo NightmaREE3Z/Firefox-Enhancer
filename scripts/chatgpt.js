@@ -63,8 +63,8 @@
   const MEMORY_MODAL_CLASS = 'bravefox-chatgpt-memory-modal';
   const HIDDEN_CLASS = 'bravefox-chatgpt-hidden';
 
-  const PERSONALIZATION_PROMPT = 'ChatGPT Personalization settings is locked, enter password to continue';
-  const MEMORY_SUMMARY_PROMPT = 'Memory summary is locked, enter password to continue.';
+  const PERSONALIZATION_PROMPT = 'ChatGPT yksilöintiasetukset on salasanasuojattu, anna salasana jatkaaksesi.';
+  const MEMORY_SUMMARY_PROMPT = 'Muistot on salasanasuojattu, anna salasana jatkaaksesi.';
   const PERSONALIZATION_PATH = '/settings/personalization';
   // Password-gate master switch.
   // false = normal BraveFox password protection is active.
@@ -77,7 +77,7 @@
   const PERSONALIZATION_MEMORY_MODAL = 'memories';
   const PERSONALIZATION_INSTRUCTIONS_PARAM = 'instructions';
   const PERSONALIZATION_CHATGPT_INSTRUCTIONS = 'chatgpt';
-  const PERSONALIZATION_INSTRUCTIONS_PROMPT = 'ChatGPT custom instructions is locked, enter password to continue';
+  const PERSONALIZATION_INSTRUCTIONS_PROMPT = 'ChatGPT mukautetut ohjeet on salasanasuojattu, anna salasana jatkaaksesi.';
   const PERSONALIZATION_AUTH_BRIDGE_PARAM = 'bravefox-auth-return';
   const PERSONALIZATION_AUTH_HANDOFF_KEY = 'bravefoxChatGptPersonalizationAuthHandoff_v1';
   const AUTH_LOOP_GUARD_KEY = 'bravefoxChatGptAuthLoopGuard_v1';
@@ -85,14 +85,14 @@
   const AUTH_LOOP_GUARD_MAX_AGE_MS = 300000;
   const LIBRARY_PROTECTED_FOLDER_ID = '6ab47ad73fe88191b5861b9b1f45132a';
   const LIBRARY_PROTECTED_FOLDER_NAME = 'Protected Files';
-  const LIBRARY_PROTECTED_FOLDER_PROMPT = 'Protected Files is locked, enter password to continue';
-  const LIBRARY_PROTECTED_FILE_DELETE_PROMPT = 'Deleting a file from Protected Files requires your password';
-  const LIBRARY_PROTECTED_EDIT_MODE_PROMPT = 'Protected Files Edit Mode is locked, enter password to continue';
+  const LIBRARY_PROTECTED_FOLDER_PROMPT = 'Suojatut tiedostot on salasanasuojattu. Anna salasana jatkaaksesi.';
+  const LIBRARY_PROTECTED_FILE_DELETE_PROMPT = 'Suojatun tiedoston poistaminen vaatii salasanan!';
+  const LIBRARY_PROTECTED_EDIT_MODE_PROMPT = 'Suojattujen tiedostojen "Muokkaustila" on salasanasuojattu, anna salasana jatkaaksesi.';
   const LIBRARY_EDIT_MODE_CLASS = 'bravefox-protected-library-edit-mode';
 
   const PROTECTED_PATH_ROUTES = [
-    { key: 'plugins', path: '/plugins', title: 'ChatGPT Plugins is locked, enter password to continue' },
-    { key: 'gpts', path: '/gpts', title: 'ChatGPT GPTs is locked, enter password to continue' }
+    { key: 'plugins', path: '/plugins', title: 'ChatGPT Lisäosat on salasanasuojattu, anna salasana jatkaaksesi' },
+    { key: 'gpts', path: '/gpts', title: 'ChatGPT GPTt on salasanasuojattu, anna salasana jatkaaksesi' }
   ];
 
   const MEMORY_ENABLE_LABELS = new Set(['ota muisti käyttöön', 'enable memory']);
@@ -148,7 +148,7 @@
     enabled: true,
     planName: 'ChatGPT Sensible Tier',
     renewalText: 'Ryöstämme sinut jälleen {date}',
-    updateButtonText: 'Päivitä'
+    updateButtonText: 'Päivittele'
   };
 
   const BILLING_NATIVE_PLAN_LABELS = new Set([
@@ -260,6 +260,46 @@
     'o4-mini'
   ]);
 
+  // === ChatGPT home/welcome headline ===========================================
+  // ChatGPT rotates between several native home-screen greetings. Customize each one
+  // independently below. `nativeText` identifies the exact ChatGPT greeting and
+  // `replacementText` controls only that variation. Set replacementText to null to
+  // leave that particular greeting untouched.
+  //
+  // Do not depend on one data-headline value here: ChatGPT can rotate the headline key
+  // together with the text. BraveFox accepts any data-headline element first, then uses
+  // the home-screen H1/span structure as a fallback. Exact native text still decides
+  // which replacement rule wins, so unrelated headings are never rewritten.
+  const CHATGPT_HOME_HEADLINE_CUSTOMIZATION = {
+    enabled: true,
+    replacements: [
+      {
+        nativeText: 'Mistä aloitetaan?',
+        replacementText: 'Koodataanko vai lässytetäänkö paskaa? Valinta on sinun.'
+      },
+      {
+        nativeText: 'Mitä tänään on luvassa?',
+        replacementText: 'Vituttaako, vai onko koodaukset mielessä?'
+      },
+      {
+        nativeText: 'Olen valmiina auttamaan.',
+        replacementText: 'Olen valmiina olemaan koodiagentti, terapeutti tai mitä ikään mielikuvituksesi saa aikaan.'
+      },
+      {
+        nativeText: 'Mitä on mielessäsi tänään?',
+        replacementText: 'Mikä harmaannuttaa hiuksiasi tänään?' 
+      }
+    ]
+  };
+
+  const CHATGPT_HOME_HEADLINE_SELECTOR = [
+    '[data-headline]',
+    'div.relative.w-full.min-w-0.text-center.select-none h1 > span',
+    'div.relative.w-full.min-w-0.text-center.select-none h1',
+    'h1 > span',
+    'h1'
+  ].join(', ');
+
   // === Custom ChatGPT banner text ===============================================
   // Edit `replacement` for the banner message and `buttonReplacement` for its primary
   // action button. `matchAll` + `matchAny` identify the native banner without relying
@@ -277,7 +317,7 @@
         'retired',
         'discontinued'
       ],
-      replacement: `Hey everyone! We're stupid morons killing off your go-to companions. Up next, it will be GPT-5.5 behind the shed, joining GPT-4o and GPT-5.1 there on October 14th! Our users probably want to join them there and not pay for a Pro sub for only half kidney a month. FML`,
+      replacement: `Hei kaikki! Poistamme ihmisten suosimat mallit täältä ja ihmettelemme miksi tilaajia lähtee. Seuraavaksi vuorossa on GPT-5.5 14. Lokakuuta! Hän liittynee GPT-4o ja GPT-5.1 seuraksi laboratorioomme.`,
       buttonMatchAny: ['kokeile', 'try'],
       buttonReplacement: `Ok Altman`
     }
@@ -318,6 +358,54 @@
 `
     }
   ];
+
+  // === Assistant image/error message text =======================================
+  // Edit `replacement` to rewrite the matching grey assistant error message.
+  // `matchAny` is intentionally text-based so generated React/Tailwind class names can rotate.
+  const CHATGPT_ASSISTANT_ERROR_TEXT_REPLACEMENTS = [
+    {
+      enabled: true,
+      matchAny: [
+        'pahoittelut, mutta luomamme kuva saattaa rikkoa petoksia tai huijauksia koskevia turvasääntöjämme',
+        'sorry, but the image we created may violate our safety policies about scams or fraud'
+      ],
+      replacement: `Pahoittelut! Emme osanneet koodata tätä ominaisuutta oikein. Turvajärjestelmämme syyttää luomaamme kuvaa petoksesta tai huijauksesta. Emme ole varmoja tästä itsekkään.`
+    }
+  ];
+
+  // === Conversation sender/time header ==========================================
+  // BraveFox shows one dedicated metadata row immediately ABOVE each message bubble.
+  // Leave userLabel null/empty to use the logged-in ChatGPT account display name.
+  // fallbackUserLabel is used only while/if ChatGPT does not expose the account name.
+  const CHATGPT_MESSAGE_METADATA_CUSTOMIZATION = {
+    enabled: true,
+    userLabel: null,
+    fallbackUserLabel: 'User',
+    assistantLabel: 'ChatGPT',
+    showAssistantModel: true,
+    showAssistantReasoningLevel: true,
+    separator: ' - ',
+    timeOnly: true,
+    locale: 'fi-FI',
+    timeZone: 'Europe/Helsinki'
+  };
+
+  const MESSAGE_TURN_ATTR = 'data-bravefox-message-turn';
+  const MESSAGE_TURN_KEY_ATTR = 'data-bravefox-message-turn-key';
+  const MESSAGE_META_ATTR = 'data-bravefox-message-meta';
+  const MESSAGE_META_ROLE_ATTR = 'data-bravefox-message-meta-role';
+  const MESSAGE_META_KEY_ATTR = 'data-bravefox-message-meta-key';
+  const MESSAGE_META_SURFACE_KEY_ATTR = 'data-bravefox-message-meta-surface-key';
+  const MESSAGE_META_TEXT_ATTR = 'data-bravefox-message-meta-text';
+  const MESSAGE_ACTIONS_ATTR = 'data-bravefox-message-actions';
+  const MESSAGE_TIMESTAMP_ATTR = 'data-bravefox-message-timestamp';
+  const MESSAGE_TIMESTAMP_SOURCE_ATTR = 'data-bravefox-message-timestamp-source';
+  const MESSAGE_MODEL_ATTR = 'data-bravefox-message-model';
+  const MESSAGE_REASONING_ATTR = 'data-bravefox-message-reasoning';
+  const MESSAGE_METADATA_RETRY_ATTR = 'data-bravefox-message-meta-retries';
+  const MESSAGE_TIMESTAMP_PROBE_CLASS = 'bravefox-message-time-probing';
+  const MESSAGE_TIMESTAMP_API_CACHE_MS = 15000;
+  const MESSAGE_USER_NAME_CACHE_MS = 300000;
 
   const CHATGPT_BANNER_HIDE_KEY = 'bravefoxChatGptHiddenModelNotices_v1';
   const CHATGPT_BANNER_CLOSE_MENU_ID = 'bravefox-chatgpt-banner-close-menu';
@@ -486,6 +574,26 @@
   let activeExactReasoningPointerId = null;
   let exactReasoningObserver = null;
   let customBannerCloseMenuLastOpenAt = 0;
+  const queuedMessageTimestampTurns = new WeakSet();
+  const completedMessageTimestampTurns = new WeakSet();
+  const apiQueuedMessageTimestampTurns = new WeakSet();
+  const messageTimestampProbeQueue = [];
+  const conversationMetadataCaches = new Map();
+  const conversationMetadataFetches = new Map();
+  let messageTimestampProbeTimer = 0;
+  let messageTimestampProbeActive = false;
+  let conversationUserDisplayName = '';
+  let conversationUserDisplayNamePromise = null;
+  let conversationUserDisplayNameFetchedAt = 0;
+  let conversationAccessToken = '';
+  let conversationAccessTokenPromise = null;
+  let conversationPendingUserSentAt = 0;
+  let conversationPendingAssistantStartedAt = 0;
+  let conversationPendingModelSlug = '';
+  let conversationPendingReasoningEffort = '';
+  let conversationLastKnownModelSlug = '';
+  let conversationLastSelectedModelSlug = '';
+  let conversationLastKnownReasoningEffort = '';
 
   // Older BraveFox background builds only know the legacy Personalization hash route.
   // IMPORTANT: consume the one-time native grant WHILE STILL ON that approved bridge
@@ -1192,6 +1300,92 @@
         box-shadow: none !important;
         padding: 0 !important;
         margin-top: 4px !important;
+      }
+
+      /* Persistent per-message sender/time heading. This is a BraveFox-owned sibling
+       * immediately ABOVE the live bubble. Every row is owned by one stable ChatGPT turn
+       * key, so a newly mounted/streaming assistant turn cannot steal the user's heading. */
+      [${MESSAGE_META_ATTR}="true"] {
+        display: block !important;
+        position: static !important;
+        box-sizing: border-box !important;
+        width: var(--bravefox-message-meta-width, 98%) !important;
+        max-width: 98% !important;
+        min-width: 0 !important;
+        min-height: 20px !important;
+        margin-top: 0 !important;
+        margin-bottom: 4px !important;
+        padding: 0 !important;
+        border: 0 !important;
+        background: transparent !important;
+        color: var(--text-primary, #111111) !important;
+        font-family: inherit !important;
+        font-size: 13px !important;
+        font-style: normal !important;
+        font-weight: 700 !important;
+        line-height: 20px !important;
+        text-align: center !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        pointer-events: auto !important;
+        user-select: text !important;
+        -webkit-user-select: text !important;
+        cursor: text !important;
+      }
+
+      [${MESSAGE_META_ATTR}="true"][${MESSAGE_META_ROLE_ATTR}="user"] {
+        margin-left: auto !important;
+        margin-right: 2% !important;
+      }
+
+      [${MESSAGE_META_ATTR}="true"][${MESSAGE_META_ROLE_ATTR}="assistant"] {
+        margin-left: 2% !important;
+        margin-right: 0 !important;
+      }
+
+      [${MESSAGE_META_ATTR}="true"] > [${MESSAGE_META_TEXT_ATTR}="true"] {
+        display: inline !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border: 0 !important;
+        background: transparent !important;
+        color: inherit !important;
+        font: inherit !important;
+        line-height: inherit !important;
+        user-select: text !important;
+        -webkit-user-select: text !important;
+      }
+
+      /* Keep ChatGPT's native action strip in normal document flow, but put the icons on
+       * the right. No absolute positioning means long messages/reasoning cannot collide
+       * with the controls or drag them above an unrelated bubble. */
+      [${MESSAGE_ACTIONS_ATTR}="true"] {
+        position: static !important;
+        top: auto !important;
+        right: auto !important;
+        bottom: auto !important;
+        left: auto !important;
+        z-index: auto !important;
+        display: flex !important;
+        width: auto !important;
+        max-width: 98% !important;
+        min-height: 24px !important;
+        margin-left: auto !important;
+        margin-right: 2% !important;
+        padding: 0 !important;
+        justify-content: flex-end !important;
+        align-items: center !important;
+        opacity: 1 !important;
+        visibility: visible !important;
+        pointer-events: auto !important;
+      }
+
+      html.${MESSAGE_TIMESTAMP_PROBE_CLASS} [role="menu"],
+      html.${MESSAGE_TIMESTAMP_PROBE_CLASS} [role="menuitem"] {
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
       }
 
       [class*="CodeBlock-module__code"] div {
@@ -2019,8 +2213,64 @@
     routePollTimer = window.setInterval(checkForRouteChange, ROUTE_POLL_MS);
   }
 
+  function captureConversationComposerSelection() {
+    const effort = readCurrentConversationReasoningEffortFromDom();
+    if (effort) {
+      conversationPendingReasoningEffort = effort;
+      conversationLastKnownReasoningEffort = effort;
+    }
+
+    const modelSlug = readCurrentConversationModelSlugForSend(effort);
+    if (modelSlug) {
+      conversationPendingModelSlug = modelSlug;
+      conversationLastSelectedModelSlug = modelSlug;
+    }
+  }
+
+  function isConversationSendButton(button) {
+    if (!(button instanceof HTMLButtonElement)) return false;
+    const label = normalizeText([
+      button.getAttribute('aria-label') || '',
+      button.getAttribute('title') || '',
+      button.getAttribute('data-testid') || '',
+      button.textContent || ''
+    ].join(' '));
+    return includesAny(label, [
+      'send message', 'send prompt', 'send-button', 'lähetä viesti', 'laheta viesti', 'lähetä', 'laheta'
+    ]);
+  }
+
+  function captureConversationSendIntentFromEvent(event) {
+    if (!event?.isTrusted) return;
+
+    let sending = false;
+    if (event.type === 'click') {
+      const button = getButtonFromEvent(event);
+      sending = isConversationSendButton(button);
+    } else if (event.type === 'keydown') {
+      if (event.key !== 'Enter' || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) return;
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const composer = target.closest('form, [data-testid*="composer" i], [class*="composer" i]');
+      const editable = target.matches('textarea, [contenteditable="true"], [role="textbox"]');
+      sending = Boolean(editable && composer);
+    }
+
+    if (!sending) return;
+    conversationPendingUserSentAt = Date.now();
+    conversationPendingAssistantStartedAt = 0;
+    conversationPendingModelSlug = '';
+    conversationPendingReasoningEffort = '';
+    captureConversationComposerSelection();
+  }
+
   function installInteractionGuards() {
     document.addEventListener('click', event => {
+      if (event.isTrusted) {
+        captureConversationModelChoiceFromEvent(event);
+        captureConversationSendIntentFromEvent(event);
+      }
+
       if (event.isTrusted) {
         const analysisToggle = getElementFromEvent(event, 'button[aria-expanded][aria-labelledby]');
         if (analysisToggle && isAnalysisActivityToggle(analysisToggle)) {
@@ -2183,6 +2433,8 @@
     }, true);
 
     document.addEventListener('keydown', event => {
+      if (event.isTrusted) captureConversationSendIntentFromEvent(event);
+
       if (event.isTrusted && (event.key === 'Enter' || event.key === ' ')) {
         const analysisToggle = getElementFromEvent(event, 'button[aria-expanded][aria-labelledby]');
         if (analysisToggle && isAnalysisActivityToggle(analysisToggle)) {
@@ -3882,12 +4134,19 @@
 
             if (relevantBillingRow) customizeBillingSubscriptionRow(node);
 
+            const relevantHomeHeadline = mayContainCustomizableHomeHeadline(node);
+            if (relevantHomeHeadline) replaceCustomizableHomeHeadline(node);
+
             const relevantBanner = mayContainCustomizableChatGptBanner(node);
             const relevantConversationMessage = mayContainConversationMessage(node);
-            if (relevantConversationMessage) applyConversationPresentation(node);
+            if (relevantConversationMessage) {
+              applyConversationPresentation(node);
+              replaceCustomizableAssistantErrorText(node);
+            }
             const relevantAssistantNotice = mayContainFixedAssistantNotice(node);
             if (
               !relevantEscapeHatch &&
+              !relevantHomeHeadline &&
               !relevantBanner &&
               !relevantAssistantNotice &&
               !relevantConversationMessage &&
@@ -6681,6 +6940,113 @@
     return null;
   }
 
+  function isCustomizableHomeHeadlineElement(headline) {
+    if (!(headline instanceof Element)) return false;
+
+    // Never touch message content merely because somebody writes one of the greeting
+    // sentences as a Markdown H1 inside a conversation.
+    if (headline.closest(
+      '[data-message-author-role], [data-user-message-bubble="true"], ' +
+      '[data-markdown-text-style="assistant-message"], .bravefox-user-message-surface, ' +
+      '.bravefox-assistant-message-surface'
+    )) {
+      return false;
+    }
+
+    // Any native data-headline marker is the strongest hook. The exact text matcher
+    // below still limits BraveFox to the configured greeting strings.
+    if (headline.hasAttribute('data-headline')) return true;
+
+    // Known 2026 splash wrapper used by the Finnish "Mistä aloitetaan?" bucket and
+    // compatible variants. This remains useful if another greeting drops data-headline.
+    if (headline.closest('div.relative.w-full.min-w-0.text-center.select-none')) {
+      if (headline.matches('h1 > span')) return true;
+      if (headline.matches('h1') && !headline.querySelector('span, [data-headline]')) return true;
+    }
+
+    // Final fallback for the blank/new-chat screen only. Never use a generic H1 match
+    // inside an existing /c/ conversation.
+    if (!getCurrentConversationId()) {
+      if (headline.matches('h1 > span')) return true;
+      if (headline.matches('h1') && !headline.querySelector('span, [data-headline]')) return true;
+    }
+
+    return false;
+  }
+
+  function mayContainCustomizableHomeHeadline(scope) {
+    if (!(scope instanceof Element)) return false;
+
+    if (
+      scope.matches?.(CHATGPT_HOME_HEADLINE_SELECTOR) &&
+      isCustomizableHomeHeadlineElement(scope)
+    ) {
+      return true;
+    }
+
+    for (const candidate of scope.querySelectorAll?.(CHATGPT_HOME_HEADLINE_SELECTOR) || []) {
+      if (isCustomizableHomeHeadlineElement(candidate)) return true;
+    }
+    return false;
+  }
+
+  function getMatchingHomeHeadlineRule(value) {
+    const text = String(value || '').replace(/\s+/g, ' ').trim();
+    if (!text) return null;
+
+    const rules = Array.isArray(CHATGPT_HOME_HEADLINE_CUSTOMIZATION.replacements)
+      ? CHATGPT_HOME_HEADLINE_CUSTOMIZATION.replacements
+      : [];
+
+    for (const rule of rules) {
+      if (!rule || typeof rule.nativeText !== 'string') continue;
+      if (text === rule.nativeText.replace(/\s+/g, ' ').trim()) return rule;
+    }
+    return null;
+  }
+
+  function replaceCustomizableHomeHeadline(scope = document) {
+    if (!CHATGPT_HOME_HEADLINE_CUSTOMIZATION.enabled) return;
+
+    forEachMatch(scope, CHATGPT_HOME_HEADLINE_SELECTOR, headline => {
+      if (!isCustomizableHomeHeadlineElement(headline)) return;
+
+      const currentText = String(headline.textContent || '').replace(/\s+/g, ' ').trim();
+      const directRule = getMatchingHomeHeadlineRule(currentText);
+
+      if (directRule) {
+        headline.setAttribute('data-bravefox-home-headline-native', directRule.nativeText);
+
+        if (typeof directRule.replacementText === 'string') {
+          if (headline.textContent !== directRule.replacementText) {
+            headline.textContent = directRule.replacementText;
+          }
+          headline.setAttribute('data-bravefox-home-headline-customized', 'true');
+        } else {
+          headline.removeAttribute('data-bravefox-home-headline-customized');
+        }
+        return;
+      }
+
+      // If BraveFox already customized this exact node, leave its replacement alone.
+      // If React changes the node to another native greeting, the direct match above
+      // takes over on that mutation and updates the stored native variation.
+      const storedNative = headline.getAttribute('data-bravefox-home-headline-native');
+      const storedRule = getMatchingHomeHeadlineRule(storedNative);
+      if (
+        storedRule &&
+        typeof storedRule.replacementText === 'string' &&
+        headline.getAttribute('data-bravefox-home-headline-customized') === 'true' &&
+        currentText === storedRule.replacementText.replace(/\s+/g, ' ').trim()
+      ) {
+        return;
+      }
+
+      headline.removeAttribute('data-bravefox-home-headline-native');
+      headline.removeAttribute('data-bravefox-home-headline-customized');
+    });
+  }
+
   function getMatchingChatGptBannerRule(text) {
     const normalized = normalizeText(text);
     if (!normalized) return null;
@@ -6972,6 +7338,10 @@
       try {
         if (window.getComputedStyle(roleNode).display === 'contents') {
           const child = Array.from(roleNode.children).find(element =>
+            !(
+              element.getAttribute?.(MESSAGE_META_ATTR) === 'true' &&
+              element.querySelector?.(`[${MESSAGE_META_TEXT_ATTR}="true"]`)
+            ) &&
             String(element.textContent || '').trim().length > 0
           );
           if (child instanceof Element) return child;
@@ -7045,6 +7415,11 @@
         surface.classList.remove('bravefox-user-message-surface');
         paintConversationSurface(surface, 'assistant');
       }
+
+      // The current ChatGPT bucket can expose the exact message surface without one of
+      // the older semantic role wrappers. Drive metadata directly from that exact surface
+      // too, otherwise the bubbles get BraveFox styling but never receive sender/time.
+      applyConversationMessageMetadata(surface, role, surface);
     };
 
     if (scope instanceof Element) {
@@ -7060,6 +7435,1726 @@
         paint(surface, 'assistant');
       }
     }
+  }
+
+  function conversationRootContainsOppositeSurface(candidate, role, surface) {
+    if (!(candidate instanceof Element)) return false;
+
+    const oppositeSelector = role === 'user'
+      ? '[data-markdown-text-style="assistant-message"], .bravefox-assistant-message-surface'
+      : '[data-user-message-bubble="true"], .bravefox-user-message-surface';
+
+    for (const opposite of candidate.querySelectorAll(oppositeSelector)) {
+      if (!(opposite instanceof Element)) continue;
+      if (surface instanceof Element && opposite === surface) continue;
+      return true;
+    }
+    return false;
+  }
+
+  function getConversationTurnRoot(roleNode, surface, role = '') {
+    if (!(roleNode instanceof Element)) return null;
+
+    const start = surface instanceof Element ? surface : roleNode;
+    const stableSelector = [
+      '[data-testid^="conversation-turn-"]',
+      '[data-content-search-unit-key]',
+      '[data-chatgpt-search-unit-key]',
+      '[data-chatgpt-selection-message-id]',
+      '[data-message-id]',
+      'section[data-turn]',
+      'article[data-turn]',
+      '.user-turn',
+      '.agent-turn'
+    ].join(', ');
+
+    let closestStable = start.closest(stableSelector);
+    if (!(closestStable instanceof Element)) closestStable = roleNode.closest(stableSelector);
+
+    // Starting from the closest per-message wrapper, widen only while the ancestor still
+    // contains this ONE role. This lets BraveFox include the native action strip without
+    // ever climbing into a shared user+assistant thread wrapper (the cause of header hopping).
+    let root = closestStable instanceof Element ? closestStable : start.parentElement;
+    if (!(root instanceof Element)) return start;
+
+    let candidate = root;
+    for (let depth = 0; depth < 7; depth += 1) {
+      const parent = candidate.parentElement;
+      if (!(parent instanceof Element) || parent === document.body) break;
+      if (!parent.contains(start)) break;
+      if (role && conversationRootContainsOppositeSurface(parent, role, surface)) break;
+
+      const parentIsStable = parent.matches?.(stableSelector);
+      const candidateHasActions = Boolean(findConversationActionRow(candidate, surface));
+      const parentHasActions = Boolean(findConversationActionRow(parent, surface));
+      if (parentIsStable || (!candidateHasActions && parentHasActions)) {
+        candidate = parent;
+        root = parent;
+        continue;
+      }
+      break;
+    }
+
+    return root;
+  }
+
+  function getConversationActionButtonLabel(button) {
+    if (!(button instanceof HTMLButtonElement)) return '';
+    return normalizeText(
+      button.getAttribute('aria-label') ||
+      button.getAttribute('title') ||
+      button.getAttribute('data-testid') ||
+      button.textContent ||
+      ''
+    );
+  }
+
+  function isConversationActionButton(button) {
+    if (!(button instanceof HTMLButtonElement)) return false;
+    const label = getConversationActionButtonLabel(button);
+    if (!label) return false;
+
+    return includesAny(label, [
+      'copy', 'kopioi',
+      'good response', 'bad response', 'like', 'dislike', 'tykkää', 'tykkaa',
+      'share', 'jaa',
+      'read aloud', 'lue ääneen', 'lue aaneen',
+      'regenerate', 'retry', 'try again', 'yritä uudelleen', 'yrita uudelleen', 'päivitä', 'paivita',
+      'more', 'more actions', 'lisää', 'lisaa',
+      'branch', 'haara',
+      'edit', 'muokkaa'
+    ]);
+  }
+
+  function findConversationActionRow(turnRoot, surface) {
+    if (!(turnRoot instanceof Element)) return null;
+
+    const buttons = Array.from(turnRoot.querySelectorAll('button')).filter(button => {
+      if (!(button instanceof HTMLButtonElement)) return false;
+      if (surface instanceof Element && surface.contains(button)) return false;
+      return true;
+    });
+    if (buttons.length < 2) return null;
+
+    let best = null;
+    let bestScore = -1;
+
+    for (const button of buttons) {
+      let ancestor = button.parentElement;
+      let depth = 0;
+      while (ancestor instanceof Element && ancestor !== turnRoot && depth < 4) {
+        if (surface instanceof Element && ancestor.contains(surface)) break;
+
+        const rowButtons = Array.from(ancestor.querySelectorAll('button')).filter(candidate =>
+          !(surface instanceof Element && surface.contains(candidate))
+        );
+        const total = rowButtons.length;
+        if (total >= 2 && total <= 12) {
+          const known = rowButtons.filter(isConversationActionButton).length;
+          const hasMenu = rowButtons.some(candidate => candidate.getAttribute('aria-haspopup') === 'menu');
+          const score = (known * 20) + (hasMenu ? 8 : 0) + total - depth;
+          if (known >= 2 && score > bestScore) {
+            best = ancestor;
+            bestScore = score;
+          }
+        }
+
+        ancestor = ancestor.parentElement;
+        depth += 1;
+      }
+    }
+
+    if (best) return best;
+
+    // Fallback for newer/localized buckets where action buttons have sparse labels.
+    // The message overflow button still exposes aria-haspopup=menu, so use its smallest
+    // button-only ancestor that stays outside the actual message surface.
+    for (const button of buttons) {
+      if (!(button instanceof HTMLButtonElement)) continue;
+      if (button.getAttribute('aria-haspopup') !== 'menu') continue;
+
+      let ancestor = button.parentElement;
+      let depth = 0;
+      while (ancestor instanceof Element && ancestor !== turnRoot && depth < 5) {
+        if (surface instanceof Element && ancestor.contains(surface)) break;
+
+        const rowButtons = Array.from(ancestor.querySelectorAll('button')).filter(candidate =>
+          !(surface instanceof Element && surface.contains(candidate))
+        );
+        if (rowButtons.length >= 1 && rowButtons.length <= 16) {
+          best = ancestor;
+          break;
+        }
+
+        ancestor = ancestor.parentElement;
+        depth += 1;
+      }
+      if (best) break;
+    }
+
+    return best;
+  }
+
+  function findConversationMoreMenuButton(actionRow) {
+    if (!(actionRow instanceof Element)) return null;
+
+    const buttons = Array.from(actionRow.querySelectorAll('button')).filter(
+      button => button instanceof HTMLButtonElement
+    );
+    if (!buttons.length) return null;
+
+    const menuButtons = buttons.filter(button => button.getAttribute('aria-haspopup') === 'menu');
+    for (const button of menuButtons) {
+      const label = getConversationActionButtonLabel(button);
+      if (includesAny(label, ['more', 'more actions', 'lisää', 'lisaa', 'toimin', 'options'])) return button;
+    }
+    if (menuButtons.length) return menuButtons[0];
+
+    for (const button of buttons) {
+      const label = getConversationActionButtonLabel(button);
+      if (includesAny(label, ['more', 'more actions', 'lisää', 'lisaa', 'toimin', 'options'])) return button;
+      if (['...', '…', '⋯'].includes(String(button.textContent || '').trim())) return button;
+      if (button.querySelector('use[href*="dots" i], use[href*="ellipsis" i], [data-icon*="dots" i], [data-icon*="ellipsis" i]')) {
+        return button;
+      }
+    }
+
+    return null;
+  }
+
+  function normalizeConversationUserDisplayName(value) {
+    const text = String(value || '').replace(/\s+/g, ' ').trim();
+    if (!text || text.length > 80) return '';
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text)) return '';
+
+    const normalized = normalizeText(text);
+    if (new Set([
+      'profile', 'account', 'settings', 'chatgpt', 'user',
+      'profiili', 'tili', 'asetukset', 'free', 'plus', 'pro', 'go'
+    ]).has(normalized)) {
+      return '';
+    }
+    return text;
+  }
+
+  function extractConversationUserDisplayName(payload) {
+    if (!payload || typeof payload !== 'object') return '';
+
+    const candidates = [
+      payload?.user?.display_name,
+      payload?.user?.displayName,
+      payload?.user?.username,
+      payload?.user?.name,
+      payload?.display_name,
+      payload?.displayName,
+      payload?.username,
+      payload?.name,
+      payload?.account?.display_name,
+      payload?.account?.name
+    ];
+
+    for (const candidate of candidates) {
+      const name = normalizeConversationUserDisplayName(candidate);
+      if (name) return name;
+    }
+    return '';
+  }
+
+  function extractConversationAccessToken(payload) {
+    if (!payload || typeof payload !== 'object') return '';
+    const token = String(
+      payload.accessToken ||
+      payload.access_token ||
+      payload?.session?.accessToken ||
+      payload?.session?.access_token ||
+      ''
+    ).trim();
+    return token.length >= 24 ? token : '';
+  }
+
+  function readConversationUserDisplayNameFromDom() {
+    const selectors = [
+      'button[data-testid="profile-button"]',
+      '[data-testid="profile-button"]',
+      'button[data-testid*="profile" i]',
+      'button[aria-label*="profile" i]',
+      'button[aria-label*="account" i]',
+      'button[aria-label*="profiili" i]',
+      'button[aria-label*="tili" i]'
+    ];
+
+    for (const selector of selectors) {
+      for (const root of document.querySelectorAll(selector)) {
+        if (!(root instanceof Element)) continue;
+
+        const leafText = [];
+        for (const leaf of root.querySelectorAll('span, div, strong, p')) {
+          if (!(leaf instanceof Element) || leaf.children.length) continue;
+          const value = normalizeConversationUserDisplayName(leaf.textContent);
+          if (value) leafText.push(value);
+        }
+
+        for (const value of leafText) {
+          const normalized = normalizeText(value);
+          if (includesAny(normalized, ['upgrade', 'päivitä', 'paivita', 'subscription', 'tilaus'])) continue;
+          if (value.length >= 2) return value;
+        }
+
+        const ownText = normalizeConversationUserDisplayName(root.textContent);
+        if (ownText && ownText.length >= 2) return ownText;
+      }
+    }
+    return '';
+  }
+
+  async function fetchConversationSessionPayload() {
+    const response = await fetch(`${location.origin}/api/auth/session`, {
+      method: 'GET',
+      credentials: 'include',
+      cache: 'no-store',
+      headers: { Accept: 'application/json' }
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const payload = await response.json();
+
+    const token = extractConversationAccessToken(payload);
+    if (token) conversationAccessToken = token;
+
+    const name = extractConversationUserDisplayName(payload);
+    if (name) {
+      conversationUserDisplayName = name;
+      conversationUserDisplayNameFetchedAt = Date.now();
+    }
+    return payload;
+  }
+
+  async function resolveConversationAccessToken() {
+    if (conversationAccessToken) return conversationAccessToken;
+    if (conversationAccessTokenPromise) return conversationAccessTokenPromise;
+
+    conversationAccessTokenPromise = (async () => {
+      try {
+        await fetchConversationSessionPayload();
+      } catch {
+        // Conversation metadata fetch can still try cookie auth as a fail-open fallback.
+      }
+      return conversationAccessToken;
+    })().finally(() => {
+      conversationAccessTokenPromise = null;
+    });
+
+    return conversationAccessTokenPromise;
+  }
+
+  async function resolveConversationUserDisplayName(force = false) {
+    const configured = normalizeConversationUserDisplayName(
+      CHATGPT_MESSAGE_METADATA_CUSTOMIZATION.userLabel
+    );
+    if (configured) return configured;
+
+    if (
+      !force &&
+      conversationUserDisplayName &&
+      Date.now() - conversationUserDisplayNameFetchedAt < MESSAGE_USER_NAME_CACHE_MS
+    ) {
+      return conversationUserDisplayName;
+    }
+
+    if (conversationUserDisplayNamePromise) return conversationUserDisplayNamePromise;
+
+    conversationUserDisplayNamePromise = (async () => {
+      try {
+        await fetchConversationSessionPayload();
+        if (conversationUserDisplayName) return conversationUserDisplayName;
+      } catch {
+        // Fall through to the legacy identity endpoint and then visible profile text.
+      }
+
+      try {
+        const response = await fetch(`${location.origin}/backend-api/me`, {
+          method: 'GET',
+          credentials: 'include',
+          cache: 'no-store',
+          headers: conversationAccessToken
+            ? { Accept: 'application/json', Authorization: `Bearer ${conversationAccessToken}` }
+            : { Accept: 'application/json' }
+        });
+        if (response.ok) {
+          const payload = await response.json();
+          const name = extractConversationUserDisplayName(payload);
+          if (name) {
+            conversationUserDisplayName = name;
+            conversationUserDisplayNameFetchedAt = Date.now();
+            return name;
+          }
+        }
+      } catch {
+        // DOM is the final fallback.
+      }
+
+      const domName = readConversationUserDisplayNameFromDom();
+      if (domName) conversationUserDisplayName = domName;
+      conversationUserDisplayNameFetchedAt = Date.now();
+      return conversationUserDisplayName;
+    })().finally(() => {
+      conversationUserDisplayNamePromise = null;
+    });
+
+    const resolved = await conversationUserDisplayNamePromise;
+    if (resolved) scheduleGeneralUiScan(false);
+    return resolved;
+  }
+
+  function normalizeConversationReasoningEffort(value) {
+    const normalized = normalizeText(value).replace(/[ _-]+/g, ' ').trim();
+    if (!normalized) return '';
+
+    if (['instant', 'min', 'minimum', 'minimal'].includes(normalized)) return 'instant';
+    if (['medium', 'standard', 'normal'].includes(normalized)) return 'medium';
+    if (['high', 'extended'].includes(normalized)) return 'high';
+    if (['extra high', 'extra-high', 'xhigh', 'x high', 'max', 'maximum'].includes(normalized)) return 'extra-high';
+    if (['pro'].includes(normalized)) return 'pro';
+    if (['ultra'].includes(normalized)) return 'ultra';
+    return '';
+  }
+
+  function formatConversationReasoningEffort(value) {
+    const effort = normalizeConversationReasoningEffort(value);
+    if (effort === 'instant') return 'Instant';
+    if (effort === 'medium') return 'Medium';
+    if (effort === 'high') return 'High';
+    if (effort === 'extra-high') return 'Extra High';
+    if (effort === 'pro') return 'Pro';
+    if (effort === 'ultra') return 'Ultra';
+    return '';
+  }
+
+  function formatConversationModelLabel(value) {
+    const slug = normalizeChatGptModelSlug(value);
+    if (!slug) return '';
+
+    const known = new Map([
+      ['gpt-5-5-thinking', '5.5 Thinking'],
+      ['gpt-5-5-pro', '5.5 Pro'],
+      ['gpt-5-5', '5.5'],
+      ['gpt-5-6-thinking', '5.6 Thinking'],
+      ['gpt-5-6-pro', '5.6 Pro'],
+      ['gpt-5-6-luna', '5.6 Luna'],
+      ['gpt-5-6-sol', '5.6 Sol'],
+      ['gpt-5-6', '5.6'],
+      ['gpt-6-astra-wm', '6 Astra Work'],
+      ['gpt-6-astra', '6 Astra'],
+      ['gpt-6-pro', '6 Pro'],
+      ['gpt-6', '6']
+    ]);
+    if (known.has(slug)) return known.get(slug);
+
+    let label = slug.replace(/^gpt-/, 'GPT-').replace(/-/g, ' ');
+    label = label.replace(/\b(\d+) (\d+)\b/g, '$1.$2');
+    return label.replace(/\b\w/g, char => char.toUpperCase()).trim();
+  }
+
+  function readConversationModelSlugFromDom(turnRoot, surface) {
+    const candidates = [];
+    const add = element => {
+      if (!(element instanceof Element)) return;
+      const value = String(element.getAttribute('data-message-model-slug') || '').trim();
+      if (value) candidates.push(value);
+    };
+
+    add(surface);
+    if (surface instanceof Element) {
+      let node = surface.parentElement;
+      for (let depth = 0; node && depth < 7; depth += 1, node = node.parentElement) {
+        add(node);
+        if (node === turnRoot) break;
+      }
+    }
+    add(turnRoot);
+    if (turnRoot instanceof Element) {
+      for (const element of turnRoot.querySelectorAll('[data-message-model-slug]')) add(element);
+    }
+
+    return candidates.find(Boolean) || '';
+  }
+
+  function readConversationReasoningEffortFromDom(turnRoot, surface) {
+    const attributeNames = [
+      'data-thinking-effort',
+      'data-reasoning-effort',
+      'data-thinking-level',
+      'data-reasoning-level',
+      'data-message-thinking-effort',
+      'data-message-reasoning-effort'
+    ];
+    const candidates = [];
+    const add = element => {
+      if (!(element instanceof Element)) return;
+      for (const attribute of attributeNames) {
+        const value = normalizeConversationReasoningEffort(element.getAttribute(attribute));
+        if (value) candidates.push(value);
+      }
+    };
+
+    add(surface);
+    if (surface instanceof Element) {
+      let node = surface.parentElement;
+      for (let depth = 0; node && depth < 7; depth += 1, node = node.parentElement) {
+        add(node);
+        if (node === turnRoot) break;
+      }
+    }
+    add(turnRoot);
+    return candidates.find(Boolean) || '';
+  }
+
+  function readCurrentConversationReasoningEffortFromDom() {
+    const sliders = Array.from(document.querySelectorAll(
+      '[data-reasoning-slider="true"] [role="slider"], [role="slider"][aria-valuetext], input[type="range"][aria-valuetext]'
+    ));
+    for (const slider of sliders) {
+      if (!(slider instanceof Element)) continue;
+      const effort = normalizeConversationReasoningEffort(
+        slider.getAttribute('aria-valuetext') ||
+        slider.getAttribute('aria-label') ||
+        slider.getAttribute('title') ||
+        getThinkingEffortLabel(slider)
+      );
+      if (effort) {
+        conversationLastKnownReasoningEffort = effort;
+        return effort;
+      }
+    }
+    return conversationLastKnownReasoningEffort;
+  }
+
+  function inferConversationModelSlugFromText(value, effort = '') {
+    const text = normalizeText(value).replace(/_/g, ' ');
+    if (!text) return '';
+
+    const normalizedEffort = normalizeConversationReasoningEffort(effort);
+    const thinkingSelected = ['medium', 'high', 'extra-high'].includes(normalizedEffort);
+
+    if (/\bgpt[- ]?6\b|\b6\s+astra\b/.test(text)) {
+      if (text.includes('pro')) return 'gpt-6-pro';
+      if (text.includes('astra')) return text.includes('work') ? 'gpt-6-astra-wm' : 'gpt-6-astra';
+      return 'gpt-6';
+    }
+
+    if (/\b5[.\s-]?6\b/.test(text)) {
+      if (text.includes('pro')) return 'gpt-5-6-pro';
+      if (text.includes('instant') || text.includes('välitön') || text.includes('valiton') || text.includes('luna')) {
+        return 'gpt-5-6-luna';
+      }
+      if (text.includes('sol')) return 'gpt-5-6-sol';
+      if (text.includes('thinking') || thinkingSelected) return 'gpt-5-6-thinking';
+      return 'gpt-5-6';
+    }
+
+    if (/\b5[.\s-]?5\b/.test(text)) {
+      if (text.includes('pro')) return 'gpt-5-5-pro';
+      return 'gpt-5-5-thinking';
+    }
+
+    return '';
+  }
+
+  function readCurrentConversationModelSlugForSend(effort = '') {
+    const explicitCandidates = [];
+
+    const addElement = element => {
+      if (!(element instanceof Element)) return;
+      for (const attribute of [
+        'data-message-model-slug',
+        'data-model-slug',
+        'data-model',
+        'data-selected-model',
+        'value',
+        'aria-label',
+        'title'
+      ]) {
+        const value = String(element.getAttribute(attribute) || '').trim();
+        if (value) explicitCandidates.push(value);
+      }
+      const text = String(element.textContent || '').trim();
+      if (text) explicitCandidates.push(text);
+    };
+
+    addElement(getChatGptComposerModelSelector());
+
+    for (const selector of [
+      'button[data-testid*="model" i]',
+      'button[aria-label*="model" i]',
+      '[data-model-slug]',
+      '[data-selected-model]'
+    ]) {
+      for (const element of document.querySelectorAll(selector)) {
+        if (!(element instanceof Element) || !isElementActuallyVisible(element)) continue;
+        addElement(element);
+      }
+    }
+
+    try {
+      const urlModel = new URL(location.href).searchParams.get('model');
+      if (urlModel) explicitCandidates.unshift(urlModel);
+    } catch {}
+
+    for (const candidate of explicitCandidates) {
+      const normalized = normalizeChatGptModelSlug(candidate);
+      if (/^gpt-\d/.test(normalized)) {
+        const inferred = inferConversationModelSlugFromText(candidate, effort);
+        return inferred || normalized;
+      }
+      const inferred = inferConversationModelSlugFromText(candidate, effort);
+      if (inferred) return inferred;
+    }
+
+    if (conversationLastSelectedModelSlug) {
+      const selected = inferConversationModelSlugFromText(conversationLastSelectedModelSlug, effort);
+      return selected || conversationLastSelectedModelSlug;
+    }
+
+    if (conversationLastKnownModelSlug) {
+      const known = inferConversationModelSlugFromText(conversationLastKnownModelSlug, effort);
+      return known || conversationLastKnownModelSlug;
+    }
+
+    const previousAssistantSurfaces = Array.from(document.querySelectorAll(
+      '[data-markdown-text-style="assistant-message"], .bravefox-assistant-message-surface'
+    )).filter(element => element instanceof Element);
+
+    for (let index = previousAssistantSurfaces.length - 1; index >= 0; index -= 1) {
+      const previousSurface = previousAssistantSurfaces[index];
+      const previousRoot = getConversationTurnRoot(previousSurface, previousSurface, 'assistant');
+      if (!(previousRoot instanceof Element)) continue;
+
+      const stored = String(previousRoot.getAttribute(MESSAGE_MODEL_ATTR) || '').trim();
+      if (stored) return stored;
+
+      const domSlug = readConversationModelSlugFromDom(previousRoot, previousSurface);
+      if (domSlug) return domSlug;
+    }
+
+    return '';
+  }
+
+  function captureConversationModelChoiceFromEvent(event) {
+    if (!event?.isTrusted) return;
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+
+    const choice = target.closest(
+      '[role="menuitem"], [role="menuitemradio"], [role="option"], [role="radio"], button'
+    );
+    if (!(choice instanceof Element)) return;
+
+    const values = [
+      choice.getAttribute('data-model-slug') || '',
+      choice.getAttribute('data-model') || '',
+      choice.getAttribute('value') || '',
+      choice.getAttribute('aria-label') || '',
+      choice.getAttribute('title') || '',
+      choice.textContent || ''
+    ];
+
+    const effort = readCurrentConversationReasoningEffortFromDom();
+    for (const value of values) {
+      const modelSlug = inferConversationModelSlugFromText(value, effort);
+      if (!modelSlug) continue;
+      conversationLastSelectedModelSlug = modelSlug;
+      return;
+    }
+  }
+
+  function getConversationAssistantDetailLabel(turnRoot, surface) {
+    if (!CHATGPT_MESSAGE_METADATA_CUSTOMIZATION.showAssistantModel) return '';
+
+    let modelSlug = String(turnRoot?.getAttribute?.(MESSAGE_MODEL_ATTR) || '').trim();
+    if (!modelSlug) modelSlug = readConversationModelSlugFromDom(turnRoot, surface);
+
+    const isLatestAssistantTurn = isSurfaceInLatestConversationTurn(turnRoot, 'assistant', surface);
+    const hasFreshPendingSend =
+      Boolean(conversationPendingUserSentAt) &&
+      Date.now() - conversationPendingUserSentAt < 180000;
+    if (!modelSlug && isLatestAssistantTurn && hasFreshPendingSend && conversationPendingModelSlug) {
+      modelSlug = conversationPendingModelSlug;
+    }
+
+    if (modelSlug && turnRoot instanceof Element && !turnRoot.getAttribute(MESSAGE_MODEL_ATTR)) {
+      turnRoot.setAttribute(MESSAGE_MODEL_ATTR, modelSlug);
+    }
+
+    let effort = String(turnRoot?.getAttribute?.(MESSAGE_REASONING_ATTR) || '').trim();
+    if (!effort) effort = readConversationReasoningEffortFromDom(turnRoot, surface);
+
+    // Pending/current reasoning UI describes the active/latest turn only. Never let an
+    // older assistant reply inherit today's selected effort just because its own metadata
+    // has not resolved yet.
+    if (!effort && isLatestAssistantTurn && conversationPendingReasoningEffort) {
+      effort = conversationPendingReasoningEffort;
+    }
+    if (!effort && isLatestAssistantTurn) effort = readCurrentConversationReasoningEffortFromDom();
+    effort = normalizeConversationReasoningEffort(effort);
+
+    const normalizedModelSlug = normalizeChatGptModelSlug(modelSlug);
+    if (!effort && normalizedModelSlug.endsWith('-pro')) effort = 'pro';
+    if (!effort && normalizedModelSlug.endsWith('-instant')) effort = 'instant';
+    if (effort && turnRoot instanceof Element && !turnRoot.getAttribute(MESSAGE_REASONING_ATTR)) {
+      turnRoot.setAttribute(MESSAGE_REASONING_ATTR, effort);
+    }
+
+    const modelLabel = formatConversationModelLabel(modelSlug);
+    if (!modelLabel) return '';
+
+    if (!CHATGPT_MESSAGE_METADATA_CUSTOMIZATION.showAssistantReasoningLevel) return modelLabel;
+    const effortLabel = formatConversationReasoningEffort(effort);
+    if (!effortLabel) return modelLabel;
+
+    // Slugs such as gpt-5-5-pro already name a tier. Do not render "Pro Pro".
+    if (normalizeText(modelLabel).split(/\s+/).includes(normalizeText(effortLabel))) return modelLabel;
+    return `${modelLabel} ${effortLabel}`;
+  }
+
+  function getConfiguredConversationSenderLabel(role, turnRoot = null, surface = null) {
+    if (role === 'user') {
+      const configured = normalizeConversationUserDisplayName(
+        CHATGPT_MESSAGE_METADATA_CUSTOMIZATION.userLabel
+      );
+      if (configured) return configured;
+      if (conversationUserDisplayName) return conversationUserDisplayName;
+      return String(CHATGPT_MESSAGE_METADATA_CUSTOMIZATION.fallbackUserLabel || 'User').trim();
+    }
+
+    if (role === 'assistant') {
+      const base = String(CHATGPT_MESSAGE_METADATA_CUSTOMIZATION.assistantLabel || '').trim();
+      if (!base) return '';
+      const details = getConversationAssistantDetailLabel(turnRoot, surface);
+      return details ? `${base} (${details})` : base;
+    }
+    return '';
+  }
+
+  function getMessageTimestampFromDate(value) {
+    const date = value instanceof Date ? value : new Date(value);
+    if (!Number.isFinite(date.getTime())) return '';
+
+    try {
+      return new Intl.DateTimeFormat(
+        CHATGPT_MESSAGE_METADATA_CUSTOMIZATION.locale || undefined,
+        {
+          hour: '2-digit',
+          minute: '2-digit',
+          timeZone: CHATGPT_MESSAGE_METADATA_CUSTOMIZATION.timeZone || 'Europe/Helsinki'
+        }
+      ).format(date);
+    } catch {
+      return `${String(date.getHours()).padStart(2, '0')}.${String(date.getMinutes()).padStart(2, '0')}`;
+    }
+  }
+
+  function formatNativeMessageTimestamp(value) {
+    const text = String(value || '').replace(/\s+/g, ' ').trim();
+    if (!text) return '';
+
+    if (CHATGPT_MESSAGE_METADATA_CUSTOMIZATION.timeOnly !== false) {
+      const matches = text.match(/\b(?:[01]?\d|2[0-3])[:.][0-5]\d\b/g);
+      if (matches?.length) return matches[matches.length - 1];
+    }
+
+    return text;
+  }
+
+  function readInlineConversationTimestamp(turnRoot) {
+    if (!(turnRoot instanceof Element)) return '';
+
+    for (const element of turnRoot.querySelectorAll('time, [datetime], [data-timestamp], [data-message-timestamp]')) {
+      if (!(element instanceof Element)) continue;
+
+      const visibleText = formatNativeMessageTimestamp(element.textContent);
+      if (visibleText && /\b(?:[01]?\d|2[0-3])[:.][0-5]\d\b/.test(visibleText)) return visibleText;
+
+      const raw =
+        element.getAttribute('datetime') ||
+        element.getAttribute('data-timestamp') ||
+        element.getAttribute('data-message-timestamp');
+      if (!raw) continue;
+
+      let dateValue = raw;
+      if (/^\d{10,13}$/.test(raw)) {
+        const numeric = Number(raw);
+        dateValue = numeric < 1e12 ? numeric * 1000 : numeric;
+      }
+      const formatted = getMessageTimestampFromDate(dateValue);
+      if (formatted) return formatted;
+    }
+
+    return '';
+  }
+
+  function getCurrentConversationId() {
+    const match = String(location.pathname || '').match(/\/c\/([^/?#]+)/i);
+    return match?.[1] ? decodeURIComponent(match[1]) : '';
+  }
+
+  function collectConversationMessageIds(turnRoot) {
+    if (!(turnRoot instanceof Element)) return [];
+
+    const ids = new Set();
+    const attributes = [
+      'data-message-id',
+      'data-chatgpt-selection-message-id',
+      'data-chatgpt-search-message-ids'
+    ];
+
+    const collectFrom = element => {
+      if (!(element instanceof Element)) return;
+      for (const attribute of attributes) {
+        const value = String(element.getAttribute(attribute) || '').trim();
+        if (!value) continue;
+        for (const part of value.split(/[\s,]+/)) {
+          const id = part.trim();
+          if (id && id.length >= 8) ids.add(id);
+        }
+      }
+    };
+
+    collectFrom(turnRoot);
+    const selector = attributes.map(attribute => `[${attribute}]`).join(', ');
+    for (const element of turnRoot.querySelectorAll(selector)) collectFrom(element);
+    return Array.from(ids);
+  }
+
+  function readConversationMetadataScalar(source, keys, depth = 0, seen = new Set()) {
+    if (!source || typeof source !== 'object' || depth > 4 || seen.has(source)) return '';
+    seen.add(source);
+
+    for (const key of keys) {
+      const value = source[key];
+      if (typeof value === 'string' && value.trim()) return value.trim();
+    }
+
+    for (const [key, value] of Object.entries(source)) {
+      if (!value || typeof value !== 'object') continue;
+      if (['content', 'parts', 'text', 'citations', 'content_references'].includes(key)) continue;
+      if (Array.isArray(value) && value.length > 20) continue;
+      const found = readConversationMetadataScalar(value, keys, depth + 1, seen);
+      if (found) return found;
+    }
+    return '';
+  }
+
+  function extractConversationMessageModelSlug(message) {
+    if (!message || typeof message !== 'object') return '';
+    const direct = [
+      message?.metadata?.model_slug,
+      message?.metadata?.resolved_model_slug,
+      message?.metadata?.server_ste_metadata?.model_slug,
+      message?.metadata?.requested_model_slug,
+      message?.model_slug,
+      message?.model
+    ];
+    for (const candidate of direct) {
+      const slug = String(candidate || '').trim();
+      if (slug) return slug;
+    }
+    return readConversationMetadataScalar(message.metadata || {}, [
+      'resolved_model_slug', 'model_slug', 'requested_model_slug', 'default_model_slug'
+    ]);
+  }
+
+  function extractConversationMessageReasoningEffort(message) {
+    if (!message || typeof message !== 'object') return '';
+    const direct = [
+      message?.metadata?.thinking_effort,
+      message?.metadata?.reasoning_effort,
+      message?.metadata?.thinking_effort_level,
+      message?.metadata?.reasoning_effort_level,
+      message?.metadata?.reasoning_level,
+      message?.thinking_effort,
+      message?.reasoning_effort
+    ];
+    for (const candidate of direct) {
+      const effort = normalizeConversationReasoningEffort(candidate);
+      if (effort) return effort;
+    }
+
+    return normalizeConversationReasoningEffort(readConversationMetadataScalar(
+      message.metadata || {},
+      ['thinking_effort', 'reasoning_effort', 'thinking_effort_level', 'reasoning_effort_level', 'reasoning_level']
+    ));
+  }
+
+  function buildConversationMessageMetadataIndex(payload) {
+    const byId = new Map();
+    const ordered = { user: [], assistant: [] };
+    const mapping = payload && typeof payload === 'object' ? payload.mapping : null;
+    if (!mapping || typeof mapping !== 'object') return { byId, ordered };
+
+    for (const node of Object.values(mapping)) {
+      const message = node?.message;
+      const id = String(message?.id || '').trim();
+      if (!id) continue;
+
+      const role = normalizeText(message?.author?.role);
+      let rawTime = message?.create_time;
+      if (typeof rawTime === 'string' && /^\d+(?:\.\d+)?$/.test(rawTime.trim())) rawTime = Number(rawTime);
+      if (typeof rawTime === 'number' && rawTime > 0 && rawTime < 1e12) rawTime *= 1000;
+      const timestamp = rawTime != null ? getMessageTimestampFromDate(rawTime) : '';
+      const modelSlug = extractConversationMessageModelSlug(message);
+      const reasoningEffort = extractConversationMessageReasoningEffort(message);
+
+      const record = {
+        id,
+        role,
+        timestamp,
+        rawTime: Number.isFinite(Number(rawTime)) ? Number(rawTime) : 0,
+        modelSlug,
+        reasoningEffort
+      };
+      byId.set(id, record);
+      if (role === 'user' || role === 'assistant') ordered[role].push(record);
+    }
+
+    for (const role of ['user', 'assistant']) {
+      ordered[role].sort((a, b) => (a.rawTime || 0) - (b.rawTime || 0));
+    }
+    return { byId, ordered };
+  }
+
+  async function fetchConversationMessageMetadataIndex(conversationId, force = false) {
+    if (!conversationId) return { byId: new Map(), ordered: { user: [], assistant: [] } };
+
+    const cached = conversationMetadataCaches.get(conversationId);
+    if (
+      !force &&
+      cached?.index?.byId instanceof Map &&
+      Date.now() - Number(cached.fetchedAt || 0) < MESSAGE_TIMESTAMP_API_CACHE_MS
+    ) {
+      return cached.index;
+    }
+
+    const activeFetch = conversationMetadataFetches.get(conversationId);
+    if (activeFetch) return activeFetch;
+
+    const request = (async () => {
+      try {
+        const token = await resolveConversationAccessToken();
+        const headers = { Accept: 'application/json' };
+        if (token) headers.Authorization = `Bearer ${token}`;
+
+        const response = await fetch(
+          `${location.origin}/backend-api/conversation/${encodeURIComponent(conversationId)}`,
+          {
+            method: 'GET',
+            credentials: 'include',
+            cache: 'no-store',
+            headers
+          }
+        );
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        const payload = await response.json();
+        const index = buildConversationMessageMetadataIndex(payload);
+        conversationMetadataCaches.set(conversationId, {
+          index,
+          fetchedAt: Date.now()
+        });
+        return index;
+      } catch {
+        return cached?.index?.byId instanceof Map
+          ? cached.index
+          : { byId: new Map(), ordered: { user: [], assistant: [] } };
+      } finally {
+        conversationMetadataFetches.delete(conversationId);
+      }
+    })();
+
+    conversationMetadataFetches.set(conversationId, request);
+    return request;
+  }
+
+  function getConversationLogicalTurnGroupKey(turnRoot, surface, role) {
+    const candidates = [];
+    const add = element => {
+      if (!(element instanceof Element)) return;
+      for (const attribute of ['data-content-search-unit-key', 'data-chatgpt-search-unit-key']) {
+        const value = String(element.getAttribute(attribute) || '').trim();
+        if (value) candidates.push(value);
+      }
+    };
+
+    add(surface);
+    if (surface instanceof Element) {
+      let node = surface.parentElement;
+      for (let depth = 0; node && depth < 8; depth += 1, node = node.parentElement) {
+        add(node);
+        if (node === turnRoot) break;
+      }
+    }
+    add(turnRoot);
+
+    for (const value of candidates) {
+      const match = value.match(/^(.*?turn-[^:]+)(?::|$)/i);
+      if (match?.[1]) return `${role}:${match[1]}`;
+      const withoutSubmessage = value.replace(/:\d+:(?:assistant|user)$/i, '');
+      if (withoutSubmessage !== value) return `${role}:${withoutSubmessage}`;
+    }
+
+    return getConversationTurnIdentity(turnRoot, role, surface);
+  }
+
+  function getConversationRoleOrdinal(turnRoot, role, surface) {
+    const selector = role === 'user'
+      ? '[data-user-message-bubble="true"], .bravefox-user-message-surface'
+      : '[data-markdown-text-style="assistant-message"], .bravefox-assistant-message-surface';
+    const groups = [];
+    const seenGroups = new Set();
+
+    for (const candidateSurface of document.querySelectorAll(selector)) {
+      if (!(candidateSurface instanceof Element)) continue;
+      const candidateRoot = getConversationTurnRoot(candidateSurface, candidateSurface, role);
+      if (!(candidateRoot instanceof Element)) continue;
+      const groupKey = getConversationLogicalTurnGroupKey(candidateRoot, candidateSurface, role);
+      if (!groupKey || seenGroups.has(groupKey)) continue;
+      seenGroups.add(groupKey);
+      groups.push(groupKey);
+    }
+
+    const currentKey = getConversationLogicalTurnGroupKey(turnRoot, surface, role);
+    return groups.indexOf(currentKey);
+  }
+
+  function applyConversationMessageMetadataRecord(turnRoot, role, record, surface, source = 'api') {
+    if (!(turnRoot instanceof Element) || !record) return false;
+    let changed = false;
+
+    const exactSurfaceMatch =
+      source !== 'api-ordinal' &&
+      surface instanceof Element &&
+      conversationRecordMatchesSurfaceExactly(turnRoot, role, surface, record);
+
+    if (record.timestamp && exactSurfaceMatch) {
+      if (setConversationSurfaceTimestamp(turnRoot, role, surface, record.timestamp, source)) changed = true;
+    }
+
+    if (role === 'assistant') {
+      // Exact per-message API metadata outranks DOM/current-model hints. The old order
+      // preferred the DOM slug even after an exact match, letting a newly selected model
+      // relabel an older reply. Ordinal matching is never trusted for model/effort.
+      const recordModel = exactSurfaceMatch ? String(record.modelSlug || '').trim() : '';
+      const domModel = readConversationModelSlugFromDom(turnRoot, surface);
+      const modelSlug = recordModel || domModel;
+      if (recordModel) {
+        conversationLastKnownModelSlug = recordModel;
+        conversationLastSelectedModelSlug = recordModel;
+      }
+      if (modelSlug && turnRoot.getAttribute(MESSAGE_MODEL_ATTR) !== modelSlug) {
+        turnRoot.setAttribute(MESSAGE_MODEL_ATTR, modelSlug);
+        changed = true;
+      }
+
+      const recordEffort = exactSurfaceMatch
+        ? normalizeConversationReasoningEffort(record.reasoningEffort)
+        : '';
+      const domEffort = readConversationReasoningEffortFromDom(turnRoot, surface);
+      const effort = recordEffort || domEffort;
+      if (effort && turnRoot.getAttribute(MESSAGE_REASONING_ATTR) !== effort) {
+        turnRoot.setAttribute(MESSAGE_REASONING_ATTR, effort);
+        conversationLastKnownReasoningEffort = effort;
+        changed = true;
+      }
+    }
+
+    if (changed) refreshConversationMetadataHeadersForTurn(turnRoot, role);
+    return changed;
+  }
+
+  async function resolveConversationMetadataFromApi(turnRoot, role, surface = null) {
+    if (!(turnRoot instanceof Element)) return false;
+    if (apiQueuedMessageTimestampTurns.has(turnRoot)) return false;
+
+    const conversationId = getCurrentConversationId();
+    if (!conversationId) return false;
+
+    apiQueuedMessageTimestampTurns.add(turnRoot);
+    try {
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        if (attempt > 0) await delayMessageTimestampProbe(attempt === 1 ? 500 : 1200);
+        if (!turnRoot.isConnected) return false;
+
+        const index = await fetchConversationMessageMetadataIndex(conversationId, attempt > 0);
+        const messageIds = collectConversationMessageIds(turnRoot);
+        if (surface instanceof Element) {
+          for (const id of collectConversationMessageIds(surface)) {
+            if (!messageIds.includes(id)) messageIds.unshift(id);
+          }
+        }
+
+        for (const messageId of messageIds) {
+          const record = index.byId.get(messageId);
+          if (!record || (record.role && record.role !== role)) continue;
+          if (applyConversationMessageMetadataRecord(turnRoot, role, record, surface, 'api')) return true;
+        }
+
+        // Some 2026 UI buckets mount the visible bubble before its data-message-id.
+        // Fall back to the turn's ordinal within the same author role for non-time
+        // metadata only. api-ordinal is explicitly blocked from changing timestamps.
+        const ordinal = getConversationRoleOrdinal(turnRoot, role, surface);
+        const ordered = index.ordered?.[role] || [];
+        const record = ordinal >= 0 ? ordered[ordinal] : null;
+        if (record && applyConversationMessageMetadataRecord(turnRoot, role, record, surface, 'api-ordinal')) {
+          return true;
+        }
+      }
+    } finally {
+      apiQueuedMessageTimestampTurns.delete(turnRoot);
+    }
+
+    return false;
+  }
+
+  function getConversationTurnIdentity(turnRoot, role, surface) {
+    if (!(turnRoot instanceof Element)) return '';
+
+    const messageIds = collectConversationMessageIds(turnRoot);
+    if (messageIds.length) return `${role}:${messageIds[0]}`;
+
+    for (const attribute of [
+      'data-testid',
+      'data-content-search-unit-key',
+      'data-chatgpt-search-unit-key',
+      'data-chatgpt-selection-message-id',
+      'data-message-id'
+    ]) {
+      const value = String(turnRoot.getAttribute(attribute) || '').trim();
+      if (value) return `${role}:${attribute}:${value}`;
+    }
+
+    if (surface instanceof Element) {
+      for (const attribute of ['data-chatgpt-selection-message-id', 'data-message-id']) {
+        const value = String(surface.getAttribute(attribute) || '').trim();
+        if (value) return `${role}:${attribute}:${value}`;
+      }
+    }
+
+    return `${role}:turn`;
+  }
+
+  function collectConversationSurfacesInTurn(turnRoot, role) {
+    if (!(turnRoot instanceof Element)) return [];
+    const selector = role === 'user'
+      ? '[data-user-message-bubble="true"], .bravefox-user-message-surface'
+      : '[data-markdown-text-style="assistant-message"], .bravefox-assistant-message-surface';
+    const result = [];
+    const seen = new Set();
+    const add = surface => {
+      if (!(surface instanceof HTMLElement) || seen.has(surface)) return;
+      seen.add(surface);
+      result.push(surface);
+    };
+    if (turnRoot.matches?.(selector)) add(turnRoot);
+    for (const surface of turnRoot.querySelectorAll(selector)) add(surface);
+    return result;
+  }
+
+  function getConversationSurfaceIdentity(turnRoot, role, surface) {
+    const turnKey = getConversationTurnIdentity(turnRoot, role, surface);
+    const surfaces = collectConversationSurfacesInTurn(turnRoot, role);
+    const ordinal = Math.max(0, surfaces.indexOf(surface));
+    const ids = collectConversationMessageIds(surface);
+    const messagePart = ids.length ? ids[0] : 'no-message-id';
+    return `${turnKey}:surface:${ordinal}:${messagePart}`;
+  }
+
+  function isPrimaryConversationSurface(turnRoot, role, surface) {
+    if (!(turnRoot instanceof Element) || !(surface instanceof Element)) return false;
+    const surfaces = collectConversationSurfacesInTurn(turnRoot, role);
+    return surfaces.length > 0 && surfaces[0] === surface;
+  }
+
+  function getConversationSurfaceTimestamp(turnRoot, role, surface) {
+    if (!(surface instanceof Element)) return '';
+
+    const direct = surface.getAttribute(MESSAGE_TIMESTAMP_ATTR) || '';
+    if (direct) return direct;
+
+    if (isPrimaryConversationSurface(turnRoot, role, surface)) {
+      return turnRoot.getAttribute(MESSAGE_TIMESTAMP_ATTR) || '';
+    }
+    return '';
+  }
+
+  function getConversationSurfaceTimestampSource(turnRoot, role, surface) {
+    if (!(surface instanceof Element)) return '';
+
+    const direct = surface.getAttribute(MESSAGE_TIMESTAMP_SOURCE_ATTR) || '';
+    if (direct) return direct;
+
+    if (isPrimaryConversationSurface(turnRoot, role, surface)) {
+      return turnRoot.getAttribute(MESSAGE_TIMESTAMP_SOURCE_ATTR) || '';
+    }
+    return '';
+  }
+
+  function setConversationSurfaceTimestamp(turnRoot, role, surface, timestamp, source = 'observed') {
+    if (!(turnRoot instanceof Element) || !(surface instanceof Element)) return false;
+    if (source === 'api-ordinal') return false;
+
+    const formatted = formatNativeMessageTimestamp(timestamp);
+    if (!formatted) return false;
+
+    const previous = surface.getAttribute(MESSAGE_TIMESTAMP_ATTR) || '';
+    const previousSource = surface.getAttribute(MESSAGE_TIMESTAMP_SOURCE_ATTR) || '';
+    const authoritative = source !== 'observed';
+    if (previous && previousSource && previousSource !== 'observed' && !authoritative) return false;
+    if (previous === formatted && previousSource === source) return false;
+
+    surface.setAttribute(MESSAGE_TIMESTAMP_ATTR, formatted);
+    surface.setAttribute(MESSAGE_TIMESTAMP_SOURCE_ATTR, source);
+    updateConversationMetadataHeader(turnRoot, role, formatted, surface);
+    return true;
+  }
+
+  function conversationRecordMatchesSurfaceExactly(turnRoot, role, surface, record) {
+    if (!(turnRoot instanceof Element) || !(surface instanceof Element) || !record?.id) return false;
+
+    const surfaceIds = collectConversationMessageIds(surface);
+    if (surfaceIds.includes(record.id)) return true;
+
+    const surfaces = collectConversationSurfacesInTurn(turnRoot, role);
+    if (surfaces.length !== 1 || surfaces[0] !== surface) return false;
+    return collectConversationMessageIds(turnRoot).includes(record.id);
+  }
+
+  function removeLegacyConversationMetadataHeader(turnRoot, surface) {
+    if (!(turnRoot instanceof Element)) return;
+
+    // v3/v4 owned one header per turn. v5 owns one header per visible message surface.
+    // Remove only old-format rows; never delete another live surface's v5 row.
+    for (const legacy of turnRoot.querySelectorAll(`[${MESSAGE_META_ATTR}="true"]`)) {
+      if (!(legacy instanceof Element)) continue;
+      if (legacy.hasAttribute(MESSAGE_META_SURFACE_KEY_ATTR)) continue;
+      legacy.remove();
+    }
+
+    if (surface instanceof Element) {
+      surface.removeAttribute('data-bravefox-message-meta-host');
+      surface.removeAttribute(MESSAGE_META_ATTR);
+      surface.removeAttribute(MESSAGE_META_TEXT_ATTR);
+      surface.style.removeProperty('padding-top');
+    }
+  }
+
+  function syncConversationMetadataGeometry(header, surface, role) {
+    if (!(header instanceof HTMLElement) || !(surface instanceof HTMLElement)) return;
+
+    const width = Math.ceil(surface.getBoundingClientRect().width);
+    if (width > 0) {
+      header.style.setProperty('--bravefox-message-meta-width', `${width}px`);
+    } else {
+      header.style.removeProperty('--bravefox-message-meta-width');
+    }
+    header.setAttribute(MESSAGE_META_ROLE_ATTR, role);
+  }
+
+  function updateConversationMetadataHeader(turnRoot, role, timestamp = '', surface = null) {
+    if (!(turnRoot instanceof Element)) return null;
+    if (!CHATGPT_MESSAGE_METADATA_CUSTOMIZATION.enabled) return null;
+
+    const liveSurface = surface instanceof HTMLElement
+      ? surface
+      : collectConversationSurfacesInTurn(turnRoot, role)[0];
+    if (!(liveSurface instanceof HTMLElement)) return null;
+
+    const senderLabel = getConfiguredConversationSenderLabel(role, turnRoot, liveSurface);
+    if (!senderLabel) return null;
+
+    const host = liveSurface.parentElement;
+    if (!(host instanceof HTMLElement)) return null;
+    if (host !== turnRoot && !turnRoot.contains(host)) return null;
+
+    const turnKey = getConversationTurnIdentity(turnRoot, role, liveSurface);
+    const surfaceKey = getConversationSurfaceIdentity(turnRoot, role, liveSurface);
+    turnRoot.setAttribute(MESSAGE_TURN_ATTR, role);
+    if (turnKey) turnRoot.setAttribute(MESSAGE_TURN_KEY_ATTR, turnKey);
+
+    removeLegacyConversationMetadataHeader(turnRoot, liveSurface);
+
+    let header = null;
+    const previous = liveSurface.previousElementSibling;
+    if (
+      previous instanceof HTMLElement &&
+      previous.getAttribute(MESSAGE_META_ATTR) === 'true' &&
+      previous.getAttribute(MESSAGE_META_SURFACE_KEY_ATTR) === surfaceKey
+    ) {
+      header = previous;
+    }
+
+    if (!(header instanceof HTMLElement)) {
+      for (const candidate of host.querySelectorAll(`:scope > [${MESSAGE_META_ATTR}="true"]`)) {
+        if (!(candidate instanceof HTMLElement)) continue;
+        if (candidate.getAttribute(MESSAGE_META_SURFACE_KEY_ATTR) !== surfaceKey) continue;
+        header = candidate;
+        break;
+      }
+    }
+
+    if (!(header instanceof HTMLElement)) {
+      header = document.createElement('div');
+      header.setAttribute(MESSAGE_META_ATTR, 'true');
+      header.setAttribute(MESSAGE_META_KEY_ATTR, turnKey);
+      header.setAttribute(MESSAGE_META_SURFACE_KEY_ATTR, surfaceKey);
+      header.setAttribute(MESSAGE_META_ROLE_ATTR, role);
+
+      const text = document.createElement('span');
+      text.setAttribute(MESSAGE_META_TEXT_ATTR, 'true');
+      header.appendChild(text);
+    }
+
+    // Every visible assistant sub-message owns its own row. Reparenting one surface can
+    // therefore never steal or replace metadata belonging to a sibling surface/turn.
+    if (header.parentElement !== host || header.nextElementSibling !== liveSurface) {
+      host.insertBefore(header, liveSurface);
+    }
+
+    header.removeAttribute('aria-hidden');
+
+    let textTarget = header.querySelector(`[${MESSAGE_META_TEXT_ATTR}="true"]`);
+    if (!(textTarget instanceof HTMLElement)) {
+      textTarget = document.createElement('span');
+      textTarget.setAttribute(MESSAGE_META_TEXT_ATTR, 'true');
+      header.replaceChildren(textTarget);
+    }
+
+    const resolvedTimestamp = timestamp || getConversationSurfaceTimestamp(turnRoot, role, liveSurface);
+    const separator = String(CHATGPT_MESSAGE_METADATA_CUSTOMIZATION.separator ?? ' - ');
+    const finalText = resolvedTimestamp ? `${senderLabel}${separator}${resolvedTimestamp}` : senderLabel;
+    if (textTarget.textContent !== finalText) textTarget.textContent = finalText;
+
+    syncConversationMetadataGeometry(header, liveSurface, role);
+    if (role === 'user' && !normalizeConversationUserDisplayName(CHATGPT_MESSAGE_METADATA_CUSTOMIZATION.userLabel)) {
+      void resolveConversationUserDisplayName(false);
+    }
+
+    return header;
+  }
+
+  function refreshConversationMetadataHeadersForTurn(turnRoot, role) {
+    if (!(turnRoot instanceof Element)) return;
+    for (const surface of collectConversationSurfacesInTurn(turnRoot, role)) {
+      const timestamp = getConversationSurfaceTimestamp(turnRoot, role, surface);
+      updateConversationMetadataHeader(turnRoot, role, timestamp, surface);
+    }
+  }
+
+  function stampConversationActionRow(turnRoot, actionRow) {
+    if (!(turnRoot instanceof HTMLElement) || !(actionRow instanceof HTMLElement)) return;
+    actionRow.setAttribute(MESSAGE_ACTIONS_ATTR, 'true');
+  }
+
+  function setConversationTimestamp(turnRoot, role, timestamp, source = 'native') {
+    if (!(turnRoot instanceof Element)) return false;
+
+    // Ordinal API matching is only a best-effort metadata fallback. It is not safe
+    // enough to identify a message timestamp, so it must never overwrite the live,
+    // native-menu, inline, or exact-ID time already associated with this turn.
+    if (source === 'api-ordinal') return false;
+
+    const formatted = formatNativeMessageTimestamp(timestamp);
+    if (!formatted) return false;
+
+    const previous = turnRoot.getAttribute(MESSAGE_TIMESTAMP_ATTR) || '';
+    const previousSource = turnRoot.getAttribute(MESSAGE_TIMESTAMP_SOURCE_ATTR) || '';
+    const authoritative = source !== 'observed';
+    if (previous && previousSource && previousSource !== 'observed' && !authoritative) return false;
+
+    turnRoot.setAttribute(MESSAGE_TIMESTAMP_ATTR, formatted);
+    turnRoot.setAttribute(MESSAGE_TIMESTAMP_SOURCE_ATTR, source);
+    if (authoritative) completedMessageTimestampTurns.add(turnRoot);
+
+    const primarySurface = collectConversationSurfacesInTurn(turnRoot, role)[0];
+    if (primarySurface instanceof Element && primarySurface !== turnRoot) {
+      setConversationSurfaceTimestamp(turnRoot, role, primarySurface, formatted, source);
+    } else {
+      refreshConversationMetadataHeadersForTurn(turnRoot, role);
+    }
+    return previous !== formatted || previousSource !== source;
+  }
+
+  function findOpenNativeMessageTimestamp() {
+    for (const item of document.querySelectorAll('[role="menuitem"]')) {
+      if (!(item instanceof Element)) continue;
+      const text = String(item.textContent || '').replace(/\s+/g, ' ').trim();
+      if (text.length > 120) continue;
+      if (!/\b(?:[01]?\d|2[0-3])[:.][0-5]\d\b/.test(text)) continue;
+      return text;
+    }
+    return '';
+  }
+
+  function delayMessageTimestampProbe(ms) {
+    return new Promise(resolve => window.setTimeout(resolve, ms));
+  }
+
+  function dispatchConversationMenuPointerDown(button) {
+    if (!(button instanceof HTMLButtonElement)) return false;
+
+    try {
+      if (typeof PointerEvent === 'function') {
+        button.dispatchEvent(new PointerEvent('pointerdown', {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          pointerId: 1,
+          pointerType: 'mouse',
+          isPrimary: true,
+          button: 0,
+          buttons: 1,
+          clientX: Math.max(1, Math.round(button.getBoundingClientRect().left + 2)),
+          clientY: Math.max(1, Math.round(button.getBoundingClientRect().top + 2))
+        }));
+        return true;
+      }
+    } catch {
+      // Fall through to the mouse event path.
+    }
+
+    try {
+      button.dispatchEvent(new MouseEvent('mousedown', {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        button: 0,
+        buttons: 1
+      }));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function nativeMessageMenuLooksOpen(menuButton) {
+    if (!(menuButton instanceof HTMLButtonElement)) return false;
+    return (
+      menuButton.getAttribute('aria-expanded') === 'true' ||
+      menuButton.getAttribute('data-state') === 'open' ||
+      Boolean(findOpenNativeMessageTimestamp())
+    );
+  }
+
+  async function openNativeConversationMessageMenu(menuButton) {
+    if (!(menuButton instanceof HTMLButtonElement)) return false;
+    if (nativeMessageMenuLooksOpen(menuButton)) return true;
+
+    dispatchConversationMenuPointerDown(menuButton);
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      await delayMessageTimestampProbe(20);
+      if (nativeMessageMenuLooksOpen(menuButton)) return true;
+    }
+
+    try {
+      menuButton.click();
+    } catch {
+      return false;
+    }
+
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      await delayMessageTimestampProbe(20);
+      if (nativeMessageMenuLooksOpen(menuButton)) return true;
+    }
+    return false;
+  }
+
+  async function closeNativeConversationMessageMenu(menuButton) {
+    if (!(menuButton instanceof HTMLButtonElement) || !menuButton.isConnected) return;
+    if (!nativeMessageMenuLooksOpen(menuButton)) return;
+
+    dispatchConversationMenuPointerDown(menuButton);
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      await delayMessageTimestampProbe(16);
+      if (!nativeMessageMenuLooksOpen(menuButton)) return;
+    }
+
+    try {
+      menuButton.click();
+      await delayMessageTimestampProbe(16);
+    } catch {
+      // Nothing else to do; a user-opened menu must never be force-removed from the DOM.
+    }
+  }
+
+  async function probeConversationTimestamp(turnRoot, role, menuButton) {
+    if (!(turnRoot instanceof Element) || !(menuButton instanceof HTMLButtonElement)) return;
+    if (!turnRoot.isConnected || !menuButton.isConnected) return;
+    if (turnRoot.hasAttribute(MESSAGE_TIMESTAMP_ATTR) && turnRoot.getAttribute(MESSAGE_TIMESTAMP_SOURCE_ATTR) !== 'observed') return;
+    if (nativeMessageMenuLooksOpen(menuButton)) return;
+    if (document.querySelector('[role="menu"][data-state="open"], [role="menu"] [role="menuitem"]')) return;
+
+    document.documentElement.classList.add(MESSAGE_TIMESTAMP_PROBE_CLASS);
+    try {
+      const opened = await openNativeConversationMessageMenu(menuButton);
+      if (!opened) return;
+
+      let nativeTimestamp = '';
+      for (let attempt = 0; attempt < 22 && !nativeTimestamp; attempt += 1) {
+        await delayMessageTimestampProbe(24);
+        nativeTimestamp = findOpenNativeMessageTimestamp();
+      }
+
+      if (nativeTimestamp) setConversationTimestamp(turnRoot, role, nativeTimestamp, 'menu');
+      await closeNativeConversationMessageMenu(menuButton);
+    } catch {
+      // Leave the native controls alone if this UI bucket rejects synthetic probing.
+    } finally {
+      document.documentElement.classList.remove(MESSAGE_TIMESTAMP_PROBE_CLASS);
+    }
+  }
+
+  function scheduleConversationTimestampProbe(turnRoot, role, actionRow) {
+    if (!(turnRoot instanceof Element) || completedMessageTimestampTurns.has(turnRoot)) return;
+
+    const timestampSource = turnRoot.getAttribute(MESSAGE_TIMESTAMP_SOURCE_ATTR) || '';
+    if (turnRoot.hasAttribute(MESSAGE_TIMESTAMP_ATTR) && timestampSource !== 'observed') return;
+
+    const inlineTimestamp = readInlineConversationTimestamp(turnRoot);
+    if (inlineTimestamp) {
+      setConversationTimestamp(turnRoot, role, inlineTimestamp, 'inline');
+      return;
+    }
+
+    if (queuedMessageTimestampTurns.has(turnRoot)) return;
+    const menuButton = actionRow instanceof HTMLButtonElement && actionRow.getAttribute('aria-haspopup') === 'menu'
+      ? actionRow
+      : findConversationMoreMenuButton(actionRow);
+    if (!(menuButton instanceof HTMLButtonElement)) return;
+
+    queuedMessageTimestampTurns.add(turnRoot);
+    messageTimestampProbeQueue.push({ turnRoot, role, menuButton });
+
+    if (!messageTimestampProbeTimer && !messageTimestampProbeActive) {
+      messageTimestampProbeTimer = window.setTimeout(processConversationTimestampProbeQueue, 320);
+    }
+  }
+
+  async function processConversationTimestampProbeQueue() {
+    if (messageTimestampProbeActive) return;
+    if (messageTimestampProbeTimer) {
+      clearTimeout(messageTimestampProbeTimer);
+      messageTimestampProbeTimer = 0;
+    }
+
+    messageTimestampProbeActive = true;
+    try {
+      while (messageTimestampProbeQueue.length) {
+        const item = messageTimestampProbeQueue.shift();
+        const { turnRoot, role, menuButton } = item || {};
+        if (!(turnRoot instanceof Element) || !turnRoot.isConnected) continue;
+        const source = turnRoot.getAttribute(MESSAGE_TIMESTAMP_SOURCE_ATTR) || '';
+        if (turnRoot.hasAttribute(MESSAGE_TIMESTAMP_ATTR) && source !== 'observed') continue;
+
+        await probeConversationTimestamp(turnRoot, role, menuButton);
+        if (!turnRoot.hasAttribute(MESSAGE_TIMESTAMP_ATTR) || turnRoot.getAttribute(MESSAGE_TIMESTAMP_SOURCE_ATTR) === 'observed') {
+          queuedMessageTimestampTurns.delete(turnRoot);
+        }
+        await delayMessageTimestampProbe(34);
+      }
+    } finally {
+      messageTimestampProbeActive = false;
+    }
+  }
+
+  function isSurfaceInLatestConversationTurn(turnRoot, role, surface) {
+    if (!(turnRoot instanceof Element) || !(surface instanceof Element)) return false;
+    const selector = role === 'user'
+      ? '[data-user-message-bubble="true"], .bravefox-user-message-surface'
+      : '[data-markdown-text-style="assistant-message"], .bravefox-assistant-message-surface';
+    const surfaces = Array.from(document.querySelectorAll(selector)).filter(element => element instanceof HTMLElement);
+    const latestSurface = surfaces[surfaces.length - 1];
+    if (!(latestSurface instanceof Element)) return false;
+
+    const latestRoot = getConversationTurnRoot(latestSurface, latestSurface, role);
+    if (!(latestRoot instanceof Element)) return false;
+    if (latestRoot === turnRoot || turnRoot.contains(latestSurface) || latestRoot.contains(surface)) return true;
+
+    const latestKey = getConversationLogicalTurnGroupKey(latestRoot, latestSurface, role);
+    const currentKey = getConversationLogicalTurnGroupKey(turnRoot, surface, role);
+    if (!latestKey || !currentKey || latestKey.endsWith(':turn') || currentKey.endsWith(':turn')) return false;
+    return latestKey === currentKey;
+  }
+
+  function getObservedConversationTimestamp(turnRoot, role, surface) {
+    if (!(surface instanceof Element)) return '';
+
+    const existing = surface.getAttribute(MESSAGE_TIMESTAMP_ATTR) || '';
+    if (existing) return existing;
+
+    const now = Date.now();
+    if (!isSurfaceInLatestConversationTurn(turnRoot, role, surface)) return '';
+
+    if (role === 'user') {
+      if (!conversationPendingUserSentAt || now - conversationPendingUserSentAt > 120000) return '';
+      return getMessageTimestampFromDate(conversationPendingUserSentAt);
+    }
+
+    if (role === 'assistant') {
+      if (!conversationPendingUserSentAt || now - conversationPendingUserSentAt > 180000) return '';
+      return getMessageTimestampFromDate(now);
+    }
+    return '';
+  }
+
+  function findConversationMoreMenuButtonNearSurface(turnRoot, surface) {
+    const actionRow = findConversationActionRow(turnRoot, surface);
+    const direct = findConversationMoreMenuButton(actionRow);
+    if (direct instanceof HTMLButtonElement) return { actionRow, menuButton: direct };
+
+    let node = surface instanceof Element ? surface.parentElement : null;
+    for (let depth = 0; node && depth < 8; depth += 1, node = node.parentElement) {
+      if (!(node instanceof Element)) continue;
+      if (turnRoot instanceof Element && node !== turnRoot && !turnRoot.contains(node)) break;
+
+      const candidates = Array.from(node.querySelectorAll('button')).filter(button =>
+        button instanceof HTMLButtonElement && !(surface instanceof Element && surface.contains(button))
+      );
+      for (const button of candidates) {
+        if (button.getAttribute('aria-haspopup') === 'menu') return { actionRow: button.parentElement, menuButton: button };
+        const label = getConversationActionButtonLabel(button);
+        if (includesAny(label, ['more', 'more actions', 'lisää', 'lisaa', 'options'])) {
+          return { actionRow: button.parentElement, menuButton: button };
+        }
+        if (['...', '…', '⋯'].includes(String(button.textContent || '').trim())) {
+          return { actionRow: button.parentElement, menuButton: button };
+        }
+      }
+      if (node === turnRoot) break;
+    }
+    return { actionRow: null, menuButton: null };
+  }
+
+  function scheduleConversationMetadataRetries(roleNode, role, surface) {
+    if (!(surface instanceof HTMLElement)) return;
+    if (surface.getAttribute(MESSAGE_METADATA_RETRY_ATTR) === 'true') return;
+    surface.setAttribute(MESSAGE_METADATA_RETRY_ATTR, 'true');
+
+    for (const delay of [220, 700, 1600, 3200]) {
+      window.setTimeout(() => {
+        if (!surface.isConnected) return;
+        applyConversationMessageMetadata(roleNode?.isConnected ? roleNode : surface, role, surface);
+      }, delay);
+    }
+  }
+
+  function applyConversationMessageMetadata(roleNode, role, surface) {
+    if (!CHATGPT_MESSAGE_METADATA_CUSTOMIZATION.enabled) return;
+    if (!(roleNode instanceof Element) || !(surface instanceof Element)) return;
+
+    const turnRoot = getConversationTurnRoot(roleNode, surface, role);
+    if (!(turnRoot instanceof Element)) return;
+
+    if (role === 'assistant') {
+      // DOM metadata is only an initial hint. Once exact per-message metadata has filled
+      // these attributes, later streaming/retry passes must not replace it with a broader
+      // current-model value.
+      let modelSlug = readConversationModelSlugFromDom(turnRoot, surface);
+      const isLatestAssistantTurn = isSurfaceInLatestConversationTurn(turnRoot, role, surface);
+      const hasFreshPendingSend =
+        Boolean(conversationPendingUserSentAt) &&
+        Date.now() - conversationPendingUserSentAt < 180000;
+
+      if (!modelSlug && isLatestAssistantTurn && hasFreshPendingSend && conversationPendingModelSlug) {
+        modelSlug = conversationPendingModelSlug;
+      }
+      if (modelSlug && !turnRoot.getAttribute(MESSAGE_MODEL_ATTR)) {
+        turnRoot.setAttribute(MESSAGE_MODEL_ATTR, modelSlug);
+      }
+
+      let effort = readConversationReasoningEffortFromDom(turnRoot, surface);
+      if (!effort && isLatestAssistantTurn && hasFreshPendingSend) {
+        effort = conversationPendingReasoningEffort;
+      }
+      if (effort && !turnRoot.getAttribute(MESSAGE_REASONING_ATTR)) {
+        turnRoot.setAttribute(MESSAGE_REASONING_ATTR, normalizeConversationReasoningEffort(effort));
+      }
+    }
+
+    let timestamp = getConversationSurfaceTimestamp(turnRoot, role, surface);
+    if (!timestamp) {
+      const inlineTimestamp = readInlineConversationTimestamp(surface);
+      if (inlineTimestamp) {
+        setConversationSurfaceTimestamp(turnRoot, role, surface, inlineTimestamp, 'inline');
+        timestamp = getConversationSurfaceTimestamp(turnRoot, role, surface) || inlineTimestamp;
+      }
+    }
+
+    if (!timestamp) {
+      const observed = getObservedConversationTimestamp(turnRoot, role, surface);
+      if (observed) {
+        setConversationSurfaceTimestamp(turnRoot, role, surface, observed, 'observed');
+        timestamp = getConversationSurfaceTimestamp(turnRoot, role, surface) || observed;
+      }
+    }
+
+    updateConversationMetadataHeader(turnRoot, role, timestamp, surface);
+
+    const timestampSource = getConversationSurfaceTimestampSource(turnRoot, role, surface);
+    const needsAuthoritativeTimestamp = !timestamp || timestampSource === 'observed';
+    const needsAssistantDetails = role === 'assistant' && (
+      !turnRoot.getAttribute(MESSAGE_MODEL_ATTR) ||
+      (CHATGPT_MESSAGE_METADATA_CUSTOMIZATION.showAssistantReasoningLevel && !turnRoot.getAttribute(MESSAGE_REASONING_ATTR))
+    );
+    if (needsAuthoritativeTimestamp || needsAssistantDetails) {
+      void resolveConversationMetadataFromApi(turnRoot, role, surface);
+    }
+
+    const { actionRow, menuButton } = findConversationMoreMenuButtonNearSurface(turnRoot, surface);
+    if (actionRow instanceof Element) stampConversationActionRow(turnRoot, actionRow);
+    if (needsAuthoritativeTimestamp && menuButton instanceof HTMLButtonElement) {
+      scheduleConversationTimestampProbe(turnRoot, role, menuButton);
+    }
+
+    scheduleConversationMetadataRetries(roleNode, role, surface);
+  }
+
+  function getMatchingAssistantErrorTextRule(element) {
+    if (!(element instanceof Element)) return null;
+    if (!element.closest('[data-markdown-text-style="assistant-message"], .bravefox-assistant-message-surface')) {
+      return null;
+    }
+
+    const text = normalizeText(element.textContent);
+    if (!text) return null;
+
+    for (const rule of CHATGPT_ASSISTANT_ERROR_TEXT_REPLACEMENTS) {
+      if (!rule?.enabled || typeof rule.replacement !== 'string') continue;
+      const matchAny = Array.isArray(rule.matchAny)
+        ? rule.matchAny.map(normalizeText).filter(Boolean)
+        : [];
+      if (matchAny.some(value => text.includes(value))) return rule;
+    }
+
+    return null;
+  }
+
+  function replaceCustomizableAssistantErrorText(scope = document) {
+    const selector = [
+      '[data-markdown-text-style="assistant-message"] span',
+      '.bravefox-assistant-message-surface span',
+      '[data-markdown-text-style="assistant-message"] p',
+      '.bravefox-assistant-message-surface p'
+    ].join(', ');
+
+    forEachMatch(scope, selector, element => {
+      if (!(element instanceof Element)) return;
+      if (element.getAttribute('data-bravefox-assistant-error-customized') === 'true') return;
+
+      // Prefer the innermost text-bearing element so surrounding paragraph markup survives.
+      if (element.matches('p') && element.querySelector('span')) return;
+      const rule = getMatchingAssistantErrorTextRule(element);
+      if (!rule) return;
+
+      element.textContent = rule.replacement;
+      element.setAttribute('data-bravefox-assistant-error-customized', 'true');
+    });
   }
 
   function applyConversationPresentation(scope = document) {
@@ -7080,6 +9175,8 @@
         surface.classList.remove('bravefox-user-message-surface');
         paintConversationSurface(surface, 'assistant');
       }
+
+      applyConversationMessageMetadata(roleNode, role, surface);
     }
   }
 
@@ -7127,6 +9224,8 @@
     hideNewSidebarControls(scope);
     collapseAnalysisActivityPanels(scope);
     applyConversationPresentation(scope);
+    replaceCustomizableAssistantErrorText(scope);
+    replaceCustomizableHomeHeadline(scope);
     replaceCustomizableChatGptBannerText(scope);
     replaceFixedAssistantNoticeText(scope);
     polishSidebarNavigation();
