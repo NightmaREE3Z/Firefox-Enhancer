@@ -1,7 +1,7 @@
 (function () {
     'use strict';
 
-    // google.js of BraveFox Enhancer v29.2.0 Hybrid
+    // google.js of BraveFox Enhancer v29.3.3 Hybrid
 
     function isGoogleMapsOrEarthUrl(value = window.location.href) {
         try {
@@ -1294,7 +1294,7 @@
 	/Lewis Hamilton/i, /Alexander/i, /mother/i, /Coffee/i, /Monster/i, /Energy/i, /LH44/i, /LH-44/i, /Greenzero/i, /Green/i, /Zero/i, /blue/i, /white/i, /red/i, /yellow/i, /brown/i, /cyan/i, /black/i, /giver/i, /taker/i, /Metallica/i, 
 	/Sabaton/i, /TheGamingDefinition/i, /Twitch/i, /Lake/i, /TGD/i, /wayback/i, /Ucey/i, /dagonhai/i, /Dagon'hai/i, /Dagon´hai/i, /Dagon`hai/i, /europe/i, /world/i, /champ/i, /fifa/i, /football/i, /ice hockey/i, /NHL/i, /american/i, 
 	/america/i, /ethiopea/i, /brazil/i, /finland/i, /netherland/i, /old/i, /new/i, /used/i, /sale/i, /toyota/i, /opel/i, /mitsubishi/i, /galant/i, /Edge WWE/i, /National Hockey League/i, /maps/i, /earth/i, /WhatsApp/i, /Messenger/i,
-	/Crate/i, /Wiki/i, /pedia/i, /Wikipedia/i,
+	/Crate/i, /Wiki/i, /pedia/i, /Wikipedia/i, /Finlay/i, /Finlayson/i,
 	
 
 

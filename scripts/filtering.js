@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Content hiding and filtering
-// @version      2026-10-01
+// @version      2026-10-07
 // @description  Filter out stuff on the internet (Targeted Enforcer)
 // @match        *://xvideos.com/*
 // @match        *://*.xvideos.com/*
@@ -22,7 +22,7 @@
     // === SITE ROUTING ===
     // filtering.js has three deliberately isolated jobs:
     //   1) full XVideos filtering;
-    //   2) lightweight no-glimpse RedTube result-card filtering; and
+    //   2) sitewide no-glimpse RedTube video, category and directory-card filtering; and
     //   3) a tiny Tenor search-submit guard.
     // It must remain completely dormant everywhere else, even when an extension manifest from an
     // older build still injects the file broadly.
@@ -55,6 +55,7 @@
     let focusMasterBlockedTermsSignature = '';
     let focusMasterBlockedTermsRefreshInterval = null;
     let focusMasterBlockedTermsFetchInFlight = null;
+    let focusMasterBlockedTermsFetchSucceeded = false;
 
     function focusMasterNormalizeWhitespace(value) {
         return String(value ?? '').replace(/\s+/g, ' ').trim();
@@ -162,6 +163,21 @@
         );
     }
 
+    // Drop the fetched Focus Master terms into the shared blocklist without touching the fixed regexes.
+    // This intentionally behaves like a RegExp/test object so every existing .some(regex => regexMatches(...))
+    // path can consume the live CSV list at the dedicated slot below.
+    function createFocusMasterFetchedTermsMatcher() {
+        return {
+            lastIndex: 0,
+            test(value) {
+                return containsFocusMasterBlockedTerm(value);
+            },
+            toString() {
+                return `focus-master-blocked-terms:${focusMasterBlockedTermsSignature}`;
+            }
+        };
+    }
+
     async function fetchFocusMasterBlockedTerms() {
         const response = await fetch(`${FOCUS_MASTER_BLOCKED_TERMS_URL}?bravefox_refresh=${Date.now()}`, {
             cache: 'no-store',
@@ -198,7 +214,9 @@
 
         focusMasterBlockedTermsFetchInFlight = fetchFocusMasterBlockedTerms()
             .then(terms => {
+                focusMasterBlockedTermsFetchSucceeded = true;
                 const changed = installFocusMasterBlockedTerms(terms);
+                try { window.dispatchEvent(new Event('bravefoxFocusMasterFetchSucceeded')); } catch (e) {}
                 if (changed) {
                     console.log(`Loaded ${focusMasterBlockedTerms.length} Focus Master blocked terms from GitHub.`);
                 }
@@ -237,7 +255,7 @@
         return [
         /deepn/i, /deepf/i, /deeps/i, /udif/i, /nudif/i, /ndres/i, /alexa/i, /poshspi(?:c|s)y/i, /face[\s_-]*swap/i, /swap[\s_-]*face/i, /Brie/i, /face[\s_-]*morph/i, 
 	/morph[\s_-]*face/i, /dream[\s_-]*booth/i, /wondershare/i, /filmora/i, /app/i, /Liv[\s_-]+Morgan/i, /Liv[\s_-]+Xoxo/i, /Morgan[\s_-]+Xoxo/i, /Sweeney/i, /Sydne/i, 
-	/Steward/i, /Stewart/i, /Kristen/i, /Kriis/i, /Bella/i, /Nikki/i, /Chyna/i, /China/i, /Hulk/i, /lex[\s_-]*bl/i, /leks[\s_-]*bl/i, /Lexi/i, /Hogan/i, /Tiffy/i, 
+	/Steward/i, /Stewart/i, /Kristen/i, /Kriis/i, /Bella/i, /Nikki/i, /Hulk/i, /lex[\s_-]*bl/i, /leks[\s_-]*bl/i, /Lexi/i, /Hogan/i, /Tiffy/i, /Transg/i, /Transv/i,
 	/Bliss/i, /Marg[\s_-]+Robb/i, /Margo/i, /Robbie/i, /Elyna/i, /Elyina/i, /Eliyna/i, /Eliyina/i, /Dua[\s_-]*Lipa/i, /Kamitani/i, /Katie/i, /Nikkita/i, /Alicy/i,
 	/Lisa[\s_-]+Marie/i, /Lisa[\s_-]+Varon/i, /Marie[\s_-]+Varon/i, /Takaichi/i, /Sakurai/i, /Arrivederci/i, /Alice/i, /Alici/i, /Arisu[\s_-]+Endo/i, /Crowley/i, 
 	/Ruby[\s_-]+Soho/i, /Castillo/i, /Monica/i, /Matsumoto/i, /Shino[\s_-]+Suzuki/i, /Lily[\s_-]+Adam/i, /Lana/i, /Blake/i, /Bailey/i, /Bayley/i, /Naomi/i, /Ruca/i, 
@@ -245,9 +263,9 @@
 	/Amanda[\s_-]+Huber/i, /Joanie[\s_-]+Laurer/i, /AEW/i, /TNA/i, /WWE/i, /NJPW/i, /LGBT/i, /Trans/i, /playboy/i, /anorexic/i, /Arab/i, /Stee/i, /Sweee/i, /Waaa/i,
 	/deviant[\s_-]*art/i, /r[\s_-]*34/i, /Stee/i, /Sweee/i, /Sol/i, /Transsexual/i, /Femdom/i, /Animat/i, /AI Porn/i, /AI Nude/i, /AI Pussy/i, /AI Anal/i, /AI Sex/i, 
 	/guy-guy/i, /homo/i, /grandpa/i, /grandma/i, /aunty/i, /piss/i, /pee/i, /crap/i, /shit/i, /fece/i, /Cuckold/i, /Bikini/i, /Lingerie/i, /Hentai/i, /Animation/i, 
-	/Artific/i, /Intel/i, /male-/i, /africa/i, /japan/i, /china/i, /chine/i, /twerk/i, /strip/i, /whori/i, /muscular/i, /-male/i, /male-/i, /shemale/i, /shemale/i, 
+	/Artific/i, /Intel/i, /male-/i, /africa/i, /japan/i, /china/i, /twerk/i, /strip/i, /whori/i, /muscular/i, /-male/i, /male-/i, /shemale/i, /shemale/i, /Appli/i,
 	/old-young/i, /young-old/i, /old-vs-young/i, /Nude AI/i, /nudi AI/i, /software/i, /undre AI/i, /Nud3/i, /Nud1/i, /Naked AI/i, /-AI/i, /AI-/i, /-AI-/i, /AI App/i, 
-	/-App/i, /App-/i, /Appli/i, /-IA/i, /IA-/i, /-IA-/i, /Serrano/i, /Russia/i, /Russian/i, /Transg/i, /Transv/i,
+	/-App/i, /App-/i, /-IA/i, /IA-/i, /-IA-/i, /Serrano/i, /Russia/i, /Russian/i,
 
 
         // Symbols and standalone abbreviations
@@ -258,137 +276,9 @@
         /\bMLM\b/i, /\bLLM\b/i, /\bAI\b/i, /\bAsia\b/i, /\bAsian\b/i, /\bMale\b/i, /\bOld\b/i, /\bIA\b/i, /\bZoey\b/i, /\bTrans\b/i, /\bGay\b/i,
 
 
-        // Blocksite consistency list (every term from blocksite list)
-        /epnu/i, /epno/i, /epeno/i, /ndres/i, /udif/i, /derrier/i, /derriere/i, /undress/i, /del clot/i, /eras clot/i, /eras pant/i, /del pant/i, /lex bl/i, /lex kauf/i,
-        /lex cabr/i, /lex carb/i, /Liv Morgan/i, /Giona Jene/i, /Gionna Daddio/i, /Jene Daddio/i, /Zeli Vega/i, /Nikki/i, /remov pant/i, /remov cloth/i, /shak ass/i, 
-	/shak booty/i, /shak butt/i, /AI cloth/i, /AI pant/i, /AI linger/i, /linqerie/i, /Zelina/i, /Zel Vega WWE/i, /removal of cloth/i, /remov of cloth/i, /0ffr0b/i,  
-	/eras of cloth/i, /Sydney Sweeney/i, /Zel Veg WWE/i, /swapface/i, /Fanene/i, /faceswap/i, /face swap/i, /morphface/i, /morph face/i, /facemorph/i, /face morph/i, 
-	/faceblend/i, /face blend/i, /Zel Vag WWE/i, /swap face/i, /switch faces/i, /switchfaces/i, /faceswitch/i, /face switch/i, /offrobe/i, /0ffrob/i, /offr0b/i,  
-	/painttonud/i, /paint2nud/i, /paint to nud/i, /paint 2 nud/i, /p4int/i, /pa1nt/i, /uncloth/i, /un cloth/i, /derobe/i, /de robe/i, /un-cloth/i, /delet of cloth/i,
-        /de-robe/i, /disrobe/i, /dis-robe/i, /clothoff/i, /cloth off/i, /cloth-off/i, /Unpant/i, /b1kin/i, /bik1n/i, /trunks/i, /trunk5/i, /unblur/i, /enhanc/i, /upscale/i,
-        /enhanceunblur/i, /photoenhance AI/i, /AI enhancing/i, /Enhancing AI/i, /AI photoenhance/i, /AI-photoenhance/i, /photoenhance-AI/i, /AI unblur and enhance/i, 
-	/AI unblur and upscale/i, /rule 34/i, /rulethirtyfour/i, /rule thirtyfour/i, /Explicit AI content/i, /gr4phy/i, /p0rno/i, /porn0/i, /deepfake/i, /deep fake/i, 
-	/object remov/i, /remov object/i, /delet object/i, /object delet/i, /eras object/i, /object eras/i, /unblur/i, /un blur/i, /deblur/i, /de blur/i, /remov blur/i, 
-	/rem0v/i, /r3mov/i, /d3let/i, /del3t/i, /3rasi/i, /er4si/i, /eras1/i, /Reveal AI/i, /AI Reveal/i, /uncensor AI/i, /AI uncensor/i, /unc3nsor/i, /uncen5or/i, 
-	/uncens0r/i, /unc3n50r/i, /uncen50r/i, /unc3ns0r/i, /Artific uncensor/i, /Uncensor artific/i, /d3epnu/i, /de3pnu/i, /d33pnu/i, /ndr3ss/i, /ndre5s/i, /ndres5/i, 
-	/ndre55/i, /ndr3s5/i, /ndr35s/i, /aifake/i, /iafake/i, /ai fake/i, /ia fake/i, /Denois/i, /De nois/i, /de-nois/i, /dr3ss/i, /dre5s/i, /dres5/i, /celebjihad/i, 
-	/celeb-jihad/i, /celebsunmasked/i, /unmaskedcelebs/i, /celebrityfakes4u/i, /celebrityfakesforyou/i, /celebrityfakes2you/i, /celebrityfakestoyou/i, /outfitswap/i, 
-	/swapoutfit/i, /outfit-swap/i, /swap-outfit/i, /aznude/i, /az_nude/i, /az-nude/i, /Fapello/i, /Daddio/i, /Gionna/i, /Giona/i, /Gion4/i, /G1ona/i, /Brianna Garcia/i, 
-	/gi0na/i, /Brie Garcia/i, /Nikki Garcia/i, /Bella Twin/i, /SamanthaWWE/i, /S4mantha/i, /sam4ntha/i, /s4m4ntha/i, /s4m4nth4/i, /sam4nth4/i, /s4manth4/i, /Irvin wrest/i, 
-	/Irvin rass/i, /Irvin WWE/i, /Irvin AEW/i, /Irvin TNA/i, /Irvin NJPW/i, /Irwin wrest/i, /Irwin rass/i, /Irwin WWE/i, /Irwin AEW/i, /Irwin TNA/i, /Irwin NJPW/i, 
-	/D4ddio/i, /dadd1o/i, /daddi0/i, /d4dd1o/i, /d4ddi0/i, /dadd10/i, /Sanna Marin sex/i, /Sanna Marin anal/i, /fappenist/i, /fappening/i, /pxxxrn/i, /diva the butt/i, 
-	/bare leak/i, /cunt leak/i, /pussy image leak/i, /pussy photo leak/i, /pussy pic leak/i, /celeb leak/i, /porn leak/i, /onlyfans leak/i, /fantime leak/i, /Nood/i,
-	/JustForFans leak/i, /FanCentro leak/i, /MYM leak/i, /Unfiltrd leak/i, /Loyalfans leak/i, /Ismygirl leak/i, /Friendsonly leak/i, /Modelhub leak/i, /myFanPark leak/i, 
-	/iFans leak/i, /Fanso leak/i, /Mygirlfund leak/i, /AdultNode leak/i, /Uncensored leak/i, /Unfiltered leak/i, /Fanvue leak/i, /Okfans leak/i, /Manyvids leak/i, 
-	/Scrile connect leak/i, /Flirtback leak/i, /Scrile content leak/i, /picwish/i, /snapedit/i, /Carbrera/i, /undiewear/i, /und1es/i, /undi3s/i, /undie5/i, /und13s/i, 
-	/und1e5/i, /undi35/i, /swimwear/i, /sw1mw/i, /5wimw/i, /sw1mwe4r/i, /sw1mw34r/i, /remov underwear/i, /remov undie/i, /remov boxers/i, /delet underwear/i, /poses/i,
-	/Fansly leak/i, /delet bikini/i, /eras swimwear/i, /remov swimwear/i, /delet swimwear/i, /remov suit/i, /delet suit/i, /eras suit/i, /remov bra/i, /delet bra/i, 
-	/delet pant/i, /delet boxers/i, /delet undie/i, /delet cloth/i, /eras cloth/i, /based labs/i, /basedlabs/i, /noodi/i, /b1kin1/i, /b!kin1/i, /b1kin!/i, /b!kin!/i, 	
-	/Chigvintsev/i, /WWE onlyfans/i, /AEW onlyfans/i, /NJPW onlyfans/i, /TNA onlyfans/i, /Bella fantas/i, /St3phan/i, /st3ph4n/i, /steph4n/i, /Steph Nicole/i, /sk1mp/i, 
-	/smexy/i, /sm3xy/i, /Bella/i, /Point 0f View/i, /b0oty/i, /bo0ty/i, /Lady Part/i, /Femal part/i, /Girl part/i, /Genital/i, /Fannie/i, /Fannys/i, /skimp/i, /eras photo/i, 
-	/5kimp/i, /generativ/i, /gener AI/i, /ejaculat/i,/5quirt/i, /squ1rt/i, /squir7/i, /squ1r7/i, /5quir7/i, /5qu1rt/i, /Mercedes Mon/i, /Sasha/i, /B4nks/i, /NJPW tush/i, 
-	/AEW tush/i, /TNA tush/i, /WWE tush/i, /NJPW vulva/i, /AEW vulva/i, /TNA vulva/i, /WWE vulva/i, /mak1n out/i, /m4kin out/i, /m4k1n out/i, /makin 0ut/i, /mak1n 0ut/i, 
-	/m4kin 0ut/i, /m4k1n 0ut/i, /Nikk Bell/i, /Niki Bell/i, /Zelin Veg/i, /d3epn/i, /de3pn/i, /Nude_AI/i, /noowd/i, /deee/i, /deppp/i, /pus5y/i, /pu5sy/i, /Nude-AI/i, 
-	/nuuw/i, /NudeAI/i, /A1 Nud3/i, /AI Nud3/i, /A1 Nude/i, /mak3 nude/i, /mak3 nud3/i, /make nude/i, /mak nud/i, /deppnude/i, /depp-nude/i, /depp nude/i, /depp\+nude/i, 
-	/nud1f/i, /deepp/i, /deepe nude/i, /d33p3 nud3/i, /deep3 nud3/i, /deep3 n00d/i, /deep3 n00/i, /deepe no0/i, /deepe n0/i, /deep e n0o/i, /deep e n00/i, /deep e noo/i, 
-	/deepe n0o/i, /deepe n00d/i, /foxify/i, /deepen 00/i, /d33pen0/i, /d3epen0/i, /de3pen0/i, /peee/i, /deepeen/i, /deepen oo/i, /deepenoo/i, /deepe noo/i, /make nud3/i, 
-	/mak1n/i, /gen nud3/i, /bas3dlabs/i, /AI Gen nud/i, /AI Gen n0/i, /g3n nude/i, /generat_nud/i, /generatenud/i, /genratenud/i, /genratnud/i, /d33pe nude/i, /undre55/i, 
-	/undre/i, /AI Nud/i, /de3pno/i, /d33pno/i, /deepn0/i, /de3pn0/i, /deepnu/i, /deep-nud/i, /d33pn0d/i, /depnud/i, /pusss/i, /pussie/i, /pussiie/i, /pussiii/i, /d3pnud/i, 
-	/deep-n/i, /deep\+n/i, /deep_nud/i, /deep_n0/i, /deep nud/i, /deepnudo/i, /nuds/i, /n8ked/i, /nak3d/i, /n4ked/i, /deep3/i, /deep-nu/i, /d33p-nu/i, /deep nu/i, /diii/i, 
-	/dipnud/i, /dllp-n/i, /dllp_n/i, /dllp n/i, /dllpn/i, /diip n/i, /diip\.n/i, /d1pnud/i, /dip nud/i, /dip-nud/i, /dip_nud/i, /unstabl diffu/i, /diipn/i, /unst4bl d1ffu/i, 
-	/deep_n/i, /AI Noo/i, /deepe n00/i, /unst4ble/i, /unst4bl3/i, /unstabl3/i, /pqrn/i, /pårn/i, /pxrn/i, /p0rni/i, /porni/i, /porny/i, /swap pant/i, /fox1fy/i, /fox1f/i,
-	/foxif/i, /f0xif/i, /removecloth/i, /remove cloth/i, /generatenude/i, /un5tabl/i, /generate nude/i, /generate nud3/i, /change pant AI/i, /photo ai/i, /imag ai/i,  
-	/nsfw=tool/i, /nsfw/i, /nsfw-tool/i, /stablediffusion/i, /stabl diffus/i, /stable-diffusion/i, /stable_diffusion/i, /stable\?diffusion/i, /stable=diffusion/i, /nuk3if/i,
-	/st4bl3/i, /stabl diffu/i, /st4bl diffu/i, /5t4bl diffu/i, /d1ffu/i, /unstable-diffusion/i, /un5t4bl/i, /unst4bl/i, /undr/i, /onlyf4ns/i, /onlyf4n5/i, /onlif4n5/i, 
-	/mak1n/i, /IMG ai/i, /st4ble/i, /onlif4ns/i, /f4nt1me/i, /fant1me/i, /f4ntime/i, /manyvids/i, /m4nyvids/i, /manyv1ds/i, /manyvid5/i, /m4nyv1d5/i, /f4n5ly/i, /fan5ly/i,
-	/f4nsly/i, /0nlynsfw/i, /onlynsfw/i, /deepai/i, /deep-ai/i, /deep\+ai/i, /deep\?ai/i, /deep=ai/i, /deep_ai/i, /gen nude/i, /nude gen/i, /genaratenud/i, /gen_nude/i, 
-	/generate_nud/i, /g3nerate_nud/i, /g3n3rat/i, /nudgen/i, /nudegen/i, /nudesgen/i, /nudes gen/i, /nde gen/i, /nude gn/i, /nde gn/i, /creat girlf/i, /creat gf/i, /creategf/i, 
-	/mak gf/i, /mak girlf/i, /Girlfriend AI/i, /nudgener/i, /nudi gen/i, /gen3raten/i, /gen3rat3n/i, /live3d/i, /aiexotic/i, /ai exotic/i, /ai-exotic/i, /nsfwart/i, /nsfw art/i, 
-	/nsfw art gen/i, /ero Artificial intelligence/i, /Artificial intelligence gen/i, /babe5/i, /Artificial intelligence g3n/i, /generat3/i, /genrat/i, /nude5/i, /waif/i,  
-	/cr3ate/i, /cr3a7e/i, /cr3at/i, /creat1/i, /Artificial intelligence porn/i, /creat3/i, /Artificial intelligence ero/i, /bebe5/i, /nubee/i, /nub3e/i, /nube3/i, /pxxrn/i,
-	/poorn/i, /penetr\*\*e/i, /Lex Bliss/i, /createporn/i, /vidnoz/i, /creat porn/i, /porn journey/i, /bussy/i, /pornjourney/i, /frosting ai/i, /fr0st ai/i, /fr0st a1/i, /pornjoy/i, 
-	/porn joy/i, /pornj0y/i, /porn j0y/i, /only-babe/i, /onlybabe/i, /ai p0rn/i, /ai corn/i, /priv3/i, /aip0rn/i, /bus5y/i, /bu5sy/i, /privee/i, /prive/i, /r3m0ve/i, /remov3/i, 
-	/r3m AI/i, /rem cloth/i, /cloth rem/i, /pant rem/i, /rem pant/i, /pant eras/i, /pant del/i, /frosting\?ai/i, /frosting=ai/i, /frosting-ai/i, /ai onl/i, /porm/i, /un pant/i, 
-	/de pant/i, /depant/i, /remdress/i, /rem dress/i, /dress rem/i, /dressrem/i, /rem bra/i, /rem boxers/i, /deldress/i, /de dress/i, /dress de/i, /dressde/i, /del bik/i, /rem bik/i, 
-	/eras bik/i, /dress eras/i, /clit\*/i, /clito\*/i, /\*litor\*/i, /\*litori/i, /clitori\*/i, /clitor\*/i, /pl3as/i, /pl345sure/i, /g3nit/i, /ai tush/i, /L3X Bliss/i, /Bl1ss/i, 
-	/L3X Bl1ss/i, /pl345ur3/i, /vulv\*/i, /\*ulva/i, /Mercede Bank/i, /pl345ure/i, /m\*stu/i, /mas\*u/i, /mast\*r/i, /vag\*\*a/i, /Artific Intellig/i, /v\*\*ina/i, /\*agina/i, 
-	/vagin\*/i, /vagi\*n/i, /puss\*/i, /puss3/i, /pussee/i, /pu5si/i, /puss1/i, /squ1r/i, /s\*uir/i, /squir\*/i, /\*quir/i, /squ\*r/i, /squi\*/i, /sq\*ir/i, /5quir\*/i, 
-	/eras pic/i, /midjourney/i, /mid journey/i, /prompthero/i, /prompt hero/i, /midjourn3y/i, /creat nud/i, /gen nud/i, /convert nud/i, /conversion nud/i, /nud someone/i, /cr3at nud/i,
-	/nud some else pic/i, /nud someone pic/i, /AI suit/i, /nud person p/i, /nud people p/i, /nud person i/i, /nak convert/i, /nak conversion/i, /nud someone i/i, /nud some else i/i, 
-	/nud someone p/i, /cre\*te/i, /cre4t nud/i, /crea7 nud/i, /cr347 nud/i, /nud app/i, /m\*k nud/i, /\*ak nud/i, /m4k nud/i, /m&k3 nud/i, /m&ke nud/i, /c\*eate/i, /cr\*ate/i, 
-	/crea\*e/i, /creat\*/i, /\*reat/i, /crete nud/i, /cret3 nud/i, /Nudi it/i, /Nude it/i, /###/i, /nud softw/i, /nud softv/i, /nud softf/i, /nud her p/i, /nud the/i, /nud people/i, 
-	/nud person/i, /nudein/i, /nudin/i, /nudey/i, /nudy/i, /nudyin/i, /nudeyi/i, /\*ying/i, /creat nak/i, /nud!f/i, /nude!f/i, /doepnud/i, /nuid1/i, /nuidi/i, /nuid/i, /nudl/i, /njuud/i,
-        /njud/i, /nujd/i, /nudj/i, /nuidif/i, /nui!d/i, /diepn/i, /deip/i, /diif/i, /deopnud/i, /nidif/i, /n1dif/i, /nid1f/i, /expli\*it/i, /explic\*t/i, /explici\*/i, /\*xplicit/i,
-	/e\*plicit/i, /ex\*licit/i, /exp\*icit/i, /expl\*cit/i, /exp!ic/i, /expl!c/i, /3xpl!c/i, /expl1c/i, /horni/i, /horn1/i, /h0rny/i, /whor1/i, /wh0re/i, /whor3/i, /dirti/i, /dirt\*/i,  
-	/d1rti/i, /conv3rt/i, /conv3rs/i, /c0nver/i, /d1rtl/i, /dlrt1/i, /dlrt!/i, /dlrti/i, /dlrty/i, /d!rti/i, /dir\*i/i, /dir\*y/i, /who\*ing/i, /deepmok/i, /nuk1f/i, /nuk3f/i,  
-	/deepnugif/i, /deepnukeif/i, /deepnugeif/i, /deepn00/i, /deepnoo/i, /diep/i, /nudi app/i, /nude app/i, /ned1f/i, /nedif/i, /nedeif/i, /nudeif/i, /nootify/i, /ned!f/i, /diva vulva/i,
-	/artificial intelligence/i, /art intel/i, /ai booty/i, /ai butt/i, /ai horny/i, /diva vag/i, /diva pussy/i, /diva naked/i, /diva nude/i, /diva anal/i, /diva horny/i, /cr34te/i,
-	/AI explicit/i, /AI explic/i, /Art explic/i, /A1 explic/i, /al explic/i, /al lntel/i, /cl0at/i, /elliecha0tic/i, /AI sensu/i, /off cloth/i, /off robe/i, /Off dress/i, /Off pant/i, 
-	/off bra/i, /off swimwear/i, /off lingerie/i, /off boxers/i, /off swimsuit/i, /AI Uncens/i, /Al uncens/i, /A1 uncens/i, /IA nude/i, /AI censor/i, /A\* censor/i, /Al censor/i, 
-	/A1 censor/i, /Al unfilt/i, /A1 unflit/i, /AI unfilt/i, /unf1lt/i, /unfllt/i, /unf!lt/i, /\*l tool/i, /\*I tool/i, /A\* tool/i, /IA nud/i, /cloth chan web/i, /cloth chan app/i, 
-	/cloth chan sit/i, /cloth chan im/i, /cloth chan ph/i, /cloth chan si/i, /pant chan si/i, /pant chan im/i, /shirt chan pic/i, /shirt chan ph/i, /sh1rt/i, /shirt chan im/i,
-	/cloth chan pic/i, /outf chan ap/i, /chng/i, /facechan/i, /cust ai/i, /facl/i, /facechang/i, /face chan/i, /khangin/i, /khange/i, /kh4ng/i, /changr/i, /khang1/i, /khang3/i,
-        /khang/i, /thr0at/i, /thro4t/i, /sw1tch/i, /face swi/i, /outf chan im/i, /dress chan ap/i, /shirt chan ap/i, /biur/i, /nude scan/i, /AI blur/i, /khank/i, /khanc/i, /ghang/i,
-        /dres chan/i, /dres switch/i, /AI dres/i, /nub1f/i, /nubif/i, /nuuu/i, /noudi/i, /nuod/i, /noudl/i, /noud1/i, /noud3/i, /deepnoud/i, /deepnou/i, /deepnu0/i, /ch4ng/i, /dlidn/i,
-	/nuubif/i, /nuub3f/i, /nodress/i, /ndress/i, /nub app/i, /nub site/i, /nuub app/i, /nuub site/i, /deeper nud/i, /deepernud/i, /deepern0o/i, /deeperno0/i, /no dress/i, /diip/i,
-	/unstress/i, /n0 tre/i, /n0tre/i, /no tress/i, /untres/i, /ntress/i, /notress/i, /nodif/i, /nod1f/i, /ndif/i, /ndlf/i, /doodlf/i, /dood!f/i, /doodif/i, /dood1f/i, /diid/i,  
-	/deepi/i, /sma5h/i, /sm4sh/i, /deep dud si/i, /deep dud ap/i, /deeperno/i, /neepdud/i, /neep dud/i, /dudeif/i, /udelf/i, /dudief/i, /udeif/i, /ude1f/i, /ude!f/i, /dlid n/i,  
-	/dild/i, /difd/i, /d nudi/i, /d3d nud/i, /deepenu/i, /deepa/i, /deepb/i, /deepd/i, /deep fa/i, /deepfa/i, /deepfx/i, /deepcu/i, /deepcoc/i, /deepdic/i, /deepic/i, /deeppic/i,  
-	/deepf3/i, /deep f4/i, /deepg/i, /deep f3/i, /deepl/i, /deeph/i, /deepj/i, /deepk/i, /deppn/i, /depp nu/i, /deepr/i, /deepq/i, /deepo/i, /deep0/i, /deep n0/i, /deepm/i, /deepw/i,  
-	/deepu/i, /deept/i, /deepx/i, /deepsx/i, /deeps\*x/i, /deepz/i, /deeznud/i, /deez nud/i, /deepy/i, /nutif/i, /ntif/i, /nutlf/i, /nut!f/i, /nuteif/i, /nopif/i, /nop1f/i, /nopeif/i,  
-	/inpa1nt/i, /inp4int/i, /inp41nt/i, /inpa!nt/i, /inpalnt/i, /llng/i, /AI outf/i, /AI wear/i, /cl0ath/i, /outf!t/i, /outf1t/i, /AI shir/i, /cI0uth/i, /c!0uth/i, /c10uth/i, /cl0uth/i, 
-	/c1outh/i, /c!outh/i, /cIouth/i, /c1oth/i, /c!oth/i, /diva the ass/i, /cl0th/i, /cl04th/i, /clo4th/i, /cl0yth/i, /cloyth/i, /w1thout/i, /with0ut/i, /wlth/i, /shlrt/i, /sh!rt/i, /5kirt/i, 
-	/5klrt/i, /dudif/i, /dud1f/i, /dud!f/i, /deep som/i, /deepsum/i, /deep sum/i, /deep sud/i, /deep gud/i, /deep cod/i, /nqde/i, /nxde/i, /tutif/i, /tut1f/i, /tut!f/i, /duudi/i, /d0dif/i, 
-        /n0dress/i, /dod1f/i, /deepfu/i, /deepfo/i, /deepf0/i, /deep fud/i, /AI editor/i, /3ditor/i, /3d1tor/i, /undressaitool/i, /undressaitools/i, /dexp/i, /nxxe/i, /nuxe/i, /nudx/i, /deepxu/i,  
-	/fudeif/i, /deep xu/i, /xudl/i, /qudl/i, /qud!f/i, /qude!f/i, /deep qud/i, /ai dress/i, /ai edit vid/i, /ai softw/i, /nudeifi/i, /zudeif/i, /zudif/i, /deep zu/i, /deep zode/i, /zodlf/i,  
-	/zode/i, /zodei/i, /zude/i, /zud1f/i, /zud!f/i, /budif/i, /budeif/i, /deep bude/i, /deep budi/i, /deebn/i, /deeb/i, /debbn/i, /debn/i, /noudif/i, /nuodif/i, /debb/i, /nuodef/i, /noudef/i,  
-	/bud!f/i, /budlf/i, /budelf/i, /deep ud/i, /deepud/i, /deep kud/i, /deep xud/i, /deep dudi/i, /deep fui/i, /deep ful/i, /deep fuo/i, /deep fyu/i, /deepfy/i, /deepfiy/i, /deepfiu/i, /deepfe/i,
-	/deep fi/i, /deep fou/i, /deep fuy/i, /fodif/i, /fod1f/i, /fod!f/i, /deep cu/i, /deep codi/i, /deep cud/i, /cudeif/i, /cudif/i, /deep foud/i, /deep fuod/i, /deepcod/i, /deepny/i, /deep ny/i, 
-	/neep dy/i, /deep noy/i, /noydif/i, /nyodif/i, /nuydif/i, /nyudif/i, /gen1r/i, /off skirt/i, /off skir/i, /bude1f/i, /dodif/i, /without skirt/i, /with out skirt/i, /5quir/i, /plea5/i, /gen1t/i, 
-	/deep fuid/i, /deep fod/i, /bude!lf/i, /nudief/i, /leak nude/i, /deepsom/i, /cloath/i, /skrt/i, /outflt/i, /promp nud/i, /nude people i/i, /nud some else p/i, /nud her i/i, /nud!n/i, /nud!ng/i, 
-	/niidif/i, /3xpl1c/i, /c0nv3r/i, /deepnukif/i, /nut1f/i, /ntlf/i, /deepf4/i, /Art !ntel/i, /pant chan ph/i, /outf chan si/i, /thr04t/i, /depdud/i, /ghanc/i, /deepnuo/i, /n0dif/i, /deepe nu/i, 
-	/deepdud/i, /Art explicit/i, /Xia Brookside/i, /Charlot Flai/i, /Ruby Soho/i, /Iyo sky/i, /Iyo Shirai/i, /Io Shirai/i, /dirt1/i, /n0 dress/i, /sklr/i, /clouth/i, /inpaint/i, /deepv/i, /fudif/i, 
-	/zod!f/i,  /un stress/i, /nuub1f/i, /nuod3/i, /deep dudeif/i, /Shirai/i, /rule34/i, /windsor/i, /winds0r/i, /w1nds0r/i, /w1ndsor/i, /Adriana Rizzo/i, /Adriana/i, /Alba Fyre/i, /Kay Lee Ray/i, 
-	/Alicia Taylor/i, /Alicia Warrington/i, /Warrington/i, /Arianna Grace/i, /Bianca Carelli/i, /Kanako Urai/i, /Space Galaxy Warrior Leona/i, /Asuka/i, /B-Fab/i, /Briana Brandy/i, /Davina Rose/i, 
-	/Davina/i, /Bianca Belair/i, /Bianca/i, /Nicole/i, /Brie Bella/i, /Nikki Bella/i, /Nicole Garcia/i, /Brooke Hogan/i, /azm/i, /Melina Nava/i, /Melina Nava Pérez/i, /Melina Pérez/i, /Mariah May/i, 
-	/Blake Monroe/i, /Candice LeRae/i, /Cathy Kelley/i, /Chantel Monroe/i, /Derrian Gobourne/i, /Chelsea Green/i, /Laurel Van Ness/i, /Megan Miller/i, /Fallon Henley/i, /Giulia/i, /Dakota Kai/i,
-	/Emily Andzulis/i, /Izzi Dame/i, /Franki Carissa/i, /Jackie Redmond/i, /Jacy Jayne/i, /Avery Taylor/i, /Jade Cargill/i, /Jaida Parker/i, /Tiana Caffey/i, /jazz/i, /Kairi Sane/i, /Xtina Kay/i,
-	/Jordynne Grace/i, /Tylynn Register/i, /Kairi Hoku/i, /Karmen Petrovic/i, /Monika Klisara/i, /Kelani Jordan/i, /Lea Mitchell/i, /Kendal Grey/i, /Kiana James/i, /Kayla Inlay/i, /Lainey Reid/i, 
-	/Adelicious/i, /Sasha Banks/i, /Mercedes Moné/i, /Alex Gracia/i, /Aleah James/i, /Alicia Atout/i, /Alisha Edwards/i, /naomi/i, /Allysin Kay/i, /Alpha Female/i, /Jazzy Gabert/i, /Amber O'Neal/i, 
-	/Amale Winchester/i, /Angel Hayze/i, /Angelica Risk/i, /Angelina Love/i, /Airica Demia/i, /anna jay/i, /Aria Bennett/i, /Arie Alexander/i, /Arkady Aura/i, /azumi/i, /Blair Davenport/i, /hyan/i, 
-	/Ash By Elegance/i, /Ashley D'Amboise/i, /Bea Priestley/i, /Dana Brooke/i, /Ayako Hamada/i, /Billie Starkz/i, /Lillian Bridget/i, /Jessie Brooks/i, /Ava Storie/i, /Brandi Lauren/i, /Ivy Nile/i,
-	/Camron Branae/i, /Ashley Blaze/i, /Amari Miller/i, /Camron Bra'Nae/i, /Camron Connors/i, /Carlee Bright/i, /Peyton Royce/i, /Cassie Lee/i, /Charlette Renegade/i, /Chigusa Nagayo/i, /Chik Tormenta/i, 
-	/Christina Von Eerie/i, /Christyan Reid/i, /Christi Jaynes/i, /Crystal Carmichael/i, /Dalys la Caribean/i, /Dani Luna/i, /Vanessa Borne/i, /Danielle Kamela/i, /Sonya Deville/i, /Daria Berenato/i, 
-	/Dasha Gonzalez/i, /Dasha Fuentes/i, /Delmi Exo/i, /Deonna Purrazzo/i, /Diamanté/i, /Priscilla Zuniga/i, /Britt Baker/i, /Dream Girl Ellie/i, /Virginia Ferry/i, /Cora Jade/i, /Elayna Black/i, 
-	/Dump Matsumoto/i, /Ella Envy/i, /Dump Matsumoto/i, /Kaoru Matsumoto/i, /Emi Sakura/i, /Emi Motokawa/i, /Donna Rama/i, /Erica Leigh/i, /Estrellita/i, /Faby Apache/i, /Faye Jackson/i, /Lady Flammer/i, 
-	/Big Booty Trudy/i, /Freya the Slaya/i, /Freya the Slayer/i, /Gabby LaSpisa/i, /Gabby Ortiz/i, /Gia Miller/i, /Georgia Lee Ann Milton/i, /Valentina Rossi/i, /Gianna Capri/i, /Adriana Gambino/i, 
-	/Jenny Levy/i, /Gisele Shaw/i, /Harley Cameron/i, /Danni Ellexo/i, /Reyna Reyes/i, /Harley Hudson/i, /Jessicka Havok/i, /Jessica Havok/i, /Jessika Havok/i, /Heather Reckless/i, /Hikaru Shida/i,
-        /holidead/i, /HollyHood Haley/i, /Indi Hartwell/i, /Samantha De Martin/i, /Courtney Stewart/i, /Isla Dawn/i, /Ivelisse/i, /Ivelisse Vélez/i, /Sofia Cortez/i, /Juliette/i, /Jada Stone/i, /Kellyanne/i,
-	/Jade Chung/i, /Jade Gentile/i, /Jazmyn Nyx/i, /Rimi Yokota/i, /Jaguar Yokota/i, /Jamie Hayter/i, /Jessi Kamea/i, /Jessie Elaban/i, /Billie Kay/i, /Jessie McKay/i, /Jessy Ventura/i, /Jessy Queen/i, 
-	/Jody Threat/i, /Julia Hart/i, /Yulisa Leon/i, /Julisa Leon/i, /Julissa Mexa/i, /Yulisa León/i, /Kacy Catanzaro/i, /Kali Armstrong/i, /Destinee Brown/i, /Karen Jarrett/i, /Elektra Lopez/i, 
-	/Karissa Rivera/i, /Kamilla Kaine/i, /kamille/i, /kamille/i, /Summer Sorrell/i, /Katie Forbes/i, /Khloe Hurtz/i, /Kayla Braxton/i, /Kayla Rossi/i, /KC Spinelli/i, /Traci Spinelli/i, /Kylie Rae/i,
-	/Nikita Naridian/i,  /Kenzie Paige/i, /Kenzie HEnry/i, /Paige Henry/i, /Kiera Hogan/i, /Killer Kelly/i, /KiLynn King/i, /Kris Statlander/i, /Kristen Stadtlander/i, /Kylie Paige/i, /Kylie Alexa/i, 
-	/Briana Ray/i, /Katrina Cortez/i, /Catalina Garcia/i, /Catalina García/i, /La Hiedra/i, /La Rosa Negra/i, /Jamie Frost/i, /Leigh Laurel/i, /Kayden Carter/i, /Lacey Lane/i, /lady frost/i, /Mia Yim/i, 
-	/Lady Shani/i, /Lash Legend/i, /Layla Diggs/i, /Breanna Covington/i, /Laynie Luck/i, /Amber Lynn/i, /Lei'D Tapa/i, /Leila Grey/i, /Cat Cardoza/i, /Lena Kross/i, /Marie Malenko/i, /Leva Bates/i,
-	/Lexy Nair/i, /Leyla Hirsch/i, /Lilian Garcia/i, /Lizzy Evo/i, /Eliza Alexander/i, /Lizzy Styles/i, /Lola Yara/i, /Lola the Adventurer/i, /Lola Vice/i, /Valerie Loureda/i, /Lyra Valkyria/i, 
-	/Aoife Valkyrie/i, /Lady Valkyrie/i, /xia-li/i, /xia li/i, /Maggie Lee/i, /Maggie Moore/i, /Maggie Minerva/i, /Maggie McKinney/i, /Mai Sakurai/i, /Maki Itoh/i, /Jakara Jackson/i, /Mara Sadè/i, 
-	/Maria Manic/i, /Marina Shafir/i, /Marti Belle/i, /Masha Slamovich/i, /Masyn Holiday/i, /Darci Khan/i, /Maxxine Dupri/i, /Sofia Cromwell/i, /Utami Hayashishita/i, /mayvalentine/i, /mayaworld/i, 
-	/may valentine/i, /maya-world/i, /maya world/i, /Mayu Iwatani/i, /mazzerati/i, /mazzerati/i, /McKenzie Mitchell/i, /Megan Bayne/i, /Lady Maravilla/i, /Meg Monroe/i, /Mercedes Martinez/i, 
-	/Melissa Santos/i, /Melina Perez/i, /Mei Suruga/i, /Megumi Kudo/i, /Mickie James/i, /Alexis Laree/i, /Emilia McKenzie/i, /Millie McKenzie/i, /Mila Moore/i, /Kellie Morga/i, /Mima Shimoda/i,
-        /Mirai Maiumi/i, /Miranda Alize/i, /Miranda Salinas/i, /Mina Shirakawa/i, /Samantha Starr/i, /Shayna Wayne/i, /Myla Grace/i, /Trinity Fatu/i, /Naomi Knight/i, /Natalia Markova/i, /Nevaeh/i, 
-	/Ekaterina Bonnie/i, /Natalya Neidhart/i, /Jasmin Areebi/i, /Nikkita Lyons/i, /La Diablesa Rosa/i, /Nixon Newell/i, /Tegan Nox/i, /Nyla Rose/i, /Penelope Ford/i, /Persephone/i, /Rosemary/i,  
-	/Hayley Montoya/i, /Penina Tuilaepa/i, /Piper Niven/i, /Priscilla Kelly/i, /Gigi Dolin/i, /Queen Aminata/i, /Rachael Ellering/i, /Rachael Evers/i, /Aliyah/i, /Nia Jax/i, /Lina Fanene/i, 
-	/Nikki Blackheart/i, /Nikki Cross/i, /Nina Samuels/i, /Raquel Rodriguez/i, /Raquel González/i, /Reina González/i, /Victoria González/i, /Reina Dorada/i, /Reyna Dorada/i, /Renee Michelle/i,
-	/Haze Jameson/i, /Renee Paquette/i, /Renee Young/i, /Rhea Ripley/i, /Demi Bennett/i, /Robyn Renegade/i, /Ronda Rousey/i, /Courtney Rush/i, /PJ Tyler/i, /Casey Maguire/i, /Roxanne Perez/i, 
-	/Ruthie Jay/i, /Ryo Mizunami/i, /Aya Mizunami/i, /Ayane Mizumura/i, /Sadie Gibbs/i, /Sam Leterna/i, /Sam L'Eterna/i, /Samantha L'Eterna/i, /Santana Garrett/i, /Sarah Schreiber/i, /Paige/i, 
-	/Saraya/i, /Sareee/i, /Sarray/i, /Sexy Star/i, /Savannah Evans/i, /Saya Kamitani/i, /Scarlett Bordeaux/i, /Elizabeth Chihaia/i, /Serena Deeb/i, /Session Moth Martina/i, /Sexy Dulce/i, 
-	/Dulce Garcia/i, /Dulce Poly/i, /Alexandra Barrulas/i, /Shayna Baszler/i, /Shazza McKenzie/i, /Chantelle Bathory/i, /Shinobu Kandori/i, /Shotzi Blackheart/i, /Sirena Linton/i, /Tay Melo/i,
-	/Dani Sekelsky/i, /Skylar Raye/i, /Sloane Jacobs/i, /Sloane Jacobs/i, /The Notorious MiMi/i, /Dani Sekelsky/i, /SoCal Val/i, /Valerie Wyndham/i, /Sol Ruca/i, /Steph De Lander/i, /Skylar Raye/i, 
-	/Persia Pirotta/i, /Stephanie Vaquer/i, /Stori Denali/i, /Su Yung/i, /Susie/i, /Susan/i, /Sussy Love/i, /Tamina Snuka/i, /Tasha Steelz/i, /Tatevik The Gamer/i, /Tatevik Hunanyan/i, /Tatum Paxley/i, 
-	/Tatyanna Dumas/i, /Tay Conti/i, /Taya Valkyrie/i, /Kira Foster/i, /Tessa Blanchard/i, /Thea Hail/i, /Thunder Rosa/i, /Tiffany Nieves/i, /Tiffany Stratton/i, /Tiffany/i, /Toni Storm/i, /Trish Adora/i, 
-	/Trish Stratus/i, /Tyra Mae Steele/i, /Tamyra Mensah-Stock/i, /Valentynna Reis/i, /Valentina Feroz/i, /Vicious Vicki/i, /Vicki Venuto/i, /Victoria Andreola/i, /Vivacious Vicki/i, /Vicky Haskins/i, 
-	/Amber Vixen/i, /Alicia Fox/i, /Victoria Yuzuki/i, /Vita VonStarr/i, /Wendy Choo/i, /Willow Nightingale/i, /Nightingale/i, /Wren Sinclair/i, /Madi Wrenkowski/i, /Zelina Rosita/i, /Yuka Sakazaki/i, 
-	/Zayda Steel/i, /Zena Sterling/i, /Olena Sadovska/i, /Zoey Stark/i, /Lacey Ryan/i, /Zoë Sager/i, /Zelina Vega/i, /Rosita/i, /Victoria Crawford/i,
+        // Focus Master fetched terms
+        createFocusMasterFetchedTermsMatcher(),
+
     ];;
     }
 
@@ -409,9 +299,8 @@
 
         const blockQuery = (query, event) => {
             const text = String(query || '').trim();
-            const blockedByStaticRegex = tenorBlockedRegexWords.some(regex => regexMatches(regex, text));
-            const blockedByFocusMaster = containsFocusMasterBlockedTerm(text);
-            if (!text || (!blockedByStaticRegex && !blockedByFocusMaster)) return false;
+            const blockedByConfiguredTerms = tenorBlockedRegexWords.some(regex => regexMatches(regex, text));
+            if (!text || !blockedByConfiguredTerms) return false;
             if (event) {
                 try { event.preventDefault(); } catch (e) {}
                 try { event.stopImmediatePropagation(); } catch (e) {}
@@ -494,7 +383,7 @@
         window.__braveFoxRedTubeFilteringInstalled = true;
 
         const REDTUBE_STATE_ATTR = 'data-bravefox-redtube-filter-state';
-        const REDTUBE_FILTER_REVISION = 'redtube-card-category-v2';
+        const REDTUBE_FILTER_REVISION = 'redtube-sitewide-v4';
         const REDTUBE_REVISION_ATTR = 'data-bravefox-redtube-filter-revision';
         const REDTUBE_CATEGORY_STATE_ATTR = 'data-bravefox-redtube-category-filter-state';
         const REDTUBE_CATEGORY_REVISION_ATTR = 'data-bravefox-redtube-category-filter-revision';
@@ -502,13 +391,53 @@
             'li.thumbnail-card[data-video-id]',
             'li.videoblock_list[data-video-id]',
             'li.js_thumbContainer[data-video-id]',
-            'li[id^="mrv_"][data-video-id]'
+            'li[id^="mrv_"][data-video-id]',
+            // RedTube sometimes omits a video ID until the thumbnail finishes hydrating.
+            'li.thumbnail-card:has(a.video-title-text, a.tm_video_title)',
+            'li.videoblock_list:has(a[href])',
+            'li.js_thumbContainer:has(a[href])',
+            'article.thumbnail-card[data-video-id]',
+            'div.thumbnail-card[data-video-id]',
+            'li.video-item:has(a[href])',
+            'article.video-card:has(a[href])'
         ];
         const REDTUBE_CATEGORY_SELECTOR_PARTS = [
             'li.category_item',
             'li.category_tracker_item',
             'li[id^="categories_list_block_"]'
         ];
+        // The directory routes use different card markup from video results. Match the
+        // actual destination paths, not incidental links in the site header or sidebar.
+        // /channel is the directory landing page; /channels/<slug> is a channel profile.
+        // /members is the landing page; /user/<id> is a member profile.
+        const REDTUBE_DIRECTORY_LINK_SELECTOR_PARTS = [
+            'pornstar', 'channels', 'channel', 'straight/playlists', 'playlists',
+            'playlist', 'user', 'members', 'community', 'amateur'
+        ].flatMap(path => [
+            `a[href^="/${path}/"]`,
+            `a[href*=".redtube.com/${path}/"]`,
+            `a[href*=".redtube.net/${path}/"]`,
+            `a[href*=".redtube.com.br/${path}/"]`
+        ]);
+        const REDTUBE_DIRECTORY_LINK_SELECTOR = REDTUBE_DIRECTORY_LINK_SELECTOR_PARTS.join(', ');
+        const REDTUBE_DIRECTORY_STATE_ATTR = 'data-bravefox-redtube-directory-filter-state';
+        const REDTUBE_DIRECTORY_REVISION_ATTR = 'data-bravefox-redtube-directory-filter-revision';
+        const REDTUBE_DIRECTORY_SELECTOR_PARTS = [
+            'li.pornstar_item', 'li.pornstar-card', 'li.model-card',
+            'li.channel_item', 'li.channel-card', 'li.playlist_item', 'li.playlist-card',
+            'li.member_item', 'li.member-card', 'li.user-card', 'li.profile-card',
+            'li.community_item', 'li.community-card',
+            'article.pornstar-card', 'article.channel-card', 'article.playlist-card',
+            'article.member-card', 'article.profile-card',
+            // A card may have no descriptive class. A person/channel/playlist detail link
+            // accompanied by an image identifies a tile without matching menu items.
+            ...REDTUBE_DIRECTORY_LINK_SELECTOR_PARTS.map(link => `li:not(.thumbnail-card):not(.videoblock_list):not(.js_thumbContainer):not([data-video-id]):not([id^="mrv_"]):has(${link}):has(img, picture)`),
+            ...REDTUBE_DIRECTORY_LINK_SELECTOR_PARTS.map(link => `article:not(.thumbnail-card):not(.video-card):not([data-video-id]):has(${link}):has(img, picture)`),
+            ...REDTUBE_DIRECTORY_LINK_SELECTOR_PARTS.map(link => `li:not(.thumbnail-card):not(.videoblock_list):not(.js_thumbContainer):not([data-video-id]):not(:has(a.video-title-text, a.tm_video_title)):not(:is(header, nav, footer, [role="navigation"]) li):has(> ${link})`),
+            ...REDTUBE_DIRECTORY_LINK_SELECTOR_PARTS.map(link => `div[class*="card" i]:not(.thumbnail-card):not(.video-card):has(> ${link}):has(img, picture)`),
+            ...REDTUBE_DIRECTORY_LINK_SELECTOR_PARTS.map(link => `${link}:not(header a, nav a, footer a, [role="navigation"] a, [role="menu"] a, .thumbnail-card a, .videoblock_list a, .js_thumbContainer a, .video-card a)`)
+        ];
+        const REDTUBE_DIRECTORY_SELECTOR = REDTUBE_DIRECTORY_SELECTOR_PARTS.join(', ');
         const REDTUBE_CARD_SELECTOR = REDTUBE_CARD_SELECTOR_PARTS.join(', ');
         const REDTUBE_CATEGORY_SELECTOR = REDTUBE_CATEGORY_SELECTOR_PARTS.join(', ');
         const redTubeBlockedRegexWords = createStaticBlockedRegexWords();
@@ -517,6 +446,150 @@
         let redTubeObserver = null;
         let removeRedTubeStorageListener = null;
         let redTubeRedirecting = false;
+        const redTubeCardTextCache = new WeakMap();
+        const redTubeCategoryTextCache = new WeakMap();
+        const redTubeDirectoryTextCache = new WeakMap();
+
+        // XVideos-style verdict reuse without recording titles, names or browsed URLs.
+        // Only 64-bit-style paired hashes are persisted; the cache is ignored until
+        // the remote list and local wrestler exclusions have both been loaded.
+        const REDTUBE_VERDICT_CACHE_KEY = 'bravefox_redtube_verdict_cache_v4';
+        const REDTUBE_VERDICT_CACHE_LIMIT = 1400;
+        const REDTUBE_VERDICT_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
+        const redTubeVerdicts = new Map();
+        let redTubeCacheScope = '';
+        let redTubeWrestlerStorageReady = false;
+        let redTubeCacheSaveTimer = null;
+        let redTubeBatchTimer = null;
+        let redTubeBatchStartedAt = 0;
+        const redTubeHomeReadyCards = new Set();
+        const redTubePendingMutationRoots = new Set();
+        let redTubeMutationDrainScheduled = false;
+        let redTubeMutationDrainTimer = null;
+
+        const isRedTubeHomeBatchRoute = () =>
+            /^\/$/.test(window.location.pathname || '/') && !window.location.search;
+
+        function redTubeHash(value) {
+            const input = String(value || '');
+            let a = 0x811c9dc5, b = 0x9747b28c;
+            for (let i = 0; i < input.length; i++) {
+                const ch = input.charCodeAt(i);
+                a = Math.imul(a ^ ch, 16777619);
+                b = Math.imul(b ^ ch, 2246822519);
+            }
+            return (a >>> 0).toString(16).padStart(8, '0') +
+                   (b >>> 0).toString(16).padStart(8, '0');
+        }
+
+        function redTubeStableVerdictKey(kind, element, searchableText) {
+            if (!element || !searchableText) return '';
+            const firstLink = kind === 'video'
+                ? element.querySelector('a.video-title-text[href], a.tm_video_title[href], .video-title-wrapper a[href], a[href*="/video/"]')
+                : element.matches?.('a[href]') ? element : element.querySelector('a[href]');
+            const id = kind === 'video' ? (element.getAttribute('data-video-id') || '') : '';
+            let path = '';
+            try {
+                if (firstLink?.getAttribute('href')) {
+                    const url = new URL(firstLink.getAttribute('href'), window.location.origin);
+                    if (url.hostname === window.location.hostname) path = url.pathname;
+                }
+            } catch (e) {}
+            if (!path && !id) return '';
+            return redTubeHash([kind, path, id, searchableText.toLocaleLowerCase('en-US')].join('\x1f'));
+        }
+
+        function redTubeLoadVerdictsForCurrentScope() {
+            if (!focusMasterBlockedTermsFetchSucceeded || !redTubeWrestlerStorageReady) return;
+            const nextScope = redTubeHash(REDTUBE_FILTER_REVISION + '\n' +
+                focusMasterBlockedTermsSignature + '\n' + redTubeDynamicWrestlerSignature);
+            if (nextScope === redTubeCacheScope) return;
+            redTubeCacheScope = nextScope;
+            redTubeVerdicts.clear();
+            try {
+                const payload = JSON.parse(localStorage.getItem(REDTUBE_VERDICT_CACHE_KEY) || 'null');
+                if (!payload || payload.scope !== nextScope || !Array.isArray(payload.rows)) return;
+                const now = Date.now();
+                for (const [key, state, time] of payload.rows.slice(-REDTUBE_VERDICT_CACHE_LIMIT)) {
+                    if (typeof key === 'string' && /^(?:clean|blocked)$/.test(state) &&
+                        Number.isFinite(time) && now - time < REDTUBE_VERDICT_CACHE_TTL_MS && time <= now) {
+                        redTubeVerdicts.set(key, { state, time });
+                    }
+                }
+            } catch (e) {}
+        }
+
+        function redTubeSaveVerdictsSoon() {
+            if (!redTubeCacheScope || redTubeCacheSaveTimer !== null) return;
+            redTubeCacheSaveTimer = setTimeout(() => {
+                redTubeCacheSaveTimer = null;
+                try {
+                    localStorage.setItem(REDTUBE_VERDICT_CACHE_KEY, JSON.stringify({
+                        scope: redTubeCacheScope,
+                        rows: [...redTubeVerdicts].map(([key, data]) => [key, data.state, data.time])
+                    }));
+                } catch (e) {}
+            }, 700);
+        }
+
+        function redTubeVerdict(kind, element, text) {
+            const key = redTubeStableVerdictKey(kind, element, text);
+            const cached = key && redTubeCacheScope ? redTubeVerdicts.get(key) : null;
+            if (cached && Date.now() - cached.time < REDTUBE_VERDICT_CACHE_TTL_MS) {
+                // Refresh LRU order without performing regex checks again.
+                redTubeVerdicts.delete(key);
+                redTubeVerdicts.set(key, cached);
+                return cached.state;
+            }
+            const state = redTubeContainsBlockedContent(text) ? 'blocked' : 'clean';
+            if (key && redTubeCacheScope) {
+                redTubeVerdicts.set(key, { state, time: Date.now() });
+                while (redTubeVerdicts.size > REDTUBE_VERDICT_CACHE_LIMIT) {
+                    redTubeVerdicts.delete(redTubeVerdicts.keys().next().value);
+                }
+                redTubeSaveVerdictsSoon();
+            }
+            return state;
+        }
+
+        function redTubeReleaseApprovedHomeBatch(force = false) {
+            if (redTubeBatchTimer !== null) {
+                clearTimeout(redTubeBatchTimer);
+                redTubeBatchTimer = null;
+            }
+            const ready = [...redTubeHomeReadyCards].filter(card =>
+                card.isConnected && card.getAttribute(REDTUBE_STATE_ATTR) === 'ready');
+            redTubeHomeReadyCards.clear();
+            if (!ready.length) { redTubeBatchStartedAt = 0; return; }
+            // Don't hold a short final row indefinitely; a bounded delay lets early
+            // arrivals paint together without fighting RedTube's lazy loading.
+            if (!force && isRedTubeHomeBatchRoute() && ready.length < 8 &&
+                Date.now() - redTubeBatchStartedAt < 400) {
+                ready.forEach(card => redTubeHomeReadyCards.add(card));
+                redTubeBatchTimer = setTimeout(() => redTubeReleaseApprovedHomeBatch(), 110);
+                return;
+            }
+            ready.sort((a, b) => a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1);
+            for (const card of ready.slice(0, 12)) setRedTubeCardState(card, 'clean', '');
+            ready.slice(12).forEach(card => redTubeHomeReadyCards.add(card));
+            redTubeBatchStartedAt = redTubeHomeReadyCards.size ? Date.now() : 0;
+            if (redTubeHomeReadyCards.size) {
+                redTubeBatchTimer = setTimeout(() => redTubeReleaseApprovedHomeBatch(true), 75);
+            }
+        }
+
+        function redTubeStageHomeCard(card) {
+            if (card.getAttribute(REDTUBE_STATE_ATTR) !== 'ready') {
+                setRedTubeCardState(card, 'ready', '');
+            }
+            if (!redTubeHomeReadyCards.size) redTubeBatchStartedAt = Date.now();
+            redTubeHomeReadyCards.add(card);
+            if (redTubeHomeReadyCards.size >= 12) {
+                redTubeReleaseApprovedHomeBatch(true);
+            } else if (redTubeBatchTimer === null) {
+                redTubeBatchTimer = setTimeout(() => redTubeReleaseApprovedHomeBatch(), 110);
+            }
+        }
 
         const redTubeDynamicWrestlerExclusions = new Set([
             'melina', 'melina-perez', 'aj-lee', 'aj', 'becky-lynch', 'becky', 'katarina', 'jojo'
@@ -530,8 +603,7 @@
             if (!text) return false;
 
             return redTubeBlockedRegexWords.some(regex => regexMatches(regex, text)) ||
-                   redTubeDynamicWrestlerRegexWords.some(regex => regexMatches(regex, text)) ||
-                   containsFocusMasterBlockedTerm(text);
+                   redTubeDynamicWrestlerRegexWords.some(regex => regexMatches(regex, text));
         };
 
         function buildRedTubeDynamicWrestlerPatterns(urls) {
@@ -573,8 +645,10 @@
 
             redTubeDynamicWrestlerSignature = signature;
             redTubeDynamicWrestlerRegexWords = buildRedTubeDynamicWrestlerPatterns(normalizedUrls);
+            redTubeLoadVerdictsForCurrentScope();
             filterRedTubeCards(true);
             filterRedTubeCategories(true);
+            filterRedTubeDirectories(true);
             checkRedTubeSearchRoute();
         }
 
@@ -584,6 +658,7 @@
                     const urls = result && Array.isArray(result.wrestling_women_urls)
                         ? result.wrestling_women_urls
                         : [];
+                    redTubeWrestlerStorageReady = true;
                     installRedTubeDynamicWrestlerBans(urls);
                 } catch (e) {}
             };
@@ -605,7 +680,7 @@
                         handleResult(result || {});
                     });
                 }
-            } catch (e) {}
+            } catch (e) { redTubeWrestlerStorageReady = true; }
         }
 
         function installRedTubeStorageListener() {
@@ -641,6 +716,12 @@
                 .join(',\n');
         }
 
+        function redTubeDirectorySelectorWithSuffix(suffix) {
+            return REDTUBE_DIRECTORY_SELECTOR_PARTS
+                .map(selector => `html.bravefox-redtube-filtering-active ${selector}${suffix}`)
+                .join(',\n');
+        }
+
         function redTubeCategorySelectorWithSuffix(suffix) {
             return REDTUBE_CATEGORY_SELECTOR_PARTS
                 .map(selector => `html.bravefox-redtube-filtering-active ${selector}${suffix}`)
@@ -663,6 +744,10 @@
                         `html.bravefox-redtube-filtering-active ${selector}:not([${REDTUBE_STATE_ATTR}="clean"]):not([${REDTUBE_STATE_ATTR}="blocked"])`
                     )
                     .join(',\n');
+                const pendingDirectories = REDTUBE_DIRECTORY_SELECTOR_PARTS
+                    .map(selector =>
+                        `html.bravefox-redtube-filtering-active ${selector}:not([${REDTUBE_DIRECTORY_STATE_ATTR}="clean"]):not([${REDTUBE_DIRECTORY_STATE_ATTR}="blocked"])`
+                    ).join(',\n');
                 const pendingCategories = REDTUBE_CATEGORY_SELECTOR_PARTS
                     .map(selector =>
                         `html.bravefox-redtube-filtering-active ${selector}:not([${REDTUBE_CATEGORY_STATE_ATTR}="clean"]):not([${REDTUBE_CATEGORY_STATE_ATTR}="blocked"])`
@@ -749,6 +834,33 @@
                         animation: none !important;
                     }
 
+                    /* Directory tiles and profile links on all RedTube listing sections.
+                       Do not prehide site navigation, filters, login widgets or page headings. */
+                    ${pendingDirectories} {
+                        visibility: hidden !important;
+                        opacity: 0 !important;
+                        pointer-events: none !important;
+                        transition: none !important;
+                        animation: none !important;
+                    }
+
+                    ${redTubeDirectorySelectorWithSuffix(`[${REDTUBE_DIRECTORY_STATE_ATTR}="blocked"]`)} {
+                        display: none !important;
+                        visibility: hidden !important;
+                        opacity: 0 !important;
+                        pointer-events: none !important;
+                        height: 0 !important;
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        overflow: hidden !important;
+                    }
+
+                    ${redTubeDirectorySelectorWithSuffix(`[${REDTUBE_DIRECTORY_STATE_ATTR}="clean"]`)} {
+                        visibility: visible !important;
+                        opacity: 1 !important;
+                        pointer-events: auto !important;
+                    }
+
                     /* Keep the orientation selector visually intact, but do not present it as an
                        interactive control. Event capture below is the authoritative click/touch guard. */
                     html.bravefox-redtube-filtering-active #orient_container,
@@ -775,6 +887,8 @@
 
             push(card.getAttribute('data-uploader-name'));
             push(card.getAttribute('data-uploader-type'));
+            push(card.getAttribute('data-video-title'));
+            push(card.getAttribute('data-title'));
 
             const title = card.querySelector(
                 'a.video-title-text, a.tm_video_title, .video-title-wrapper a[title]'
@@ -809,6 +923,19 @@
                 push(thumb.getAttribute('title'));
             }
 
+            const links = card.querySelectorAll(
+                'a.video-title-text[href], a.tm_video_title[href], .video-title-wrapper a[href], ' +
+                'a.author-title-text[href], .performers-list a[href]'
+            );
+            for (const link of links) {
+                push(link.getAttribute('title'));
+                push(link.getAttribute('aria-label'));
+                // Compare only the human-readable final slug, never arbitrary query tokens.
+                try {
+                    const path = new URL(link.getAttribute('href'), window.location.origin).pathname;
+                    push(decodeURIComponent(path.split('/').filter(Boolean).pop() || '').replace(/[-_+]+/g, ' '));
+                } catch (e) {}
+            }
             return values.join(' ').replace(/\s+/g, ' ').trim();
         }
 
@@ -870,17 +997,16 @@
 
             const currentState = category.getAttribute(REDTUBE_CATEGORY_STATE_ATTR) || '';
             const currentRevision = category.getAttribute(REDTUBE_CATEGORY_REVISION_ATTR) || '';
-            if (!force && currentRevision === REDTUBE_FILTER_REVISION &&
-                (currentState === 'clean' || currentState === 'blocked')) {
-                return;
-            }
-
             const searchableText = getRedTubeCategorySearchText(category);
             if (!searchableText) return;
+            if (!force && currentRevision === REDTUBE_FILTER_REVISION &&
+                (currentState === 'clean' || currentState === 'blocked') &&
+                redTubeCategoryTextCache.get(category) === searchableText) return;
+            redTubeCategoryTextCache.set(category, searchableText);
 
             setRedTubeCategoryState(
                 category,
-                redTubeContainsBlockedContent(searchableText) ? 'blocked' : 'clean',
+                redTubeVerdict('category', category, searchableText),
                 searchableText
             );
         }
@@ -917,19 +1043,20 @@
 
             const currentState = card.getAttribute(REDTUBE_STATE_ATTR) || '';
             const currentRevision = card.getAttribute(REDTUBE_REVISION_ATTR) || '';
-            if (!force && currentRevision === REDTUBE_FILTER_REVISION &&
-                (currentState === 'clean' || currentState === 'blocked')) {
-                return;
-            }
-
             const searchableText = getRedTubeCardSearchText(card);
             if (!searchableText) return;
+            if (!force && currentRevision === REDTUBE_FILTER_REVISION &&
+                (currentState === 'clean' || currentState === 'blocked' || currentState === 'ready') &&
+                redTubeCardTextCache.get(card) === searchableText) return;
+            redTubeCardTextCache.set(card, searchableText);
 
-            setRedTubeCardState(
-                card,
-                redTubeContainsBlockedContent(searchableText) ? 'blocked' : 'clean',
-                searchableText
-            );
+            const verdict = redTubeVerdict('video', card, searchableText);
+            if (verdict === 'clean' && isRedTubeHomeBatchRoute()) {
+                redTubeStageHomeCard(card);
+            } else {
+                redTubeHomeReadyCards.delete(card);
+                setRedTubeCardState(card, verdict, searchableText);
+            }
         }
 
         function filterRedTubeCards(force = false) {
@@ -938,6 +1065,176 @@
                 document.querySelectorAll(REDTUBE_CARD_SELECTOR).forEach(card => {
                     filterRedTubeCard(card, force);
                 });
+            } catch (e) {}
+        }
+
+        // New sitewide directory cards: pornstar, channel, playlists, member and
+        // community listings. The card root is selected conservatively: never claim
+        // a menu, navbar, feed/grid parent, or another person's neighboring tile.
+        function isRedTubeDirectoryLink(link) {
+            if (!link || !link.matches || !link.matches(REDTUBE_DIRECTORY_LINK_SELECTOR)) return false;
+            if (link.closest('header, nav, footer, [role="navigation"], [role="menu"]')) return false;
+            try {
+                const url = new URL(link.getAttribute('href') || '', window.location.origin);
+                const host = url.hostname.toLowerCase();
+                if (!(host === 'redtube.com' || host.endsWith('.redtube.com') ||
+                      host === 'redtube.net' || host.endsWith('.redtube.net') ||
+                      host === 'redtube.com.br' || host.endsWith('.redtube.com.br'))) return false;
+                const parts = url.pathname.split('/').filter(Boolean);
+                return parts.length >= 2;
+            } catch (e) { return false; }
+        }
+
+        function getRedTubeDirectoryRoot(link) {
+            if (!isRedTubeDirectoryLink(link)) return null;
+            let chosen = link;
+            let current = link.parentElement;
+            for (let depth = 0; current && depth < 5; depth++, current = current.parentElement) {
+                if (current.matches('header, nav, footer, [role="navigation"], [role="menu"], main, [role="main"], ul, ol, section')) break;
+                if (current.matches(REDTUBE_CARD_SELECTOR + ', ' + REDTUBE_CATEGORY_SELECTOR)) break;
+                const ownLinks = [...current.querySelectorAll(REDTUBE_DIRECTORY_LINK_SELECTOR)].filter(isRedTubeDirectoryLink);
+                if (!ownLinks.length || ownLinks.length > 4) break;
+                const paths = new Set(ownLinks.map(anchor => {
+                    try { return new URL(anchor.getAttribute('href'), window.location.origin).pathname; }
+                    catch (e) { return anchor.getAttribute('href'); }
+                }));
+                if (paths.size !== 1) break;
+                if (String(current.textContent || '').length > 650) break;
+                // Stop at one actual card boundary rather than swallowing a whole grid.
+                if (current.matches('li, article, [class*="card" i], [class*="tile" i], [class*="item" i], [class*="block" i]')) {
+                    chosen = current;
+                    break;
+                }
+                if (current.querySelector('img, picture')) chosen = current;
+            }
+            return chosen;
+        }
+
+        function getRedTubeDirectorySearchText(tile) {
+            if (!tile) return '';
+            const values = [];
+            const push = value => {
+                const text = String(value || '').replace(/\s+/g, ' ').trim();
+                if (text) values.push(text);
+            };
+            const links = tile.matches && tile.matches(REDTUBE_DIRECTORY_LINK_SELECTOR)
+                ? [tile] : [...tile.querySelectorAll(REDTUBE_DIRECTORY_LINK_SELECTOR)];
+            for (const link of links) {
+                if (!isRedTubeDirectoryLink(link)) continue;
+                push(link.textContent);
+                push(link.getAttribute('title'));
+                push(link.getAttribute('aria-label'));
+                try {
+                    const path = new URL(link.getAttribute('href'), window.location.origin).pathname;
+                    // Some URLs use numeric IDs (e.g. /user/53163391); names then come
+                    // from the card label, avatar alt, or title instead of the URL.
+                    const slug = decodeURIComponent(path.split('/').filter(Boolean).pop() || '');
+                    if (!/^\d+$/.test(slug)) push(slug.replace(/[-_+]+/g, ' '));
+                } catch (e) {}
+            }
+            const names = tile.querySelectorAll
+                ? tile.querySelectorAll('h2, h3, h4, [class*="name" i], [class*="title" i], img[alt], img[title]')
+                : [];
+            for (let i = 0; i < names.length && i < 12; i++) {
+                push(names[i].getAttribute('alt'));
+                push(names[i].getAttribute('title'));
+                if (!names[i].matches('img')) push(names[i].textContent);
+            }
+            if (!values.length) push(tile.getAttribute && tile.getAttribute('title'));
+            return values.join(' ').replace(/\s+/g, ' ').trim();
+        }
+
+        function setRedTubeDirectoryState(tile, state, text) {
+            tile.setAttribute(REDTUBE_DIRECTORY_STATE_ATTR, state);
+            tile.setAttribute(REDTUBE_DIRECTORY_REVISION_ATTR, REDTUBE_FILTER_REVISION);
+            if (state === 'blocked') {
+                tile.setAttribute('aria-hidden', 'true');
+                if (tile.getAttribute('data-bravefox-redtube-directory-block-logged') !== '1') {
+                    tile.setAttribute('data-bravefox-redtube-directory-block-logged', '1');
+                    console.log(`No-glimpse blocked RedTube directory entry: ${text}`);
+                }
+            } else {
+                tile.removeAttribute('aria-hidden');
+                tile.removeAttribute('data-bravefox-redtube-directory-block-logged');
+            }
+        }
+
+        function filterRedTubeDirectoryCard(tile, force = false) {
+            if (!tile || !tile.isConnected) return;
+            const anchors = tile.matches && tile.matches(REDTUBE_DIRECTORY_LINK_SELECTOR)
+                ? [tile] : [...tile.querySelectorAll(REDTUBE_DIRECTORY_LINK_SELECTOR)];
+            if (!anchors.some(isRedTubeDirectoryLink)) return;
+            const searchableText = getRedTubeDirectorySearchText(tile);
+            if (!searchableText) return;
+            const currentState = tile.getAttribute(REDTUBE_DIRECTORY_STATE_ATTR);
+            if (!force && tile.getAttribute(REDTUBE_DIRECTORY_REVISION_ATTR) === REDTUBE_FILTER_REVISION &&
+                (currentState === 'clean' || currentState === 'blocked') &&
+                redTubeDirectoryTextCache.get(tile) === searchableText) return;
+            redTubeDirectoryTextCache.set(tile, searchableText);
+            const state = redTubeVerdict('directory', tile, searchableText);
+            setRedTubeDirectoryState(tile, state, searchableText);
+            // A linked image may itself be an early prehide target. Give it the same
+            // verdict as its enclosing single-identity card so it doesn't stay blank.
+            anchors.forEach(anchor => {
+                if (anchor !== tile && isRedTubeDirectoryLink(anchor)) {
+                    setRedTubeDirectoryState(anchor, state, searchableText);
+                }
+            });
+        }
+
+        function filterRedTubeDirectories(force = false) {
+            try {
+                injectRedTubeNoGlimpseCSS();
+                const seen = new Set();
+                document.querySelectorAll(REDTUBE_DIRECTORY_LINK_SELECTOR).forEach(link => {
+                    if (!isRedTubeDirectoryLink(link)) return;
+                    const tile = getRedTubeDirectoryRoot(link);
+                    if (tile && !seen.has(tile)) {
+                        seen.add(tile);
+                        filterRedTubeDirectoryCard(tile, force);
+                    }
+                });
+            } catch (e) {}
+        }
+
+        function collectRedTubeDirectoriesFromNode(node, directories) {
+            const element = node?.nodeType === 1 ? node : node?.parentElement;
+            if (!element) return;
+            const link = element.closest?.(REDTUBE_DIRECTORY_LINK_SELECTOR);
+            if (link && isRedTubeDirectoryLink(link)) {
+                const tile = getRedTubeDirectoryRoot(link);
+                if (tile) directories.add(tile);
+            }
+            const links = element.matches?.(REDTUBE_DIRECTORY_LINK_SELECTOR)
+                ? [element] : (element.querySelectorAll?.(REDTUBE_DIRECTORY_LINK_SELECTOR) || []);
+            for (const anchor of links) {
+                if (!isRedTubeDirectoryLink(anchor)) continue;
+                const tile = getRedTubeDirectoryRoot(anchor);
+                if (tile) directories.add(tile);
+            }
+        }
+
+        function checkRedTubeBlockedDirectoryRoute() {
+            if (isRedTubeWatchPage() || redTubeRedirecting) return;
+            try {
+                const parts = window.location.pathname.split('/').filter(Boolean);
+                const prefix = parts[0]?.toLowerCase();
+                const isProfile = ['pornstar', 'channels', 'channel', 'user', 'members',
+                    'community', 'playlist', 'playlists', 'amateur', 'categories'].includes(prefix);
+                const isNestedPlaylist = prefix === 'straight' && parts[1] === 'playlists';
+                const isCategory = prefix === 'redtube' && parts.length > 1;
+                if (!isProfile && !isNestedPlaylist && !isCategory) return;
+                const slug = isNestedPlaylist ? parts[2] : parts[1];
+                if (!slug) return;
+                if (!/^\d+$/.test(slug)) {
+                    const text = decodeURIComponent(slug).replace(/[-_+]+/g, ' ');
+                    if (redTubeContainsBlockedContent(text)) redirectRedTubeHome();
+                } else if (prefix === 'user') {
+                    // Numeric member URLs reveal the actual display name in their heading.
+                    // Don't judge other page copy or sidebar headings as the member identity.
+                    const heading = document.querySelector('main h1, [role="main"] h1, h1');
+                    if (heading && redTubeContainsBlockedContent(heading.textContent)) redirectRedTubeHome();
+                }
             } catch (e) {}
         }
 
@@ -1105,31 +1402,57 @@
 
         function ensureRedTubeObserver() {
             if (!document.documentElement) {
-                setTimeout(ensureRedTubeObserver, 50);
+                setTimeout(ensureRedTubeObserver, 16);
                 return;
             }
+            // On document-start injection, <html> can appear after the userscript.
+            // Install the no-glimpse stylesheet as soon as that element exists,
+            // rather than waiting for the full DOMContentLoaded event.
+            injectRedTubeNoGlimpseCSS();
             if (redTubeObserver) return;
 
-            redTubeObserver = new MutationObserver(records => {
-                const cards = new Set();
-                const categories = new Set();
+            // Mutation-local coalescing: scan each altered subtree at most once per
+            // microtask, then yield between chunks instead of blocking menu interactions.
+            const drainRedTubeMutations = () => {
+                redTubeMutationDrainScheduled = false;
+                redTubeMutationDrainTimer = null;
+                const cards = new Set(), categories = new Set(), directories = new Set();
+                let processed = 0;
+                for (const root of redTubePendingMutationRoots) {
+                    redTubePendingMutationRoots.delete(root);
+                    if (!root.isConnected && root !== document.documentElement) continue;
+                    collectRedTubeCardsFromNode(root, cards);
+                    collectRedTubeCategoriesFromNode(root, categories);
+                    collectRedTubeDirectoriesFromNode(root, directories);
+                    if (++processed >= 40) break;
+                }
+                cards.forEach(card => filterRedTubeCard(card, false));
+                categories.forEach(category => filterRedTubeCategory(category, false));
+                directories.forEach(tile => filterRedTubeDirectoryCard(tile, false));
+                if (/^\/user\/\d+(?:\/|$)/.test(window.location.pathname)) checkRedTubeBlockedDirectoryRoute();
+                if (redTubePendingMutationRoots.size && !redTubeMutationDrainScheduled) {
+                    redTubeMutationDrainScheduled = true;
+                    redTubeMutationDrainTimer = setTimeout(drainRedTubeMutations, 16);
+                }
+            };
 
+            redTubeObserver = new MutationObserver(records => {
                 records.forEach(record => {
                     if (record.type === 'childList') {
                         record.addedNodes.forEach(node => {
-                            collectRedTubeCardsFromNode(node, cards);
-                            collectRedTubeCategoriesFromNode(node, categories);
+                            const element = node.nodeType === 1 ? node : node.parentElement;
+                            if (element) redTubePendingMutationRoots.add(element);
                         });
-                        return;
+                    } else {
+                        const element = record.target.nodeType === 1
+                            ? record.target : record.target.parentElement;
+                        if (element) redTubePendingMutationRoots.add(element);
                     }
-
-                    collectRedTubeCardsFromNode(record.target, cards);
-                    collectRedTubeCategoriesFromNode(record.target, categories);
                 });
-
-                cards.forEach(card => filterRedTubeCard(card, false));
-                categories.forEach(category => filterRedTubeCategory(category, true));
-                disableRedTubeOrientationControl();
+                if (redTubePendingMutationRoots.size && !redTubeMutationDrainScheduled) {
+                    redTubeMutationDrainScheduled = true;
+                    queueMicrotask(drainRedTubeMutations);
+                }
             });
 
             redTubeObserver.observe(document.documentElement, {
@@ -1139,9 +1462,19 @@
                 attributes: true,
                 attributeFilter: [
                     'title', 'alt', 'href', 'aria-label', 'data-uploader-name', 'data-uploader-type',
-                    'data-video-id', 'data-category_id', 'data-category-id'
+                    'data-video-id', 'data-category_id', 'data-category-id', 'data-video-title', 'data-title', 'src'
                 ]
             });
+        }
+
+        function runRedTubeRoutePass(force = false) {
+            if (!isRedTubeHomeBatchRoute()) redTubeReleaseApprovedHomeBatch(true);
+            checkRedTubeSearchRoute();
+            checkRedTubeBlockedDirectoryRoute();
+            filterRedTubeCards(force);
+            filterRedTubeCategories(force);
+            filterRedTubeDirectories(force);
+            disableRedTubeOrientationControl();
         }
 
         function installRedTubeHistoryHooks() {
@@ -1157,10 +1490,7 @@
                         const result = original.apply(this, arguments);
                         queueMicrotask(() => {
                             redTubeRedirecting = false;
-                            checkRedTubeSearchRoute();
-                            filterRedTubeCards(false);
-                            filterRedTubeCategories(false);
-                            disableRedTubeOrientationControl();
+                            runRedTubeRoutePass(false);
                         });
                         return result;
                     };
@@ -1169,17 +1499,11 @@
 
             window.addEventListener('popstate', () => {
                 redTubeRedirecting = false;
-                checkRedTubeSearchRoute();
-                filterRedTubeCards(false);
-                filterRedTubeCategories(false);
-                disableRedTubeOrientationControl();
+                runRedTubeRoutePass(false);
             }, true);
             window.addEventListener('pageshow', () => {
                 redTubeRedirecting = false;
-                checkRedTubeSearchRoute();
-                filterRedTubeCards(false);
-                filterRedTubeCategories(false);
-                disableRedTubeOrientationControl();
+                runRedTubeRoutePass(false);
             }, true);
         }
 
@@ -1190,27 +1514,38 @@
         installRedTubeOrientationGuard();
         loadRedTubeDynamicWrestlerBans();
         installRedTubeStorageListener();
-        checkRedTubeSearchRoute();
-        filterRedTubeCards(false);
-        filterRedTubeCategories(false);
-        disableRedTubeOrientationControl();
+        // If there is no extension storage, the dynamic list is necessarily empty.
+        if (!((typeof browser !== 'undefined' && browser.storage?.local) ||
+              (typeof chrome !== 'undefined' && chrome.storage?.local))) {
+            redTubeWrestlerStorageReady = true;
+            redTubeLoadVerdictsForCurrentScope();
+        }
+        runRedTubeRoutePass(false);
 
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', () => {
-                filterRedTubeCards(false);
-                filterRedTubeCategories(false);
-                disableRedTubeOrientationControl();
+                runRedTubeRoutePass(false);
             }, { once: true });
         }
 
+        window.addEventListener('bravefoxFocusMasterFetchSucceeded', () => {
+            redTubeLoadVerdictsForCurrentScope();
+        }, true);
+
         window.addEventListener(FOCUS_MASTER_BLOCKED_TERMS_UPDATED_EVENT, () => {
-            filterRedTubeCards(true);
-            filterRedTubeCategories(true);
-            checkRedTubeSearchRoute();
+            redTubeHomeReadyCards.clear();
+            redTubeLoadVerdictsForCurrentScope();
+            runRedTubeRoutePass(true);
         }, true);
 
         window.addEventListener('pagehide', event => {
             if (event.persisted) return;
+            if (redTubeCacheSaveTimer !== null) {
+                clearTimeout(redTubeCacheSaveTimer);
+                redTubeCacheSaveTimer = null;
+            }
+            if (redTubeBatchTimer !== null) clearTimeout(redTubeBatchTimer);
+            if (redTubeMutationDrainTimer !== null) clearTimeout(redTubeMutationDrainTimer);
             if (redTubeObserver) {
                 try { redTubeObserver.disconnect(); } catch (e) {}
                 redTubeObserver = null;
@@ -2398,8 +2733,7 @@
         if (!text) return false;
 
         return blockedRegexWords.some(regex => regexMatches(regex, text)) ||
-               dynamicWrestlerRegexWords.some(regex => regexMatches(regex, text)) ||
-               containsFocusMasterBlockedTerm(text);
+               dynamicWrestlerRegexWords.some(regex => regexMatches(regex, text));
     }
 
     function resetProcessedCaches() {

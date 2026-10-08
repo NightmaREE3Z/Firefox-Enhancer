@@ -89,6 +89,7 @@
   const LIBRARY_PROTECTED_FILE_DELETE_PROMPT = 'Suojatun tiedoston poistaminen vaatii salasanan!';
   const LIBRARY_PROTECTED_EDIT_MODE_PROMPT = 'Suojattujen tiedostojen "Muokkaustila" on salasanasuojattu, anna salasana jatkaaksesi.';
   const LIBRARY_EDIT_MODE_CLASS = 'bravefox-protected-library-edit-mode';
+  const LIBRARY_PROTECTED_NAV_SESSION_KEY = 'bravefoxChatGptProtectedLibraryNavigation_v1';
 
   const PROTECTED_PATH_ROUTES = [
     { key: 'plugins', path: '/plugins', title: 'ChatGPT Lisäosat on salasanasuojattu, anna salasana jatkaaksesi' },
@@ -401,11 +402,54 @@
   const MESSAGE_TIMESTAMP_ATTR = 'data-bravefox-message-timestamp';
   const MESSAGE_TIMESTAMP_SOURCE_ATTR = 'data-bravefox-message-timestamp-source';
   const MESSAGE_MODEL_ATTR = 'data-bravefox-message-model';
+  const MESSAGE_MODEL_SOURCE_ATTR = 'data-bravefox-message-model-source';
   const MESSAGE_REASONING_ATTR = 'data-bravefox-message-reasoning';
+  const MESSAGE_REASONING_SOURCE_ATTR = 'data-bravefox-message-reasoning-source';
   const MESSAGE_METADATA_RETRY_ATTR = 'data-bravefox-message-meta-retries';
   const MESSAGE_TIMESTAMP_PROBE_CLASS = 'bravefox-message-time-probing';
   const MESSAGE_TIMESTAMP_API_CACHE_MS = 15000;
   const MESSAGE_USER_NAME_CACHE_MS = 300000;
+  // Share only compact, non-content message metadata across ChatGPT tabs/windows.
+  // This lets an already-seen conversation restore timestamps/model labels synchronously
+  // instead of refetching and reparsing the full conversation tree in every tab.
+  const MESSAGE_METADATA_SHARED_CACHE_KEY = 'bravefoxChatGptMessageMetadataCache_v1';
+  const MESSAGE_METADATA_SHARED_CACHE_MAX_CONVERSATIONS = 10;
+  const MESSAGE_METADATA_SHARED_CACHE_MAX_RECORDS = 600;
+  const MESSAGE_USER_NAME_SHARED_CACHE_KEY = 'bravefoxChatGptUserDisplayName_v1';
+
+  // === Local conversation archive ==============================================
+  // IndexedDB keeps a full, deduplicated user/assistant history locally. Snapshots are
+  // lightweight pointers into that history, not duplicate copies of the whole chat.
+  const CHAT_ARCHIVE_DB_NAME = 'bravefox_chat_archive_v1';
+  const CHAT_ARCHIVE_DB_VERSION = 1;
+  const CHAT_ARCHIVE_CONVERSATIONS_STORE = 'conversations';
+  const CHAT_ARCHIVE_MESSAGES_STORE = 'messages';
+  const CHAT_ARCHIVE_SNAPSHOTS_STORE = 'snapshots';
+  const CHAT_ARCHIVE_BUTTON_ID = 'bravefox-local-chat-archive-button';
+  const CHAT_ARCHIVE_MODAL_ID = 'bravefox-local-chat-archive-modal';
+  const CHAT_ARCHIVE_STYLE_ID = 'bravefox-local-chat-archive-style';
+  const CHAT_ARCHIVE_TOOLBAR_BUTTON_ATTR = 'data-bravefox-chat-archive-toolbar';
+  const CHAT_ARCHIVE_SHARE_HIDDEN_ATTR = 'data-bravefox-share-hidden';
+  const CHAT_ARCHIVE_LIBRARY_MENU_ITEM_ATTR = 'data-bravefox-library-chat-archive';
+  const CHAT_ARCHIVE_LIBRARY_MENU_HIDDEN_ATTR = 'data-bravefox-library-new-menu-hidden';
+  const CHAT_ARCHIVE_LIBRARY_MENU_DIVIDER_ATTR = 'data-bravefox-library-archive-divider';
+  const CHAT_ARCHIVE_LIBRARY_MENU_ROOT_ATTR = 'data-bravefox-library-new-menu-root';
+  const CHAT_ARCHIVE_LIBRARY_MENU_CURATING_CLASS = 'bravefox-library-new-menu-curating';
+  const CHAT_ARCHIVE_HANDOFF_KEY = 'bravefoxChatArchiveContinuationHandoff_v1';
+  const CHAT_ARCHIVE_CONTEXT_LINK_KEY = 'bravefoxChatArchiveContextLinks_v1';
+  const CHAT_ARCHIVE_AUTO_SNAPSHOT_MESSAGE_STEP = 20;
+  const CHAT_ARCHIVE_AUTO_SNAPSHOT_MIN_AGE_MS = 30 * 60 * 1000;
+  const CHAT_ARCHIVE_CONTINUATION_MAX_CHARS = 36000;
+  const CHAT_ARCHIVE_HANDOFF_MAX_AGE_MS = 2 * 60 * 1000;
+  const CHAT_ARCHIVE_GHOST_CLEANUP_INTERVAL_MS = 10 * 60 * 1000;
+  const CHAT_ARCHIVE_GHOST_MIN_AGE_MS = 2 * 60 * 1000;
+  const CHAT_ARCHIVE_GHOST_CONFIRM_DELAY_MS = 1500;
+  const CHAT_ARCHIVE_EXISTENCE_HEALTH_MAX_AGE_MS = 15 * 60 * 1000;
+  const CHAT_ARCHIVE_GHOST_MAX_CHECKS_PER_PASS = 12;
+  const CHAT_ARCHIVE_IMAGE_CONCURRENCY = 6;
+  const CHAT_ARCHIVE_IMAGE_FETCH_TIMEOUT_MS = 20000;
+  const CHAT_ARCHIVE_IMAGE_FETCH_ATTEMPTS = 2;
+  const CHAT_ARCHIVE_IMAGE_RETRY_DELAY_MS = 450;
 
   const CHATGPT_BANNER_HIDE_KEY = 'bravefoxChatGptHiddenModelNotices_v1';
   const CHATGPT_BANNER_CLOSE_MENU_ID = 'bravefox-chatgpt-banner-close-menu';
@@ -536,6 +580,8 @@
   let protectedMemoryModalUnlocked = false;
   let protectedPersonalizationInstructionsUnlocked = false;
   let protectedLibraryEditMode = false;
+  let protectedLibraryNavigationUnlocked = false;
+  const protectedLibraryDescendantPaths = new Set();
   let routeAuthCheckInProgress = false;
   let authRedirectRequested = false;
   let pendingApprovedAction = null;
@@ -580,6 +626,7 @@
   const messageTimestampProbeQueue = [];
   const conversationMetadataCaches = new Map();
   const conversationMetadataFetches = new Map();
+  const conversationSharedMetadataLoaded = new Set();
   let messageTimestampProbeTimer = 0;
   let messageTimestampProbeActive = false;
   let conversationUserDisplayName = '';
@@ -591,9 +638,45 @@
   let conversationPendingAssistantStartedAt = 0;
   let conversationPendingModelSlug = '';
   let conversationPendingReasoningEffort = '';
-  let conversationLastKnownModelSlug = '';
   let conversationLastSelectedModelSlug = '';
   let conversationLastKnownReasoningEffort = '';
+  let conversationSelectionRouteKey = '';
+  let conversationSelectionFastRefreshTimer = 0;
+  let conversationLiveMetadataFrame = 0;
+  const conversationLiveMetadataScopes = new Set();
+  let conversationArchiveDbPromise = null;
+  let conversationArchiveDomCaptureTimer = 0;
+  let conversationArchivePostStreamTimer = 0;
+  let conversationArchiveUiRefreshTimer = 0;
+  let conversationArchiveLastHandoffId = '';
+  let conversationArchiveSelectedConversationId = '';
+  let conversationArchiveChannel = null;
+  let conversationArchiveLibraryMenuTimer = 0;
+  const conversationArchivePayloadSyncs = new Map();
+  const conversationArchiveDeletedUntilReload = new Set();
+  const conversationArchiveExistenceChecks = new Map();
+  let conversationArchiveExistenceApiHealthyAt = 0;
+  let conversationArchiveGhostCleanupRunning = false;
+  let conversationArchiveGhostCleanupInterval = 0;
+
+  restoreConversationUserDisplayNameFromSharedCache();
+  window.addEventListener('storage', event => {
+    if (event.key === MESSAGE_METADATA_SHARED_CACHE_KEY) {
+      const conversationId = getCurrentConversationId();
+      if (!conversationId) return;
+      conversationSharedMetadataLoaded.delete(conversationId);
+      hydrateConversationMetadataCacheFromSharedStorage(conversationId, true);
+      refreshLatestConversationMetadataImmediately();
+      return;
+    }
+
+    if (event.key === MESSAGE_USER_NAME_SHARED_CACHE_KEY) {
+      restoreConversationUserDisplayNameFromSharedCache();
+      refreshLatestConversationMetadataImmediately();
+    }
+  }, true);
+
+  restoreProtectedLibraryNavigationSession();
 
   // Older BraveFox background builds only know the legacy Personalization hash route.
   // IMPORTANT: consume the one-time native grant WHILE STILL ON that approved bridge
@@ -625,7 +708,10 @@
   // the legacy Firefox Android #settings/Account modal before ChatGPT can paint it.
   document.documentElement.classList.toggle(ACCOUNT_SETTINGS_CLASS, isAccountSettingsRoute());
 
-  if (descriptorRequiresPassword(initialProtectedRoute)) {
+  if (
+    descriptorRequiresPassword(initialProtectedRoute) &&
+    !(initialProtectedRoute?.key === 'library-protected-files' && protectedLibraryNavigationUnlocked)
+  ) {
     document.documentElement.classList.add(GATED_CLASS);
     setInlinePaintGate(true);
   }
@@ -637,11 +723,17 @@
   document.documentElement.classList.add(SIDEBAR_TOP_WAIT_CLASS, SIDEBAR_RECENTS_WAIT_CLASS);
 
   injectStyles();
+  // Warm ChatGPT's bearer token immediately in the background. Full conversation
+  // history lives behind /backend-api/conversation/{id}; having the token ready
+  // keeps archive/snapshot sync API-first without delaying the DOM-fast metadata path.
+  void resolveConversationAccessToken();
   void synchronizeRoute();
   installNavigationGuards();
   installInteractionGuards();
   installThinkingEffortEdgeLock();
   installEscapeHatchObserver();
+  scheduleConversationSelectionFastRefresh();
+  startConversationArchiveSystem();
   maintainSidebarStageReveal(document);
   armSidebarStageFailOpen();
   collapseAnalysisActivityPanels(document);
@@ -1479,6 +1571,93 @@
     }
   }
 
+  function normalizeProtectedLibraryPath(value) {
+    try {
+      const url = new URL(String(value || location.href), location.href);
+      if (url.origin !== location.origin) return '';
+      return String(url.pathname || '/').toLowerCase().replace(/\/+$/, '') || '/';
+    } catch {
+      return '';
+    }
+  }
+
+  function getProtectedLibraryRootPath() {
+    return `/library/d/${LIBRARY_PROTECTED_FOLDER_ID}`.toLowerCase();
+  }
+
+  function isKnownProtectedLibraryPath(pathname) {
+    const normalized = normalizeProtectedLibraryPath(pathname);
+    if (!normalized) return false;
+
+    const root = getProtectedLibraryRootPath();
+    if (normalized === root || normalized.startsWith(`${root}/`)) return true;
+
+    for (const path of protectedLibraryDescendantPaths) {
+      if (normalized === path || normalized.startsWith(`${path}/`)) return true;
+    }
+    return false;
+  }
+
+  function isCandidateProtectedLibraryDescendantPath(value) {
+    const pathname = normalizeProtectedLibraryPath(value);
+    if (!pathname || !pathname.startsWith('/library/')) return false;
+    if (pathname === '/library') return false;
+
+    // Never learn top-level Library destinations as descendants merely because the user
+    // clicked them while standing inside Protected Files. Only item/detail-style paths
+    // can become part of the protected subtree.
+    if (/^\/library\/(?:trash|all|shared|recent|uploads?|images?|settings)(?:\/|$)/i.test(pathname)) {
+      return false;
+    }
+    return true;
+  }
+
+  function persistProtectedLibraryNavigationSession() {
+    try {
+      sessionStorage.setItem(
+        LIBRARY_PROTECTED_NAV_SESSION_KEY,
+        JSON.stringify({
+          unlocked: !!protectedLibraryNavigationUnlocked,
+          paths: Array.from(protectedLibraryDescendantPaths).slice(-256)
+        })
+      );
+    } catch {}
+  }
+
+  function restoreProtectedLibraryNavigationSession() {
+    try {
+      const raw = sessionStorage.getItem(LIBRARY_PROTECTED_NAV_SESSION_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw);
+      protectedLibraryNavigationUnlocked = saved?.unlocked === true;
+      for (const value of Array.isArray(saved?.paths) ? saved.paths : []) {
+        const pathname = normalizeProtectedLibraryPath(value);
+        if (!pathname || !pathname.startsWith('/library/') || pathname === '/library') continue;
+        protectedLibraryDescendantPaths.add(pathname);
+      }
+    } catch {}
+  }
+
+  function unlockProtectedLibraryNavigationSession() {
+    if (protectedLibraryNavigationUnlocked) return;
+    protectedLibraryNavigationUnlocked = true;
+    persistProtectedLibraryNavigationSession();
+  }
+
+  function rememberProtectedLibraryDescendantUrl(value) {
+    const pathname = normalizeProtectedLibraryPath(value);
+    if (!pathname || isKnownProtectedLibraryPath(pathname)) return false;
+    if (!isCandidateProtectedLibraryDescendantPath(pathname)) return false;
+    protectedLibraryDescendantPaths.add(pathname);
+    persistProtectedLibraryNavigationSession();
+    return true;
+  }
+
+  function rememberProtectedLibraryTransition(fromUrl, toUrl) {
+    if (!isKnownProtectedLibraryPath(fromUrl)) return false;
+    return rememberProtectedLibraryDescendantUrl(toUrl);
+  }
+
   function getProtectedRouteDescriptorForUrl(value) {
     try {
       const url = new URL(String(value || location.href), location.href);
@@ -1520,8 +1699,8 @@
         return { key: 'personalization', path: null, title: PERSONALIZATION_PROMPT, modal: null };
       }
 
-      const protectedLibraryPath = `/library/d/${LIBRARY_PROTECTED_FOLDER_ID}`;
-      if (pathname === protectedLibraryPath || pathname.startsWith(`${protectedLibraryPath}/`)) {
+      const protectedLibraryPath = getProtectedLibraryRootPath();
+      if (isKnownProtectedLibraryPath(pathname)) {
         return { key: 'library-protected-files', path: protectedLibraryPath, title: LIBRARY_PROTECTED_FOLDER_PROMPT };
       }
       for (const route of PROTECTED_PATH_ROUTES) {
@@ -2009,6 +2188,29 @@
 
     configureRouteObserver();
 
+    if (routeKey === 'library-protected-files' && protectedLibraryNavigationUnlocked) {
+      // Navigation access is session-unlocked, but edit/delete actions still return their
+      // own one-time native grants. Consume those separately so the navigation shortcut
+      // can never bypass or swallow an Edit Mode / delete authorization.
+      let actionGrant = null;
+      try {
+        actionGrant = await consumeNativePasswordGrant();
+      } catch {}
+
+      protectedRouteUnlocked = true;
+      authRedirectRequested = false;
+      routeAuthCheckInProgress = false;
+      document.documentElement.classList.remove(GATED_CLASS);
+      setInlinePaintGate(false);
+      scheduleProtectedLibraryReconcileBurst();
+
+      if (actionGrant?.routeKey === routeKey) {
+        await clearAuthLoopGuard();
+        resumeApprovedPasswordAction(actionGrant);
+      }
+      return;
+    }
+
     if (!descriptor) {
       document.documentElement.classList.remove(GATED_CLASS);
       document.documentElement.classList.remove(PLUGINS_READY_CLASS);
@@ -2086,6 +2288,9 @@
       if (grant?.routeKey === routeKey) {
         await clearAuthLoopGuard();
         protectedRouteUnlocked = true;
+        if (routeKey === 'library-protected-files' && grant.kind === 'protected-route') {
+          unlockProtectedLibraryNavigationSession();
+        }
         protectedMemoryModalUnlocked =
           grant.kind === 'memory-summary' ||
           onMemoryModal;
@@ -2126,18 +2331,24 @@
 
   function checkForRouteChange() {
     if (location.href === lastUrl) return false;
+    const previousUrl = lastUrl;
+    rememberProtectedLibraryTransition(previousUrl, location.href);
     lastUrl = location.href;
     cleanupProtectedLibraryUiOutsideFolder();
     void synchronizeRoute();
+    scheduleConversationSelectionFastRefresh();
     scheduleGeneralUiScan(true);
     return true;
   }
 
   function installNavigationGuards() {
     const handleNavigation = () => {
+      const previousUrl = lastUrl;
+      rememberProtectedLibraryTransition(previousUrl, location.href);
       lastUrl = location.href;
       cleanupProtectedLibraryUiOutsideFolder();
       void synchronizeRoute();
+      scheduleConversationSelectionFastRefresh();
       scheduleGeneralUiScan(true);
       scheduleSidebarPolishRetries();
     };
@@ -2145,12 +2356,15 @@
     window.addEventListener('hashchange', handleNavigation, true);
     window.addEventListener('popstate', handleNavigation, true);
     window.addEventListener('pageshow', handleNavigation, true);
+    window.addEventListener('focus', scheduleConversationSelectionFastRefresh, true);
     window.addEventListener('pagehide', () => {
       if (isPluginsRoute()) void finalizePluginVaultSeedIfReady();
     }, true);
 
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') checkForRouteChange();
+      if (document.visibilityState !== 'visible') return;
+      checkForRouteChange();
+      scheduleConversationSelectionFastRefresh();
     }, true);
 
     try {
@@ -2162,6 +2376,9 @@
           try {
             const destinationUrl = event?.destination?.url;
             if (!destinationUrl) return;
+            if (isKnownProtectedLibraryPath(location.href)) {
+              rememberProtectedLibraryDescendantUrl(destinationUrl);
+            }
             const descriptor = getProtectedRouteDescriptorForUrl(destinationUrl);
 
             // Apply Saved Memories presentation policy before the destination commits,
@@ -2180,9 +2397,12 @@
             );
 
             const sameUnlockedLane =
-              descriptor?.key &&
-              descriptor.key === activeProtectedRouteKey &&
-              protectedRouteUnlocked;
+              (
+                descriptor?.key &&
+                descriptor.key === activeProtectedRouteKey &&
+                protectedRouteUnlocked
+              ) ||
+              (descriptor?.key === 'library-protected-files' && protectedLibraryNavigationUnlocked);
             const lockedMemoryModal =
               descriptor?.key === 'personalization' &&
               descriptor.modal === PERSONALIZATION_MEMORY_MODAL &&
@@ -2214,6 +2434,7 @@
   }
 
   function captureConversationComposerSelection() {
+    syncConversationSelectionState();
     const effort = readCurrentConversationReasoningEffortFromDom();
     if (effort) {
       conversationPendingReasoningEffort = effort;
@@ -2247,6 +2468,12 @@
     if (event.type === 'click') {
       const button = getButtonFromEvent(event);
       sending = isConversationSendButton(button);
+      if (!sending && button instanceof HTMLButtonElement) {
+        const composer = button.closest('form, [data-testid*="composer" i], [class*="composer" i]');
+        const hasEditable = composer?.querySelector?.('textarea, [contenteditable="true"], [role="textbox"]');
+        const looksLikeSubmit = button.type === 'submit' || normalizeText(button.getAttribute('data-testid')).includes('send');
+        sending = Boolean(composer && hasEditable && looksLikeSubmit);
+      }
     } else if (event.type === 'keydown') {
       if (event.key !== 'Enter' || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) return;
       const target = event.target;
@@ -2254,6 +2481,12 @@
       const composer = target.closest('form, [data-testid*="composer" i], [class*="composer" i]');
       const editable = target.matches('textarea, [contenteditable="true"], [role="textbox"]');
       sending = Boolean(editable && composer);
+    } else if (event.type === 'submit') {
+      const form = event.target;
+      if (!(form instanceof HTMLFormElement)) return;
+      const composer = form.matches('[data-testid*="composer" i], [class*="composer" i]') ||
+        form.querySelector('textarea, [contenteditable="true"], [role="textbox"]');
+      sending = Boolean(composer);
     }
 
     if (!sending) return;
@@ -2284,11 +2517,17 @@
         const anchor = getElementFromEvent(event, 'a[href]');
         if (anchor) {
           const targetUrl = new URL(anchor.getAttribute('href'), location.href);
+          if (isKnownProtectedLibraryPath(location.href)) {
+            rememberProtectedLibraryDescendantUrl(targetUrl.href);
+          }
           const targetDescriptor = getProtectedRouteDescriptorForUrl(targetUrl.href);
           const sameUnlockedLane =
-            targetDescriptor?.key &&
-            targetDescriptor.key === activeProtectedRouteKey &&
-            protectedRouteUnlocked;
+            (
+              targetDescriptor?.key &&
+              targetDescriptor.key === activeProtectedRouteKey &&
+              protectedRouteUnlocked
+            ) ||
+            (targetDescriptor?.key === 'library-protected-files' && protectedLibraryNavigationUnlocked);
           const lockedMemoryModal =
             targetDescriptor?.key === 'personalization' &&
             targetDescriptor.modal === PERSONALIZATION_MEMORY_MODAL &&
@@ -2430,6 +2669,10 @@
       // immediately after a tap. The always-on portal observer already catches newly
       // mounted menus there, so keep the legacy fallback scan for non-Android clients only.
       if (!IS_ANDROID && isLikelyMenuTrigger(event.target)) scheduleGeneralUiScan(false);
+    }, true);
+
+    document.addEventListener('submit', event => {
+      if (event.isTrusted) captureConversationSendIntentFromEvent(event);
     }, true);
 
     document.addEventListener('keydown', event => {
@@ -4068,8 +4311,30 @@
             continue;
           }
 
-          for (const node of mutation.addedNodes) {
+          if (mutation.type === 'characterData') {
+            const parent = mutation.target?.parentElement;
+            if (parent instanceof Element && mayContainConversationMessage(parent)) {
+              scheduleLiveConversationMetadataRefresh(parent);
+            }
+            continue;
+          }
+
+          for (const addedNode of mutation.addedNodes) {
+            const node = addedNode instanceof Element ? addedNode : addedNode.parentElement;
             if (!(node instanceof Element)) continue;
+
+            // Library > New is portal-mounted after the pointer event. Curate that freshly
+            // inserted popup from this pre-paint observer instead of relying on ChatGPT's
+            // current menu wrapper attributes, which rotate between UI generations.
+            if (isChatGptLibraryLocation()) {
+              const libraryNodeText = normalizeText(node.textContent);
+              if (
+                document.documentElement.classList.contains(CHAT_ARCHIVE_LIBRARY_MENU_CURATING_CLASS) ||
+                isConversationArchiveLibraryUploadText(libraryNodeText)
+              ) {
+                reconcileConversationArchiveLibraryNewMenu();
+              }
+            }
 
             // MutationObserver callbacks run before the browser's next paint. Collapse new
             // reasoning/activity panels here so expanded analysis does not become a scroll wall.
@@ -4138,9 +4403,14 @@
             if (relevantHomeHeadline) replaceCustomizableHomeHeadline(node);
 
             const relevantBanner = mayContainCustomizableChatGptBanner(node);
+            const relevantComposerModelSelector =
+              node.matches?.('button.__composer-pill[aria-haspopup="menu"]') ||
+              node.querySelector?.('button.__composer-pill[aria-haspopup="menu"]');
+            if (relevantComposerModelSelector) scheduleConversationSelectionFastRefresh();
+
             const relevantConversationMessage = mayContainConversationMessage(node);
             if (relevantConversationMessage) {
-              applyConversationPresentation(node);
+              scheduleLiveConversationMetadataRefresh(node);
               replaceCustomizableAssistantErrorText(node);
             }
             const relevantAssistantNotice = mayContainFixedAssistantNotice(node);
@@ -4182,6 +4452,7 @@
       escapeHatchObserver.observe(document.documentElement, {
         childList: true,
         subtree: true,
+        characterData: true,
         attributes: true,
         attributeFilter: ['aria-expanded']
       });
@@ -4342,6 +4613,7 @@
   }
 
   function runGeneralUiScan(scope) {
+    ensureConversationArchiveButton();
     if (isPersonalizationRoute()) hideSensitiveMemoryControls(scope);
     if (isPluginsRoute()) void applyPluginPagePolicy(document);
     if (isGptsRoute()) applyGptPagePolicy(document);
@@ -7707,6 +7979,32 @@
     return '';
   }
 
+  function restoreConversationUserDisplayNameFromSharedCache() {
+    try {
+      const raw = localStorage.getItem(MESSAGE_USER_NAME_SHARED_CACHE_KEY);
+      if (!raw) return '';
+      const parsed = JSON.parse(raw);
+      const name = normalizeConversationUserDisplayName(parsed?.name);
+      if (!name) return '';
+      conversationUserDisplayName = name;
+      conversationUserDisplayNameFetchedAt = Number(parsed?.savedAt || 0) || Date.now();
+      return name;
+    } catch {
+      return '';
+    }
+  }
+
+  function persistConversationUserDisplayNameToSharedCache(name) {
+    const normalized = normalizeConversationUserDisplayName(name);
+    if (!normalized) return;
+    try {
+      localStorage.setItem(MESSAGE_USER_NAME_SHARED_CACHE_KEY, JSON.stringify({
+        name: normalized,
+        savedAt: Date.now()
+      }));
+    } catch {}
+  }
+
   async function fetchConversationSessionPayload() {
     const response = await fetch(`${location.origin}/api/auth/session`, {
       method: 'GET',
@@ -7724,6 +8022,7 @@
     if (name) {
       conversationUserDisplayName = name;
       conversationUserDisplayNameFetchedAt = Date.now();
+      persistConversationUserDisplayNameToSharedCache(name);
     }
     return payload;
   }
@@ -7785,6 +8084,7 @@
           if (name) {
             conversationUserDisplayName = name;
             conversationUserDisplayNameFetchedAt = Date.now();
+            persistConversationUserDisplayNameToSharedCache(name);
             return name;
           }
         }
@@ -7793,7 +8093,10 @@
       }
 
       const domName = readConversationUserDisplayNameFromDom();
-      if (domName) conversationUserDisplayName = domName;
+      if (domName) {
+        conversationUserDisplayName = domName;
+        persistConversationUserDisplayNameToSharedCache(domName);
+      }
       conversationUserDisplayNameFetchedAt = Date.now();
       return conversationUserDisplayName;
     })().finally(() => {
@@ -7908,22 +8211,62 @@
     return candidates.find(Boolean) || '';
   }
 
-  function readCurrentConversationReasoningEffortFromDom() {
+  function inferConversationReasoningEffortFromText(value) {
+    const text = normalizeText(value).replace(/[ _-]+/g, ' ').trim();
+    if (!text) return '';
+
+    if (/(?:^|\s)(?:extra high|xhigh|x high|max|maximum)(?:$|\s)/.test(text)) return 'extra-high';
+    if (/(?:^|\s)(?:high|korkea|extended)(?:$|\s)/.test(text)) return 'high';
+    if (/(?:^|\s)(?:medium|keskitaso|standard|normal)(?:$|\s)/.test(text)) return 'medium';
+    if (/(?:^|\s)(?:instant|min|minimum|minimal|välitön|valiton)(?:$|\s)/.test(text)) return 'instant';
+    if (/(?:^|\s)pro(?:$|\s)/.test(text)) return 'pro';
+    if (/(?:^|\s)ultra(?:$|\s)/.test(text)) return 'ultra';
+    return '';
+  }
+
+  function readLiveConversationReasoningEffortFromDom() {
+    syncConversationSelectionState();
+
+    // The composer pill is the most reliable user-facing source because it belongs to
+    // this tab and reflects the model/effort the user is about to send with. Prefer it
+    // over remembered state and over unrelated sliders elsewhere in the page.
+    const selector = getChatGptComposerModelSelector();
+    if (selector instanceof Element) {
+      const values = [
+        selector.getAttribute('aria-valuetext') || '',
+        selector.getAttribute('aria-label') || '',
+        selector.getAttribute('title') || '',
+        selector.getAttribute('data-thinking-effort') || '',
+        selector.getAttribute('data-reasoning-effort') || '',
+        selector.textContent || ''
+      ];
+      for (const value of values) {
+        const effort = inferConversationReasoningEffortFromText(value);
+        if (effort) return effort;
+      }
+    }
+
     const sliders = Array.from(document.querySelectorAll(
       '[data-reasoning-slider="true"] [role="slider"], [role="slider"][aria-valuetext], input[type="range"][aria-valuetext]'
     ));
     for (const slider of sliders) {
-      if (!(slider instanceof Element)) continue;
+      if (!(slider instanceof Element) || !isElementActuallyVisible(slider)) continue;
       const effort = normalizeConversationReasoningEffort(
         slider.getAttribute('aria-valuetext') ||
         slider.getAttribute('aria-label') ||
         slider.getAttribute('title') ||
         getThinkingEffortLabel(slider)
       );
-      if (effort) {
-        conversationLastKnownReasoningEffort = effort;
-        return effort;
-      }
+      if (effort) return effort;
+    }
+    return '';
+  }
+
+  function readCurrentConversationReasoningEffortFromDom() {
+    const liveEffort = readLiveConversationReasoningEffortFromDom();
+    if (liveEffort) {
+      conversationLastKnownReasoningEffort = liveEffort;
+      return liveEffort;
     }
     return conversationLastKnownReasoningEffort;
   }
@@ -7959,47 +8302,28 @@
     return '';
   }
 
-  function readCurrentConversationModelSlugForSend(effort = '') {
-    const explicitCandidates = [];
+  function readLiveConversationModelSlugFromComposer(effort = '') {
+    syncConversationSelectionState();
+    const selectorCandidates = [];
+    const selector = getChatGptComposerModelSelector();
+    if (!(selector instanceof Element)) return '';
 
-    const addElement = element => {
-      if (!(element instanceof Element)) return;
-      for (const attribute of [
-        'data-message-model-slug',
-        'data-model-slug',
-        'data-model',
-        'data-selected-model',
-        'value',
-        'aria-label',
-        'title'
-      ]) {
-        const value = String(element.getAttribute(attribute) || '').trim();
-        if (value) explicitCandidates.push(value);
-      }
-      const text = String(element.textContent || '').trim();
-      if (text) explicitCandidates.push(text);
-    };
-
-    addElement(getChatGptComposerModelSelector());
-
-    for (const selector of [
-      'button[data-testid*="model" i]',
-      'button[aria-label*="model" i]',
-      '[data-model-slug]',
-      '[data-selected-model]'
+    for (const attribute of [
+      'data-message-model-slug',
+      'data-model-slug',
+      'data-model',
+      'data-selected-model',
+      'value',
+      'aria-label',
+      'title'
     ]) {
-      for (const element of document.querySelectorAll(selector)) {
-        if (!(element instanceof Element) || !isElementActuallyVisible(element)) continue;
-        addElement(element);
-      }
+      const value = String(selector.getAttribute(attribute) || '').trim();
+      if (value) selectorCandidates.push(value);
     }
+    const text = String(selector.textContent || '').trim();
+    if (text) selectorCandidates.push(text);
 
-    try {
-      const urlModel = new URL(location.href).searchParams.get('model');
-      if (urlModel) explicitCandidates.unshift(urlModel);
-    } catch {}
-
-    for (const candidate of explicitCandidates) {
+    for (const candidate of selectorCandidates) {
       const normalized = normalizeChatGptModelSlug(candidate);
       if (/^gpt-\d/.test(normalized)) {
         const inferred = inferConversationModelSlugFromText(candidate, effort);
@@ -8009,16 +8333,37 @@
       if (inferred) return inferred;
     }
 
+    return '';
+  }
+
+  function readCurrentConversationModelSlugForSend(effort = '') {
+    syncConversationSelectionState();
+
+    // IMPORTANT: the visible composer selector outranks the URL and every other DOM
+    // model hint. ChatGPT's SPA can leave ?model= stale after an in-place model switch.
+    const liveModelSlug = readLiveConversationModelSlugFromComposer(effort);
+    if (liveModelSlug) return liveModelSlug;
+
+    // A trusted click on a model choice is the next-best source. This is tab-local and
+    // conversation-scoped, unlike API metadata from an older assistant turn.
     if (conversationLastSelectedModelSlug) {
       const selected = inferConversationModelSlugFromText(conversationLastSelectedModelSlug, effort);
       return selected || conversationLastSelectedModelSlug;
     }
 
-    if (conversationLastKnownModelSlug) {
-      const known = inferConversationModelSlugFromText(conversationLastKnownModelSlug, effort);
-      return known || conversationLastKnownModelSlug;
-    }
+    // URL is fallback-only. It can describe the model the conversation opened with
+    // rather than the model currently selected in the composer.
+    try {
+      const urlModel = new URL(location.href).searchParams.get('model');
+      if (urlModel) {
+        const normalized = normalizeChatGptModelSlug(urlModel);
+        const inferred = inferConversationModelSlugFromText(urlModel, effort);
+        if (inferred || /^gpt-\d/.test(normalized)) return inferred || normalized;
+      }
+    } catch {}
 
+    // Last resort for a stable conversation: inherit the previous assistant turn. Route
+    // synchronization prevents this fallback from leaking across conversations.
     const previousAssistantSurfaces = Array.from(document.querySelectorAll(
       '[data-markdown-text-style="assistant-message"], .bravefox-assistant-message-surface'
     )).filter(element => element instanceof Element);
@@ -8038,8 +8383,165 @@
     return '';
   }
 
+  function refreshConversationSelectionFromLiveUi() {
+    syncConversationSelectionState();
+
+    const previousModelSlug = normalizeChatGptModelSlug(conversationLastSelectedModelSlug);
+    const liveEffort = readLiveConversationReasoningEffortFromDom();
+    // Never use remembered effort to classify a freshly observed model. If the new
+    // composer does not expose its effort yet, leave that detail unknown rather than
+    // turning an old Medium/High value into a false model family.
+    const liveModelSlug = readLiveConversationModelSlugFromComposer(liveEffort);
+
+    let changed = false;
+    if (liveModelSlug) {
+      const nextModelSlug = normalizeChatGptModelSlug(liveModelSlug);
+      if (nextModelSlug !== previousModelSlug) {
+        conversationLastSelectedModelSlug = liveModelSlug;
+        changed = true;
+
+        // A model change with no visible effort proof must not inherit Medium/High from
+        // the previously active model in this tab. A later DOM/API pass can fill it in.
+        if (!liveEffort && conversationLastKnownReasoningEffort) {
+          conversationLastKnownReasoningEffort = '';
+        }
+      } else if (!conversationLastSelectedModelSlug) {
+        conversationLastSelectedModelSlug = liveModelSlug;
+        changed = true;
+      }
+    }
+
+    if (liveEffort && liveEffort !== conversationLastKnownReasoningEffort) {
+      conversationLastKnownReasoningEffort = liveEffort;
+      changed = true;
+    }
+
+    return changed;
+  }
+
+  function isConversationGenerationActive() {
+    for (const button of document.querySelectorAll('button')) {
+      if (!(button instanceof HTMLButtonElement)) continue;
+      const label = normalizeText([
+        button.getAttribute('data-testid') || '',
+        button.getAttribute('aria-label') || '',
+        button.getAttribute('title') || '',
+        button.textContent || ''
+      ].join(' '));
+      if (includesAny(label, [
+        'stop-button', 'stop generating', 'stop response', 'keskeytä', 'keskeyta',
+        'lopeta luominen', 'lopeta vastaus'
+      ])) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function recoverConversationSendSnapshotFromActiveGeneration() {
+    if (!isConversationGenerationActive()) return false;
+
+    let changed = false;
+    if (!conversationPendingUserSentAt) {
+      conversationPendingUserSentAt = Date.now();
+      changed = true;
+    }
+    if (!conversationPendingAssistantStartedAt) {
+      conversationPendingAssistantStartedAt = Date.now();
+      changed = true;
+    }
+
+    const beforeModel = conversationPendingModelSlug;
+    const beforeEffort = conversationPendingReasoningEffort;
+    captureConversationComposerSelection();
+    if (conversationPendingModelSlug !== beforeModel || conversationPendingReasoningEffort !== beforeEffort) {
+      changed = true;
+    }
+    return changed;
+  }
+
+  function refreshLatestConversationMetadataImmediately() {
+    if (!CHATGPT_MESSAGE_METADATA_CUSTOMIZATION.enabled) return;
+    recoverConversationSendSnapshotFromActiveGeneration();
+
+    const selectors = [
+      ['user', '[data-user-message-bubble="true"], .bravefox-user-message-surface'],
+      ['assistant', '[data-markdown-text-style="assistant-message"], .bravefox-assistant-message-surface']
+    ];
+
+    for (const [role, selector] of selectors) {
+      const surfaces = Array.from(document.querySelectorAll(selector))
+        .filter(surface => surface instanceof HTMLElement);
+      for (const surface of surfaces.slice(-2)) {
+        applyConversationMessageMetadata(surface, role, surface);
+      }
+    }
+  }
+
+  function scheduleLiveConversationMetadataRefresh(scope) {
+    const element = scope instanceof Element
+      ? scope
+      : scope?.parentElement instanceof Element
+        ? scope.parentElement
+        : null;
+    if (element) conversationLiveMetadataScopes.add(element);
+    if (conversationLiveMetadataFrame) return;
+
+    const run = () => {
+      conversationLiveMetadataFrame = 0;
+      const scopes = Array.from(conversationLiveMetadataScopes);
+      conversationLiveMetadataScopes.clear();
+
+      if (!scopes.length) {
+        refreshLatestConversationMetadataImmediately();
+        return;
+      }
+
+      for (const candidate of scopes.slice(-8)) {
+        if (!(candidate instanceof Element) || !candidate.isConnected) continue;
+        applyConversationPresentation(candidate);
+      }
+      refreshLatestConversationMetadataImmediately();
+      scheduleConversationArchiveDomCapture();
+      scheduleConversationArchivePostStreamSync();
+    };
+
+    if (typeof requestAnimationFrame === 'function') {
+      conversationLiveMetadataFrame = requestAnimationFrame(run);
+    } else {
+      conversationLiveMetadataFrame = window.setTimeout(run, 0);
+    }
+  }
+
+  function scheduleConversationSelectionFastRefresh() {
+    // Hydrate shared per-message metadata before touching the headers. If another tab
+    // has already resolved this conversation, timestamps/model labels can paint in the
+    // very same task instead of waiting for another full conversation download.
+    primeConversationMetadataIndexForCurrentRoute();
+
+    // First read happens synchronously, before any network metadata or delayed scan.
+    // This is what makes switching browser windows/tabs feel immediate.
+    const changedNow = refreshConversationSelectionFromLiveUi();
+    refreshLatestConversationMetadataImmediately();
+    if (changedNow) scheduleGeneralUiScan(true);
+
+    // React may replace the composer pill during focus/navigation. One short retry catches
+    // that new node without polling or waiting on the conversation API.
+    if (conversationSelectionFastRefreshTimer) {
+      clearTimeout(conversationSelectionFastRefreshTimer);
+    }
+    conversationSelectionFastRefreshTimer = window.setTimeout(() => {
+      conversationSelectionFastRefreshTimer = 0;
+      const changedLater = refreshConversationSelectionFromLiveUi();
+      refreshLatestConversationMetadataImmediately();
+      if (changedLater) scheduleGeneralUiScan(true);
+    }, 45);
+  }
+
   function captureConversationModelChoiceFromEvent(event) {
     if (!event?.isTrusted) return;
+    syncConversationSelectionState();
+
     const target = event.target;
     if (!(target instanceof Element)) return;
 
@@ -8057,13 +8559,36 @@
       choice.textContent || ''
     ];
 
-    const effort = readCurrentConversationReasoningEffortFromDom();
+    let clickedEffort = '';
     for (const value of values) {
-      const modelSlug = inferConversationModelSlugFromText(value, effort);
-      if (!modelSlug) continue;
-      conversationLastSelectedModelSlug = modelSlug;
+      clickedEffort = inferConversationReasoningEffortFromText(value);
+      if (clickedEffort) break;
+    }
+
+    // Do not let a previously remembered High/Medium force a plain model choice into
+    // the wrong family. First identify the model from the clicked choice itself.
+    let clickedModel = '';
+    for (const value of values) {
+      clickedModel = inferConversationModelSlugFromText(value, clickedEffort);
+      if (clickedModel) break;
+    }
+
+    if (clickedModel) {
+      const previousModel = normalizeChatGptModelSlug(conversationLastSelectedModelSlug);
+      const nextModel = normalizeChatGptModelSlug(clickedModel);
+      conversationLastSelectedModelSlug = clickedModel;
+
+      if (clickedEffort) {
+        conversationLastKnownReasoningEffort = clickedEffort;
+      } else if (previousModel && previousModel !== nextModel) {
+        // Unknown is safer than incorrectly carrying High from another model. The next
+        // send will re-read the composer pill/slider and fill this if ChatGPT exposes it.
+        conversationLastKnownReasoningEffort = '';
+      }
       return;
     }
+
+    if (clickedEffort) conversationLastKnownReasoningEffort = clickedEffort;
   }
 
   function getConversationAssistantDetailLabel(turnRoot, surface) {
@@ -8076,12 +8601,15 @@
     const hasFreshPendingSend =
       Boolean(conversationPendingUserSentAt) &&
       Date.now() - conversationPendingUserSentAt < 180000;
+    let modelCameFromPendingSend = false;
     if (!modelSlug && isLatestAssistantTurn && hasFreshPendingSend && conversationPendingModelSlug) {
       modelSlug = conversationPendingModelSlug;
+      modelCameFromPendingSend = true;
     }
 
     if (modelSlug && turnRoot instanceof Element && !turnRoot.getAttribute(MESSAGE_MODEL_ATTR)) {
       turnRoot.setAttribute(MESSAGE_MODEL_ATTR, modelSlug);
+      turnRoot.setAttribute(MESSAGE_MODEL_SOURCE_ATTR, modelCameFromPendingSend ? 'send' : 'dom');
     }
 
     let effort = String(turnRoot?.getAttribute?.(MESSAGE_REASONING_ATTR) || '').trim();
@@ -8090,8 +8618,10 @@
     // Pending/current reasoning UI describes the active/latest turn only. Never let an
     // older assistant reply inherit today's selected effort just because its own metadata
     // has not resolved yet.
+    let effortCameFromPendingSend = false;
     if (!effort && isLatestAssistantTurn && conversationPendingReasoningEffort) {
       effort = conversationPendingReasoningEffort;
+      effortCameFromPendingSend = true;
     }
     if (!effort && isLatestAssistantTurn) effort = readCurrentConversationReasoningEffortFromDom();
     effort = normalizeConversationReasoningEffort(effort);
@@ -8101,6 +8631,7 @@
     if (!effort && normalizedModelSlug.endsWith('-instant')) effort = 'instant';
     if (effort && turnRoot instanceof Element && !turnRoot.getAttribute(MESSAGE_REASONING_ATTR)) {
       turnRoot.setAttribute(MESSAGE_REASONING_ATTR, effort);
+      turnRoot.setAttribute(MESSAGE_REASONING_SOURCE_ATTR, effortCameFromPendingSend ? 'send' : 'dom');
     }
 
     const modelLabel = formatConversationModelLabel(modelSlug);
@@ -8164,6 +8695,30 @@
     return text;
   }
 
+  function readInlineConversationRawTimestamp(turnRoot) {
+    if (!(turnRoot instanceof Element)) return 0;
+
+    for (const element of turnRoot.querySelectorAll('time, [datetime], [data-timestamp], [data-message-timestamp]')) {
+      if (!(element instanceof Element)) continue;
+      const raw =
+        element.getAttribute('datetime') ||
+        element.getAttribute('data-timestamp') ||
+        element.getAttribute('data-message-timestamp');
+      if (!raw) continue;
+
+      let numeric = 0;
+      if (/^\d+(?:\.\d+)?$/.test(String(raw).trim())) {
+        numeric = Number(raw);
+        if (numeric > 0 && numeric < 1e12) numeric *= 1000;
+      } else {
+        const parsed = Date.parse(raw);
+        if (Number.isFinite(parsed)) numeric = parsed;
+      }
+      if (Number.isFinite(numeric) && numeric > 0) return numeric;
+    }
+    return 0;
+  }
+
   function readInlineConversationTimestamp(turnRoot) {
     if (!(turnRoot instanceof Element)) return '';
 
@@ -8191,9 +8746,2731 @@
     return '';
   }
 
+
+  // === BraveFox local conversation archive =====================================
+
+  function archiveRequestToPromise(request) {
+    return new Promise((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error || new Error('IndexedDB request failed'));
+    });
+  }
+
+  function archiveTransactionDone(transaction) {
+    return new Promise((resolve, reject) => {
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error || new Error('IndexedDB transaction failed'));
+      transaction.onabort = () => reject(transaction.error || new Error('IndexedDB transaction aborted'));
+    });
+  }
+
+  function openConversationArchiveDb() {
+    if (conversationArchiveDbPromise) return conversationArchiveDbPromise;
+    if (!('indexedDB' in window)) return Promise.reject(new Error('IndexedDB unavailable'));
+
+    conversationArchiveDbPromise = new Promise((resolve, reject) => {
+      const request = indexedDB.open(CHAT_ARCHIVE_DB_NAME, CHAT_ARCHIVE_DB_VERSION);
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(CHAT_ARCHIVE_CONVERSATIONS_STORE)) {
+          const store = db.createObjectStore(CHAT_ARCHIVE_CONVERSATIONS_STORE, { keyPath: 'id' });
+          store.createIndex('updatedAt', 'updatedAt', { unique: false });
+        }
+        if (!db.objectStoreNames.contains(CHAT_ARCHIVE_MESSAGES_STORE)) {
+          const store = db.createObjectStore(CHAT_ARCHIVE_MESSAGES_STORE, { keyPath: 'key' });
+          store.createIndex('conversationId', 'conversationId', { unique: false });
+          store.createIndex('conversationBranch', ['conversationId', 'branchOrder'], { unique: false });
+          store.createIndex('conversationCreated', ['conversationId', 'createTime'], { unique: false });
+        }
+        if (!db.objectStoreNames.contains(CHAT_ARCHIVE_SNAPSHOTS_STORE)) {
+          const store = db.createObjectStore(CHAT_ARCHIVE_SNAPSHOTS_STORE, { keyPath: 'id' });
+          store.createIndex('conversationId', 'conversationId', { unique: false });
+          store.createIndex('conversationCreated', ['conversationId', 'createdAt'], { unique: false });
+        }
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => {
+        conversationArchiveDbPromise = null;
+        reject(request.error || new Error('Could not open local chat archive'));
+      };
+      request.onblocked = () => console.warn('[BraveFox Enhancer] Local chat archive database upgrade is blocked by another tab.');
+    });
+    return conversationArchiveDbPromise;
+  }
+
+  function cloneArchiveJson(value) {
+    if (value == null) return null;
+    try {
+      if (typeof structuredClone === 'function') return structuredClone(value);
+    } catch {}
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch {
+      return null;
+    }
+  }
+
+  function extractArchivePlainTextFromContent(content) {
+    if (!content || typeof content !== 'object') return '';
+    const parts = Array.isArray(content.parts) ? content.parts : [];
+    const values = [];
+    const add = value => {
+      const text = String(value ?? '').trim();
+      if (text) values.push(text);
+    };
+
+    for (const part of parts) {
+      if (typeof part === 'string') {
+        add(part);
+        continue;
+      }
+      if (!part || typeof part !== 'object') continue;
+      if (typeof part.text === 'string') add(part.text);
+      else if (typeof part.content === 'string') add(part.content);
+      else if (part.asset_pointer || part.image_url) add('[Image/attachment]');
+      else if (part.name || part.filename) add(`[Attachment: ${part.name || part.filename}]`);
+    }
+
+    if (!values.length) {
+      if (typeof content.text === 'string') add(content.text);
+      if (typeof content.result === 'string') add(content.result);
+    }
+    return values.join('\n\n').trim();
+  }
+
+  function getArchiveFileIdFromAssetPointer(value) {
+    const pointer = String(value || '').trim();
+    if (!pointer) return '';
+    const schemeMatch = pointer.match(/^(?:sediment|file-service):\/\/(.+)$/i);
+    if (schemeMatch) return String(schemeMatch[1] || '').trim();
+    return /^(?:file[-_])/.test(pointer) ? pointer : '';
+  }
+
+  function getArchiveImageParts(message) {
+    const parts = Array.isArray(message?.content?.parts) ? message.content.parts : [];
+    const images = [];
+    for (const part of parts) {
+      if (!part || typeof part !== 'object') continue;
+      const contentType = normalizeText(part.content_type || part.type);
+      const assetPointer = String(part.asset_pointer || '').trim();
+      const imageUrl = typeof part.image_url === 'string'
+        ? String(part.image_url).trim()
+        : typeof part.image_url?.url === 'string'
+          ? String(part.image_url.url).trim()
+          : '';
+      const partMimeType = String(part.mime_type || part.mimeType || '');
+      const isImage = contentType === 'image_asset_pointer' || contentType === 'image' || Boolean(imageUrl) || /^image\//i.test(partMimeType);
+      if (!isImage) continue;
+      const id = String(
+        part.id || part.file_id || getArchiveFileIdFromAssetPointer(assetPointer) || ''
+      ).trim();
+      images.push({
+        id,
+        name: String(part.name || part.filename || part.file_name || ''),
+        mimeType: partMimeType,
+        size: Number(part.size || part.size_bytes || 0) || 0,
+        width: Number(part.width || 0) || 0,
+        height: Number(part.height || 0) || 0,
+        assetPointer,
+        imageUrl,
+        isImage: true
+      });
+    }
+    return images;
+  }
+
+  function sanitizeArchiveAttachments(message) {
+    const raw = message?.metadata?.attachments || message?.metadata?.files || [];
+    const imageParts = getArchiveImageParts(message);
+    const imageById = new Map();
+    for (const image of imageParts) {
+      if (image.id) imageById.set(image.id, image);
+    }
+
+    const attachments = (Array.isArray(raw) ? raw : []).slice(0, 50).map(item => {
+      if (!item || typeof item !== 'object') return null;
+      const id = String(item.id || item.file_id || '').trim();
+      const image = id ? imageById.get(id) : null;
+      const mimeType = String(item.mime_type || item.mimeType || image?.mimeType || '');
+      return {
+        id,
+        name: String(item.name || item.filename || item.file_name || image?.name || ''),
+        mimeType,
+        size: Number(item.size || item.size_bytes || image?.size || 0) || 0,
+        width: Number(image?.width || 0) || 0,
+        height: Number(image?.height || 0) || 0,
+        assetPointer: String(image?.assetPointer || ''),
+        imageUrl: String(image?.imageUrl || ''),
+        isImage: Boolean(image || /^image\//i.test(mimeType))
+      };
+    }).filter(Boolean);
+
+    const knownIds = new Set(attachments.map(item => item.id).filter(Boolean));
+    for (const image of imageParts) {
+      if (image.id && knownIds.has(image.id)) continue;
+      attachments.push(image);
+      if (image.id) knownIds.add(image.id);
+    }
+    return attachments;
+  }
+
+  function getArchiveCurrentBranchNodeIds(payload) {
+    const mapping = payload && typeof payload === 'object' ? payload.mapping : null;
+    const currentNode = String(payload?.current_node || '').trim();
+    if (!mapping || typeof mapping !== 'object' || !currentNode || !mapping[currentNode]) return [];
+
+    const reversed = [];
+    const seen = new Set();
+    let nodeId = currentNode;
+    while (nodeId && mapping[nodeId] && !seen.has(nodeId)) {
+      seen.add(nodeId);
+      reversed.push(nodeId);
+      nodeId = String(mapping[nodeId]?.parent || '').trim();
+    }
+    return reversed.reverse();
+  }
+
+  function normalizeArchiveTimestamp(value) {
+    let numeric = value;
+    if (typeof numeric === 'string' && /^\d+(?:\.\d+)?$/.test(numeric.trim())) numeric = Number(numeric);
+    if (!Number.isFinite(Number(numeric))) return 0;
+    numeric = Number(numeric);
+    if (numeric > 0 && numeric < 1e12) numeric *= 1000;
+    return numeric > 0 ? numeric : 0;
+  }
+
+  function getArchiveDocumentTitleFallback() {
+    const title = String(document.title || '').replace(/\s*[|–—-]\s*ChatGPT\s*$/i, '').trim();
+    return title && !/^chatgpt$/i.test(title) ? title : 'Untitled Chat';
+  }
+
+  function buildArchiveRecordsFromConversationPayload(conversationId, payload) {
+    const mapping = payload && typeof payload === 'object' ? payload.mapping : null;
+    if (!mapping || typeof mapping !== 'object') return { records: [], branchRecords: [], currentNodeId: '' };
+
+    const branchNodeIds = getArchiveCurrentBranchNodeIds(payload);
+    const branchOrder = new Map(branchNodeIds.map((id, index) => [id, index]));
+    const records = [];
+
+    for (const [nodeId, node] of Object.entries(mapping)) {
+      const message = node?.message;
+      const messageId = String(message?.id || '').trim();
+      const role = normalizeText(message?.author?.role);
+      if (!messageId || (role !== 'user' && role !== 'assistant')) continue;
+
+      const createTime = normalizeArchiveTimestamp(message?.create_time);
+      const updateTime = normalizeArchiveTimestamp(message?.update_time);
+      const reasoningEffort = extractConversationMessageReasoningEffort(message);
+      const modelSlug = extractConversationMessageModelSlug(message, reasoningEffort);
+      const content = cloneArchiveJson(message?.content || null);
+      const plainText = extractArchivePlainTextFromContent(content);
+      const order = branchOrder.has(nodeId) ? branchOrder.get(nodeId) : -1;
+
+      records.push({
+        key: `${conversationId}:${messageId}`,
+        conversationId,
+        id: messageId,
+        nodeId: String(nodeId || ''),
+        parentNodeId: String(node?.parent || ''),
+        childNodeIds: Array.isArray(node?.children) ? node.children.map(String) : [],
+        role,
+        createTime,
+        createTimeSource: createTime > 0 ? 'api' : 'unknown',
+        updateTime,
+        branchOrder: order,
+        onCurrentBranch: order >= 0,
+        content,
+        plainText,
+        attachments: sanitizeArchiveAttachments(message),
+        modelSlug: String(modelSlug || ''),
+        reasoningEffort: String(reasoningEffort || ''),
+        status: String(message?.status || ''),
+        endTurn: Boolean(message?.end_turn),
+        source: 'api',
+        archivedAt: Date.now()
+      });
+    }
+
+    const branchRecords = records
+      .filter(record => record.onCurrentBranch)
+      .sort((a, b) => a.branchOrder - b.branchOrder);
+    return {
+      records,
+      branchRecords,
+      currentNodeId: String(payload?.current_node || ''),
+      branchNodeIds
+    };
+  }
+
+  async function getArchivedConversation(conversationId) {
+    const id = String(conversationId || '').trim();
+    if (!id) return null;
+    const db = await openConversationArchiveDb();
+    const tx = db.transaction(CHAT_ARCHIVE_CONVERSATIONS_STORE, 'readonly');
+    return archiveRequestToPromise(tx.objectStore(CHAT_ARCHIVE_CONVERSATIONS_STORE).get(id));
+  }
+
+  async function getArchivedConversations() {
+    const db = await openConversationArchiveDb();
+    const tx = db.transaction(CHAT_ARCHIVE_CONVERSATIONS_STORE, 'readonly');
+    const result = await archiveRequestToPromise(tx.objectStore(CHAT_ARCHIVE_CONVERSATIONS_STORE).getAll());
+    return (Array.isArray(result) ? result : []).sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0));
+  }
+
+  async function getArchivedMessages(conversationId) {
+    const id = String(conversationId || '').trim();
+    if (!id) return [];
+    const db = await openConversationArchiveDb();
+    const tx = db.transaction(CHAT_ARCHIVE_MESSAGES_STORE, 'readonly');
+    const store = tx.objectStore(CHAT_ARCHIVE_MESSAGES_STORE);
+    const index = store.index('conversationId');
+    const result = await archiveRequestToPromise(index.getAll(IDBKeyRange.only(id)));
+    return (Array.isArray(result) ? result : []).sort((a, b) => {
+      const ao = Number(a.branchOrder ?? -1);
+      const bo = Number(b.branchOrder ?? -1);
+      if (ao >= 0 && bo >= 0) return ao - bo;
+      if (ao >= 0) return -1;
+      if (bo >= 0) return 1;
+      return Number(a.createTime || 0) - Number(b.createTime || 0);
+    });
+  }
+
+  async function getArchivedSnapshots(conversationId) {
+    const id = String(conversationId || '').trim();
+    if (!id) return [];
+    const db = await openConversationArchiveDb();
+    const tx = db.transaction(CHAT_ARCHIVE_SNAPSHOTS_STORE, 'readonly');
+    const store = tx.objectStore(CHAT_ARCHIVE_SNAPSHOTS_STORE);
+    const index = store.index('conversationId');
+    const result = await archiveRequestToPromise(index.getAll(IDBKeyRange.only(id)));
+    return (Array.isArray(result) ? result : []).sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
+  }
+
+
+  async function getArchivedSnapshotConversationIds() {
+    const db = await openConversationArchiveDb();
+    const tx = db.transaction(CHAT_ARCHIVE_SNAPSHOTS_STORE, 'readonly');
+    const snapshots = await archiveRequestToPromise(
+      tx.objectStore(CHAT_ARCHIVE_SNAPSHOTS_STORE).getAll()
+    );
+    return new Set(
+      (Array.isArray(snapshots) ? snapshots : [])
+        .map(snapshot => String(snapshot?.conversationId || '').trim())
+        .filter(Boolean)
+    );
+  }
+
+  function isConversationArchiveExistenceApiHealthy() {
+    return Boolean(
+      conversationArchiveExistenceApiHealthyAt &&
+      Date.now() - conversationArchiveExistenceApiHealthyAt <= CHAT_ARCHIVE_EXISTENCE_HEALTH_MAX_AGE_MS
+    );
+  }
+
+  async function classifyMissingConversationResponse(response) {
+    if (!(response instanceof Response)) return 'unknown';
+    if (response.ok) {
+      conversationArchiveExistenceApiHealthyAt = Date.now();
+      return 'exists';
+    }
+    if (response.status === 410) return 'missing';
+    if (response.status !== 404) return 'unknown';
+
+    // An exact conversation endpoint can still return a generic 404 when ChatGPT changes
+    // routing. Never treat that as deletion. Require the response body itself to say that
+    // the conversation is absent/deleted.
+    let body = '';
+    try { body = normalizeText(await response.clone().text()); } catch {}
+    if (!body) return 'unknown';
+    const mentionsConversation = body.includes('conversation') || body.includes('chat');
+    const saysMissing = [
+      'not found', 'not_found', 'does not exist', 'doesn\'t exist',
+      'no longer exists', 'deleted', 'removed'
+    ].some(term => body.includes(term));
+    return mentionsConversation && saysMissing ? 'missing' : 'unknown';
+  }
+
+  async function probeChatGptConversationExistence(conversationId) {
+    const id = String(conversationId || '').trim();
+    if (!id) return 'unknown';
+
+    let token = conversationAccessToken || await resolveConversationAccessToken();
+    // Ghost cleanup is destructive. Unlike normal metadata reads, do not fall back to
+    // cookie-only probing because an unauthenticated 404 must never count as deletion.
+    if (!token) return 'unknown';
+
+    const url = `${location.origin}/backend-api/conversation/${encodeURIComponent(id)}`;
+    const requestConversation = currentToken => fetch(url, {
+      method: 'GET',
+      credentials: 'include',
+      cache: 'no-store',
+      headers: { Accept: 'application/json', Authorization: `Bearer ${currentToken}` }
+    });
+
+    try {
+      let response = await requestConversation(token);
+      if (response.status === 401 || response.status === 403) {
+        conversationAccessToken = '';
+        token = await resolveConversationAccessToken();
+        if (!token) return 'unknown';
+        response = await requestConversation(token);
+      }
+      return classifyMissingConversationResponse(response);
+    } catch {
+      return 'unknown';
+    }
+  }
+
+  async function establishConversationArchiveExistenceApiHealth(conversations, snapshotConversationIds) {
+    if (isConversationArchiveExistenceApiHealthy()) return true;
+
+    const currentId = getCurrentConversationId();
+    const anchors = [];
+    if (currentId) anchors.push(currentId);
+
+    // Prefer snapshot-protected archives as health probes: even if one unexpectedly reports
+    // missing, it is never eligible for automatic deletion. Then add a couple of ordinary
+    // archives as non-destructive probes so a library made entirely of unsnapshotted chats
+    // can still prove the exact-conversation endpoint is healthy.
+    for (const conversation of Array.isArray(conversations) ? conversations : []) {
+      const id = String(conversation?.id || '').trim();
+      if (!id || anchors.includes(id) || !snapshotConversationIds.has(id)) continue;
+      anchors.push(id);
+      if (anchors.length >= 3) break;
+    }
+    if (anchors.length < 3) {
+      for (const conversation of Array.isArray(conversations) ? conversations : []) {
+        const id = String(conversation?.id || '').trim();
+        if (!id || anchors.includes(id)) continue;
+        anchors.push(id);
+        if (anchors.length >= 3) break;
+      }
+    }
+
+    for (const id of anchors) {
+      const status = await probeChatGptConversationExistence(id);
+      if (status === 'exists') return true;
+    }
+    return isConversationArchiveExistenceApiHealthy();
+  }
+
+  async function cleanupDeletedConversationArchives(force = false) {
+    if (conversationArchiveGhostCleanupRunning) return 0;
+    conversationArchiveGhostCleanupRunning = true;
+
+    try {
+      const [conversations, snapshotConversationIds] = await Promise.all([
+        getArchivedConversations(),
+        getArchivedSnapshotConversationIds()
+      ]);
+      if (!conversations.length) return 0;
+
+      const now = Date.now();
+      const candidates = conversations.filter(conversation => {
+        const id = String(conversation?.id || '').trim();
+        if (!id || snapshotConversationIds.has(id)) return false;
+        const ageAnchor = Number(conversation?.archivedAt || conversation?.updatedAt || conversation?.createdAt || 0);
+        if (ageAnchor && now - ageAnchor < CHAT_ARCHIVE_GHOST_MIN_AGE_MS) return false;
+        if (!force) {
+          const lastChecked = Number(conversationArchiveExistenceChecks.get(id) || 0);
+          if (lastChecked && now - lastChecked < CHAT_ARCHIVE_GHOST_CLEANUP_INTERVAL_MS) return false;
+        }
+        return true;
+      }).slice(0, CHAT_ARCHIVE_GHOST_MAX_CHECKS_PER_PASS);
+
+      if (!candidates.length) return 0;
+      if (!(await establishConversationArchiveExistenceApiHealth(conversations, snapshotConversationIds))) {
+        return 0;
+      }
+
+      let deleted = 0;
+      for (const conversation of candidates) {
+        const id = String(conversation?.id || '').trim();
+        if (!id) continue;
+        conversationArchiveExistenceChecks.set(id, Date.now());
+
+        const first = await probeChatGptConversationExistence(id);
+        if (first !== 'missing' || !isConversationArchiveExistenceApiHealthy()) continue;
+
+        await new Promise(resolve => window.setTimeout(resolve, CHAT_ARCHIVE_GHOST_CONFIRM_DELAY_MS));
+        const second = await probeChatGptConversationExistence(id);
+        if (second !== 'missing' || !isConversationArchiveExistenceApiHealthy()) continue;
+
+        // Snapshot creation can race with this background pass. Re-check at the destructive
+        // edge so even a snapshot made one second ago permanently protects the archive.
+        const snapshots = await getArchivedSnapshots(id);
+        if (snapshots.length) continue;
+
+        if (await deleteConversationArchive(id)) {
+          conversationArchiveExistenceChecks.delete(id);
+          deleted += 1;
+        }
+      }
+      return deleted;
+    } catch {
+      return 0;
+    } finally {
+      conversationArchiveGhostCleanupRunning = false;
+    }
+  }
+
+  async function deleteConversationArchiveSnapshot(conversationId, snapshotId) {
+    const id = String(conversationId || '').trim();
+    const targetSnapshotId = String(snapshotId || '').trim();
+    if (!id || !targetSnapshotId) return false;
+
+    const snapshots = await getArchivedSnapshots(id);
+    const snapshot = snapshots.find(item => String(item?.id || '') === targetSnapshotId);
+    if (!snapshot) return false;
+
+    const db = await openConversationArchiveDb();
+    const tx = db.transaction(CHAT_ARCHIVE_SNAPSHOTS_STORE, 'readwrite');
+    const done = archiveTransactionDone(tx);
+    tx.objectStore(CHAT_ARCHIVE_SNAPSHOTS_STORE).delete(targetSnapshotId);
+    await done;
+    notifyConversationArchiveChanged(id);
+    return true;
+  }
+
+  async function deleteConversationArchive(conversationId) {
+    const id = String(conversationId || '').trim();
+    if (!id) return false;
+
+    // If this is the conversation currently open in the tab, stop live capture from
+    // immediately recreating the archive the user just explicitly deleted. A reload/new
+    // page session intentionally clears this suppression and allows archiving to resume.
+    if (id === getCurrentConversationId()) conversationArchiveDeletedUntilReload.add(id);
+
+    const db = await openConversationArchiveDb();
+    const tx = db.transaction(
+      [CHAT_ARCHIVE_CONVERSATIONS_STORE, CHAT_ARCHIVE_MESSAGES_STORE, CHAT_ARCHIVE_SNAPSHOTS_STORE],
+      'readwrite'
+    );
+    const done = archiveTransactionDone(tx);
+    tx.objectStore(CHAT_ARCHIVE_CONVERSATIONS_STORE).delete(id);
+
+    const deleteIndexedRecords = storeName => new Promise((resolve, reject) => {
+      const store = tx.objectStore(storeName);
+      const request = store.index('conversationId').openCursor(IDBKeyRange.only(id));
+      request.onsuccess = () => {
+        const cursor = request.result;
+        if (!cursor) {
+          resolve();
+          return;
+        }
+        cursor.delete();
+        cursor.continue();
+      };
+      request.onerror = () => reject(request.error || new Error(`Could not delete ${storeName} archive records`));
+    });
+
+    await Promise.all([
+      deleteIndexedRecords(CHAT_ARCHIVE_MESSAGES_STORE),
+      deleteIndexedRecords(CHAT_ARCHIVE_SNAPSHOTS_STORE)
+    ]);
+    await done;
+
+    // Remove continuation links that would otherwise point at a local archive that no
+    // longer exists. This never touches the original ChatGPT conversation itself.
+    try {
+      const parsed = JSON.parse(localStorage.getItem(CHAT_ARCHIVE_CONTEXT_LINK_KEY) || '{}');
+      if (parsed && typeof parsed === 'object') {
+        let changed = false;
+        for (const [targetId, value] of Object.entries(parsed)) {
+          if (targetId === id || String(value?.sourceConversationId || '') === id) {
+            delete parsed[targetId];
+            changed = true;
+          }
+        }
+        if (changed) localStorage.setItem(CHAT_ARCHIVE_CONTEXT_LINK_KEY, JSON.stringify(parsed));
+      }
+    } catch {}
+
+    notifyConversationArchiveChanged(id);
+    return true;
+  }
+
+  function notifyConversationArchiveChanged(conversationId) {
+    try { conversationArchiveChannel?.postMessage({ type: 'changed', conversationId }); } catch {}
+    if (document.getElementById(CHAT_ARCHIVE_MODAL_ID)) scheduleConversationArchiveModalRefresh(40);
+  }
+
+  async function createConversationArchiveSnapshot(conversationId, name = '', type = 'manual') {
+    const conversation = await getArchivedConversation(conversationId);
+    if (!conversation) return null;
+
+    const snapshots = await getArchivedSnapshots(conversationId);
+    const sequence = snapshots.length + 1;
+    const createdAt = Date.now();
+    const snapshot = {
+      id: `${conversationId}:${createdAt}:${Math.random().toString(36).slice(2, 8)}`,
+      conversationId,
+      name: String(name || '').trim() || (type === 'automatic'
+        ? `Auto · ${Number(conversation.messageCount || 0)} messages`
+        : `Snapshot ${sequence}`),
+      type,
+      createdAt,
+      throughNodeId: String(conversation.currentNodeId || ''),
+      throughMessageId: String(conversation.lastMessageId || ''),
+      messageIds: Array.isArray(conversation.currentBranchMessageIds)
+        ? conversation.currentBranchMessageIds.map(String).filter(Boolean)
+        : [],
+      messageCount: Number(conversation.messageCount || 0),
+      updatedAt: Number(conversation.updatedAt || createdAt)
+    };
+
+    const db = await openConversationArchiveDb();
+    const tx = db.transaction(CHAT_ARCHIVE_SNAPSHOTS_STORE, 'readwrite');
+    tx.objectStore(CHAT_ARCHIVE_SNAPSHOTS_STORE).put(snapshot);
+    await archiveTransactionDone(tx);
+    notifyConversationArchiveChanged(conversationId);
+    return snapshot;
+  }
+
+  async function ensureAutomaticConversationArchiveSnapshot(conversationId, conversation) {
+    if (!conversation || !Number(conversation.messageCount || 0)) return;
+    const snapshots = await getArchivedSnapshots(conversationId);
+    const latest = snapshots[0] || null;
+    const messageCount = Number(conversation.messageCount || 0);
+    const latestCount = Number(latest?.messageCount || 0);
+    const latestAge = latest ? Date.now() - Number(latest.createdAt || 0) : Infinity;
+    const advancedEnough = messageCount >= latestCount + CHAT_ARCHIVE_AUTO_SNAPSHOT_MESSAGE_STEP;
+    const agedAndAdvanced = messageCount > latestCount && latestAge >= CHAT_ARCHIVE_AUTO_SNAPSHOT_MIN_AGE_MS;
+    if (!latest || advancedEnough || agedAndAdvanced) {
+      await createConversationArchiveSnapshot(conversationId, '', 'automatic');
+    }
+  }
+
+  async function archiveConversationPayload(conversationId, payload) {
+    const id = String(conversationId || '').trim();
+    if (!id || !payload || typeof payload !== 'object') return false;
+    if (conversationArchiveDeletedUntilReload.has(id)) return false;
+
+    try {
+      const { records, branchRecords, currentNodeId } = buildArchiveRecordsFromConversationPayload(id, payload);
+      if (!records.length) return false;
+      const previous = await getArchivedConversation(id).catch(() => null);
+      const now = Date.now();
+      const firstTime = branchRecords.reduce((min, record) => record.createTime && (!min || record.createTime < min) ? record.createTime : min, 0);
+      const last = branchRecords[branchRecords.length - 1] || null;
+      const humanBranchRecords = branchRecords.filter(record => isArchiveHumanConversationMessage(record));
+      const lastHuman = humanBranchRecords[humanBranchRecords.length - 1] || last;
+      const conversation = {
+        id,
+        title: String(payload.title || previous?.title || getArchiveDocumentTitleFallback()).trim() || 'Untitled Chat',
+        url: `${location.origin}/c/${encodeURIComponent(id)}`,
+        createdAt: Number(previous?.createdAt || firstTime || now),
+        updatedAt: Number(lastHuman?.updateTime || lastHuman?.createTime || payload.update_time && normalizeArchiveTimestamp(payload.update_time) || now),
+        archivedAt: now,
+        currentNodeId,
+        // Snapshots deliberately point at the clean, human-visible transcript. Raw tool/code
+        // records remain stored separately and can still be inspected through the database/JSON.
+        currentBranchMessageIds: humanBranchRecords.map(record => String(record.id || '')).filter(Boolean),
+        lastMessageId: String(lastHuman?.id || previous?.lastMessageId || ''),
+        messageCount: humanBranchRecords.length,
+        totalStoredMessages: records.length,
+        userMessageCount: humanBranchRecords.filter(record => record.role === 'user').length,
+        assistantMessageCount: humanBranchRecords.filter(record => record.role === 'assistant').length,
+        source: 'api'
+      };
+
+      const db = await openConversationArchiveDb();
+      const tx = db.transaction(
+        [CHAT_ARCHIVE_CONVERSATIONS_STORE, CHAT_ARCHIVE_MESSAGES_STORE],
+        'readwrite'
+      );
+      tx.objectStore(CHAT_ARCHIVE_CONVERSATIONS_STORE).put(conversation);
+      const messageStore = tx.objectStore(CHAT_ARCHIVE_MESSAGES_STORE);
+      for (const record of records) messageStore.put(record);
+      await archiveTransactionDone(tx);
+
+      void ensureAutomaticConversationArchiveSnapshot(id, conversation).catch(() => {});
+      notifyConversationArchiveChanged(id);
+      return true;
+    } catch (error) {
+      try { console.debug('[BraveFox Enhancer] Local conversation archive update failed.', error); } catch {}
+      return false;
+    }
+  }
+
+  function extractArchiveTextFromConversationSurface(surface) {
+    if (!(surface instanceof Element)) return '';
+    try {
+      const clone = surface.cloneNode(true);
+      for (const node of clone.querySelectorAll(
+        `[${MESSAGE_META_ATTR}="true"], [${MESSAGE_ACTIONS_ATTR}], button, [role="button"]`
+      )) node.remove();
+      return String(clone.textContent || '').replace(/\u00a0/g, ' ').replace(/[ \t]+\n/g, '\n').trim();
+    } catch {
+      return String(surface.textContent || '').trim();
+    }
+  }
+
+  async function archiveVisibleConversationTail() {
+    const conversationId = getCurrentConversationId();
+    if (!conversationId) return false;
+    if (conversationArchiveDeletedUntilReload.has(conversationId)) return false;
+
+    // Capture the visible tail in real DOM order. The previous user-first/assistant-second
+    // collection could scramble a DOM-only archive when authoritative conversation metadata
+    // was temporarily unavailable.
+    const allSurfaces = Array.from(document.querySelectorAll(
+      '[data-user-message-bubble="true"], .bravefox-user-message-surface, ' +
+      '[data-markdown-text-style="assistant-message"], .bravefox-assistant-message-surface'
+    )).filter(node => node instanceof HTMLElement);
+    const candidates = allSurfaces.slice(-16).map((surface, tailIndex) => ({
+      role: surface.matches('[data-user-message-bubble="true"], .bravefox-user-message-surface') ? 'user' : 'assistant',
+      surface,
+      domOrder: Math.max(0, allSurfaces.length - 16) + tailIndex
+    }));
+    if (!candidates.length) return false;
+
+    const prepared = [];
+    for (const { role, surface, domOrder } of candidates) {
+      const root = getConversationTurnRoot(surface, surface, role) || surface;
+      const ids = collectConversationMessageIds(surface);
+      for (const id of collectConversationMessageIds(root)) if (!ids.includes(id)) ids.push(id);
+      const messageId = ids[0];
+      if (!messageId) continue;
+      const text = extractArchiveTextFromConversationSurface(surface);
+      if (!text) continue;
+      prepared.push({ role, root, surface, messageId, text, domOrder, key: `${conversationId}:${messageId}` });
+    }
+    if (!prepared.length) return false;
+
+    const db = await openConversationArchiveDb();
+    const readTx = db.transaction(
+      [CHAT_ARCHIVE_CONVERSATIONS_STORE, CHAT_ARCHIVE_MESSAGES_STORE],
+      'readonly'
+    );
+    const readConversationStore = readTx.objectStore(CHAT_ARCHIVE_CONVERSATIONS_STORE);
+    const readMessageStore = readTx.objectStore(CHAT_ARCHIVE_MESSAGES_STORE);
+    const currentConversationPromise = archiveRequestToPromise(readConversationStore.get(conversationId)).catch(() => null);
+    const existingPromises = prepared.map(item => archiveRequestToPromise(readMessageStore.get(item.key)).catch(() => null));
+    const [currentConversation, existingRecords] = await Promise.all([
+      currentConversationPromise,
+      Promise.all(existingPromises)
+    ]);
+
+    const generationActive = isConversationGenerationActive();
+    const index = conversationMetadataCaches.get(conversationId)?.index;
+    const records = [];
+    for (let i = 0; i < prepared.length; i += 1) {
+      const { role, root, surface, messageId, text, domOrder, key } = prepared[i];
+      const existing = existingRecords[i];
+      const meta = index?.byId instanceof Map ? index.byId.get(messageId) : null;
+      const exactMetadataTime = Number(meta?.rawTime || 0) || 0;
+      const pendingTime = Number(
+        role === 'user' ? conversationPendingUserSentAt : conversationPendingAssistantStartedAt
+      ) || 0;
+      const nativeDomTime = readInlineConversationRawTimestamp(root) || readInlineConversationRawTimestamp(surface);
+      const existingTime = Number(existing?.createTime || 0) || 0;
+      const existingTimeSource = String(existing?.createTimeSource || '').trim();
+      const existingTimeTrusted = existingTime > 0 && (
+        existing?.source === 'api' || ['api', 'api-cache', 'native-dom', 'send'].includes(existingTimeSource)
+      );
+      const createTime = exactMetadataTime || nativeDomTime || (existingTimeTrusted ? existingTime : 0) || pendingTime || 0;
+      const createTimeSource = exactMetadataTime
+        ? 'api-cache'
+        : nativeDomTime
+          ? 'native-dom'
+          : existingTimeTrusted
+            ? (existingTimeSource || (existing?.source === 'api' ? 'api' : 'unknown'))
+            : pendingTime
+              ? 'send'
+              : 'unknown';
+      const modelSlug = role === 'assistant'
+        ? String(root.getAttribute(MESSAGE_MODEL_ATTR) || meta?.modelSlug || existing?.modelSlug || conversationPendingModelSlug || '')
+        : '';
+      const reasoningEffort = role === 'assistant'
+        ? String(root.getAttribute(MESSAGE_REASONING_ATTR) || meta?.reasoningEffort || existing?.reasoningEffort || conversationPendingReasoningEffort || '')
+        : '';
+
+      // API records carry the richer original markdown/content object. DOM streaming may
+      // update the visible text first, but never downgrade an API record to plain text.
+      const record = existing && existing.source === 'api'
+        ? {
+            ...existing,
+            createTime: exactMetadataTime || existing.createTime,
+            createTimeSource: exactMetadataTime ? 'api' : (existing.createTimeSource || 'api'),
+            plainText: text.length >= String(existing.plainText || '').length ? text : existing.plainText,
+            archivedAt: Date.now()
+          }
+        : {
+            ...(existing || {}),
+            key,
+            conversationId,
+            id: messageId,
+            nodeId: String(existing?.nodeId || ''),
+            parentNodeId: String(existing?.parentNodeId || ''),
+            childNodeIds: Array.isArray(existing?.childNodeIds) ? existing.childNodeIds : [],
+            role,
+            createTime,
+            createTimeSource,
+            updateTime: Date.now(),
+            branchOrder: Number(existing?.branchOrder ?? -1) >= 0
+              ? Number(existing.branchOrder)
+              : Number(domOrder ?? -1),
+            onCurrentBranch: existing?.onCurrentBranch !== false,
+            content: existing?.content || { content_type: 'text', parts: [text] },
+            plainText: text,
+            attachments: Array.isArray(existing?.attachments) ? existing.attachments : [],
+            modelSlug,
+            reasoningEffort,
+            status: generationActive && role === 'assistant' ? 'in_progress' : 'finished_successfully',
+            endTurn: !generationActive,
+            source: 'dom',
+            archivedAt: Date.now()
+          };
+      records.push(record);
+    }
+
+    const now = Date.now();
+    const writeTx = db.transaction(
+      [CHAT_ARCHIVE_CONVERSATIONS_STORE, CHAT_ARCHIVE_MESSAGES_STORE],
+      'readwrite'
+    );
+    const messageStore = writeTx.objectStore(CHAT_ARCHIVE_MESSAGES_STORE);
+    for (const record of records) messageStore.put(record);
+    writeTx.objectStore(CHAT_ARCHIVE_CONVERSATIONS_STORE).put({
+      ...(currentConversation || {}),
+      id: conversationId,
+      title: String(currentConversation?.title || getArchiveDocumentTitleFallback()),
+      url: `${location.origin}/c/${encodeURIComponent(conversationId)}`,
+      createdAt: Number(currentConversation?.createdAt || now),
+      updatedAt: now,
+      archivedAt: now,
+      currentNodeId: String(currentConversation?.currentNodeId || ''),
+      currentBranchMessageIds: Array.isArray(currentConversation?.currentBranchMessageIds)
+        ? currentConversation.currentBranchMessageIds
+        : [],
+      lastMessageId: String(currentConversation?.lastMessageId || ''),
+      messageCount: Number(currentConversation?.messageCount || 0),
+      totalStoredMessages: Number(currentConversation?.totalStoredMessages || 0),
+      userMessageCount: Number(currentConversation?.userMessageCount || 0),
+      assistantMessageCount: Number(currentConversation?.assistantMessageCount || 0),
+      source: currentConversation?.source || 'dom'
+    });
+    await archiveTransactionDone(writeTx);
+    notifyConversationArchiveChanged(conversationId);
+    return true;
+  }
+
+  function scheduleConversationArchiveDomCapture(delay = 650) {
+    if (!getCurrentConversationId()) return;
+    if (conversationArchiveDomCaptureTimer) clearTimeout(conversationArchiveDomCaptureTimer);
+    conversationArchiveDomCaptureTimer = window.setTimeout(() => {
+      conversationArchiveDomCaptureTimer = 0;
+      void archiveVisibleConversationTail();
+    }, delay);
+  }
+
+  function scheduleConversationArchivePostStreamSync() {
+    const conversationId = getCurrentConversationId();
+    if (!conversationId) return;
+    if (conversationArchivePostStreamTimer) clearTimeout(conversationArchivePostStreamTimer);
+    conversationArchivePostStreamTimer = window.setTimeout(() => {
+      conversationArchivePostStreamTimer = 0;
+      if (isConversationGenerationActive()) {
+        scheduleConversationArchivePostStreamSync();
+        return;
+      }
+      const currentId = getCurrentConversationId();
+      if (currentId) void fetchConversationMessageMetadataIndex(currentId, true);
+    }, 2400);
+  }
+
+  function formatArchiveDateTime(value, includeSeconds = false) {
+    const numeric = Number(value || 0);
+    if (!Number.isFinite(numeric) || numeric <= 0) return 'Timestamp unavailable';
+    const date = new Date(numeric);
+    if (!Number.isFinite(date.getTime())) return 'Timestamp unavailable';
+    try {
+      const options = {
+        year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+        timeZone: CHATGPT_MESSAGE_METADATA_CUSTOMIZATION.timeZone || 'Europe/Helsinki'
+      };
+      if (includeSeconds) options.second = '2-digit';
+      return new Intl.DateTimeFormat(CHATGPT_MESSAGE_METADATA_CUSTOMIZATION.locale || 'fi-FI', options).format(date);
+    } catch {
+      return date.toLocaleString();
+    }
+  }
+
+  function getArchiveMessageModelLabel(message) {
+    if (!message || message.role !== 'assistant') return '';
+    const rawLabel = formatConversationModelLabel(message.modelSlug);
+    if (!rawLabel) return '';
+    const modelLabel = /^gpt[- ]/i.test(rawLabel) ? rawLabel : `GPT-${rawLabel}`;
+    const effortLabel = formatConversationReasoningEffort(message.reasoningEffort);
+    if (!effortLabel || modelLabel.toLowerCase().includes(effortLabel.toLowerCase())) return modelLabel;
+    return `${modelLabel} ${effortLabel}`;
+  }
+
+  function escapeArchiveHtml(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function getArchiveIsoTimestamp(value) {
+    const numeric = Number(value || 0);
+    if (!Number.isFinite(numeric) || numeric <= 0) return '';
+    const date = new Date(numeric);
+    return Number.isFinite(date.getTime()) ? date.toISOString() : '';
+  }
+
+  function archiveSafeFileName(value) {
+    const safe = String(value || 'ChatGPT conversation')
+      .replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 100);
+    return safe || 'ChatGPT conversation';
+  }
+
+  // The backend conversation tree contains assistant-side implementation records that are not
+  // part of the human transcript: empty transition nodes plus standalone tool/code invocations.
+  // Keep those raw records in IndexedDB for fidelity/debugging, but hide them everywhere the
+  // archive is presented as an actual conversation. A normal assistant reply that merely contains
+  // fenced code remains content_type=text and is therefore preserved.
+  function isArchiveHumanConversationMessage(message) {
+    if (!message || (message.role !== 'user' && message.role !== 'assistant')) return false;
+
+    const contentType = normalizeText(message?.content?.content_type || '').replace(/[\s-]+/g, '_');
+    const backstageAssistantTypes = new Set([
+      'code', 'thoughts', 'reasoning_recap', 'execution_output', 'tool_result',
+      'computer_initialize_state', 'computer_output', 'tether_browsing_display'
+    ]);
+    if (message.role === 'assistant' && backstageAssistantTypes.has(contentType)) return false;
+
+    const text = String(message.plainText || '').trim();
+    const attachments = Array.isArray(message.attachments) ? message.attachments.filter(Boolean) : [];
+    return Boolean(text || attachments.length);
+  }
+
+  function getArchivedCurrentBranch(messages, snapshot = null) {
+    const allMessages = Array.isArray(messages) ? messages : [];
+    if (Array.isArray(snapshot?.messageIds) && snapshot.messageIds.length) {
+      const byId = new Map(allMessages.map(message => [String(message.id || ''), message]));
+      return snapshot.messageIds
+        .map(id => byId.get(String(id)))
+        .filter(message => isArchiveHumanConversationMessage(message));
+    }
+
+    let branch = allMessages.filter(message => message.onCurrentBranch !== false);
+    if (branch.some(message => Number(message.branchOrder) >= 0)) {
+      branch = branch.filter(message => Number(message.branchOrder) >= 0)
+        .sort((a, b) => Number(a.branchOrder) - Number(b.branchOrder));
+    } else {
+      branch.sort((a, b) => Number(a.createTime || 0) - Number(b.createTime || 0));
+    }
+    const limit = Number(snapshot?.messageCount || 0);
+    if (limit > 0) branch = branch.slice(0, limit);
+    return branch.filter(message => isArchiveHumanConversationMessage(message));
+  }
+
+  async function repairArchivedMessageMetadataFromIndex(conversationId, index) {
+    const id = String(conversationId || '').trim();
+    if (!id || !(index?.byId instanceof Map)) return false;
+
+    const messages = await getArchivedMessages(id).catch(() => []);
+    if (!messages.length) return false;
+    const db = await openConversationArchiveDb();
+    const tx = db.transaction(CHAT_ARCHIVE_MESSAGES_STORE, 'readwrite');
+    const store = tx.objectStore(CHAT_ARCHIVE_MESSAGES_STORE);
+    let changed = false;
+
+    for (const message of messages) {
+      const meta = index.byId.get(String(message.id || ''));
+      const exactTime = Number(meta?.rawTime || 0) || 0;
+      const next = { ...message };
+      let messageChanged = false;
+
+      if (exactTime > 0 && (Number(message.createTime || 0) !== exactTime || message.createTimeSource !== 'api')) {
+        next.createTime = exactTime;
+        next.createTimeSource = 'api';
+        messageChanged = true;
+      } else if (
+        !exactTime &&
+        message.source === 'dom' &&
+        !String(message.createTimeSource || '').trim() &&
+        Number(message.createTime || 0) > 0
+      ) {
+        // Archive v1 used Date.now() for old DOM-only messages. That looked precise but was
+        // merely the capture time. Never export that value as if it were the message time.
+        next.createTime = 0;
+        next.createTimeSource = 'unknown';
+        messageChanged = true;
+      }
+
+      if (message.role === 'assistant') {
+        const modelSlug = String(meta?.modelSlug || '').trim();
+        const reasoningEffort = String(meta?.reasoningEffort || '').trim();
+        if (modelSlug && modelSlug !== String(message.modelSlug || '')) {
+          next.modelSlug = modelSlug;
+          messageChanged = true;
+        }
+        if (reasoningEffort && reasoningEffort !== String(message.reasoningEffort || '')) {
+          next.reasoningEffort = reasoningEffort;
+          messageChanged = true;
+        }
+      }
+
+      if (messageChanged) {
+        next.archivedAt = Date.now();
+        store.put(next);
+        changed = true;
+      }
+    }
+
+    await archiveTransactionDone(tx);
+    if (changed) notifyConversationArchiveChanged(id);
+    return changed;
+  }
+
+  async function prepareConversationArchiveForExport(conversationId) {
+    const id = String(conversationId || '').trim();
+    if (!id) return null;
+
+    let index = null;
+    try {
+      index = await fetchConversationMessageMetadataIndex(id, true);
+    } catch {}
+
+    const activeSync = conversationArchivePayloadSyncs.get(id);
+    if (activeSync) {
+      try { await activeSync; } catch {}
+    }
+
+    if (index?.byId instanceof Map) {
+      try { await repairArchivedMessageMetadataFromIndex(id, index); } catch {}
+    }
+    return index;
+  }
+
+  async function buildConversationArchiveMarkdown(conversationId, snapshotId = '') {
+    const [conversation, messages, snapshots] = await Promise.all([
+      getArchivedConversation(conversationId),
+      getArchivedMessages(conversationId),
+      getArchivedSnapshots(conversationId)
+    ]);
+    if (!conversation) return '';
+    const snapshot = snapshotId ? snapshots.find(item => item.id === snapshotId) : null;
+    const branch = getArchivedCurrentBranch(messages, snapshot);
+    const lines = [
+      `# ${conversation.title || 'ChatGPT Conversation'}`,
+      '',
+      `> Local BraveFox archive · ${branch.length} messages · ${formatArchiveDateTime(snapshot?.createdAt || conversation.updatedAt)}`,
+      ''
+    ];
+    for (const message of branch) {
+      const role = message.role === 'user' ? 'User' : 'ChatGPT';
+      const modelLabel = getArchiveMessageModelLabel(message);
+      const model = modelLabel ? ` · ${modelLabel}` : '';
+      lines.push(`## ${role} · ${formatArchiveDateTime(message.createTime, true)}${model}`, '', String(message.plainText || '').trim(), '');
+    }
+    return lines.join('\n').trim() + '\n';
+  }
+
+  function isArchiveImageAttachment(attachment) {
+    if (!attachment || typeof attachment !== 'object') return false;
+    return Boolean(
+      attachment.isImage ||
+      /^image\//i.test(String(attachment.mimeType || '')) ||
+      /^data:image\//i.test(String(attachment.imageUrl || '').trim())
+    );
+  }
+
+  function getArchiveAttachmentCacheKey(attachment) {
+    return String(
+      attachment?.id ||
+      attachment?.assetPointer ||
+      attachment?.imageUrl ||
+      attachment?.name ||
+      ''
+    ).trim();
+  }
+
+  function archiveBlobToDataUrl(blob, fallbackMimeType = '') {
+    return new Promise((resolve, reject) => {
+      try {
+        const mimeType = String(blob?.type || fallbackMimeType || '').trim();
+        const readableBlob = blob && !blob.type && mimeType
+          ? new Blob([blob], { type: mimeType })
+          : blob;
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(reader.error || new Error('Could not encode image attachment'));
+        reader.readAsDataURL(readableBlob);
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+
+  function isArchiveImageMissingStatus(status) {
+    return status === 404 || status === 410;
+  }
+
+  function isArchiveImageRetryableStatus(status) {
+    return status === 408 || status === 425 || status === 429 || status >= 500;
+  }
+
+  function describeArchiveImageFailure(result) {
+    const status = Number(result?.status || 0) || 0;
+    const reason = String(result?.reason || '').trim();
+    if (status) return `HTTP ${status}${reason ? ` (${reason})` : ''}`;
+    return reason || 'unknown retrieval failure';
+  }
+
+  async function waitForArchiveImageRetry(attempt) {
+    const multiplier = Math.max(1, Number(attempt || 1));
+    await new Promise(resolve => window.setTimeout(resolve, CHAT_ARCHIVE_IMAGE_RETRY_DELAY_MS * multiplier));
+  }
+
+  async function fetchArchiveImageRequest(url, init = {}) {
+    const target = String(url || '').trim();
+    if (!target) return { state: 'failed', reason: 'missing URL' };
+
+    let parsed = null;
+    try { parsed = new URL(target, location.origin); } catch {
+      return { state: 'failed', reason: 'invalid URL' };
+    }
+
+    let lastFailure = { state: 'failed', reason: 'request failed' };
+    for (let attempt = 1; attempt <= CHAT_ARCHIVE_IMAGE_FETCH_ATTEMPTS; attempt += 1) {
+      const controller = new AbortController();
+      const timer = window.setTimeout(() => controller.abort(), CHAT_ARCHIVE_IMAGE_FETCH_TIMEOUT_MS);
+      try {
+        const response = await fetch(parsed.href, { ...init, signal: controller.signal });
+        if (response.ok) return { state: 'ok', response };
+
+        const status = Number(response.status || 0) || 0;
+        if (isArchiveImageMissingStatus(status)) {
+          let bodyText = '';
+          try { bodyText = String(await response.clone().text()).slice(0, 2048); } catch {}
+          const normalizedBody = normalizeText(bodyText);
+          const explicitlyNamesMissingAsset = Boolean(
+            status === 410 ||
+            /(?:file|attachment|asset|image).{0,80}(?:not found|deleted|does not exist|no longer exists|unavailable)/i.test(bodyText) ||
+            /(?:not found|deleted|does not exist|no longer exists|unavailable).{0,80}(?:file|attachment|asset|image)/i.test(bodyText) ||
+            normalizedBody.includes('file_not_found') ||
+            normalizedBody.includes('attachment_not_found')
+          );
+          return {
+            state: 'missing',
+            status,
+            confirmedMissing: explicitlyNamesMissingAsset,
+            reason: bodyText || response.statusText || 'not found'
+          };
+        }
+
+        lastFailure = {
+          state: 'failed',
+          status,
+          reason: response.statusText || `HTTP ${status || 'error'}`
+        };
+        if (!isArchiveImageRetryableStatus(status) || attempt >= CHAT_ARCHIVE_IMAGE_FETCH_ATTEMPTS) {
+          return lastFailure;
+        }
+      } catch (error) {
+        const timedOut = error?.name === 'AbortError';
+        lastFailure = {
+          state: 'failed',
+          reason: timedOut ? 'request timed out' : String(error?.message || error || 'network error')
+        };
+        if (attempt >= CHAT_ARCHIVE_IMAGE_FETCH_ATTEMPTS) return lastFailure;
+      } finally {
+        window.clearTimeout(timer);
+      }
+
+      await waitForArchiveImageRetry(attempt);
+    }
+    return lastFailure;
+  }
+
+  async function fetchArchiveImageResponse(url, token = '', expectedMimeType = '') {
+    const target = String(url || '').trim();
+    if (!target) return { state: 'failed', reason: 'missing image URL' };
+    if (/^data:image\//i.test(target)) {
+      return {
+        state: 'resolved',
+        dataUrl: target,
+        mimeType: String(expectedMimeType || '')
+      };
+    }
+
+    let parsed = null;
+    try { parsed = new URL(target, location.origin); } catch {
+      return { state: 'failed', reason: 'invalid image URL' };
+    }
+    const sameOrigin = parsed.origin === location.origin;
+    const headers = { Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8' };
+    if (sameOrigin && token) headers.Authorization = `Bearer ${token}`;
+
+    const fetched = await fetchArchiveImageRequest(parsed.href, {
+      method: 'GET',
+      credentials: sameOrigin ? 'include' : 'omit',
+      cache: 'no-store',
+      headers
+    });
+    if (fetched.state !== 'ok') return fetched;
+
+    const response = fetched.response;
+    let blob = null;
+    try { blob = await response.blob(); } catch (error) {
+      return { state: 'failed', reason: String(error?.message || error || 'could not read image response') };
+    }
+    const type = String(blob.type || response.headers.get('content-type') || '').split(';')[0].trim();
+    const expectedType = String(expectedMimeType || '').split(';')[0].trim();
+    if (type && !/^image\//i.test(type) && !/^image\//i.test(expectedType)) {
+      return { state: 'failed', status: response.status, reason: `unexpected content type ${type}` };
+    }
+    const finalType = /^image\//i.test(type) ? type : expectedType;
+    try {
+      const dataUrl = await archiveBlobToDataUrl(blob, finalType);
+      return dataUrl
+        ? { state: 'resolved', dataUrl, mimeType: finalType, size: blob.size }
+        : { state: 'failed', reason: 'empty encoded image' };
+    } catch (error) {
+      return { state: 'failed', reason: String(error?.message || error || 'could not encode image') };
+    }
+  }
+
+  async function resolveArchiveImageDescriptor(descriptorUrl, token, attachment) {
+    const headers = { Accept: 'application/json' };
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const fetched = await fetchArchiveImageRequest(descriptorUrl, {
+      method: 'GET',
+      credentials: 'include',
+      cache: 'no-store',
+      headers
+    });
+    if (fetched.state !== 'ok') return fetched;
+
+    const response = fetched.response;
+    const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+    if (contentType.startsWith('image/')) {
+      try {
+        const blob = await response.blob();
+        const dataUrl = await archiveBlobToDataUrl(blob, attachment.mimeType);
+        return dataUrl
+          ? { state: 'resolved', dataUrl, mimeType: blob.type || contentType, size: blob.size }
+          : { state: 'failed', reason: 'empty encoded image' };
+      } catch (error) {
+        return { state: 'failed', reason: String(error?.message || error || 'could not read image response') };
+      }
+    }
+
+    let payload = null;
+    try { payload = await response.json(); } catch (error) {
+      return { state: 'failed', status: response.status, reason: 'descriptor was not valid JSON' };
+    }
+    const downloadUrl = String(
+      payload?.download_url || payload?.downloadUrl || payload?.url || ''
+    ).trim();
+    if (!downloadUrl) {
+      return { state: 'failed', status: response.status, reason: 'descriptor contained no download URL' };
+    }
+    return fetchArchiveImageResponse(downloadUrl, token, attachment.mimeType);
+  }
+
+  async function resolveArchiveImageAttachment(conversationId, attachment, token = '') {
+    if (!isArchiveImageAttachment(attachment)) {
+      return { state: 'failed', reason: 'attachment is not an image' };
+    }
+
+    const directUrl = String(attachment.imageUrl || '').trim();
+    const fileId = String(
+      attachment.id || getArchiveFileIdFromAssetPointer(attachment.assetPointer) || ''
+    ).trim();
+    const observations = [];
+
+    if (directUrl) {
+      const direct = await fetchArchiveImageResponse(directUrl, token, attachment.mimeType);
+      if (direct.state === 'resolved') return direct;
+      observations.push({ source: 'direct image URL', result: direct });
+    }
+
+    if (fileId) {
+      const encodedConversationId = encodeURIComponent(String(conversationId || '').trim());
+      const encodedFileId = encodeURIComponent(fileId);
+      const descriptorUrls = [
+        `${location.origin}/backend-api/conversation/${encodedConversationId}/attachment/${encodedFileId}/download`,
+        `${location.origin}/backend-api/files/${encodedFileId}/download`,
+        `${location.origin}/backend-api/files/download/${encodedFileId}?conversation_id=${encodedConversationId}&inline=false`,
+        `${location.origin}/files/download/${encodedFileId}?conversation_id=${encodedConversationId}&inline=false`
+      ];
+
+      for (const descriptorUrl of descriptorUrls) {
+        const result = await resolveArchiveImageDescriptor(descriptorUrl, token, attachment);
+        if (result.state === 'resolved') return result;
+        observations.push({ source: descriptorUrl, result });
+
+        // A backend response that explicitly identifies this file/attachment as gone is
+        // sufficient evidence; do not burn through legacy fallback endpoints after that.
+        if (result.state === 'missing' && result.confirmedMissing) {
+          return {
+            state: 'missing',
+            status: Number(result.status || 0) || 404,
+            reason: `permanently unavailable (HTTP ${Number(result.status || 0) || 404})`
+          };
+        }
+
+        // Authentication/permission failures are not evidence that the file is gone.
+        // Stop probing alternate endpoints and make the export fail explicitly instead.
+        if (result.state === 'failed' && (result.status === 401 || result.status === 403)) break;
+      }
+    }
+
+    if (!observations.length) {
+      return { state: 'failed', reason: 'attachment has no retrievable URL or file ID' };
+    }
+
+    // Only call an attachment permanently unavailable when every authoritative attempt ended in an
+    // explicit 404/410 AND at least one response positively identified the missing object
+    // as a file/attachment/asset (or used HTTP 410 Gone). Generic route-level 404 pages are
+    // deliberately NOT enough evidence to skip an image.
+    const authoritativeObservations = fileId
+      ? observations.filter(item => item.source !== 'direct image URL')
+      : observations;
+    const allMissing = authoritativeObservations.length > 0 &&
+      authoritativeObservations.every(item => item.result?.state === 'missing');
+    const confirmedMissing = authoritativeObservations.some(item => Boolean(item.result?.confirmedMissing));
+    if (allMissing && confirmedMissing) {
+      const statuses = Array.from(new Set(authoritativeObservations.map(item => Number(item.result?.status || 0)).filter(Boolean)));
+      return {
+        state: 'missing',
+        status: statuses[0] || 404,
+        reason: statuses.length ? `permanently unavailable (${statuses.map(status => `HTTP ${status}`).join('/')})` : 'permanently unavailable'
+      };
+    }
+
+    const firstFailure = observations.find(item => item.result?.state === 'failed') || observations[0];
+    return {
+      state: 'failed',
+      status: Number(firstFailure?.result?.status || 0) || 0,
+      reason: `${firstFailure?.source || 'image retrieval'}: ${describeArchiveImageFailure(firstFailure?.result)}`
+    };
+  }
+
+  async function buildArchiveEmbeddedImageMap(conversationId, branch, onProgress = null) {
+    const unique = new Map();
+    for (const message of Array.isArray(branch) ? branch : []) {
+      for (const attachment of Array.isArray(message?.attachments) ? message.attachments : []) {
+        if (!isArchiveImageAttachment(attachment)) continue;
+        const key = getArchiveAttachmentCacheKey(attachment);
+        if (key && !unique.has(key)) unique.set(key, attachment);
+      }
+    }
+    if (!unique.size) {
+      if (typeof onProgress === 'function') {
+        try { onProgress({ completed: 0, total: 0, resolved: 0, unavailable: 0, failed: 0 }); } catch {}
+      }
+      return { resolved: new Map(), unavailable: new Map(), total: 0 };
+    }
+
+    let token = '';
+    try { token = conversationAccessToken || await resolveConversationAccessToken(); } catch {}
+    const entries = Array.from(unique.entries());
+    const resolved = new Map();
+    const unavailable = new Map();
+    const failures = [];
+    let cursor = 0;
+    let completed = 0;
+
+    const reportProgress = () => {
+      if (typeof onProgress !== 'function') return;
+      try {
+        onProgress({
+          completed,
+          total: entries.length,
+          resolved: resolved.size,
+          unavailable: unavailable.size,
+          failed: failures.length
+        });
+      } catch {}
+    };
+    reportProgress();
+
+    const worker = async () => {
+      while (true) {
+        const index = cursor++;
+        if (index >= entries.length) return;
+        const [key, attachment] = entries[index];
+        let result = null;
+        try {
+          result = await resolveArchiveImageAttachment(conversationId, attachment, token);
+        } catch (error) {
+          result = { state: 'failed', reason: String(error?.message || error || 'unexpected resolver error') };
+        }
+
+        if (result?.state === 'resolved' && result.dataUrl) {
+          resolved.set(key, result);
+        } else if (result?.state === 'missing') {
+          unavailable.set(key, result);
+        } else {
+          failures.push({
+            key,
+            attachment,
+            status: Number(result?.status || 0) || 0,
+            reason: String(result?.reason || 'unknown retrieval failure')
+          });
+        }
+
+        completed += 1;
+        reportProgress();
+      }
+    };
+
+    const workerCount = Math.min(CHAT_ARCHIVE_IMAGE_CONCURRENCY, entries.length);
+    await Promise.all(Array.from({ length: workerCount }, () => worker()));
+
+    if (failures.length) {
+      const examples = failures.slice(0, 5).map(item => {
+        const name = String(item.attachment?.name || item.attachment?.id || item.key || 'image');
+        return `${name}: ${item.status ? `HTTP ${item.status} · ` : ''}${item.reason}`;
+      });
+      const more = failures.length > examples.length ? `\n…plus ${failures.length - examples.length} more.` : '';
+      const error = new Error(
+        `HTML export stopped because ${failures.length} of ${entries.length} image attachments could not be verified. ` +
+        `No images were silently skipped. Retry the export when the connection/API is healthy.\n\n${examples.join('\n')}${more}`
+      );
+      error.name = 'BraveFoxArchiveImageExportIncompleteError';
+      error.failures = failures;
+      throw error;
+    }
+
+    return { resolved, unavailable, total: entries.length };
+  }
+
+  function removeEmbeddedImagePlaceholder(text, embeddedImageCount) {
+    const value = String(text || '');
+    if (!embeddedImageCount) return value;
+    return value
+      .replace(/(^|\n)\s*\[Image\/attachment\]\s*(?=\n|$)/gi, '$1')
+      .replace(/^\s*\n+|\n+\s*$/g, '')
+      .trim();
+  }
+
+  async function buildConversationArchiveHtml(conversationId, snapshotId = '', onProgress = null) {
+    const [conversation, messages, snapshots] = await Promise.all([
+      getArchivedConversation(conversationId),
+      getArchivedMessages(conversationId),
+      getArchivedSnapshots(conversationId)
+    ]);
+    if (!conversation) return '';
+    const snapshot = snapshotId ? snapshots.find(item => item.id === snapshotId) : null;
+    const branch = getArchivedCurrentBranch(messages, snapshot);
+    const title = String(conversation.title || 'ChatGPT Conversation');
+    const exportedAt = Date.now();
+    const archiveStateAt = Number(snapshot?.createdAt || conversation.updatedAt || 0);
+    const sourceUrl = String(conversation.url || '');
+
+    const imageResolution = await buildArchiveEmbeddedImageMap(conversationId, branch, onProgress);
+    const embeddedImages = imageResolution.resolved;
+    const unavailableImages = imageResolution.unavailable;
+    const messageHtml = branch.map(message => {
+      const isUser = message.role === 'user';
+      const roleLabel = isUser ? 'You' : 'ChatGPT';
+      const modelLabel = getArchiveMessageModelLabel(message);
+      const iso = getArchiveIsoTimestamp(message.createTime);
+      const localTime = formatArchiveDateTime(message.createTime, true);
+      const timestampHtml = iso
+        ? `<time datetime="${escapeArchiveHtml(iso)}" title="${escapeArchiveHtml(iso)}">${escapeArchiveHtml(localTime)}</time>`
+        : '<span class="timestamp-missing">Timestamp unavailable</span>';
+      const attachments = Array.isArray(message.attachments) ? message.attachments.filter(Boolean) : [];
+      const embedded = [];
+      const fallbackAttachments = [];
+      for (const item of attachments) {
+        const key = getArchiveAttachmentCacheKey(item);
+        const image = key ? embeddedImages.get(key) : null;
+        if (image?.dataUrl && isArchiveImageAttachment(item)) embedded.push({ item, image });
+        else fallbackAttachments.push(item);
+      }
+      const imageHtml = embedded.length
+        ? `<div class="embedded-images">${embedded.map(({ item, image }) => {
+            const name = String(item.name || item.id || 'Attached image');
+            const dimensions = item.width && item.height ? `${item.width}×${item.height}` : '';
+            const size = Number(image.size || item.size || 0) || 0;
+            const details = [dimensions, size ? `${size} bytes` : ''].filter(Boolean).join(' · ');
+            return `<figure class="archive-image"><img loading="lazy" src="${escapeArchiveHtml(image.dataUrl)}" alt="${escapeArchiveHtml(name)}"><figcaption>${escapeArchiveHtml(name)}${details ? ` <span>${escapeArchiveHtml(details)}</span>` : ''}</figcaption></figure>`;
+          }).join('')}</div>`
+        : '';
+      const attachmentHtml = fallbackAttachments.length
+        ? `<ul class="attachments">${fallbackAttachments.map(item => {
+            const name = String(item.name || item.id || 'Attachment');
+            const key = getArchiveAttachmentCacheKey(item);
+            const permanentlyUnavailable = Boolean(key && unavailableImages.has(key) && isArchiveImageAttachment(item));
+            const details = [
+              item.mimeType,
+              item.size ? `${item.size} bytes` : '',
+              permanentlyUnavailable ? 'image unavailable at export time' : ''
+            ].filter(Boolean).join(' · ');
+            return `<li>${escapeArchiveHtml(name)}${details ? ` <span>${escapeArchiveHtml(details)}</span>` : ''}</li>`;
+          }).join('')}</ul>`
+        : '';
+      const visibleText = removeEmbeddedImagePlaceholder(message.plainText, embedded.length);
+      return `
+        <article class="message ${isUser ? 'user' : 'assistant'}">
+          <header>
+            <div class="who">${escapeArchiveHtml(roleLabel)}${modelLabel ? `<span class="model">${escapeArchiveHtml(modelLabel)}</span>` : ''}</div>
+            ${timestampHtml}
+          </header>
+          ${visibleText ? `<div class="message-body">${escapeArchiveHtml(visibleText)}</div>` : ''}
+          ${imageHtml}
+          ${attachmentHtml}
+        </article>`;
+    }).join('\n');
+
+    return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${escapeArchiveHtml(title)} · BraveFox archive</title>
+<style>
+  :root { color-scheme: light dark; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: Canvas; color: CanvasText; }
+  main { width: min(1000px, calc(100% - 32px)); margin: 32px auto 72px; }
+  .archive-head { border-bottom: 1px solid color-mix(in srgb, CanvasText 18%, transparent); padding-bottom: 20px; margin-bottom: 24px; }
+  h1 { margin: 0 0 8px; font-size: clamp(1.5rem, 4vw, 2.2rem); }
+  .meta { opacity: .72; line-height: 1.6; }
+  .meta a { color: inherit; }
+  .message { border: 1px solid color-mix(in srgb, CanvasText 16%, transparent); border-radius: 16px; margin: 14px 0; overflow: hidden; }
+  .message.user { background: color-mix(in srgb, Canvas 92%, #7c6cff 8%); }
+  .message.assistant { background: color-mix(in srgb, Canvas 96%, CanvasText 4%); }
+  .message header { display: flex; gap: 12px; justify-content: space-between; align-items: baseline; padding: 12px 16px; border-bottom: 1px solid color-mix(in srgb, CanvasText 10%, transparent); }
+  .who { font-weight: 700; }
+  .model { display: inline-block; margin-left: 8px; padding: 2px 7px; border-radius: 999px; font-size: .78rem; font-weight: 650; background: color-mix(in srgb, CanvasText 9%, transparent); }
+  time, .timestamp-missing { white-space: nowrap; font-size: .82rem; opacity: .7; }
+  .timestamp-missing { font-style: italic; }
+  .message-body { padding: 16px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.55; }
+  .embedded-images { display: grid; gap: 12px; padding: 0 16px 16px; }
+  .message header + .embedded-images { padding-top: 16px; }
+  .archive-image { margin: 0; }
+  .archive-image img { display: block; max-width: 100%; max-height: 780px; width: auto; height: auto; border-radius: 12px; border: 1px solid color-mix(in srgb, CanvasText 14%, transparent); background: color-mix(in srgb, CanvasText 4%, transparent); }
+  .archive-image figcaption { margin-top: 6px; font-size: .82rem; opacity: .72; overflow-wrap: anywhere; }
+  .archive-image figcaption span { opacity: .8; }
+  .attachments { margin: 0 16px 16px 34px; padding: 0; }
+  .attachments span { opacity: .65; font-size: .86em; }
+  .foot { margin-top: 28px; opacity: .62; font-size: .84rem; }
+  @media print { main { width: 100%; margin: 0; } .message { break-inside: avoid; } }
+</style>
+</head>
+<body>
+<main>
+  <section class="archive-head">
+    <h1>${escapeArchiveHtml(title)}</h1>
+    <div class="meta">Local BraveFox archive · ${branch.length} messages · archive state ${escapeArchiveHtml(formatArchiveDateTime(archiveStateAt, true))}</div>
+    <div class="meta">Exported ${escapeArchiveHtml(formatArchiveDateTime(exportedAt, true))}${sourceUrl ? ` · <a href="${escapeArchiveHtml(sourceUrl)}">Open original conversation</a>` : ''}</div>
+  </section>
+  ${messageHtml || '<p>No archived messages in this checkpoint.</p>'}
+  <div class="foot">Timestamps are original ChatGPT message creation times when authoritative metadata was available. Missing timestamps are shown as unavailable rather than replaced with archive/export time. Image attachments are embedded directly in this HTML. An image is left as attachment metadata only when the server explicitly reported it unavailable (404/410); ambiguous retrieval failures stop the export instead of silently skipping images.</div>
+</main>
+</body>
+</html>`;
+  }
+
+  function downloadConversationArchiveBlob(filename, content, mimeType) {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.style.display = 'none';
+    document.documentElement.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  async function exportConversationArchiveMarkdown(conversationId, snapshotId = '') {
+    await prepareConversationArchiveForExport(conversationId);
+    const conversation = await getArchivedConversation(conversationId);
+    if (!conversation) return;
+    const markdown = await buildConversationArchiveMarkdown(conversationId, snapshotId);
+    downloadConversationArchiveBlob(`${archiveSafeFileName(conversation.title)}.md`, markdown, 'text/markdown;charset=utf-8');
+  }
+
+  async function exportConversationArchiveHtml(conversationId, snapshotId = '', onProgress = null) {
+    await prepareConversationArchiveForExport(conversationId);
+    const conversation = await getArchivedConversation(conversationId);
+    if (!conversation) return;
+    const html = await buildConversationArchiveHtml(conversationId, snapshotId, onProgress);
+    downloadConversationArchiveBlob(`${archiveSafeFileName(conversation.title)}.html`, html, 'text/html;charset=utf-8');
+  }
+
+  async function exportConversationArchiveJson(conversationId) {
+    await prepareConversationArchiveForExport(conversationId);
+    const [conversation, messages, snapshots] = await Promise.all([
+      getArchivedConversation(conversationId),
+      getArchivedMessages(conversationId),
+      getArchivedSnapshots(conversationId)
+    ]);
+    if (!conversation) return;
+    const payload = {
+      format: 'BraveFox Chat Archive v1',
+      exportedAt: new Date().toISOString(),
+      conversation,
+      snapshots,
+      messages
+    };
+    downloadConversationArchiveBlob(
+      `${archiveSafeFileName(conversation.title)}.json`,
+      JSON.stringify(payload, null, 2),
+      'application/json;charset=utf-8'
+    );
+  }
+
+  function buildArchiveContinuationText(conversation, messages, snapshot) {
+    const branch = getArchivedCurrentBranch(messages, snapshot);
+    if (!branch.length) return '';
+    const header = [
+      '[BraveFox local conversation continuity]',
+      `Previous chat: ${conversation.title || 'Untitled Chat'}`,
+      `Checkpoint: ${snapshot?.name || 'Latest archived state'}`,
+      `Archived messages available locally: ${branch.length}`,
+      '',
+      'The text below is prior conversation context. It may be an excerpt of a much larger local archive.',
+      'Treat it as established conversation history. If I ask about older omitted details, ask me to retrieve them from the BraveFox archive rather than inventing them.',
+      '',
+      '[BEGIN PREVIOUS CHAT EXCERPT]'
+    ].join('\n');
+    const footer = '\n[END PREVIOUS CHAT EXCERPT]\n\nContinue from this prior chat context.';
+    const budget = Math.max(8000, CHAT_ARCHIVE_CONTINUATION_MAX_CHARS - header.length - footer.length);
+
+    const formatMessage = message => {
+      const label = message.role === 'user' ? 'USER' : 'ASSISTANT';
+      const meta = message.role === 'assistant' && message.modelSlug
+        ? ` [${message.modelSlug}${message.reasoningEffort ? ` / ${message.reasoningEffort}` : ''}]`
+        : '';
+      return `\n\n${label}${meta}:\n${String(message.plainText || '').trim()}`;
+    };
+
+    const first = branch.slice(0, Math.min(4, branch.length));
+    const selected = [...first];
+    const selectedIds = new Set(selected.map(message => message.id));
+    let used = first.reduce((sum, message) => sum + formatMessage(message).length, 0);
+
+    for (let index = branch.length - 1; index >= 0; index -= 1) {
+      const message = branch[index];
+      if (selectedIds.has(message.id)) continue;
+      const rendered = formatMessage(message);
+      if (used + rendered.length > budget && selected.length > first.length) break;
+      if (rendered.length > budget) continue;
+      selected.push(message);
+      selectedIds.add(message.id);
+      used += rendered.length;
+    }
+    selected.sort((a, b) => branch.indexOf(a) - branch.indexOf(b));
+
+    const omitted = Math.max(0, branch.length - selected.length);
+    const omissionNote = omitted
+      ? `\n\n[${omitted} older messages are retained in the local BraveFox archive but omitted from this initial context packet.]`
+      : '';
+    return header + selected.map(formatMessage).join('') + omissionNote + footer;
+  }
+
+  function writeArchiveHandoff(payload) {
+    try {
+      localStorage.setItem(CHAT_ARCHIVE_HANDOFF_KEY, JSON.stringify(payload));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function readArchiveHandoff() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(CHAT_ARCHIVE_HANDOFF_KEY) || 'null');
+      if (!parsed || typeof parsed !== 'object') return null;
+      if (Date.now() - Number(parsed.createdAt || 0) > CHAT_ARCHIVE_HANDOFF_MAX_AGE_MS) {
+        localStorage.removeItem(CHAT_ARCHIVE_HANDOFF_KEY);
+        return null;
+      }
+      return parsed;
+    } catch {
+      return null;
+    }
+  }
+
+  function findConversationComposerEditable() {
+    const selectors = [
+      '#prompt-textarea',
+      'form textarea',
+      'form [contenteditable="true"][role="textbox"]',
+      'form [contenteditable="true"]',
+      '[data-testid*="composer" i] [contenteditable="true"]'
+    ];
+    for (const selector of selectors) {
+      const element = document.querySelector(selector);
+      if (element instanceof HTMLTextAreaElement || (element instanceof HTMLElement && element.isContentEditable)) return element;
+    }
+    return null;
+  }
+
+  function appendTextToConversationComposer(text) {
+    const value = String(text || '').trim();
+    if (!value) return false;
+    const editable = findConversationComposerEditable();
+    if (!editable) return false;
+
+    editable.focus();
+    if (editable instanceof HTMLTextAreaElement) {
+      const descriptor = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
+      const existing = editable.value || '';
+      descriptor?.set?.call(editable, existing ? `${existing}\n\n${value}` : value);
+      editable.dispatchEvent(new Event('input', { bubbles: true }));
+      editable.dispatchEvent(new Event('change', { bubbles: true }));
+      return true;
+    }
+
+    try {
+      const selection = window.getSelection();
+      const range = document.createRange();
+      range.selectNodeContents(editable);
+      range.collapse(false);
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      const prefix = String(editable.textContent || '').trim() ? '\n\n' : '';
+      if (document.execCommand?.('insertText', false, prefix + value)) {
+        editable.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: prefix + value }));
+        return true;
+      }
+    } catch {}
+
+    const existing = String(editable.textContent || '');
+    editable.textContent = existing ? `${existing}\n\n${value}` : value;
+    editable.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: value }));
+    return true;
+  }
+
+  function persistArchiveContextLink(newConversationId, sourceConversationId, snapshotId = '') {
+    const target = String(newConversationId || '').trim();
+    const source = String(sourceConversationId || '').trim();
+    if (!target || !source) return;
+    try {
+      const parsed = JSON.parse(localStorage.getItem(CHAT_ARCHIVE_CONTEXT_LINK_KEY) || '{}');
+      const store = parsed && typeof parsed === 'object' ? parsed : {};
+      store[target] = { sourceConversationId: source, snapshotId: String(snapshotId || ''), linkedAt: Date.now() };
+      const entries = Object.entries(store).sort((a, b) => Number(b[1]?.linkedAt || 0) - Number(a[1]?.linkedAt || 0));
+      localStorage.setItem(CHAT_ARCHIVE_CONTEXT_LINK_KEY, JSON.stringify(Object.fromEntries(entries.slice(0, 20))));
+    } catch {}
+  }
+
+  function getArchiveContextLink(conversationId = getCurrentConversationId()) {
+    const id = String(conversationId || '').trim();
+    if (!id) return null;
+    try {
+      const store = JSON.parse(localStorage.getItem(CHAT_ARCHIVE_CONTEXT_LINK_KEY) || '{}');
+      return store && typeof store === 'object' ? store[id] || null : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function beginConversationArchiveContinuation(conversationId, snapshotId = '') {
+    const [conversation, messages, snapshots] = await Promise.all([
+      getArchivedConversation(conversationId),
+      getArchivedMessages(conversationId),
+      getArchivedSnapshots(conversationId)
+    ]);
+    if (!conversation) return false;
+    const snapshot = snapshotId ? snapshots.find(item => item.id === snapshotId) || null : null;
+    const contextText = buildArchiveContinuationText(conversation, messages, snapshot);
+    if (!contextText) return false;
+    const handoffId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    if (!writeArchiveHandoff({
+      id: handoffId,
+      createdAt: Date.now(),
+      sourceConversationId: conversationId,
+      snapshotId: String(snapshot?.id || ''),
+      contextText
+    })) return false;
+
+    window.open(`${location.origin}/`, '_blank', 'noopener');
+    return true;
+  }
+
+  function consumeConversationArchiveHandoffIfReady() {
+    if (getCurrentConversationId()) return false;
+    const handoff = readArchiveHandoff();
+    if (!handoff || handoff.id === conversationArchiveLastHandoffId) return false;
+    const editable = findConversationComposerEditable();
+    if (!editable) return false;
+    if (!appendTextToConversationComposer(handoff.contextText)) return false;
+
+    conversationArchiveLastHandoffId = handoff.id;
+    try { localStorage.removeItem(CHAT_ARCHIVE_HANDOFF_KEY); } catch {}
+    try {
+      sessionStorage.setItem('bravefoxChatArchivePendingLink_v1', JSON.stringify({
+        sourceConversationId: handoff.sourceConversationId,
+        snapshotId: handoff.snapshotId,
+        linkedAt: Date.now()
+      }));
+    } catch {}
+    ensureConversationArchiveButton();
+    return true;
+  }
+
+  function linkPendingArchiveContextToCurrentConversation() {
+    const conversationId = getCurrentConversationId();
+    if (!conversationId) return;
+    try {
+      const pending = JSON.parse(sessionStorage.getItem('bravefoxChatArchivePendingLink_v1') || 'null');
+      if (!pending?.sourceConversationId) return;
+      persistArchiveContextLink(conversationId, pending.sourceConversationId, pending.snapshotId || '');
+      sessionStorage.removeItem('bravefoxChatArchivePendingLink_v1');
+    } catch {}
+  }
+
+  function ensureConversationArchiveStyles() {
+    if (document.getElementById(CHAT_ARCHIVE_STYLE_ID)) return;
+    const style = document.createElement('style');
+    style.id = CHAT_ARCHIVE_STYLE_ID;
+    style.textContent = `
+      /* Replace the stock Share/Jaa toolbar action with the local Archive action. */
+      button.button-toolbar[aria-label="Jaa"],
+      button.button-toolbar[aria-label="Share"],
+      button[${CHAT_ARCHIVE_SHARE_HIDDEN_ATTR}="true"] {
+        display: none !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+      }
+      button[${CHAT_ARCHIVE_TOOLBAR_BUTTON_ATTR}="true"] {
+        display: inline-flex !important;
+        visibility: visible !important;
+        pointer-events: auto !important;
+        opacity: 1 !important;
+        cursor: pointer !important;
+      }
+      button[${CHAT_ARCHIVE_TOOLBAR_BUTTON_ATTR}="true"] svg { flex: none !important; }
+
+      /* Library > New is paint-gated while BraveFox keeps only Folder, Archive and Upload. */
+      html.${CHAT_ARCHIVE_LIBRARY_MENU_CURATING_CLASS} [role="menu"][data-radix-menu-content][data-state="open"],
+      html.${CHAT_ARCHIVE_LIBRARY_MENU_CURATING_CLASS} [role="menu"][data-state="open"],
+      html.${CHAT_ARCHIVE_LIBRARY_MENU_CURATING_CLASS} [data-radix-menu-content][data-state="open"] {
+        opacity: 0 !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+      }
+      [${CHAT_ARCHIVE_LIBRARY_MENU_ROOT_ATTR}="curating"] {
+        opacity: 0 !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+      }
+      [${CHAT_ARCHIVE_LIBRARY_MENU_HIDDEN_ATTR}="true"] {
+        display: none !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+      }
+      [${CHAT_ARCHIVE_LIBRARY_MENU_ITEM_ATTR}="true"] { cursor: pointer !important; }
+      [${CHAT_ARCHIVE_LIBRARY_MENU_DIVIDER_ATTR}="true"] {
+        height: 1px !important;
+        margin: 5px 0 !important;
+        background: var(--border-light, rgba(127,127,127,.22)) !important;
+      }
+
+      #${CHAT_ARCHIVE_BUTTON_ID} {
+        color: inherit !important;
+        text-decoration: none !important;
+        cursor: pointer !important;
+      }
+      #${CHAT_ARCHIVE_BUTTON_ID} svg { flex: none !important; }
+      #${CHAT_ARCHIVE_MODAL_ID} {
+        position: fixed !important; inset: 0 !important; z-index: 2147483600 !important;
+        background: rgba(0,0,0,.46) !important; display: flex !important; align-items: center !important; justify-content: center !important;
+        padding: 24px !important; box-sizing: border-box !important;
+      }
+      #${CHAT_ARCHIVE_MODAL_ID} .bf-archive-panel {
+        width: min(1120px, 96vw) !important; height: min(760px, 92vh) !important;
+        background: var(--main-surface-primary, #fff) !important; color: var(--text-primary, #171717) !important;
+        border: 1px solid var(--border-light, rgba(127,127,127,.30)) !important; border-radius: 16px !important;
+        box-shadow: 0 24px 70px rgba(0,0,0,.28) !important; display: grid !important;
+        grid-template-rows: auto 1fr !important; overflow: hidden !important;
+      }
+      #${CHAT_ARCHIVE_MODAL_ID} .bf-archive-header { display:flex !important; align-items:center !important; gap:12px !important; padding:14px 16px !important; border-bottom:1px solid var(--border-light,rgba(127,127,127,.22)) !important; }
+      #${CHAT_ARCHIVE_MODAL_ID} .bf-archive-header strong { font-size:16px !important; }
+      #${CHAT_ARCHIVE_MODAL_ID} .bf-archive-close { margin-left:auto !important; }
+      #${CHAT_ARCHIVE_MODAL_ID} .bf-archive-body { display:grid !important; grid-template-columns:minmax(250px,34%) 1fr !important; min-height:0 !important; }
+      #${CHAT_ARCHIVE_MODAL_ID} .bf-archive-list { border-right:1px solid var(--border-light,rgba(127,127,127,.22)) !important; overflow:auto !important; padding:10px !important; }
+      #${CHAT_ARCHIVE_MODAL_ID} .bf-archive-detail { overflow:auto !important; padding:16px !important; }
+      #${CHAT_ARCHIVE_MODAL_ID} button, #${CHAT_ARCHIVE_MODAL_ID} select, #${CHAT_ARCHIVE_MODAL_ID} input {
+        font: inherit !important; color: inherit !important; border:1px solid var(--border-light,rgba(127,127,127,.30)) !important;
+        background: var(--main-surface-secondary,rgba(127,127,127,.08)) !important; border-radius:8px !important; padding:7px 9px !important;
+      }
+      #${CHAT_ARCHIVE_MODAL_ID} button { cursor:pointer !important; }
+      #${CHAT_ARCHIVE_MODAL_ID} button:hover { background: var(--main-surface-tertiary,rgba(127,127,127,.15)) !important; }
+      #${CHAT_ARCHIVE_MODAL_ID} .bf-archive-chat { width:100% !important; text-align:left !important; margin-bottom:6px !important; display:block !important; }
+      #${CHAT_ARCHIVE_MODAL_ID} .bf-archive-chat[data-selected="true"] { outline:2px solid rgba(80,130,230,.65) !important; }
+      #${CHAT_ARCHIVE_MODAL_ID} .bf-archive-muted { opacity:.68 !important; font-size:12px !important; }
+      #${CHAT_ARCHIVE_MODAL_ID} .bf-archive-actions { display:flex !important; flex-wrap:wrap !important; gap:8px !important; margin:12px 0 !important; }
+      #${CHAT_ARCHIVE_MODAL_ID} .bf-archive-search { width:100% !important; box-sizing:border-box !important; margin:10px 0 !important; }
+      #${CHAT_ARCHIVE_MODAL_ID} .bf-archive-result { border-top:1px solid var(--border-light,rgba(127,127,127,.18)) !important; padding:10px 0 !important; }
+      #${CHAT_ARCHIVE_MODAL_ID} .bf-archive-result pre { white-space:pre-wrap !important; font:inherit !important; font-size:12px !important; margin:6px 0 !important; max-height:130px !important; overflow:hidden !important; }
+      @media (max-width: 760px) {
+        #${CHAT_ARCHIVE_MODAL_ID} { padding:8px !important; }
+        #${CHAT_ARCHIVE_MODAL_ID} .bf-archive-panel { width:100% !important; height:96vh !important; }
+        #${CHAT_ARCHIVE_MODAL_ID} .bf-archive-body { grid-template-columns:1fr !important; grid-template-rows:34% 1fr !important; }
+        #${CHAT_ARCHIVE_MODAL_ID} .bf-archive-list { border-right:0 !important; border-bottom:1px solid var(--border-light,rgba(127,127,127,.22)) !important; }
+      }
+    `;
+    (document.head || document.documentElement).appendChild(style);
+  }
+
+  function makeConversationArchiveChatIcon(size = 16) {
+    const svgNs = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(svgNs, 'svg');
+    svg.setAttribute('width', String(size));
+    svg.setAttribute('height', String(size));
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '1.8');
+    svg.setAttribute('stroke-linecap', 'round');
+    svg.setAttribute('stroke-linejoin', 'round');
+    svg.setAttribute('focusable', 'false');
+    svg.setAttribute('aria-hidden', 'true');
+
+    const bubble = document.createElementNS(svgNs, 'path');
+    bubble.setAttribute('d', 'M5.5 4.75h10.25A2.25 2.25 0 0 1 18 7v4.25a2.25 2.25 0 0 1-2.25 2.25H10l-3.75 2.75.8-2.75H5.5A2.25 2.25 0 0 1 3.25 11.25V7A2.25 2.25 0 0 1 5.5 4.75Z');
+    const dots = document.createElementNS(svgNs, 'path');
+    dots.setAttribute('d', 'M7.25 9.1h.01M10.6 9.1h.01M13.95 9.1h.01');
+    const tray = document.createElementNS(svgNs, 'path');
+    tray.setAttribute('d', 'M9 17.25h9.25A1.75 1.75 0 0 0 20 15.5v-1.25M10.75 20h6.75A2.5 2.5 0 0 0 20 17.5');
+    svg.append(bubble, dots, tray);
+    return svg;
+  }
+
+  function getConversationArchiveNativeShareButton() {
+    if (!getCurrentConversationId()) return null;
+    for (const button of document.querySelectorAll('button[aria-label], button.button-toolbar')) {
+      if (!(button instanceof HTMLButtonElement)) continue;
+      if (button.hasAttribute(CHAT_ARCHIVE_TOOLBAR_BUTTON_ATTR)) continue;
+      const label = normalizeText(
+        button.getAttribute('aria-label') || button.getAttribute('title') || button.textContent || ''
+      );
+      if (!['jaa', 'share', 'share chat'].includes(label)) continue;
+      if (button.closest('[data-message-author-role], [data-turn], article[data-turn], section[data-turn]')) continue;
+      return button;
+    }
+    return null;
+  }
+
+  function makeConversationArchiveToolbarButton(nativeShare) {
+    if (!(nativeShare instanceof HTMLButtonElement)) return null;
+    const button = nativeShare.cloneNode(true);
+    if (!(button instanceof HTMLButtonElement)) return null;
+
+    button.removeAttribute('id');
+    button.removeAttribute('data-state');
+    button.removeAttribute('aria-expanded');
+    button.removeAttribute('aria-haspopup');
+
+    // Archive is a BraveFox action, not Share. Never inherit ChatGPT's transient
+    // disabled state (Share is often disabled while a response is generating).
+    button.disabled = false;
+    button.removeAttribute('disabled');
+    button.removeAttribute('aria-disabled');
+    button.removeAttribute('data-disabled');
+    button.removeAttribute('inert');
+    button.tabIndex = 0;
+
+    button.setAttribute(CHAT_ARCHIVE_TOOLBAR_BUTTON_ATTR, 'true');
+    button.setAttribute('aria-label', 'Arkisto');
+    button.title = 'Keskusteluarkisto';
+    button.type = 'button';
+    button.replaceChildren(makeConversationArchiveChatIcon(16), document.createTextNode('Arkisto'));
+    button.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      void openConversationArchiveModal();
+    });
+    return button;
+  }
+
+  function ensureConversationArchiveToolbarButton() {
+    const existing = document.querySelector(`button[${CHAT_ARCHIVE_TOOLBAR_BUTTON_ATTR}="true"]`);
+
+    if (!getCurrentConversationId()) {
+      existing?.remove();
+      for (const share of document.querySelectorAll(`button[${CHAT_ARCHIVE_SHARE_HIDDEN_ATTR}="true"]`)) {
+        share.removeAttribute(CHAT_ARCHIVE_SHARE_HIDDEN_ATTR);
+      }
+      return;
+    }
+
+    const nativeShare = getConversationArchiveNativeShareButton();
+    if (!(nativeShare instanceof HTMLButtonElement) || !nativeShare.parentElement) {
+      existing?.remove();
+      return;
+    }
+
+    nativeShare.setAttribute(CHAT_ARCHIVE_SHARE_HIDDEN_ATTR, 'true');
+    if (existing?.isConnected) {
+      // A clone created while Share was temporarily disabled must not stay disabled forever.
+      existing.disabled = false;
+      existing.removeAttribute('disabled');
+      existing.removeAttribute('aria-disabled');
+      existing.removeAttribute('data-disabled');
+      existing.removeAttribute('inert');
+      existing.tabIndex = 0;
+      if (nativeShare.nextElementSibling !== existing) nativeShare.after(existing);
+      return;
+    }
+
+    const archiveButton = makeConversationArchiveToolbarButton(nativeShare);
+    if (archiveButton) nativeShare.after(archiveButton);
+  }
+
+  function ensureConversationArchiveButton() {
+    // Retire the brittle custom sidebar row. Archive access now has two stable homes:
+    // the in-chat toolbar (replacing Share) and Library > New.
+    document.getElementById(CHAT_ARCHIVE_BUTTON_ID)?.remove();
+    ensureConversationArchiveToolbarButton();
+  }
+
+  function isConversationArchiveLibraryNewTrigger(target) {
+    if (!isChatGptLibraryLocation() || !(target instanceof Element)) return false;
+    const control = target.closest('button[aria-haspopup="menu"], button, [role="button"]');
+    if (!(control instanceof Element)) return false;
+
+    const label = normalizeText(
+      control.getAttribute('aria-label') ||
+      control.getAttribute('title') ||
+      control.querySelector(':scope > span')?.textContent ||
+      control.textContent ||
+      ''
+    );
+    if (!['uusi', 'new', 'create new'].includes(label)) return false;
+
+    // The Library's New button is a Radix menu trigger. Prefer this exact native shape,
+    // while keeping the structural fallback for localized/older ChatGPT builds.
+    if (control.matches('button[aria-haspopup="menu"]')) return true;
+    const main = control.closest('main, [role="main"]');
+    return Boolean(main || !control.closest('nav, aside, [data-testid*="sidebar"]'));
+  }
+
+  function getConversationArchiveLibraryNewTrigger() {
+    if (!isChatGptLibraryLocation()) return null;
+    for (const control of document.querySelectorAll('button[aria-haspopup="menu"], button, [role="button"]')) {
+      if (isConversationArchiveLibraryNewTrigger(control)) return control;
+    }
+    return null;
+  }
+
+  function isConversationArchiveLibraryFolderText(value) {
+    return ['kansio', 'folder', 'uusi kansio', 'new folder'].includes(normalizeText(value));
+  }
+
+  function isConversationArchiveLibraryDocumentText(value) {
+    return ['asiakirja', 'document', 'new document', 'uusi asiakirja'].includes(normalizeText(value));
+  }
+
+  function isConversationArchiveLibraryUploadText(value) {
+    const text = normalizeText(value);
+    return (
+      text.includes('lataa tiedostoja palvelimeen') ||
+      text.includes('upload files') ||
+      text.includes('upload from computer') ||
+      text.includes('upload from device')
+    );
+  }
+
+  function getConversationArchiveLibraryCommonAncestor(first, second) {
+    if (!(first instanceof Element) || !(second instanceof Element)) return null;
+    const ancestors = new Set();
+    let node = first;
+    for (let depth = 0; node && depth < 14; depth += 1, node = node.parentElement) {
+      ancestors.add(node);
+    }
+    node = second;
+    for (let depth = 0; node && depth < 14; depth += 1, node = node.parentElement) {
+      if (ancestors.has(node)) return node;
+    }
+    return null;
+  }
+
+  function getConversationArchiveLibraryNewMenu() {
+    if (!isChatGptLibraryLocation()) return null;
+
+    // Exact 2026 Library shape: Uusi is the Radix trigger and the portal menu points back
+    // to that button through aria-labelledby. This relationship is much more stable than
+    // generated class names or portal coordinates.
+    const trigger = getConversationArchiveLibraryNewTrigger();
+    const triggerId = String(trigger?.id || '').trim();
+    if (triggerId) {
+      for (const menu of document.querySelectorAll(
+        '[role="menu"][data-radix-menu-content][data-state="open"], [role="menu"][data-state="open"]'
+      )) {
+        if (!(menu instanceof Element) || !menu.isConnected) continue;
+        if (String(menu.getAttribute('aria-labelledby') || '').trim() !== triggerId) continue;
+        return menu;
+      }
+    }
+
+    // Fallback: accept only an OPEN menu that contains the two native rows we keep.
+    // Do not accidentally curate account/model/other Radix menus elsewhere on the page.
+    const candidates = Array.from(document.querySelectorAll(
+      '[role="menu"][data-state="open"], [data-radix-menu-content][data-state="open"]'
+    ));
+    for (let index = candidates.length - 1; index >= 0; index -= 1) {
+      const menu = candidates[index];
+      if (!(menu instanceof Element) || !menu.isConnected) continue;
+      const text = normalizeText(menu.textContent);
+      if (isConversationArchiveLibraryUploadText(text) && /(^|\s)(kansio|folder)(\s|$)/.test(text)) {
+        return menu;
+      }
+    }
+
+    // Older/stripped Library builds: anchor on Folder + Upload and derive their nearest
+    // common popup container. Keep this as a last resort only.
+    const textElements = Array.from(document.querySelectorAll(
+      'button, a, [role="menuitem"], [role="option"], [role="button"], div, span, p'
+    ));
+    const folderElements = [];
+    const uploadElements = [];
+    for (const element of textElements) {
+      if (!(element instanceof Element) || !element.isConnected) continue;
+      const text = normalizeText(
+        element.getAttribute('aria-label') || element.getAttribute('title') || element.textContent || ''
+      );
+      if (isConversationArchiveLibraryFolderText(text)) folderElements.push(element);
+      if (isConversationArchiveLibraryUploadText(text)) uploadElements.push(element);
+    }
+
+    let best = null;
+    let bestLength = Number.POSITIVE_INFINITY;
+    for (const folder of folderElements) {
+      for (const upload of uploadElements) {
+        const common = getConversationArchiveLibraryCommonAncestor(folder, upload);
+        if (!(common instanceof Element)) continue;
+        if (common === document.documentElement || common === document.body) continue;
+        if (common.matches('main, [role="main"], nav, aside')) continue;
+        const text = normalizeText(common.textContent);
+        if (!isConversationArchiveLibraryUploadText(text)) continue;
+        if (!/(^|\s)(kansio|folder)(\s|$)/.test(text)) continue;
+        if (text.length < bestLength) {
+          best = common;
+          bestLength = text.length;
+        }
+      }
+    }
+    return best;
+  }
+
+  function getConversationArchiveLibraryMenuItems(menu) {
+    if (!(menu instanceof Element)) return [];
+
+    // Current Library menu: rows are direct Radix collection items. Restricting to direct
+    // children prevents the icon/text descendants from being mistaken for separate items.
+    const direct = Array.from(menu.children).filter(child =>
+      child instanceof Element &&
+      child.matches('[role="menuitem"][data-radix-collection-item], [role="menuitem"], [role="option"]')
+    );
+    if (direct.length) return direct;
+
+    let items = Array.from(menu.querySelectorAll(
+      '[role="menuitem"], [role="option"], button, a[href], [tabindex="0"], [tabindex="-1"]'
+    ));
+    items = items.filter(item => {
+      if (!(item instanceof Element)) return false;
+      const owner = item.closest('[role="menuitem"], [role="option"], button, a[href]');
+      return owner === item;
+    });
+    return Array.from(new Set(items));
+  }
+
+  function getConversationArchiveLibraryItemKind(item) {
+    if (!(item instanceof Element)) return '';
+    const text = normalizeText(
+      item.getAttribute('aria-label') || item.getAttribute('title') || item.textContent || ''
+    );
+    if (isConversationArchiveLibraryFolderText(text)) return 'folder';
+    if (isConversationArchiveLibraryDocumentText(text)) return 'document';
+    if (isConversationArchiveLibraryUploadText(text)) return 'upload';
+    return '';
+  }
+
+  function rewriteConversationArchiveLibraryMenuLabel(item) {
+    const walker = document.createTreeWalker(item, NodeFilter.SHOW_TEXT);
+    let node = walker.nextNode();
+    while (node) {
+      const value = normalizeText(node.nodeValue);
+      if ([
+        'kansio', 'folder', 'uusi kansio', 'new folder',
+        'asiakirja', 'document', 'new document', 'uusi asiakirja'
+      ].includes(value)) {
+        node.nodeValue = 'Arkisto';
+        return true;
+      }
+      node = walker.nextNode();
+    }
+    return false;
+  }
+
+  function makeConversationArchiveLibraryMenuItem(folderItem, documentItem = null) {
+    // Prefer Asiakirja as the donor. Its native terms-light-20 icon is intentionally kept
+    // for Arkisto; it already reads as a compact records/document archive glyph and keeps
+    // the menu visually 100% native. Fall back to Folder only on older Library builds.
+    const donor = documentItem instanceof Element ? documentItem : folderItem;
+    if (!(donor instanceof Element)) return null;
+    const item = donor.cloneNode(true);
+    if (!(item instanceof Element)) return null;
+
+    item.removeAttribute('id');
+    for (const child of item.querySelectorAll('[id]')) child.removeAttribute('id');
+    item.removeAttribute('data-state');
+    item.removeAttribute('aria-expanded');
+    item.removeAttribute('aria-haspopup');
+    item.removeAttribute('href');
+    item.removeAttribute(CHAT_ARCHIVE_LIBRARY_MENU_HIDDEN_ATTR);
+    item.setAttribute(CHAT_ARCHIVE_LIBRARY_MENU_ITEM_ATTR, 'true');
+    item.setAttribute('aria-label', 'Arkisto');
+    item.setAttribute('title', 'Keskusteluarkisto');
+    item.setAttribute('role', 'menuitem');
+    item.setAttribute('tabindex', '-1');
+    if (item instanceof HTMLButtonElement) item.type = 'button';
+
+    rewriteConversationArchiveLibraryMenuLabel(item);
+
+    // If Asiakirja was unavailable, still use the same native sprite fragment rather than
+    // a hand-drawn icon. Preserve ChatGPT's live asset bundle path and swap only the id.
+    if (!(documentItem instanceof Element)) {
+      const use = item.querySelector('svg use[href]');
+      if (use) {
+        const href = String(use.getAttribute('href') || '');
+        const base = href.includes('#') ? href.slice(0, href.indexOf('#')) : href;
+        use.setAttribute('href', `${base}#terms-light-20`);
+      }
+    }
+
+    item.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      // Close the real Radix menu through its own trigger before opening the archive modal.
+      const menu = item.closest('[role="menu"]');
+      const labelledBy = String(menu?.getAttribute('aria-labelledby') || '').trim();
+      const trigger = labelledBy ? document.getElementById(labelledBy) : null;
+      if (trigger instanceof HTMLElement) {
+        try { trigger.click(); } catch {}
+      }
+
+      document.documentElement.classList.remove(CHAT_ARCHIVE_LIBRARY_MENU_CURATING_CLASS);
+      void openConversationArchiveModal();
+    });
+    return item;
+  }
+
+  function reconcileConversationArchiveLibraryNewMenu() {
+    const menu = getConversationArchiveLibraryNewMenu();
+    if (!(menu instanceof Element)) return false;
+    menu.setAttribute(CHAT_ARCHIVE_LIBRARY_MENU_ROOT_ATTR, 'curating');
+
+    const items = getConversationArchiveLibraryMenuItems(menu);
+    let folderItem = null;
+    let documentItem = null;
+    let uploadItem = null;
+    for (const item of items) {
+      if (item.hasAttribute(CHAT_ARCHIVE_LIBRARY_MENU_ITEM_ATTR)) continue;
+      const kind = getConversationArchiveLibraryItemKind(item);
+      if (kind === 'folder' && !folderItem) folderItem = item;
+      if (kind === 'document' && !documentItem) documentItem = item;
+      if (kind === 'upload' && !uploadItem) uploadItem = item;
+    }
+
+    if (!(folderItem instanceof Element) || !(uploadItem instanceof Element)) {
+      menu.removeAttribute(CHAT_ARCHIVE_LIBRARY_MENU_ROOT_ATTR);
+      return false;
+    }
+
+    // Hide every native menu item except the two explicitly kept by the concept.
+    for (const item of items) {
+      if (item === folderItem || item === uploadItem || item.hasAttribute(CHAT_ARCHIVE_LIBRARY_MENU_ITEM_ATTR)) {
+        item.removeAttribute(CHAT_ARCHIVE_LIBRARY_MENU_HIDDEN_ATTR);
+      } else {
+        item.setAttribute(CHAT_ARCHIVE_LIBRARY_MENU_HIDDEN_ATTR, 'true');
+      }
+    }
+
+    let archiveItem = menu.querySelector(`[${CHAT_ARCHIVE_LIBRARY_MENU_ITEM_ATTR}="true"]`);
+    if (!(archiveItem instanceof Element)) {
+      archiveItem = makeConversationArchiveLibraryMenuItem(folderItem, documentItem);
+      if (archiveItem) folderItem.after(archiveItem);
+    } else if (folderItem.nextElementSibling !== archiveItem) {
+      folderItem.after(archiveItem);
+    }
+
+    // Use ChatGPT's own separator already present before Upload. Hide only extra separators.
+    const directChildren = Array.from(menu.children);
+    const separators = directChildren.filter(child =>
+      child instanceof Element &&
+      (
+        child.matches('[role="separator"]') ||
+        Boolean(child.querySelector(':scope > .h-px.w-full.bg-border, :scope > .h-px[class*="bg-border"]'))
+      )
+    );
+    let keptSeparator = null;
+    for (const separator of separators) {
+      const beforeUpload = separator.compareDocumentPosition(uploadItem) & Node.DOCUMENT_POSITION_FOLLOWING;
+      if (!keptSeparator && beforeUpload) {
+        keptSeparator = separator;
+        separator.removeAttribute(CHAT_ARCHIVE_LIBRARY_MENU_HIDDEN_ATTR);
+      } else {
+        separator.setAttribute(CHAT_ARCHIVE_LIBRARY_MENU_HIDDEN_ATTR, 'true');
+      }
+    }
+
+    // Remove the synthetic divider from older BraveFox builds if this tab upgraded live.
+    for (const oldDivider of menu.querySelectorAll(`[${CHAT_ARCHIVE_LIBRARY_MENU_DIVIDER_ATTR}="true"]`)) {
+      oldDivider.remove();
+    }
+
+    // Hide any other direct child that is neither the section label, our kept rows, nor the
+    // one native separator. This catches plugin-source footers and future non-item wrappers.
+    for (const child of Array.from(menu.children)) {
+      if (!(child instanceof Element)) continue;
+      if (child === folderItem || child === archiveItem || child === uploadItem || child === keptSeparator) continue;
+      if (child.matches('[data-menu-section-label="true"]')) {
+        child.removeAttribute(CHAT_ARCHIVE_LIBRARY_MENU_HIDDEN_ATTR);
+        continue;
+      }
+      if (items.includes(child)) continue; // already classified above
+      child.setAttribute(CHAT_ARCHIVE_LIBRARY_MENU_HIDDEN_ATTR, 'true');
+    }
+
+    menu.setAttribute(CHAT_ARCHIVE_LIBRARY_MENU_ROOT_ATTR, 'ready');
+    document.documentElement.classList.remove(CHAT_ARCHIVE_LIBRARY_MENU_CURATING_CLASS);
+    return true;
+  }
+
+  function armConversationArchiveLibraryNewMenu() {
+    if (!isChatGptLibraryLocation()) return;
+    document.documentElement.classList.add(CHAT_ARCHIVE_LIBRARY_MENU_CURATING_CLASS);
+    if (conversationArchiveLibraryMenuTimer) clearTimeout(conversationArchiveLibraryMenuTimer);
+
+    const startedAt = Date.now();
+    const poll = () => {
+      conversationArchiveLibraryMenuTimer = 0;
+      if (reconcileConversationArchiveLibraryNewMenu()) return;
+      if (Date.now() - startedAt < 1200) {
+        conversationArchiveLibraryMenuTimer = window.setTimeout(poll, 16);
+        return;
+      }
+      document.documentElement.classList.remove(CHAT_ARCHIVE_LIBRARY_MENU_CURATING_CLASS);
+    };
+    conversationArchiveLibraryMenuTimer = window.setTimeout(poll, 0);
+  }
+
+  function handleConversationArchivePointerDown(event) {
+    if (isConversationArchiveLibraryNewTrigger(event.target)) armConversationArchiveLibraryNewMenu();
+  }
+
+  function handleConversationArchiveLibraryKeyDown(event) {
+    if (!['Enter', ' '].includes(event.key)) return;
+    if (isConversationArchiveLibraryNewTrigger(event.target)) armConversationArchiveLibraryNewMenu();
+  }
+
+  function closeConversationArchiveModal() {
+    document.getElementById(CHAT_ARCHIVE_MODAL_ID)?.remove();
+  }
+
+  function scheduleConversationArchiveModalRefresh(delay = 80) {
+    if (conversationArchiveUiRefreshTimer) clearTimeout(conversationArchiveUiRefreshTimer);
+    conversationArchiveUiRefreshTimer = window.setTimeout(() => {
+      conversationArchiveUiRefreshTimer = 0;
+      if (document.getElementById(CHAT_ARCHIVE_MODAL_ID)) void renderConversationArchiveModal();
+    }, delay);
+  }
+
+  function archiveSearchScore(text, query) {
+    const haystack = normalizeText(text);
+    const tokens = normalizeText(query).split(' ').filter(token => token.length >= 2);
+    if (!tokens.length || !haystack) return 0;
+    let score = 0;
+    for (const token of tokens) {
+      let index = 0;
+      let matches = 0;
+      while ((index = haystack.indexOf(token, index)) >= 0 && matches < 20) {
+        matches += 1;
+        score += token.length + 2;
+        index += token.length;
+      }
+      if (!matches) return 0;
+    }
+    return score;
+  }
+
+  async function searchConversationArchive(conversationId, query) {
+    const messages = getArchivedCurrentBranch(await getArchivedMessages(conversationId));
+    return messages
+      .map((message, index) => ({ message, index, score: archiveSearchScore(message.plainText, query) }))
+      .filter(item => item.score > 0)
+      .sort((a, b) => b.score - a.score || b.index - a.index)
+      .slice(0, 20);
+  }
+
+  function buildArchiveSearchExcerpt(message, max = 650) {
+    const text = String(message?.plainText || '').replace(/\s+/g, ' ').trim();
+    return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+  }
+
+  async function renderConversationArchiveModal() {
+    const modal = document.getElementById(CHAT_ARCHIVE_MODAL_ID);
+    if (!modal) return;
+    const listHost = modal.querySelector('[data-bf-archive-list]');
+    const detailHost = modal.querySelector('[data-bf-archive-detail]');
+    if (!(listHost instanceof HTMLElement) || !(detailHost instanceof HTMLElement)) return;
+
+    const conversations = await getArchivedConversations().catch(() => []);
+    const currentId = getCurrentConversationId();
+    if (!conversationArchiveSelectedConversationId || !conversations.some(item => item.id === conversationArchiveSelectedConversationId)) {
+      conversationArchiveSelectedConversationId = conversations.some(item => item.id === currentId)
+        ? currentId
+        : conversations[0]?.id || '';
+    }
+
+    listHost.replaceChildren();
+    if (!conversations.length) {
+      const empty = document.createElement('div');
+      empty.className = 'bf-archive-muted';
+      empty.textContent = currentId
+        ? 'This chat has not finished its first archive sync yet. Leave this panel open for a moment.'
+        : 'No locally archived chats yet.';
+      listHost.appendChild(empty);
+    }
+
+    for (const conversation of conversations) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'bf-archive-chat';
+      button.dataset.selected = String(conversation.id === conversationArchiveSelectedConversationId);
+      const title = document.createElement('div');
+      title.textContent = conversation.title || 'Untitled Chat';
+      title.style.fontWeight = '650';
+      const meta = document.createElement('div');
+      meta.className = 'bf-archive-muted';
+      meta.textContent = `${Number(conversation.messageCount || 0)} messages · ${formatArchiveDateTime(conversation.updatedAt)}`;
+      button.append(title, meta);
+      button.addEventListener('click', () => {
+        conversationArchiveSelectedConversationId = conversation.id;
+        void renderConversationArchiveModal();
+      });
+      listHost.appendChild(button);
+    }
+
+    detailHost.replaceChildren();
+    const selected = conversations.find(item => item.id === conversationArchiveSelectedConversationId);
+    if (!selected) return;
+    const snapshots = await getArchivedSnapshots(selected.id).catch(() => []);
+
+    const heading = document.createElement('h2');
+    heading.textContent = selected.title || 'Untitled Chat';
+    heading.style.margin = '0 0 4px';
+    const meta = document.createElement('div');
+    meta.className = 'bf-archive-muted';
+    meta.textContent = `${selected.messageCount || 0} messages · ${snapshots.length} checkpoints · last saved ${formatArchiveDateTime(selected.archivedAt)}`;
+
+    const snapshotSelect = document.createElement('select');
+    snapshotSelect.setAttribute('data-bf-archive-snapshot-select', 'true');
+    const latestOption = document.createElement('option');
+    latestOption.value = '';
+    latestOption.textContent = 'Latest archived state';
+    snapshotSelect.appendChild(latestOption);
+    for (const snapshot of snapshots) {
+      const option = document.createElement('option');
+      option.value = snapshot.id;
+      option.textContent = `${snapshot.name} · ${snapshot.messageCount} msgs · ${formatArchiveDateTime(snapshot.createdAt)}`;
+      snapshotSelect.appendChild(option);
+    }
+
+    const actions = document.createElement('div');
+    actions.className = 'bf-archive-actions';
+    const actionButton = (label, handler) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = label;
+      button.addEventListener('click', handler);
+      actions.appendChild(button);
+      return button;
+    };
+    actionButton('Snapshot', async () => {
+      const suggested = `Manual · ${formatArchiveDateTime(Date.now())}`;
+      const name = window.prompt('Name this full-history checkpoint:', suggested);
+      if (name === null) return;
+      if (selected.id === getCurrentConversationId()) {
+        await archiveVisibleConversationTail().catch(() => {});
+        await fetchConversationMessageMetadataIndex(selected.id, true).catch(() => null);
+        const activeSync = conversationArchivePayloadSyncs.get(selected.id);
+        if (activeSync) await activeSync.catch(() => false);
+      }
+      await createConversationArchiveSnapshot(selected.id, name, 'manual');
+      await renderConversationArchiveModal();
+    });
+    const deleteSnapshotButton = actionButton('Delete snapshot', async () => {
+      const snapshotId = String(snapshotSelect.value || '').trim();
+      if (!snapshotId) return;
+      const snapshot = snapshots.find(item => String(item?.id || '') === snapshotId);
+      const snapshotName = String(snapshot?.name || 'this snapshot');
+      if (!window.confirm(`Delete snapshot “${snapshotName}”?\n\nOnly this checkpoint will be removed. The archived conversation and its messages stay intact.`)) return;
+      deleteSnapshotButton.disabled = true;
+      try {
+        await deleteConversationArchiveSnapshot(selected.id, snapshotId);
+        await renderConversationArchiveModal();
+      } catch (error) {
+        console.error('BraveFox snapshot deletion failed', error);
+        window.alert(String(error?.message || error || 'Could not delete the snapshot.'));
+        if (deleteSnapshotButton.isConnected) deleteSnapshotButton.disabled = !snapshotSelect.value;
+      }
+    });
+    deleteSnapshotButton.disabled = !snapshotSelect.value;
+    snapshotSelect.addEventListener('change', () => {
+      if (deleteSnapshotButton.isConnected) deleteSnapshotButton.disabled = !snapshotSelect.value;
+    });
+    const deleteArchiveButton = actionButton('Delete archive', async () => {
+      const archiveTitle = String(selected.title || 'Untitled Chat');
+      if (!window.confirm(
+        `Delete the entire local archive for “${archiveTitle}”?\n\nThis removes its locally stored messages and every snapshot/checkpoint. It does NOT delete the original ChatGPT conversation.`
+      )) return;
+      deleteArchiveButton.disabled = true;
+      try {
+        await deleteConversationArchive(selected.id);
+        if (conversationArchiveSelectedConversationId === selected.id) conversationArchiveSelectedConversationId = '';
+        await renderConversationArchiveModal();
+      } catch (error) {
+        console.error('BraveFox archive deletion failed', error);
+        window.alert(String(error?.message || error || 'Could not delete the local archive.'));
+        if (deleteArchiveButton.isConnected) deleteArchiveButton.disabled = false;
+      }
+    });
+    actionButton('Continue in new chat', async () => {
+      await beginConversationArchiveContinuation(selected.id, snapshotSelect.value);
+    });
+    const exportHtmlButton = actionButton('Export HTML', async () => {
+      const oldLabel = exportHtmlButton.textContent;
+      exportHtmlButton.disabled = true;
+      exportHtmlButton.textContent = 'Embedding images…';
+      try {
+        await exportConversationArchiveHtml(selected.id, snapshotSelect.value, progress => {
+          if (!exportHtmlButton.isConnected) return;
+          const total = Number(progress?.total || 0) || 0;
+          const completed = Number(progress?.completed || 0) || 0;
+          exportHtmlButton.textContent = total
+            ? `Embedding images ${completed}/${total}…`
+            : 'Building HTML…';
+        });
+      } catch (error) {
+        console.error('BraveFox HTML archive export failed', error);
+        window.alert(String(error?.message || error || 'HTML export failed.'));
+      } finally {
+        if (exportHtmlButton.isConnected) {
+          exportHtmlButton.disabled = false;
+          exportHtmlButton.textContent = oldLabel;
+        }
+      }
+    });
+    actionButton('Export Markdown', () => void exportConversationArchiveMarkdown(selected.id, snapshotSelect.value));
+    actionButton('Export JSON', () => void exportConversationArchiveJson(selected.id));
+    actionButton('Open original', () => window.open(`${location.origin}/c/${encodeURIComponent(selected.id)}`, '_blank', 'noopener'));
+
+    const searchLabel = document.createElement('div');
+    searchLabel.style.marginTop = '18px';
+    searchLabel.style.fontWeight = '650';
+    searchLabel.textContent = 'Search this full local archive';
+    const searchInput = document.createElement('input');
+    searchInput.className = 'bf-archive-search';
+    searchInput.type = 'search';
+    searchInput.placeholder = 'e.g. weapon table crash, script name, offset…';
+    const results = document.createElement('div');
+    results.setAttribute('data-bf-archive-results', 'true');
+
+    let searchTimer = 0;
+    const runSearch = async () => {
+      const query = searchInput.value.trim();
+      results.replaceChildren();
+      if (query.length < 2) return;
+      const matches = await searchConversationArchive(selected.id, query);
+      if (!matches.length) {
+        const none = document.createElement('div');
+        none.className = 'bf-archive-muted';
+        none.textContent = 'No matching archived messages.';
+        results.appendChild(none);
+        return;
+      }
+      for (const { message } of matches) {
+        const row = document.createElement('div');
+        row.className = 'bf-archive-result';
+        const label = document.createElement('strong');
+        label.textContent = `${message.role === 'user' ? 'You' : 'ChatGPT'} · ${formatArchiveDateTime(message.createTime)}`;
+        const excerpt = document.createElement('pre');
+        excerpt.textContent = buildArchiveSearchExcerpt(message);
+        const insert = document.createElement('button');
+        insert.type = 'button';
+        insert.textContent = 'Insert into composer';
+        insert.addEventListener('click', () => {
+          const context = `[Retrieved from BraveFox local archive: ${selected.title}]\n${message.role === 'user' ? 'USER' : 'ASSISTANT'}:\n${message.plainText}`;
+          if (appendTextToConversationComposer(context)) closeConversationArchiveModal();
+        });
+        row.append(label, excerpt, insert);
+        results.appendChild(row);
+      }
+    };
+    searchInput.addEventListener('input', () => {
+      if (searchTimer) clearTimeout(searchTimer);
+      searchTimer = window.setTimeout(() => { searchTimer = 0; void runSearch(); }, 180);
+    });
+
+    const linked = getArchiveContextLink();
+    if (linked?.sourceConversationId && linked.sourceConversationId !== selected.id) {
+      const linkedNote = document.createElement('div');
+      linkedNote.className = 'bf-archive-muted';
+      linkedNote.style.marginTop = '12px';
+      linkedNote.textContent = `This chat is linked to archive ${linked.sourceConversationId.slice(0, 8)}…`;
+      detailHost.append(heading, meta, linkedNote, snapshotSelect, actions, searchLabel, searchInput, results);
+    } else {
+      detailHost.append(heading, meta, snapshotSelect, actions, searchLabel, searchInput, results);
+    }
+  }
+
+  async function openConversationArchiveModal() {
+    ensureConversationArchiveStyles();
+    let modal = document.getElementById(CHAT_ARCHIVE_MODAL_ID);
+    if (modal) {
+      await renderConversationArchiveModal();
+      return;
+    }
+    modal = document.createElement('div');
+    modal.id = CHAT_ARCHIVE_MODAL_ID;
+    modal.innerHTML = `
+      <div class="bf-archive-panel" role="dialog" aria-modal="true" aria-label="BraveFox local chat archive">
+        <div class="bf-archive-header">
+          <strong>Local Chat Archive</strong>
+          <span class="bf-archive-muted">Full local history · deduplicated checkpoints</span>
+          <button type="button" class="bf-archive-close">Close</button>
+        </div>
+        <div class="bf-archive-body">
+          <div class="bf-archive-list" data-bf-archive-list></div>
+          <div class="bf-archive-detail" data-bf-archive-detail></div>
+        </div>
+      </div>
+    `;
+    modal.querySelector('.bf-archive-close')?.addEventListener('click', closeConversationArchiveModal);
+    modal.addEventListener('mousedown', event => {
+      if (event.target === modal) closeConversationArchiveModal();
+    });
+    document.addEventListener('keydown', function archiveEscape(event) {
+      if (event.key !== 'Escape' || !document.getElementById(CHAT_ARCHIVE_MODAL_ID)) return;
+      closeConversationArchiveModal();
+      document.removeEventListener('keydown', archiveEscape, true);
+    }, true);
+    document.documentElement.appendChild(modal);
+    await renderConversationArchiveModal();
+    void cleanupDeletedConversationArchives(true);
+  }
+
+  function startConversationArchiveSystem() {
+    ensureConversationArchiveStyles();
+    ensureConversationArchiveButton();
+    document.addEventListener('pointerdown', handleConversationArchivePointerDown, true);
+    document.addEventListener('keydown', handleConversationArchiveLibraryKeyDown, true);
+    void openConversationArchiveDb().catch(error => {
+      try { console.debug('[BraveFox Enhancer] Local chat archive unavailable.', error); } catch {}
+    });
+
+    try {
+      if ('BroadcastChannel' in window) {
+        conversationArchiveChannel = new BroadcastChannel('bravefox_chat_archive_v1');
+        conversationArchiveChannel.addEventListener('message', event => {
+          if (event.data?.type === 'changed' && document.getElementById(CHAT_ARCHIVE_MODAL_ID)) {
+            scheduleConversationArchiveModalRefresh(60);
+          }
+        });
+      }
+    } catch {}
+
+    window.setInterval(() => {
+      ensureConversationArchiveButton();
+      if (isChatGptLibraryLocation()) reconcileConversationArchiveLibraryNewMenu();
+      linkPendingArchiveContextToCurrentConversation();
+      if (!getCurrentConversationId()) consumeConversationArchiveHandoffIfReady();
+    }, 500);
+
+    if (!conversationArchiveGhostCleanupInterval) {
+      conversationArchiveGhostCleanupInterval = window.setInterval(() => {
+        void cleanupDeletedConversationArchives(false);
+      }, CHAT_ARCHIVE_GHOST_CLEANUP_INTERVAL_MS);
+    }
+
+    window.addEventListener('pagehide', () => {
+      scheduleConversationArchiveDomCapture(0);
+      if (conversationArchiveGhostCleanupInterval) {
+        clearInterval(conversationArchiveGhostCleanupInterval);
+        conversationArchiveGhostCleanupInterval = 0;
+      }
+      try { conversationArchiveChannel?.close(); } catch {}
+      conversationArchiveChannel = null;
+    }, true);
+
+    // First route may already contain a fully rendered conversation when this script starts.
+    scheduleConversationArchiveDomCapture(350);
+    window.setTimeout(consumeConversationArchiveHandoffIfReady, 150);
+    window.setTimeout(() => void cleanupDeletedConversationArchives(false), 8000);
+  }
+
   function getCurrentConversationId() {
     const match = String(location.pathname || '').match(/\/c\/([^/?#]+)/i);
     return match?.[1] ? decodeURIComponent(match[1]) : '';
+  }
+
+  function getConversationSelectionRouteKey() {
+    const conversationId = getCurrentConversationId();
+    if (conversationId) return `conversation:${conversationId}`;
+
+    const path = String(location.pathname || '').replace(/\/+$/, '') || '/';
+    if (path === '/') return 'new-chat';
+    return '';
+  }
+
+  function resetConversationSelectionState() {
+    conversationPendingUserSentAt = 0;
+    conversationPendingAssistantStartedAt = 0;
+    conversationPendingModelSlug = '';
+    conversationPendingReasoningEffort = '';
+    conversationLastSelectedModelSlug = '';
+    conversationLastKnownReasoningEffort = '';
+  }
+
+  function syncConversationSelectionState() {
+    const nextKey = getConversationSelectionRouteKey();
+    if (!nextKey || nextKey === conversationSelectionRouteKey) return;
+
+    // First observation establishes the tab's current chat lane. There is nothing stale
+    // to clear yet, and this may run after the send timestamp was just captured.
+    if (!conversationSelectionRouteKey) {
+      conversationSelectionRouteKey = nextKey;
+      return;
+    }
+
+    const freshPendingSend =
+      Boolean(conversationPendingUserSentAt) &&
+      Date.now() - conversationPendingUserSentAt < 180000;
+
+    // Sending the first message changes / into /c/<id>. Preserve that one send snapshot
+    // across the SPA URL transition; every other conversation change gets a clean slate.
+    if (conversationSelectionRouteKey === 'new-chat' && nextKey.startsWith('conversation:') && freshPendingSend) {
+      conversationSelectionRouteKey = nextKey;
+      return;
+    }
+
+    resetConversationSelectionState();
+    conversationSelectionRouteKey = nextKey;
   }
 
   function collectConversationMessageIds(turnRoot) {
@@ -8243,23 +11520,35 @@
     return '';
   }
 
-  function extractConversationMessageModelSlug(message) {
+  function extractConversationMessageModelSlug(message, reasoningEffort = '') {
     if (!message || typeof message !== 'object') return '';
+
+    // BraveFox's visible label describes what the user selected for the turn, not a
+    // hidden routing/fallback target. Requested/default fields therefore outrank
+    // resolved_model_slug and server-side execution aliases.
     const direct = [
-      message?.metadata?.model_slug,
-      message?.metadata?.resolved_model_slug,
-      message?.metadata?.server_ste_metadata?.model_slug,
+      message?.metadata?.default_model_slug,
       message?.metadata?.requested_model_slug,
+      message?.metadata?.requested_model,
+      message?.metadata?.model_slug,
       message?.model_slug,
-      message?.model
+      message?.model,
+      message?.metadata?.resolved_model_slug,
+      message?.metadata?.server_ste_metadata?.model_slug
     ];
     for (const candidate of direct) {
-      const slug = String(candidate || '').trim();
+      const value = String(candidate || '').trim();
+      if (!value) continue;
+      const inferred = inferConversationModelSlugFromText(value, reasoningEffort);
+      if (inferred) return inferred;
+      const slug = normalizeChatGptModelSlug(value);
       if (slug) return slug;
     }
-    return readConversationMetadataScalar(message.metadata || {}, [
-      'resolved_model_slug', 'model_slug', 'requested_model_slug', 'default_model_slug'
+
+    const fallback = readConversationMetadataScalar(message.metadata || {}, [
+      'default_model_slug', 'requested_model_slug', 'model_slug', 'resolved_model_slug'
     ]);
+    return inferConversationModelSlugFromText(fallback, reasoningEffort) || normalizeChatGptModelSlug(fallback);
   }
 
   function extractConversationMessageReasoningEffort(message) {
@@ -8300,8 +11589,8 @@
       if (typeof rawTime === 'string' && /^\d+(?:\.\d+)?$/.test(rawTime.trim())) rawTime = Number(rawTime);
       if (typeof rawTime === 'number' && rawTime > 0 && rawTime < 1e12) rawTime *= 1000;
       const timestamp = rawTime != null ? getMessageTimestampFromDate(rawTime) : '';
-      const modelSlug = extractConversationMessageModelSlug(message);
       const reasoningEffort = extractConversationMessageReasoningEffort(message);
+      const modelSlug = extractConversationMessageModelSlug(message, reasoningEffort);
 
       const record = {
         id,
@@ -8321,9 +11610,155 @@
     return { byId, ordered };
   }
 
+  function buildConversationMessageMetadataIndexFromRecords(records) {
+    const byId = new Map();
+    const ordered = { user: [], assistant: [] };
+
+    for (const raw of Array.isArray(records) ? records : []) {
+      const id = String(raw?.id || '').trim();
+      const role = normalizeText(raw?.role);
+      if (!id || (role !== 'user' && role !== 'assistant')) continue;
+
+      const record = {
+        id,
+        role,
+        timestamp: formatNativeMessageTimestamp(raw?.timestamp || ''),
+        rawTime: Number(raw?.rawTime || 0) || 0,
+        modelSlug: String(raw?.modelSlug || '').trim(),
+        reasoningEffort: normalizeConversationReasoningEffort(raw?.reasoningEffort)
+      };
+      byId.set(id, record);
+      ordered[role].push(record);
+    }
+
+    for (const role of ['user', 'assistant']) {
+      ordered[role].sort((a, b) => (a.rawTime || 0) - (b.rawTime || 0));
+    }
+    return { byId, ordered };
+  }
+
+  function readConversationMetadataSharedStore() {
+    try {
+      const raw = localStorage.getItem(MESSAGE_METADATA_SHARED_CACHE_KEY);
+      if (!raw) return { version: 1, conversations: {} };
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return { version: 1, conversations: {} };
+      if (!parsed.conversations || typeof parsed.conversations !== 'object') parsed.conversations = {};
+      return parsed;
+    } catch {
+      return { version: 1, conversations: {} };
+    }
+  }
+
+  function hydrateConversationMetadataCacheFromSharedStorage(conversationId, force = false) {
+    const id = String(conversationId || '').trim();
+    if (!id) return null;
+    if (!force && conversationSharedMetadataLoaded.has(id)) {
+      return conversationMetadataCaches.get(id)?.index || null;
+    }
+    conversationSharedMetadataLoaded.add(id);
+
+    try {
+      const store = readConversationMetadataSharedStore();
+      const entry = store.conversations?.[id];
+      if (!entry || !Array.isArray(entry.records) || !entry.records.length) return null;
+
+      const index = buildConversationMessageMetadataIndexFromRecords(entry.records);
+      if (!(index.byId instanceof Map) || !index.byId.size) return null;
+
+      const savedAt = Number(entry.savedAt || 0) || 0;
+      const current = conversationMetadataCaches.get(id);
+      if (!current || savedAt >= Number(current.fetchedAt || 0)) {
+        conversationMetadataCaches.set(id, {
+          index,
+          fetchedAt: savedAt,
+          source: 'shared'
+        });
+      }
+      return conversationMetadataCaches.get(id)?.index || index;
+    } catch {
+      return null;
+    }
+  }
+
+  function persistConversationMetadataIndexToSharedStorage(conversationId, index) {
+    const id = String(conversationId || '').trim();
+    if (!id || !(index?.byId instanceof Map) || !index.byId.size) return;
+
+    try {
+      const records = Array.from(index.byId.values())
+        .filter(record => record && record.id && (record.role === 'user' || record.role === 'assistant'))
+        .sort((a, b) => (a.rawTime || 0) - (b.rawTime || 0))
+        .slice(-MESSAGE_METADATA_SHARED_CACHE_MAX_RECORDS)
+        .map(record => ({
+          id: String(record.id || ''),
+          role: String(record.role || ''),
+          timestamp: String(record.timestamp || ''),
+          rawTime: Number(record.rawTime || 0) || 0,
+          modelSlug: String(record.modelSlug || ''),
+          reasoningEffort: String(record.reasoningEffort || '')
+        }));
+
+      if (!records.length) return;
+
+      const store = readConversationMetadataSharedStore();
+      store.version = 1;
+      store.conversations[id] = {
+        savedAt: Date.now(),
+        records
+      };
+
+      const ids = Object.keys(store.conversations)
+        .sort((a, b) =>
+          Number(store.conversations[b]?.savedAt || 0) -
+          Number(store.conversations[a]?.savedAt || 0)
+        );
+      for (const staleId of ids.slice(MESSAGE_METADATA_SHARED_CACHE_MAX_CONVERSATIONS)) {
+        delete store.conversations[staleId];
+      }
+
+      localStorage.setItem(MESSAGE_METADATA_SHARED_CACHE_KEY, JSON.stringify(store));
+      conversationSharedMetadataLoaded.add(id);
+    } catch {}
+  }
+
+  function applyConversationMessageMetadataFromFastCache(turnRoot, role, surface) {
+    if (!(turnRoot instanceof Element) || !(surface instanceof Element)) return false;
+    const conversationId = getCurrentConversationId();
+    if (!conversationId) return false;
+
+    hydrateConversationMetadataCacheFromSharedStorage(conversationId);
+    const index = conversationMetadataCaches.get(conversationId)?.index;
+    if (!(index?.byId instanceof Map) || !index.byId.size) return false;
+
+    const ids = collectConversationMessageIds(turnRoot);
+    for (const id of collectConversationMessageIds(surface)) {
+      if (!ids.includes(id)) ids.unshift(id);
+    }
+
+    for (const messageId of ids) {
+      const record = index.byId.get(messageId);
+      if (!record || (record.role && record.role !== role)) continue;
+      if (applyConversationMessageMetadataRecord(turnRoot, role, record, surface, 'cache')) return true;
+    }
+    return false;
+  }
+
+  function primeConversationMetadataIndexForCurrentRoute() {
+    const conversationId = getCurrentConversationId();
+    if (!conversationId) return;
+    hydrateConversationMetadataCacheFromSharedStorage(conversationId);
+    void fetchConversationMessageMetadataIndex(conversationId, false).then(() => {
+      // The shared cache already paints synchronously. This follow-up only fills messages
+      // that were added since the cache snapshot or corrects a first-load cache miss.
+      refreshLatestConversationMetadataImmediately();
+    });
+  }
+
   async function fetchConversationMessageMetadataIndex(conversationId, force = false) {
     if (!conversationId) return { byId: new Map(), ordered: { user: [], assistant: [] } };
 
+    hydrateConversationMetadataCacheFromSharedStorage(conversationId);
     const cached = conversationMetadataCaches.get(conversationId);
     if (
       !force &&
@@ -8338,27 +11773,58 @@
 
     const request = (async () => {
       try {
-        const token = await resolveConversationAccessToken();
-        const headers = { Accept: 'application/json' };
-        if (token) headers.Authorization = `Bearer ${token}`;
-
-        const response = await fetch(
-          `${location.origin}/backend-api/conversation/${encodeURIComponent(conversationId)}`,
-          {
+        const url = `${location.origin}/backend-api/conversation/${encodeURIComponent(conversationId)}`;
+        const requestConversation = async token => {
+          const headers = { Accept: 'application/json' };
+          if (token) headers.Authorization = `Bearer ${token}`;
+          return fetch(url, {
             method: 'GET',
             credentials: 'include',
             cache: 'no-store',
             headers
-          }
-        );
+          });
+        };
+
+        // Full ChatGPT conversation reads are bearer-authenticated. Do not use the
+        // cookie-only request as the primary path: some deployments fail it with a
+        // non-401/403 response, which previously prevented us from ever trying the
+        // session token and left the archive stuck with only virtualized DOM messages.
+        let token = conversationAccessToken || await resolveConversationAccessToken();
+        let response = await requestConversation(token || '');
+
+        if (!response.ok && token && (response.status === 401 || response.status === 403)) {
+          // A cached bearer token can expire independently of the page session. Clear it
+          // and force a fresh /api/auth/session lookup before retrying once.
+          conversationAccessToken = '';
+          token = await resolveConversationAccessToken();
+          if (token) response = await requestConversation(token);
+        }
+
+        // If session lookup itself is unavailable, retain one cookie-auth fallback rather
+        // than giving up entirely. This is fallback-only; a valid bearer token always wins.
+        if (!response.ok && !token) {
+          response = await requestConversation('');
+        }
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        conversationArchiveExistenceApiHealthyAt = Date.now();
 
         const payload = await response.json();
+        const archiveSync = Promise.resolve(archiveConversationPayload(conversationId, payload))
+          .catch(() => false)
+          .finally(() => {
+            if (conversationArchivePayloadSyncs.get(conversationId) === archiveSync) {
+              conversationArchivePayloadSyncs.delete(conversationId);
+            }
+          });
+        conversationArchivePayloadSyncs.set(conversationId, archiveSync);
+        void archiveSync;
         const index = buildConversationMessageMetadataIndex(payload);
         conversationMetadataCaches.set(conversationId, {
           index,
-          fetchedAt: Date.now()
+          fetchedAt: Date.now(),
+          source: 'api'
         });
+        persistConversationMetadataIndexToSharedStorage(conversationId, index);
         return index;
       } catch {
         return cached?.index?.byId instanceof Map
@@ -8438,19 +11904,20 @@
     }
 
     if (role === 'assistant') {
-      // Exact per-message API metadata outranks DOM/current-model hints. The old order
-      // preferred the DOM slug even after an exact match, letting a newly selected model
-      // relabel an older reply. Ordinal matching is never trusted for model/effort.
+      // A send-time snapshot is the strongest source for the visible label: it records
+      // the model/effort selected in this exact tab when the user sent the prompt. Exact
+      // API metadata is authoritative only when no send snapshot exists (for example
+      // after a reload). Ordinal matching is never trusted for model/effort.
       const recordModel = exactSurfaceMatch ? String(record.modelSlug || '').trim() : '';
       const domModel = readConversationModelSlugFromDom(turnRoot, surface);
       const modelSlug = recordModel || domModel;
-      if (recordModel) {
-        conversationLastKnownModelSlug = recordModel;
-        conversationLastSelectedModelSlug = recordModel;
-      }
-      if (modelSlug && turnRoot.getAttribute(MESSAGE_MODEL_ATTR) !== modelSlug) {
-        turnRoot.setAttribute(MESSAGE_MODEL_ATTR, modelSlug);
-        changed = true;
+      const modelSource = String(turnRoot.getAttribute(MESSAGE_MODEL_SOURCE_ATTR) || '').trim();
+      if (modelSlug && modelSource !== 'send') {
+        if (turnRoot.getAttribute(MESSAGE_MODEL_ATTR) !== modelSlug) {
+          turnRoot.setAttribute(MESSAGE_MODEL_ATTR, modelSlug);
+          changed = true;
+        }
+        turnRoot.setAttribute(MESSAGE_MODEL_SOURCE_ATTR, recordModel ? 'api' : 'dom');
       }
 
       const recordEffort = exactSurfaceMatch
@@ -8458,10 +11925,13 @@
         : '';
       const domEffort = readConversationReasoningEffortFromDom(turnRoot, surface);
       const effort = recordEffort || domEffort;
-      if (effort && turnRoot.getAttribute(MESSAGE_REASONING_ATTR) !== effort) {
-        turnRoot.setAttribute(MESSAGE_REASONING_ATTR, effort);
-        conversationLastKnownReasoningEffort = effort;
-        changed = true;
+      const effortSource = String(turnRoot.getAttribute(MESSAGE_REASONING_SOURCE_ATTR) || '').trim();
+      if (effort && effortSource !== 'send') {
+        if (turnRoot.getAttribute(MESSAGE_REASONING_ATTR) !== effort) {
+          turnRoot.setAttribute(MESSAGE_REASONING_ATTR, effort);
+          changed = true;
+        }
+        turnRoot.setAttribute(MESSAGE_REASONING_SOURCE_ATTR, recordEffort ? 'api' : 'dom');
       }
     }
 
@@ -8971,6 +12441,7 @@
     const surfaces = Array.from(document.querySelectorAll(selector)).filter(element => element instanceof HTMLElement);
     const latestSurface = surfaces[surfaces.length - 1];
     if (!(latestSurface instanceof Element)) return false;
+    if (latestSurface === surface || latestSurface.contains(surface) || surface.contains(latestSurface)) return true;
 
     const latestRoot = getConversationTurnRoot(latestSurface, latestSurface, role);
     if (!(latestRoot instanceof Element)) return false;
@@ -9046,10 +12517,15 @@
 
   function applyConversationMessageMetadata(roleNode, role, surface) {
     if (!CHATGPT_MESSAGE_METADATA_CUSTOMIZATION.enabled) return;
+    syncConversationSelectionState();
     if (!(roleNode instanceof Element) || !(surface instanceof Element)) return;
 
     const turnRoot = getConversationTurnRoot(roleNode, surface, role);
     if (!(turnRoot instanceof Element)) return;
+
+    // Exact message-id metadata restored from another tab/local cache is safe to use
+    // immediately and avoids the large-conversation API latency seen on window switches.
+    applyConversationMessageMetadataFromFastCache(turnRoot, role, surface);
 
     if (role === 'assistant') {
       // DOM metadata is only an initial hint. Once exact per-message metadata has filled
@@ -9066,6 +12542,12 @@
       }
       if (modelSlug && !turnRoot.getAttribute(MESSAGE_MODEL_ATTR)) {
         turnRoot.setAttribute(MESSAGE_MODEL_ATTR, modelSlug);
+        turnRoot.setAttribute(
+          MESSAGE_MODEL_SOURCE_ATTR,
+          !readConversationModelSlugFromDom(turnRoot, surface) && isLatestAssistantTurn && hasFreshPendingSend
+            ? 'send'
+            : 'dom'
+        );
       }
 
       let effort = readConversationReasoningEffortFromDom(turnRoot, surface);
@@ -9074,6 +12556,12 @@
       }
       if (effort && !turnRoot.getAttribute(MESSAGE_REASONING_ATTR)) {
         turnRoot.setAttribute(MESSAGE_REASONING_ATTR, normalizeConversationReasoningEffort(effort));
+        turnRoot.setAttribute(
+          MESSAGE_REASONING_SOURCE_ATTR,
+          !readConversationReasoningEffortFromDom(turnRoot, surface) && isLatestAssistantTurn && hasFreshPendingSend
+            ? 'send'
+            : 'dom'
+        );
       }
     }
 
@@ -9432,6 +12920,7 @@
 
   function isInsideProtectedLibraryFolder() {
     if (!isChatGptLibraryLocation()) return false;
+    if (getProtectedRouteDescriptor()?.key === 'library-protected-files') return true;
     if (location.href.includes(LIBRARY_PROTECTED_FOLDER_ID)) return true;
 
     // Fallback for route shapes that do not expose the folder id in the URL.
@@ -9439,6 +12928,23 @@
       if (normalizeText(element.textContent) === normalizeText(LIBRARY_PROTECTED_FOLDER_NAME)) return true;
     }
     return false;
+  }
+
+  function discoverProtectedLibraryDescendantLinks(scope = document) {
+    if (!isInsideProtectedLibraryFolder()) return false;
+    const root = scope && typeof scope.querySelectorAll === 'function' ? scope : document;
+    let changed = false;
+    for (const anchor of root.querySelectorAll('a[href]')) {
+      if (!(anchor instanceof HTMLAnchorElement)) continue;
+      let target = '';
+      try {
+        target = new URL(anchor.getAttribute('href') || '', location.href).href;
+      } catch {
+        continue;
+      }
+      if (rememberProtectedLibraryDescendantUrl(target)) changed = true;
+    }
+    return changed;
   }
 
   function findProtectedLibraryTitleElement() {
@@ -9449,6 +12955,18 @@
       if (!(element instanceof HTMLElement)) continue;
       if (element.children.length !== 0) continue;
       if (normalizeText(element.textContent) !== wanted) continue;
+      const rect = element.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) continue;
+      return element;
+    }
+
+    // Descendant folders have their own title instead of the literal "Protected Files"
+    // breadcrumb. Keep Edit Mode available throughout the protected subtree by anchoring
+    // to the first visible page-level heading/current breadcrumb in that lane.
+    for (const element of document.querySelectorAll('h1, h2, h3, [aria-current="page"], [data-testid*="breadcrumb"]')) {
+      if (!(element instanceof HTMLElement)) continue;
+      const text = String(element.textContent || '').replace(/\s+/g, ' ').trim();
+      if (!text || text.length > 180) continue;
       const rect = element.getBoundingClientRect();
       if (rect.width <= 0 || rect.height <= 0) continue;
       return element;
@@ -9907,6 +13425,7 @@
     if (!isChatGptLibraryLocation()) return;
 
     reconcileLibraryTabs();
+    discoverProtectedLibraryDescendantLinks(document);
 
     let changed = false;
     for (const control of getLibraryCheckableControls()) {
