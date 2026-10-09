@@ -192,6 +192,242 @@
   if (isPluginsPathname(location.pathname)) document.documentElement.classList.add(PLUGINS_CURATING_CLASS);
   if (isGptsPathname(location.pathname)) document.documentElement.classList.add(GPTS_CURATING_CLASS);
 
+  // === BraveFox ChatGPT Reliability — portable content-side client ================
+  // No page-level fetch interception: only BraveFox-owned optional requests are gated.
+  const BRAVEFOX_RELIABILITY_PROTOCOL = 'bravefox:chat-reliability:v1';
+  const BRAVEFOX_RELIABILITY_DRAFT_PREFIX = 'bravefoxChatReliabilityDraftV1:';
+  const braveFoxReliabilityState = { connected: false, cooldownUntil: 0, requests: 0, suspectedDuplicates: 0, rateLimits: 0, serverErrors: 0, networkErrors: 0, lastStatus: 0 };
+  let braveFoxReliabilityUiTimer = 0;
+  let braveFoxReliabilityDraftTimer = 0;
+  let braveFoxReliabilityPanelOpen = false;
+
+  function braveFoxReliabilityUpdate(snapshot) {
+    if (!snapshot || typeof snapshot !== 'object') return;
+    braveFoxReliabilityState.connected = true;
+    for (const field of ['requests', 'suspectedDuplicates', 'rateLimits', 'serverErrors', 'networkErrors', 'lastStatus']) {
+      if (Number.isFinite(Number(snapshot[field]))) braveFoxReliabilityState[field] = Math.max(0, Number(snapshot[field]));
+    }
+    braveFoxReliabilityState.cooldownUntil = Math.max(0, Number(snapshot.cooldownUntil || 0));
+    braveFoxReliabilityRefreshUi();
+  }
+
+  function braveFoxReliabilityMessage(type, extra = {}) {
+    if (!api?.runtime?.sendMessage) return Promise.resolve(null);
+    const message = { type: BRAVEFOX_RELIABILITY_PROTOCOL + ':' + type, ...extra };
+    return new Promise(resolve => {
+      let settled = false;
+      const done = response => { if (!settled) { settled = true; resolve(response || null); } };
+      try {
+        const result = api.runtime.sendMessage(message, response => {
+          try { void api.runtime.lastError; } catch {}
+          done(response);
+        });
+        if (result && typeof result.then === 'function') result.then(done, () => done(null));
+      } catch {
+        try {
+          const result = api.runtime.sendMessage(message);
+          if (result && typeof result.then === 'function') result.then(done, () => done(null));
+          else done(null);
+        } catch { done(null); }
+      }
+    });
+  }
+
+  function braveFoxReliabilityRemainingMs() {
+    return Math.max(0, braveFoxReliabilityState.cooldownUntil - Date.now());
+  }
+
+  async function braveFoxReliabilityFetch(input, options = {}) {
+    let host = '';
+    try { host = new URL(String(input), location.origin).hostname.toLowerCase(); } catch {}
+    const chatGptOwned = host === 'chatgpt.com';
+    if (chatGptOwned && braveFoxReliabilityRemainingMs() > 0) {
+      const error = new Error('BraveFox optional request paused during ChatGPT cooldown');
+      error.name = 'BraveFoxReliabilityCooldown';
+      throw error;
+    }
+    const response = await fetch(input, options);
+    if (chatGptOwned && response.status === 429) {
+      // Retry-After on our own fetch is available without inspecting ChatGPT bodies.
+      const retryAfter = response.headers.get('Retry-After') || '';
+      let waitMs = 60000;
+      const seconds = Number(retryAfter);
+      if (retryAfter) {
+        const parsed = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(retryAfter) - Date.now();
+        if (Number.isFinite(parsed)) waitMs = Math.max(15000, Math.min(300000, parsed));
+      }
+      braveFoxReliabilityState.cooldownUntil = Math.max(braveFoxReliabilityState.cooldownUntil, Date.now() + waitMs);
+      braveFoxReliabilityMessage('own-429', { retryAfter }).then(value => braveFoxReliabilityUpdate(value?.snapshot));
+      braveFoxReliabilityRefreshUi();
+    }
+    return response;
+  }
+
+  function braveFoxReliabilityDraftKey() {
+    const match = location.pathname.match(/^\/c\/([^/?#]+)/);
+    return BRAVEFOX_RELIABILITY_DRAFT_PREFIX + (match?.[1] || 'new-chat');
+  }
+
+  function braveFoxReliabilityComposer() {
+    return document.querySelector('#prompt-textarea, [data-testid="composer-input"]');
+  }
+
+  function braveFoxReliabilityComposerValue(element) {
+    if (!element) return '';
+    return ('value' in element ? String(element.value || '') : String(element.innerText || element.textContent || '')).trim();
+  }
+
+  function braveFoxReliabilityReadDraft() {
+    try {
+      const draft = JSON.parse(sessionStorage.getItem(braveFoxReliabilityDraftKey()) || 'null');
+      if (!draft || !draft.text || Date.now() - draft.savedAt > 12 * 60 * 60 * 1000) return '';
+      return String(draft.text).slice(0, 20000);
+    } catch { return ''; }
+  }
+
+  function braveFoxReliabilitySaveDraft() {
+    const field = braveFoxReliabilityComposer();
+    if (!field) return;
+    const text = braveFoxReliabilityComposerValue(field);
+    try {
+      if (!text) sessionStorage.removeItem(braveFoxReliabilityDraftKey());
+      else if (text.length <= 20000) sessionStorage.setItem(braveFoxReliabilityDraftKey(), JSON.stringify({ text, savedAt: Date.now() }));
+    } catch {}
+    braveFoxReliabilityRefreshUi();
+  }
+
+  function braveFoxReliabilityRefreshUi() {
+    const root = document.getElementById('bravefox-reliability-root');
+    if (!root) return;
+    const button = root.querySelector('[data-bf-reliability-toggle]');
+    const panel = root.querySelector('[data-bf-reliability-panel]');
+    const content = root.querySelector('[data-bf-reliability-status]');
+    const restore = root.querySelector('[data-bf-reliability-restore]');
+    const remaining = braveFoxReliabilityRemainingMs();
+    const status = remaining > 0 ? `Cooldown ${Math.ceil(remaining / 1000)}s` : braveFoxReliabilityState.connected ? 'Monitoring' : 'Local only';
+    if (button) {
+      button.textContent = `BraveFox · ${remaining > 0 ? '429 cooldown' : 'Reliability'}`;
+      button.setAttribute('aria-label', `BraveFox ChatGPT reliability: ${status}`);
+    }
+    if (panel) panel.hidden = !braveFoxReliabilityPanelOpen;
+    if (content) content.textContent = `${status} · Requests ${braveFoxReliabilityState.requests} · Possible rapid-repeat GETs ${braveFoxReliabilityState.suspectedDuplicates} · 429s ${braveFoxReliabilityState.rateLimits} · Server errors ${braveFoxReliabilityState.serverErrors} · Network errors ${braveFoxReliabilityState.networkErrors}`;
+    if (restore) restore.disabled = !braveFoxReliabilityReadDraft();
+  }
+
+  function braveFoxReliabilityMakeButton(label, onClick) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = label;
+    button.addEventListener('click', onClick);
+    return button;
+  }
+
+  function braveFoxReliabilityCreateUi() {
+    if (!document.body || document.getElementById('bravefox-reliability-root')) return;
+    const style = document.createElement('style');
+    style.textContent = `
+      #bravefox-reliability-root{position:fixed;right:12px;bottom:12px;z-index:2147483645;font:12px system-ui,sans-serif;color:var(--text-primary,#222)}
+      #bravefox-reliability-root button{cursor:pointer;font:inherit;border:1px solid rgba(125,125,125,.35);border-radius:9px;padding:6px 9px;color:inherit;background:var(--main-surface-primary,#fff)}
+      #bravefox-reliability-root [data-bf-reliability-toggle]{opacity:.86;box-shadow:0 2px 10px rgba(0,0,0,.1)}
+      #bravefox-reliability-root [data-bf-reliability-panel]{position:absolute;bottom:40px;right:0;width:min(330px,calc(100vw - 24px));padding:12px;background:var(--main-surface-primary,#fff);border:1px solid rgba(125,125,125,.3);border-radius:12px;box-shadow:0 10px 35px rgba(0,0,0,.2)}
+      #bravefox-reliability-root [data-bf-reliability-panel][hidden]{display:none!important}
+      #bravefox-reliability-root [data-bf-reliability-controls]{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+      #bravefox-reliability-root p{margin:8px 0 0;line-height:1.45}
+      html.bravefox-chatgpt-gated #bravefox-reliability-root{display:none!important}
+    `;
+    const root = document.createElement('div');
+    root.id = 'bravefox-reliability-root';
+    const toggle = braveFoxReliabilityMakeButton('BraveFox · Reliability', () => {
+      braveFoxReliabilityPanelOpen = !braveFoxReliabilityPanelOpen;
+      braveFoxReliabilityRefreshUi();
+    });
+    toggle.setAttribute('data-bf-reliability-toggle', '');
+    const panel = document.createElement('section');
+    panel.setAttribute('data-bf-reliability-panel', '');
+    panel.hidden = true;
+    panel.setAttribute('aria-label', 'BraveFox ChatGPT reliability');
+    const title = document.createElement('strong');
+    title.textContent = 'ChatGPT Reliability';
+    const description = document.createElement('p');
+    description.textContent = 'Passive diagnostics only. Native ChatGPT requests are never blocked or replayed. Rapid-repeat GET counts are estimates.';
+    const status = document.createElement('p');
+    status.setAttribute('data-bf-reliability-status', '');
+    const controls = document.createElement('div');
+    controls.setAttribute('data-bf-reliability-controls', '');
+    const refresh = braveFoxReliabilityMakeButton('Refresh diagnostics', () => {
+      void braveFoxReliabilityMessage('get').then(value => braveFoxReliabilityUpdate(value?.snapshot));
+    });
+    const restore = braveFoxReliabilityMakeButton('Restore saved draft', () => {
+      const text = braveFoxReliabilityReadDraft();
+      const composer = braveFoxReliabilityComposer();
+      if (!text || !composer || braveFoxReliabilityComposerValue(composer)) return;
+      composer.focus();
+      if ('value' in composer) {
+        const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(composer), 'value');
+        if (descriptor?.set) descriptor.set.call(composer, text);
+        else composer.value = text;
+        composer.dispatchEvent(new Event('input', { bubbles: true }));
+      } else {
+        try { document.execCommand('insertText', false, text); } catch {}
+        if (!braveFoxReliabilityComposerValue(composer)) {
+          composer.textContent = text;
+          composer.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }));
+        }
+      }
+      braveFoxReliabilityRefreshUi();
+    });
+    restore.setAttribute('data-bf-reliability-restore', '');
+    const reload = braveFoxReliabilityMakeButton('Reload ChatGPT', () => {
+      // Explicit click only. Never auto-reload an active stream or replay a submission.
+      braveFoxReliabilitySaveDraft();
+      location.reload();
+    });
+    const copy = braveFoxReliabilityMakeButton('Copy diagnostics', () => {
+      const data = { ...braveFoxReliabilityState, collectedAt: new Date().toISOString() };
+      // Never include prompt text, tokens, headers, conversation IDs or full URLs.
+      void navigator.clipboard?.writeText?.(JSON.stringify(data, null, 2)).catch(() => {});
+    });
+    controls.append(refresh, restore, reload, copy);
+    panel.append(title, description, status, controls);
+    root.append(toggle, panel);
+    document.head?.appendChild(style);
+    document.body.appendChild(root);
+    braveFoxReliabilityRefreshUi();
+  }
+
+  function initializeBraveFoxReliability() {
+    try {
+      api?.runtime?.onMessage?.addListener(message => {
+        if (message?.type !== BRAVEFOX_RELIABILITY_PROTOCOL + ':state') return undefined;
+        braveFoxReliabilityUpdate(message.snapshot);
+        return undefined;
+      });
+    } catch {}
+    void braveFoxReliabilityMessage('get').then(value => braveFoxReliabilityUpdate(value?.snapshot));
+    if (document.body) braveFoxReliabilityCreateUi();
+    else document.addEventListener('DOMContentLoaded', braveFoxReliabilityCreateUi, { once: true });
+    document.addEventListener('input', event => {
+      const field = braveFoxReliabilityComposer();
+      if (!field || (event.target !== field && !field.contains(event.target))) return;
+      if (braveFoxReliabilityDraftTimer) clearTimeout(braveFoxReliabilityDraftTimer);
+      braveFoxReliabilityDraftTimer = window.setTimeout(() => {
+        braveFoxReliabilityDraftTimer = 0;
+        braveFoxReliabilitySaveDraft();
+      }, 700);
+    }, true);
+    // Recheck at most once per 20 seconds, only to expire the UI countdown.
+    braveFoxReliabilityUiTimer = window.setInterval(() => {
+      if (braveFoxReliabilityRemainingMs() > 0 || braveFoxReliabilityPanelOpen) braveFoxReliabilityRefreshUi();
+    }, 20000);
+    window.addEventListener('pagehide', () => {
+      if (braveFoxReliabilityDraftTimer) clearTimeout(braveFoxReliabilityDraftTimer);
+      clearInterval(braveFoxReliabilityUiTimer);
+      braveFoxReliabilitySaveDraft();
+    }, { once: true });
+  }
+
+  initializeBraveFoxReliability();
+
   injectStyles();
   void synchronizeRoute();
   installNavigationGuards();

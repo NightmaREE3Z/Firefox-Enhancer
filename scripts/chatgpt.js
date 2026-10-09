@@ -374,6 +374,75 @@
     }
   ];
 
+  // === Conversation-loading failure panel =======================================
+  // Edit these visible labels independently. Set either messageText or retryButtonText
+  // to null to keep ChatGPT's native label. When messageText is customized, the
+  // detected conversation GET status is appended, or SAM if it cannot be determined.
+  // The native Retry button and its click behavior stay intact.
+  const CHATGPT_CONVERSATION_LOAD_ERROR_CUSTOMIZATION = {
+    enabled: true,
+    messageText: 'Pahoittelut! Emme osanneet koodata tätä sivua oikein.\nKeskustelun lataaminen epäonnistui.',
+    retryButtonText: 'Ehkä tää nappi toimii',
+    showErrorCode: true,
+    errorCodeLabel: 'Virhekoodi',
+    unknownErrorCode: 'Emme me tiedämme'
+  };
+
+  const CHATGPT_CONVERSATION_LOAD_ERROR_NATIVE_LABELS = new Set([
+    'tämän chatgpt-keskustelun lataaminen ei onnistunut',
+    'unable to load conversation',
+    'unable to load this conversation',
+    'failed to load conversation',
+    'failed to load this conversation',
+    'we were unable to load this conversation',
+    'could not load conversation',
+    'couldn’t load conversation',
+    'this conversation could not be loaded',
+    'there was an error loading the conversation'
+  ]);
+  const CHATGPT_CONVERSATION_LOAD_RETRY_NATIVE_LABELS = new Set([
+    'yritä uudelleen',
+    'retry',
+    'try again',
+    'retry loading'
+  ]);
+  // ChatGPT uses both an inline bordered error and a centered full-page error after
+  // some reloads. These share the same text settings and native Retry behavior.
+  const CHATGPT_CONVERSATION_LOAD_ERROR_CENTERED_SELECTOR =
+    'div.flex.w-full.max-w-xl.flex-col.items-center.text-center.justify-center.gap-3';
+  const CHATGPT_CONVERSATION_LOAD_ERROR_SELECTOR =
+    `div.rounded-xl.border, ${CHATGPT_CONVERSATION_LOAD_ERROR_CENTERED_SELECTOR}`;
+
+  // === Sidebar conversation-history loading error ===============================
+  // Customize the history-list failure independently from conversation-load errors.
+  // Set either text to null to retain ChatGPT's native wording. The original Retry
+  // button (including its SVG icon and click handler) is never replaced.
+  const CHATGPT_HISTORY_LOAD_ERROR_CUSTOMIZATION = {
+    enabled: true,
+    messageText: 'Apua saatana! Paskoimme allemme.',
+    retryButtonText: 'Päivittele'
+  };
+
+  const CHATGPT_HISTORY_LOAD_ERROR_NATIVE_LABELS = new Set([
+    'historian lataaminen ei onnistu',
+    'keskusteluhistorian lataaminen ei onnistu',
+    'unable to load history',
+    'unable to load chat history',
+    'failed to load history',
+    'failed to load chat history',
+    'could not load history',
+    'couldn’t load history',
+    "can't load history",
+    'error loading history'
+  ]);
+  const CHATGPT_HISTORY_LOAD_RETRY_NATIVE_LABELS = new Set([
+    'yritä uudelleen',
+    'retry',
+    'try again',
+    'retry loading'
+  ]);
+  const CHATGPT_HISTORY_LOAD_ERROR_SELECTOR = 'div[role="status"]';
+
   // === Conversation sender/time header ==========================================
   // BraveFox shows one dedicated metadata row immediately ABOVE each message bubble.
   // Leave userLabel null/empty to use the logged-in ChatGPT account display name.
@@ -407,7 +476,11 @@
   const MESSAGE_REASONING_SOURCE_ATTR = 'data-bravefox-message-reasoning-source';
   const MESSAGE_METADATA_RETRY_ATTR = 'data-bravefox-message-meta-retries';
   const MESSAGE_TIMESTAMP_PROBE_CLASS = 'bravefox-message-time-probing';
-  const MESSAGE_TIMESTAMP_API_CACHE_MS = 15000;
+  const MESSAGE_TIMESTAMP_API_CACHE_MS = 45000;
+  // Failed metadata reads must not trigger another full conversation GET for every
+  // visible message. Explicit refreshes are also coalesced for a short window.
+  const MESSAGE_METADATA_FAILED_RETRY_MS = 45000;
+  const MESSAGE_METADATA_FORCE_REFRESH_MIN_MS = 10000;
   const MESSAGE_USER_NAME_CACHE_MS = 300000;
   // Share only compact, non-content message metadata across ChatGPT tabs/windows.
   // This lets an already-seen conversation restore timestamps/model labels synchronously
@@ -437,16 +510,32 @@
   const CHAT_ARCHIVE_LIBRARY_MENU_CURATING_CLASS = 'bravefox-library-new-menu-curating';
   const CHAT_ARCHIVE_HANDOFF_KEY = 'bravefoxChatArchiveContinuationHandoff_v1';
   const CHAT_ARCHIVE_CONTEXT_LINK_KEY = 'bravefoxChatArchiveContextLinks_v1';
+  // === Automatic archive title filter ==========================================
+  // Automatically store chats whose titles match one of the configured terms.
+  // Terms of 3 characters or fewer must match a whole word; longer terms can
+  // match within titles. Matching is case-insensitive and treats punctuation
+  // as word separators. The filter applies to API history sync and DOM capture,
+  // not to exports or previously saved archives. Unknown titles wait.
+  // To restore automatic archiving of every chat, set enabled to false.
+  const CHAT_ARCHIVE_AUTO_TITLE_FILTER = {
+    enabled: true,
+    titleWords: ['General', 'Mod', 'BraveFox', 'Meta', 'Boogalo', 'War', 'part']
+  };
+  let conversationArchiveObservedTitleRoute = '';
+  let conversationArchiveObservedDocumentTitle = '';
   const CHAT_ARCHIVE_AUTO_SNAPSHOT_MESSAGE_STEP = 20;
   const CHAT_ARCHIVE_AUTO_SNAPSHOT_MIN_AGE_MS = 30 * 60 * 1000;
   const CHAT_ARCHIVE_CONTINUATION_MAX_CHARS = 36000;
   const CHAT_ARCHIVE_HANDOFF_MAX_AGE_MS = 2 * 60 * 1000;
-  const CHAT_ARCHIVE_GHOST_CLEANUP_INTERVAL_MS = 10 * 60 * 1000;
+  // Automatic ghost cleanup is optional; it probes archived conversations via the
+  // network, so leave it off by default. Opening the archive still performs cleanup.
+  const CHAT_ARCHIVE_AUTO_GHOST_CLEANUP = false;
+  const CHAT_ARCHIVE_GHOST_CLEANUP_INTERVAL_MS = 30 * 60 * 1000;
   const CHAT_ARCHIVE_GHOST_MIN_AGE_MS = 2 * 60 * 1000;
   const CHAT_ARCHIVE_GHOST_CONFIRM_DELAY_MS = 1500;
   const CHAT_ARCHIVE_EXISTENCE_HEALTH_MAX_AGE_MS = 15 * 60 * 1000;
-  const CHAT_ARCHIVE_GHOST_MAX_CHECKS_PER_PASS = 12;
-  const CHAT_ARCHIVE_IMAGE_CONCURRENCY = 6;
+  const CHAT_ARCHIVE_GHOST_MAX_CHECKS_PER_PASS = 3;
+  const CHAT_ARCHIVE_IMAGE_CONCURRENCY = 2;
   const CHAT_ARCHIVE_IMAGE_FETCH_TIMEOUT_MS = 20000;
   const CHAT_ARCHIVE_IMAGE_FETCH_ATTEMPTS = 2;
   const CHAT_ARCHIVE_IMAGE_RETRY_DELAY_MS = 450;
@@ -626,6 +715,8 @@
   const messageTimestampProbeQueue = [];
   const conversationMetadataCaches = new Map();
   const conversationMetadataFetches = new Map();
+  const conversationMetadataLastAttemptAt = new Map();
+  const conversationMetadataLastFailureAt = new Map();
   const conversationSharedMetadataLoaded = new Set();
   let messageTimestampProbeTimer = 0;
   let messageTimestampProbeActive = false;
@@ -634,6 +725,7 @@
   let conversationUserDisplayNameFetchedAt = 0;
   let conversationAccessToken = '';
   let conversationAccessTokenPromise = null;
+  let conversationAccessTokenRetryAt = 0;
   let conversationPendingUserSentAt = 0;
   let conversationPendingAssistantStartedAt = 0;
   let conversationPendingModelSlug = '';
@@ -658,6 +750,668 @@
   let conversationArchiveExistenceApiHealthyAt = 0;
   let conversationArchiveGhostCleanupRunning = false;
   let conversationArchiveGhostCleanupInterval = 0;
+
+  // === BraveFox ChatGPT Reliability — portable content-side client ================
+  // Never intercept/replay ChatGPT's native fetches, navigation or message submission.
+  // Only BraveFox's optional metadata/archive requests are paced and paused here.
+  const BRAVEFOX_RELIABILITY_PROTOCOL = 'bravefox:chat-reliability:v1';
+  const BRAVEFOX_RELIABILITY_DRAFT_PREFIX = 'bravefoxChatReliabilityDraftV1:';
+  // Per-tab session history survives refreshes, but expires and never stores page content.
+  const BRAVEFOX_RELIABILITY_HISTORY_KEY = 'bravefoxChatReliabilityHistoryV3';
+  const BRAVEFOX_RELIABILITY_HISTORY_TTL_MS = 60 * 60 * 1000;
+  const BRAVEFOX_RELIABILITY_HISTORY_MAX = 24;
+  const BRAVEFOX_RELIABILITY_SHARED_COOLDOWN_KEY = 'bravefoxChatGptOptionalCooldown_v1';
+  const BRAVEFOX_RELIABILITY_SHARED_SLOT_KEY = 'bravefoxChatGptOptionalNextSlot_v1';
+  const BRAVEFOX_RELIABILITY_SLOT_LOCK = 'bravefox-chatgpt-optional-request-slot';
+  const BRAVEFOX_RELIABILITY_REQUEST_CONTROL = {
+    enabled: true,
+    minSpacingMs: 1800,
+    maxQueueDelayMs: 12000,
+    default429CooldownMs: 60000,
+    serverErrorCooldownMs: 20000,
+    networkErrorCooldownMs: 10000,
+    maxCooldownMs: 5 * 60 * 1000
+  };
+  // Categorized HTTP diagnostics arrive from each browser's passive background webRequest
+  // monitor. No request URLs, conversation IDs, headers or message contents are recorded.
+  const braveFoxReliabilityState = {
+    connected: false, endpointDiagnosticsAvailable: false, cooldownUntil: 0, requests: 0, suspectedDuplicates: 0,
+    rateLimits: 0, serverErrors: 0, networkErrors: 0, lastStatus: 0,
+    loadRequests: 0, loadSuccess: 0, load429: 0, load5xx: 0,
+    loadOther4xx: 0, loadNetworkErrors: 0, loadConsecutiveFailures: 0,
+    loadFailureStartAt: 0, lastLoadFailureAt: 0, lastLoadSuccessAt: 0,
+    lastLoadStatus: 0, lastLoadFailureStatus: 0, lastLoadAt: 0, listErrors: 0, list429: 0,
+    authErrors: 0, recentLoadEvents: [],
+    tabScoped: false, advancedDiagnosticsAvailable: false,
+    lastLoad429At: 0, lastLoad429RetryAfterMs: 0, lastLoad429RetryAfterState: 'unavailable'
+  };
+  const braveFoxOwnRequestStats = { sent: 0, paused: 0, rateLimits: 0, serverErrors: 0, networkErrors: 0 };
+  const braveFoxLoadPanelState = {
+    visible: false, firstSeenAt: 0, lastSeenAt: 0, recoveredAt: 0, appearances: 0,
+    matchedFailureStatus: 0, matchedFailureAt: 0
+  };
+  let braveFoxLoadPanelNode = null;
+  let braveFoxLoadPanelCheckTimer = 0;
+  let braveFoxOptionalNextRequestAt = 0;
+  let braveFoxReliabilitySharedCooldownUntil = 0;
+  let braveFoxReliabilityUiTimer = 0;
+  let braveFoxReliabilityDraftTimer = 0;
+  let braveFoxReliabilityPanelOpen = false;
+  let braveFoxReliabilityHistory = [];
+
+  function braveFoxReliabilitySafeEvent(event) {
+    if (!event || !['conversation GET', 'conversation list', 'auth session'].includes(event.kind) ||
+        !(event.status === 'network' || (Number.isInteger(event.status) && event.status >= 100 && event.status <= 599)) ||
+        !Number.isFinite(event.at) || event.at <= 0) return null;
+    const sanitized = { kind: event.kind, status: event.status, at: event.at };
+    if (event.kind === 'conversation GET' && event.status === 429) {
+      sanitized.retryAfterState = ['valid', 'missing', 'invalid', 'unavailable'].includes(event.retryAfterState) ?
+        event.retryAfterState : 'unavailable';
+      sanitized.retryAfterMs = sanitized.retryAfterState === 'valid' && Number.isFinite(event.retryAfterMs) ?
+        Math.max(0, Math.min(24 * 60 * 60 * 1000, event.retryAfterMs)) : 0;
+    }
+    return sanitized;
+  }
+
+  function braveFoxReliabilityTrimHistory(events) {
+    const stamp = Date.now();
+    const deduplicated = new Map();
+    for (const value of events) {
+      const event = braveFoxReliabilitySafeEvent(value);
+      if (!event || event.at > stamp + 5000 || stamp - event.at > BRAVEFOX_RELIABILITY_HISTORY_TTL_MS) continue;
+      deduplicated.set(`${event.kind}:${event.status}:${event.at}`, event);
+    }
+    return [...deduplicated.values()].sort((a, b) => a.at - b.at).slice(-BRAVEFOX_RELIABILITY_HISTORY_MAX);
+  }
+
+  function braveFoxReliabilityRestoreHistory() {
+    try {
+      const raw = JSON.parse(sessionStorage.getItem(BRAVEFOX_RELIABILITY_HISTORY_KEY) || '[]');
+      braveFoxReliabilityHistory = braveFoxReliabilityTrimHistory(Array.isArray(raw) ? raw : []);
+      sessionStorage.setItem(BRAVEFOX_RELIABILITY_HISTORY_KEY, JSON.stringify(braveFoxReliabilityHistory));
+    } catch { braveFoxReliabilityHistory = []; }
+  }
+
+  function braveFoxReliabilityMergeHistory(events) {
+    const next = braveFoxReliabilityTrimHistory([...braveFoxReliabilityHistory, ...events]);
+    if (JSON.stringify(next) === JSON.stringify(braveFoxReliabilityHistory)) return;
+    braveFoxReliabilityHistory = next;
+    try { sessionStorage.setItem(BRAVEFOX_RELIABILITY_HISTORY_KEY, JSON.stringify(next)); } catch {}
+  }
+
+  function braveFoxReliabilityUpdate(snapshot) {
+    if (!snapshot || typeof snapshot !== 'object') return;
+    braveFoxReliabilityState.connected = true;
+    braveFoxReliabilityState.endpointDiagnosticsAvailable = Number(snapshot.diagnosticsVersion) >= 2;
+    braveFoxReliabilityState.advancedDiagnosticsAvailable = Number(snapshot.diagnosticsVersion) >= 3;
+    braveFoxReliabilityState.tabScoped = snapshot.tabScoped === true;
+    for (const field of [
+      'requests', 'suspectedDuplicates', 'rateLimits', 'serverErrors', 'networkErrors', 'lastStatus',
+      'loadRequests', 'loadSuccess', 'load429', 'load5xx', 'loadOther4xx', 'loadNetworkErrors',
+      'loadConsecutiveFailures', 'loadFailureStartAt', 'lastLoadFailureAt', 'lastLoadSuccessAt',
+      'lastLoadStatus', 'lastLoadFailureStatus', 'lastLoadAt', 'listErrors', 'list429', 'authErrors',
+      'lastLoad429At', 'lastLoad429RetryAfterMs'
+    ]) {
+      if (Number.isFinite(Number(snapshot[field]))) braveFoxReliabilityState[field] = Math.max(0, Number(snapshot[field]));
+    }
+    braveFoxReliabilityState.lastLoad429RetryAfterState =
+      ['valid', 'missing', 'invalid', 'unavailable'].includes(snapshot.lastLoad429RetryAfterState) ?
+        snapshot.lastLoad429RetryAfterState : 'unavailable';
+    // Ignore untrusted/unexpected fields from background. Each event is tab-scoped.
+    if (Array.isArray(snapshot.recentLoadEvents)) {
+      braveFoxReliabilityState.recentLoadEvents = snapshot.recentLoadEvents.slice(-16)
+        .map(braveFoxReliabilitySafeEvent).filter(Boolean);
+      if (braveFoxReliabilityState.tabScoped) {
+        braveFoxReliabilityMergeHistory(braveFoxReliabilityState.recentLoadEvents);
+      }
+    }
+    braveFoxReliabilityState.cooldownUntil = Math.max(0, Number(snapshot.cooldownUntil || 0));
+    // An endpoint failure may arrive after React has already painted its error.
+    // Update only the recognized panel; never trigger any networking or retry.
+    if (braveFoxLoadPanelState.visible && braveFoxLoadPanelNode?.isConnected) {
+      customizeConversationLoadError(braveFoxLoadPanelNode);
+    }
+    braveFoxReliabilityRefreshUi();
+  }
+
+  function braveFoxReliabilityMessage(type, extra = {}) {
+    if (!api?.runtime?.sendMessage) return Promise.resolve(null);
+    const message = { type: BRAVEFOX_RELIABILITY_PROTOCOL + ':' + type, ...extra };
+    return new Promise(resolve => {
+      let settled = false;
+      const done = response => { if (!settled) { settled = true; resolve(response || null); } };
+      try {
+        const result = api.runtime.sendMessage(message, response => {
+          try { void api.runtime.lastError; } catch {}
+          done(response);
+        });
+        if (result && typeof result.then === 'function') result.then(done, () => done(null));
+      } catch {
+        try {
+          const result = api.runtime.sendMessage(message);
+          if (result && typeof result.then === 'function') result.then(done, () => done(null));
+          else done(null);
+        } catch { done(null); }
+      }
+    });
+  }
+
+  function braveFoxReliabilityReadSharedNumber(key) {
+    try {
+      const value = Number(localStorage.getItem(key) || 0);
+      return Number.isFinite(value) && value > 0 ? value : 0;
+    } catch { return 0; }
+  }
+
+  function braveFoxReliabilityRemainingMs() {
+    return Math.max(0, Math.max(
+      braveFoxReliabilityState.cooldownUntil,
+      braveFoxReliabilitySharedCooldownUntil
+    ) - Date.now());
+  }
+
+  function braveFoxReliabilityPauseOwnRequests(milliseconds) {
+    const waitMs = Math.max(0, Math.min(
+      BRAVEFOX_RELIABILITY_REQUEST_CONTROL.maxCooldownMs, Number(milliseconds) || 0
+    ));
+    const until = Date.now() + waitMs;
+    // Do not let another tab's shorter pause overwrite a longer shared cooldown.
+    braveFoxReliabilitySharedCooldownUntil = Math.max(
+      braveFoxReliabilitySharedCooldownUntil,
+      braveFoxReliabilityReadSharedNumber(BRAVEFOX_RELIABILITY_SHARED_COOLDOWN_KEY),
+      until
+    );
+    // Cross-tab cooldown is for BraveFox's own requests only. It must never stop
+    // native ChatGPT fetches, which are not under this wrapper's control.
+    try {
+      localStorage.setItem(BRAVEFOX_RELIABILITY_SHARED_COOLDOWN_KEY, String(braveFoxReliabilitySharedCooldownUntil));
+    } catch {}
+    braveFoxReliabilityRefreshUi();
+  }
+
+  function braveFoxReliabilityRetryDelay(retryAfter, fallbackMs) {
+    const value = String(retryAfter || '').trim();
+    let delay = fallbackMs;
+    if (value) {
+      const seconds = Number(value);
+      const parsed = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(value) - Date.now();
+      if (Number.isFinite(parsed)) delay = parsed;
+    }
+    return Math.max(1000, Math.min(BRAVEFOX_RELIABILITY_REQUEST_CONTROL.maxCooldownMs, delay));
+  }
+
+  async function braveFoxReliabilityWaitForOwnRequestSlot(signal) {
+    const { minSpacingMs, maxQueueDelayMs } = BRAVEFOX_RELIABILITY_REQUEST_CONTROL;
+    if (!minSpacingMs) return;
+    const reserve = () => {
+      const now = Date.now();
+      const shared = braveFoxReliabilityReadSharedNumber(BRAVEFOX_RELIABILITY_SHARED_SLOT_KEY);
+      // Ignore stale/corrupt distant timestamps rather than hanging optional reads.
+      const sharedNext = shared <= now + 24 * 60 * 60 * 1000 ? shared : now;
+      const next = Math.max(now, sharedNext, braveFoxOptionalNextRequestAt);
+      if (next - now > maxQueueDelayMs) {
+        const error = new Error('BraveFox optional request queue is full');
+        error.name = 'BraveFoxReliabilityQueueBusy';
+        throw error;
+      }
+      braveFoxOptionalNextRequestAt = next + minSpacingMs;
+      try { localStorage.setItem(BRAVEFOX_RELIABILITY_SHARED_SLOT_KEY, String(braveFoxOptionalNextRequestAt)); } catch {}
+      return next;
+    };
+    // A very short Web Lock protects only slot reservation, not the actual fetch.
+    // This prevents multiple ChatGPT tabs from all grabbing the same slot.
+    let at;
+    if (navigator.locks?.request) {
+      try { at = await navigator.locks.request(BRAVEFOX_RELIABILITY_SLOT_LOCK, reserve); }
+      catch (error) {
+        if (error?.name === 'BraveFoxReliabilityQueueBusy') throw error;
+        at = reserve();
+      }
+    } else {
+      at = reserve();
+    }
+    const delay = Math.max(0, at - Date.now());
+    if (delay) await new Promise(resolve => window.setTimeout(resolve, delay));
+    if (signal?.aborted) throw new DOMException('Request cancelled', 'AbortError');
+  }
+
+  function braveFoxReliabilityThrowIfPaused() {
+    if (braveFoxReliabilityRemainingMs() <= 0) return;
+    braveFoxOwnRequestStats.paused += 1;
+    const error = new Error('BraveFox optional request paused during ChatGPT cooldown');
+    error.name = 'BraveFoxReliabilityCooldown';
+    throw error;
+  }
+
+  async function braveFoxReliabilityFetch(input, options = {}) {
+    let host = '';
+    try { host = new URL(String(input), location.origin).hostname.toLowerCase(); } catch {}
+    const chatGptOwned = host === 'chatgpt.com';
+    if (chatGptOwned && BRAVEFOX_RELIABILITY_REQUEST_CONTROL.enabled) {
+      braveFoxReliabilityThrowIfPaused();
+      await braveFoxReliabilityWaitForOwnRequestSlot(options.signal);
+      braveFoxReliabilityThrowIfPaused();
+    }
+
+    let response;
+    try {
+      if (chatGptOwned) braveFoxOwnRequestStats.sent += 1;
+      response = await fetch(input, options);
+    } catch (error) {
+      if (chatGptOwned && BRAVEFOX_RELIABILITY_REQUEST_CONTROL.enabled && error?.name !== 'AbortError') {
+        braveFoxOwnRequestStats.networkErrors += 1;
+        braveFoxReliabilityPauseOwnRequests(BRAVEFOX_RELIABILITY_REQUEST_CONTROL.networkErrorCooldownMs);
+      }
+      throw error;
+    }
+    if (chatGptOwned && response.status === 429) {
+      braveFoxOwnRequestStats.rateLimits += 1;
+      const retryAfter = response.headers.get('Retry-After') || '';
+      if (BRAVEFOX_RELIABILITY_REQUEST_CONTROL.enabled) {
+        braveFoxReliabilityPauseOwnRequests(braveFoxReliabilityRetryDelay(
+          retryAfter, BRAVEFOX_RELIABILITY_REQUEST_CONTROL.default429CooldownMs
+        ));
+      }
+      // Keep notifying the existing background observer; do not inspect API bodies.
+      void braveFoxReliabilityMessage('own-429', { retryAfter }).then(value => braveFoxReliabilityUpdate(value?.snapshot));
+    } else if (chatGptOwned && [500, 502, 503, 504].includes(response.status)) {
+      braveFoxOwnRequestStats.serverErrors += 1;
+      if (BRAVEFOX_RELIABILITY_REQUEST_CONTROL.enabled) {
+        braveFoxReliabilityPauseOwnRequests(braveFoxReliabilityRetryDelay(
+          response.headers.get('Retry-After'), BRAVEFOX_RELIABILITY_REQUEST_CONTROL.serverErrorCooldownMs
+        ));
+      }
+    }
+    if (chatGptOwned) braveFoxReliabilityRefreshUi();
+    return response;
+  }
+
+  function braveFoxReliabilityDraftKey() {
+    const match = location.pathname.match(/^\/c\/([^/?#]+)/);
+    return BRAVEFOX_RELIABILITY_DRAFT_PREFIX + (match?.[1] || 'new-chat');
+  }
+
+  function braveFoxReliabilityComposer() {
+    return document.querySelector('#prompt-textarea, [data-testid="composer-input"]');
+  }
+
+  function braveFoxReliabilityComposerValue(element) {
+    if (!element) return '';
+    return ('value' in element ? String(element.value || '') : String(element.innerText || element.textContent || '')).trim();
+  }
+
+  function braveFoxReliabilityReadDraft() {
+    try {
+      const draft = JSON.parse(sessionStorage.getItem(braveFoxReliabilityDraftKey()) || 'null');
+      if (!draft || !draft.text || Date.now() - draft.savedAt > 12 * 60 * 60 * 1000) return '';
+      return String(draft.text).slice(0, 20000);
+    } catch { return ''; }
+  }
+
+  function braveFoxReliabilitySaveDraft() {
+    const field = braveFoxReliabilityComposer();
+    if (!field) return;
+    const text = braveFoxReliabilityComposerValue(field);
+    try {
+      if (!text) sessionStorage.removeItem(braveFoxReliabilityDraftKey());
+      else if (text.length <= 20000) sessionStorage.setItem(braveFoxReliabilityDraftKey(), JSON.stringify({ text, savedAt: Date.now() }));
+    } catch {}
+    braveFoxReliabilityRefreshUi();
+  }
+
+  function braveFoxReliabilityClock(at) {
+    if (!Number.isFinite(at) || at <= 0) return 'unknown';
+    return new Date(at).toLocaleTimeString('fi-FI', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  }
+
+  function braveFoxReliabilityLoadAssessment() {
+    const state = braveFoxReliabilityState;
+    if (!state.connected) return 'Background diagnostics unavailable; not enough evidence to classify the failure.';
+    if (!state.endpointDiagnosticsAvailable) return 'Endpoint diagnostics require the matching updated background.js. General counters alone cannot identify conversation-load failures.';
+    if (state.loadRequests === 0 && !braveFoxLoadPanelState.visible) return 'No conversation GET responses observed yet.';
+    const spanMs = Math.max(0, state.lastLoadFailureAt - state.loadFailureStartAt);
+    if (state.loadConsecutiveFailures >= 3 && spanMs >= 20000) {
+      return `Persistent pattern: ${state.loadConsecutiveFailures} consecutive conversation GET failures over ${Math.round(spanMs / 1000)}s.`;
+    }
+    if (state.loadConsecutiveFailures >= 2) {
+      return `Repeated failures: ${state.loadConsecutiveFailures} consecutive conversation GET failures; duration not yet persistent.`;
+    }
+    if (state.loadConsecutiveFailures === 1) return 'One recent conversation GET failure; may be transient.';
+    if (braveFoxLoadPanelState.visible) return 'ChatGPT still displays its load-error panel; HTTP success alone cannot confirm UI recovery.';
+    if (state.lastLoadSuccessAt && state.lastLoadFailureAt && state.lastLoadSuccessAt > state.lastLoadFailureAt) {
+      return 'Recovery signal: a conversation GET succeeded after the last failed attempt.';
+    }
+    return 'No active conversation GET failure streak.';
+  }
+
+  // Match a failed conversation GET to the moment the load-error UI first appeared.
+  // Unlike lastStatus/lastLoadFailureAt, this does not select an unrelated or much
+  // later failure. Events are scoped to this tab by the background; a nearby event
+  // remains temporal evidence rather than proof of the precise React failure.
+  function braveFoxReliabilityMatchedLoadFailure() {
+    const panel = braveFoxLoadPanelState;
+    if (!panel.visible || !panel.firstSeenAt || !braveFoxReliabilityState.endpointDiagnosticsAvailable) return null;
+    if (panel.matchedFailureStatus) return {
+      status: panel.matchedFailureStatus, at: panel.matchedFailureAt
+    };
+
+    const anchor = panel.firstSeenAt;
+    let nearest = null;
+    const matchingEvents = braveFoxReliabilityState.tabScoped ?
+      [...braveFoxReliabilityHistory, ...braveFoxReliabilityState.recentLoadEvents] :
+      braveFoxReliabilityState.recentLoadEvents;
+    for (const event of matchingEvents) {
+      if (event.kind !== 'conversation GET' ||
+          !Number.isInteger(event.status) || event.status < 400 || event.status > 599) continue;
+      const distance = Math.abs(event.at - anchor);
+      // Never label an error using a stale failure from another conversation.
+      if (distance > 10000 || (nearest && distance >= nearest.distance)) continue;
+      nearest = { status: event.status, at: event.at, distance };
+    }
+
+    if (!nearest) {
+      const state = braveFoxReliabilityState;
+      const distance = Math.abs(state.lastLoadFailureAt - anchor);
+      if (state.lastLoadFailureAt && distance <= 10000 &&
+          Number.isInteger(state.lastLoadFailureStatus) &&
+          state.lastLoadFailureStatus >= 400 && state.lastLoadFailureStatus <= 599) {
+        nearest = { status: state.lastLoadFailureStatus, at: state.lastLoadFailureAt, distance };
+      }
+    }
+    if (!nearest) return null;
+    // Hold the identified code for this appearance even if the bounded history
+    // later discards the first failed request.
+    panel.matchedFailureStatus = nearest.status;
+    panel.matchedFailureAt = nearest.at;
+    return { status: nearest.status, at: nearest.at };
+  }
+
+  function braveFoxIsConversationLoadErrorLabel(value) {
+    const label = normalizeText(value);
+    if (CHATGPT_CONVERSATION_LOAD_ERROR_NATIVE_LABELS.has(label)) return true;
+    const settings = CHATGPT_CONVERSATION_LOAD_ERROR_CUSTOMIZATION;
+    const custom = typeof settings.messageText === 'string' ? normalizeText(settings.messageText) : '';
+    if (!custom) return false;
+    if (label === custom) return true;
+    const codeLabel = normalizeText(settings.errorCodeLabel || 'Virhekoodi');
+    // Match the displayed parenthesized status while normalizing line breaks.
+    const displayBase = normalizeText(settings.messageText.replace(/\.\s*$/, ''));
+    const prefix = `${displayBase} (${codeLabel}: `;
+    if (!label.startsWith(prefix) || !label.endsWith(')')) return false;
+    const suffix = label.slice(prefix.length, -1);
+    return /^[45]\d\d$/.test(suffix) || suffix === normalizeText(settings.unknownErrorCode || 'SAM');
+  }
+
+  function braveFoxConversationLoadErrorText() {
+    const settings = CHATGPT_CONVERSATION_LOAD_ERROR_CUSTOMIZATION;
+    const base = settings.messageText;
+    if (settings.showErrorCode !== true) return base;
+    const code = braveFoxReliabilityMatchedLoadFailure()?.status || settings.unknownErrorCode || 'SAM';
+    const displayBase = base.replace(/\.\s*$/, '');
+    return `${displayBase} (${settings.errorCodeLabel || 'Virhekoodi'}: ${code})`;
+  }
+
+  // Called only when ChatGPT's native load-error panel is recognized in the existing
+  // DOM observer. We do not install another whole-page observer or retry anything.
+  function braveFoxReliabilityMarkLoadPanel(container) {
+    if (!(container instanceof Element)) return;
+    const stamp = Date.now();
+    if (!braveFoxLoadPanelState.visible) {
+      braveFoxLoadPanelState.appearances++;
+      braveFoxLoadPanelState.firstSeenAt = stamp;
+      braveFoxLoadPanelState.matchedFailureStatus = 0;
+      braveFoxLoadPanelState.matchedFailureAt = 0;
+    }
+    braveFoxLoadPanelState.visible = true;
+    braveFoxLoadPanelState.lastSeenAt = stamp;
+    braveFoxLoadPanelNode = container;
+    if (!braveFoxLoadPanelCheckTimer) {
+      braveFoxLoadPanelCheckTimer = window.setTimeout(braveFoxReliabilityCheckLoadPanel, 2500);
+    }
+    braveFoxReliabilityRefreshUi();
+  }
+
+  function braveFoxReliabilityCheckLoadPanel() {
+    braveFoxLoadPanelCheckTimer = 0;
+    if (!braveFoxLoadPanelState.visible) return;
+    const node = braveFoxLoadPanelNode;
+    const label = node?.isConnected ? normalizeText(getConversationLoadErrorLabelNode(node)?.nodeValue) : '';
+    const nativeOrCustomized = braveFoxIsConversationLoadErrorLabel(label);
+    if (!node?.isConnected || !nativeOrCustomized) {
+      braveFoxLoadPanelState.visible = false;
+      braveFoxLoadPanelState.recoveredAt = Date.now();
+      braveFoxLoadPanelNode = null;
+      braveFoxReliabilityRefreshUi();
+      return;
+    }
+    braveFoxLoadPanelCheckTimer = window.setTimeout(braveFoxReliabilityCheckLoadPanel, 2500);
+  }
+
+  function braveFoxReliabilityPanelSummary() {
+    const panel = braveFoxLoadPanelState;
+    if (panel.visible) {
+      const elapsed = Math.max(0, Math.floor((Date.now() - panel.firstSeenAt) / 1000));
+      const durationText = elapsed >= 30 ? `Persistent visible UI error (${elapsed}s). ` : '';
+      const failure = braveFoxReliabilityMatchedLoadFailure();
+      return `${durationText}Load-error UI visible since ${braveFoxReliabilityClock(panel.firstSeenAt)}. ` +
+        (failure ? `A conversation GET returned HTTP ${failure.status} within 10s of the error appearing; correlation isn't proof of cause.` :
+          'No HTTP failure matched the error appearance closely enough; the status is undetermined.');
+    }
+    if (panel.recoveredAt) return `Load-error UI disappeared at ${braveFoxReliabilityClock(panel.recoveredAt)}; not proof that conversation data loaded.`;
+    return 'No conversation-load error panel detected in this tab.';
+  }
+
+  function braveFoxReliabilityRetryAfterSummary() {
+    const stat = braveFoxReliabilityState;
+    if (!stat.advancedDiagnosticsAvailable) return 'Retry-After: matching diagnostics background.js is required.';
+    // The Chromium MV3 background can restart between failed GETs and a reload.
+    // Fall back to this tab's expiring session history instead of losing the hint.
+    const archived = [...braveFoxReliabilityHistory].reverse().find(event =>
+      event.kind === 'conversation GET' && event.status === 429 &&
+      event.at <= Date.now() + 5000 && Date.now() - event.at <= BRAVEFOX_RELIABILITY_HISTORY_TTL_MS
+    );
+    const useHistory = archived && archived.at > stat.lastLoad429At;
+    const at = useHistory ? archived.at : stat.lastLoad429At;
+    if (!at) return 'Retry-After: no conversation HTTP 429 observed in this tab.';
+    const hint = useHistory ? archived.retryAfterState : stat.lastLoad429RetryAfterState;
+    const delayMs = useHistory ? archived.retryAfterMs : stat.lastLoad429RetryAfterMs;
+    if (hint === 'missing') return 'Conversation 429: no Retry-After header was exposed.';
+    if (hint === 'invalid') return 'Conversation 429: an unparseable Retry-After header was exposed.';
+    if (hint !== 'valid') return 'Conversation 429: Retry-After header could not be inspected.';
+    const seconds = Math.ceil(delayMs / 1000);
+    const remaining = Math.max(0, Math.ceil((at + delayMs - Date.now()) / 1000));
+    return `Conversation 429: server suggested ${seconds}s before retrying; ${remaining}s remaining as of now. This is informational, not an automatic retry.`;
+  }
+
+  function braveFoxReliabilityHistorySummary() {
+    const history = braveFoxReliabilityTrimHistory(braveFoxReliabilityHistory);
+    if (!history.length) return 'No recent tab-local failure history (retained for up to 60 minutes).';
+    return 'This tab · recent endpoint history (max 60 min): ' + history.slice(-8).map(event =>
+      `${braveFoxReliabilityClock(event.at)} ${event.kind}: ${event.status}${event.status === 429 && event.retryAfterState === 'valid' ? ` (Retry-After ${Math.ceil(event.retryAfterMs / 1000)}s)` : ''}`
+    ).join(' · ');
+  }
+
+  function braveFoxReliabilityRefreshUi() {
+    const root = document.getElementById('bravefox-reliability-root');
+    if (!root) return;
+    const button = root.querySelector('[data-bf-reliability-toggle]');
+    const panel = root.querySelector('[data-bf-reliability-panel]');
+    const content = root.querySelector('[data-bf-reliability-status]');
+    const endpoints = root.querySelector('[data-bf-reliability-endpoints]');
+    const assessment = root.querySelector('[data-bf-reliability-assessment]');
+    const panelState = root.querySelector('[data-bf-reliability-panelstate]');
+    const events = root.querySelector('[data-bf-reliability-events]');
+    const retryAfter = root.querySelector('[data-bf-reliability-retryafter]');
+    const history = root.querySelector('[data-bf-reliability-history]');
+    const restore = root.querySelector('[data-bf-reliability-restore]');
+    const remaining = braveFoxReliabilityRemainingMs();
+    const status = remaining > 0 ? `Cooldown ${Math.ceil(remaining / 1000)}s` : braveFoxReliabilityState.connected ? 'Monitoring' : 'Local only';
+    if (button) {
+      button.textContent = `BraveFox · ${remaining > 0 ? '429 cooldown' : 'Reliability'}`;
+      button.setAttribute('aria-label', `BraveFox ChatGPT reliability: ${status}`);
+    }
+    if (panel) panel.hidden = !braveFoxReliabilityPanelOpen;
+    if (content) content.textContent = `${status} · All observed requests ${braveFoxReliabilityState.requests} · All 429s ${braveFoxReliabilityState.rateLimits} · All 5xx ${braveFoxReliabilityState.serverErrors} · Rapid-repeat GET estimates ${braveFoxReliabilityState.suspectedDuplicates} · Network errors ${braveFoxReliabilityState.networkErrors} · BraveFox reads (this tab) ${braveFoxOwnRequestStats.sent} · Own 429s ${braveFoxOwnRequestStats.rateLimits} · Paused optional requests ${braveFoxOwnRequestStats.paused}`;
+    if (endpoints) endpoints.textContent = !braveFoxReliabilityState.endpointDiagnosticsAvailable ?
+      'Conversation endpoint data unavailable: install the matching background.js from this update.' :
+      `Conversation GETs ${braveFoxReliabilityState.loadRequests} · Success ${braveFoxReliabilityState.loadSuccess} · 429 ${braveFoxReliabilityState.load429} · 5xx ${braveFoxReliabilityState.load5xx} · Other 4xx ${braveFoxReliabilityState.loadOther4xx} · Network errors ${braveFoxReliabilityState.loadNetworkErrors} · Conversation-list errors ${braveFoxReliabilityState.listErrors} (429: ${braveFoxReliabilityState.list429}) · Authentication errors ${braveFoxReliabilityState.authErrors}`;
+    if (assessment) assessment.textContent = braveFoxReliabilityLoadAssessment();
+    if (panelState) panelState.textContent = braveFoxReliabilityPanelSummary();
+    if (events) events.textContent = braveFoxReliabilityState.recentLoadEvents.length ?
+      'Recent endpoint events: ' + braveFoxReliabilityState.recentLoadEvents.slice(-5).map(event =>
+        `${braveFoxReliabilityClock(event.at)} ${event.kind}: ${event.status}`
+      ).join(' · ') : 'No recent failed conversation/list/authentication requests captured.';
+    if (retryAfter) retryAfter.textContent = braveFoxReliabilityRetryAfterSummary();
+    if (history) history.textContent = braveFoxReliabilityHistorySummary();
+    if (restore) restore.disabled = !braveFoxReliabilityReadDraft();
+  }
+
+  function braveFoxReliabilityMakeButton(label, onClick) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = label;
+    button.addEventListener('click', onClick);
+    return button;
+  }
+
+  function braveFoxReliabilityCreateUi() {
+    if (!document.body || document.getElementById('bravefox-reliability-root')) return;
+    const style = document.createElement('style');
+    style.textContent = `
+      #bravefox-reliability-root{position:fixed;right:12px;bottom:12px;z-index:2147483645;font:12px system-ui,sans-serif;color:var(--text-primary,#222)}
+      #bravefox-reliability-root button{cursor:pointer;font:inherit;border:1px solid rgba(125,125,125,.35);border-radius:9px;padding:6px 9px;color:inherit;background:var(--main-surface-primary,#fff)}
+      #bravefox-reliability-root [data-bf-reliability-toggle]{opacity:.86;box-shadow:0 2px 10px rgba(0,0,0,.1)}
+      #bravefox-reliability-root [data-bf-reliability-panel]{position:absolute;bottom:40px;right:0;width:min(415px,calc(100vw - 24px));padding:12px;background:var(--main-surface-primary,#fff);border:1px solid rgba(125,125,125,.3);border-radius:12px;box-shadow:0 10px 35px rgba(0,0,0,.2)}
+      #bravefox-reliability-root [data-bf-reliability-panel][hidden]{display:none!important}
+      #bravefox-reliability-root [data-bf-reliability-controls]{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+      #bravefox-reliability-root p{margin:8px 0 0;line-height:1.45}
+      html.bravefox-chatgpt-gated #bravefox-reliability-root{display:none!important}
+    `;
+    const root = document.createElement('div');
+    root.id = 'bravefox-reliability-root';
+    const toggle = braveFoxReliabilityMakeButton('BraveFox · Reliability', () => {
+      braveFoxReliabilityPanelOpen = !braveFoxReliabilityPanelOpen;
+      braveFoxReliabilityRefreshUi();
+    });
+    toggle.setAttribute('data-bf-reliability-toggle', '');
+    const panel = document.createElement('section');
+    panel.setAttribute('data-bf-reliability-panel', '');
+    panel.hidden = true;
+    panel.setAttribute('aria-label', 'BraveFox ChatGPT reliability');
+    const title = document.createElement('strong');
+    title.textContent = 'ChatGPT Reliability';
+    const description = document.createElement('p');
+    description.textContent = 'Passive diagnostics for this browser tab, not a cross-browser control experiment. Never retries native requests. Conversation GETs may include BraveFox reads; HTTP status alone does not identify the root cause.';
+    const status = document.createElement('p');
+    status.setAttribute('data-bf-reliability-status', '');
+    const endpoints = document.createElement('p');
+    endpoints.setAttribute('data-bf-reliability-endpoints', '');
+    const assessment = document.createElement('p');
+    assessment.setAttribute('data-bf-reliability-assessment', '');
+    const panelState = document.createElement('p');
+    panelState.setAttribute('data-bf-reliability-panelstate', '');
+    const events = document.createElement('p');
+    events.setAttribute('data-bf-reliability-events', '');
+    const retryAfter = document.createElement('p');
+    retryAfter.setAttribute('data-bf-reliability-retryafter', '');
+    const history = document.createElement('p');
+    history.setAttribute('data-bf-reliability-history', '');
+    const controls = document.createElement('div');
+    controls.setAttribute('data-bf-reliability-controls', '');
+    const refresh = braveFoxReliabilityMakeButton('Refresh diagnostics', () => {
+      void braveFoxReliabilityMessage('get').then(value => braveFoxReliabilityUpdate(value?.snapshot));
+    });
+    const restore = braveFoxReliabilityMakeButton('Restore saved draft', () => {
+      const text = braveFoxReliabilityReadDraft();
+      const composer = braveFoxReliabilityComposer();
+      if (!text || !composer || braveFoxReliabilityComposerValue(composer)) return;
+      composer.focus();
+      if ('value' in composer) {
+        const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(composer), 'value');
+        if (descriptor?.set) descriptor.set.call(composer, text);
+        else composer.value = text;
+        composer.dispatchEvent(new Event('input', { bubbles: true }));
+      } else {
+        try { document.execCommand('insertText', false, text); } catch {}
+        if (!braveFoxReliabilityComposerValue(composer)) {
+          composer.textContent = text;
+          composer.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }));
+        }
+      }
+      braveFoxReliabilityRefreshUi();
+    });
+    restore.setAttribute('data-bf-reliability-restore', '');
+    const reload = braveFoxReliabilityMakeButton('Reload ChatGPT', () => {
+      // Explicit click only. Never auto-reload an active stream or replay a submission.
+      braveFoxReliabilitySaveDraft();
+      location.reload();
+    });
+    const copy = braveFoxReliabilityMakeButton('Copy diagnostics', () => {
+      const data = {
+        ...braveFoxReliabilityState,
+        diagnosticScope: 'Only this browser tab, not an account-wide monitor',
+        recentTabHistory: braveFoxReliabilityTrimHistory(braveFoxReliabilityHistory),
+        retryAfterAssessment: braveFoxReliabilityRetryAfterSummary(),
+        ownRequests: { ...braveFoxOwnRequestStats },
+        loadErrorPanel: { ...braveFoxLoadPanelState },
+        assessment: braveFoxReliabilityLoadAssessment(),
+        panelAssessment: braveFoxReliabilityPanelSummary(),
+        collectedAt: new Date().toISOString()
+      };
+      // Never include prompt text, tokens, headers, conversation IDs or full URLs.
+      void navigator.clipboard?.writeText?.(JSON.stringify(data, null, 2)).catch(() => {});
+    });
+    controls.append(refresh, restore, reload, copy);
+    panel.append(title, description, status, endpoints, assessment, panelState, retryAfter, events, history, controls);
+    root.append(toggle, panel);
+    document.head?.appendChild(style);
+    document.body.appendChild(root);
+    braveFoxReliabilityRefreshUi();
+  }
+
+  function initializeBraveFoxReliability() {
+    braveFoxReliabilityRestoreHistory();
+    braveFoxReliabilitySharedCooldownUntil = braveFoxReliabilityReadSharedNumber(BRAVEFOX_RELIABILITY_SHARED_COOLDOWN_KEY);
+    if (braveFoxReliabilitySharedCooldownUntil > Date.now() + BRAVEFOX_RELIABILITY_REQUEST_CONTROL.maxCooldownMs) {
+      braveFoxReliabilitySharedCooldownUntil = 0;
+    }
+    window.addEventListener('storage', event => {
+      if (event.key !== BRAVEFOX_RELIABILITY_SHARED_COOLDOWN_KEY) return;
+      braveFoxReliabilitySharedCooldownUntil = braveFoxReliabilityReadSharedNumber(BRAVEFOX_RELIABILITY_SHARED_COOLDOWN_KEY);
+      braveFoxReliabilityRefreshUi();
+    });
+    try {
+      api?.runtime?.onMessage?.addListener(message => {
+        if (message?.type !== BRAVEFOX_RELIABILITY_PROTOCOL + ':state') return undefined;
+        braveFoxReliabilityUpdate(message.snapshot);
+        return undefined;
+      });
+    } catch {}
+    void braveFoxReliabilityMessage('get').then(value => braveFoxReliabilityUpdate(value?.snapshot));
+    if (document.body) braveFoxReliabilityCreateUi();
+    else document.addEventListener('DOMContentLoaded', braveFoxReliabilityCreateUi, { once: true });
+    document.addEventListener('input', event => {
+      const field = braveFoxReliabilityComposer();
+      if (!field || (event.target !== field && !field.contains(event.target))) return;
+      if (braveFoxReliabilityDraftTimer) clearTimeout(braveFoxReliabilityDraftTimer);
+      braveFoxReliabilityDraftTimer = window.setTimeout(() => {
+        braveFoxReliabilityDraftTimer = 0;
+        braveFoxReliabilitySaveDraft();
+      }, 700);
+    }, true);
+    // Recheck at most once per 20 seconds, only to expire the UI countdown.
+    braveFoxReliabilityUiTimer = window.setInterval(() => {
+      if (braveFoxReliabilityRemainingMs() > 0 || braveFoxReliabilityPanelOpen) braveFoxReliabilityRefreshUi();
+    }, 20000);
+    window.addEventListener('pagehide', () => {
+      if (braveFoxReliabilityDraftTimer) clearTimeout(braveFoxReliabilityDraftTimer);
+      clearInterval(braveFoxReliabilityUiTimer);
+      if (braveFoxLoadPanelCheckTimer) clearTimeout(braveFoxLoadPanelCheckTimer);
+      braveFoxReliabilitySaveDraft();
+    }, { once: true });
+  }
+
+  initializeBraveFoxReliability();
 
   restoreConversationUserDisplayNameFromSharedCache();
   window.addEventListener('storage', event => {
@@ -4313,6 +5067,12 @@
 
           if (mutation.type === 'characterData') {
             const parent = mutation.target?.parentElement;
+            if (parent instanceof Element && parent.closest(CHATGPT_CONVERSATION_LOAD_ERROR_SELECTOR)) {
+              customizeConversationLoadError(parent);
+            }
+            if (parent instanceof Element && parent.closest(CHATGPT_HISTORY_LOAD_ERROR_SELECTOR)) {
+              customizeHistoryLoadError(parent);
+            }
             if (parent instanceof Element && mayContainConversationMessage(parent)) {
               scheduleLiveConversationMetadataRefresh(parent);
             }
@@ -4322,6 +5082,17 @@
           for (const addedNode of mutation.addedNodes) {
             const node = addedNode instanceof Element ? addedNode : addedNode.parentElement;
             if (!(node instanceof Element)) continue;
+
+            if (
+              node.matches(CHATGPT_CONVERSATION_LOAD_ERROR_SELECTOR) ||
+              node.closest(CHATGPT_CONVERSATION_LOAD_ERROR_SELECTOR) ||
+              node.querySelector(CHATGPT_CONVERSATION_LOAD_ERROR_SELECTOR)
+            ) customizeConversationLoadError(node);
+            if (
+              node.matches(CHATGPT_HISTORY_LOAD_ERROR_SELECTOR) ||
+              node.closest(CHATGPT_HISTORY_LOAD_ERROR_SELECTOR) ||
+              node.querySelector(CHATGPT_HISTORY_LOAD_ERROR_SELECTOR)
+            ) customizeHistoryLoadError(node);
 
             // Library > New is portal-mounted after the pointer event. Curate that freshly
             // inserted popup from this pre-paint observer instead of relying on ChatGPT's
@@ -8006,7 +8777,7 @@
   }
 
   async function fetchConversationSessionPayload() {
-    const response = await fetch(`${location.origin}/api/auth/session`, {
+    const response = await braveFoxReliabilityFetch(`${location.origin}/api/auth/session`, {
       method: 'GET',
       credentials: 'include',
       cache: 'no-store',
@@ -8030,13 +8801,16 @@
   async function resolveConversationAccessToken() {
     if (conversationAccessToken) return conversationAccessToken;
     if (conversationAccessTokenPromise) return conversationAccessTokenPromise;
+    if (Date.now() < conversationAccessTokenRetryAt) return '';
 
     conversationAccessTokenPromise = (async () => {
       try {
         await fetchConversationSessionPayload();
       } catch {
-        // Conversation metadata fetch can still try cookie auth as a fail-open fallback.
+        // Failing session lookups should not repeat for each message on the screen.
+        // Conversation metadata may still use cookie authentication as a fallback.
       }
+      conversationAccessTokenRetryAt = conversationAccessToken ? 0 : Date.now() + MESSAGE_METADATA_FAILED_RETRY_MS;
       return conversationAccessToken;
     })().finally(() => {
       conversationAccessTokenPromise = null;
@@ -8070,7 +8844,7 @@
       }
 
       try {
-        const response = await fetch(`${location.origin}/backend-api/me`, {
+        const response = await braveFoxReliabilityFetch(`${location.origin}/backend-api/me`, {
           method: 'GET',
           credentials: 'include',
           cache: 'no-store',
@@ -8944,6 +9718,39 @@
     return title && !/^chatgpt$/i.test(title) ? title : 'Untitled Chat';
   }
 
+  function isArchiveResolvedTitle(title) {
+    const normalized = normalizeText(title);
+    return Boolean(normalized) && ![
+      'chatgpt', 'untitled chat', 'new chat', 'loading', 'loading…', 'loading...'
+    ].includes(normalized);
+  }
+
+  function resolveArchiveCaptureTitle(conversationId, apiTitle = '', previousTitle = '') {
+    // API title is authoritative; the tab title is usable only for the active chat.
+    // Never borrow another conversation's title during an asynchronous route change.
+    const visibleTitle = conversationId === getCurrentConversationId()
+      ? getArchiveDocumentTitleFallback()
+      : '';
+    for (const candidate of [apiTitle, visibleTitle, previousTitle]) {
+      const title = String(candidate || '').trim();
+      if (isArchiveResolvedTitle(title)) return title;
+    }
+    return '';
+  }
+
+  function shouldAutomaticallyArchiveConversationTitle(title) {
+    if (!CHAT_ARCHIVE_AUTO_TITLE_FILTER.enabled) return true;
+    if (!isArchiveResolvedTitle(title)) return false;
+    const normalizedTitle = normalizeLooseTitle(title);
+    return CHAT_ARCHIVE_AUTO_TITLE_FILTER.titleWords.some(word => {
+      const normalizedWord = normalizeLooseTitle(word);
+      if (!normalizedWord) return false;
+      const escapedWord = normalizedWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const pattern = normalizedWord.length <= 3 ? `\\b${escapedWord}\\b` : escapedWord;
+      return new RegExp(pattern, 'i').test(normalizedTitle);
+    });
+  }
+
   function buildArchiveRecordsFromConversationPayload(conversationId, payload) {
     const mapping = payload && typeof payload === 'object' ? payload.mapping : null;
     if (!mapping || typeof mapping !== 'object') return { records: [], branchRecords: [], currentNodeId: '' };
@@ -9100,7 +9907,7 @@
     if (!token) return 'unknown';
 
     const url = `${location.origin}/backend-api/conversation/${encodeURIComponent(id)}`;
-    const requestConversation = currentToken => fetch(url, {
+    const requestConversation = currentToken => braveFoxReliabilityFetch(url, {
       method: 'GET',
       credentials: 'include',
       cache: 'no-store',
@@ -9111,6 +9918,7 @@
       let response = await requestConversation(token);
       if (response.status === 401 || response.status === 403) {
         conversationAccessToken = '';
+        conversationAccessTokenRetryAt = 0;
         token = await resolveConversationAccessToken();
         if (!token) return 'unknown';
         response = await requestConversation(token);
@@ -9155,6 +9963,19 @@
   }
 
   async function cleanupDeletedConversationArchives(force = false) {
+    if (!force && (document.visibilityState !== 'visible' || braveFoxReliabilityRemainingMs() > 0)) return 0;
+    // Web Locks synchronize cleanup across tabs without storing conversation contents.
+    // On older browsers, the existing in-tab single-flight guard remains in effect.
+    if (navigator.locks?.request) {
+      try {
+        return await navigator.locks.request('bravefox-chat-archive-cleanup', { ifAvailable: true },
+          lock => lock ? cleanupDeletedConversationArchivesInternal(force) : 0);
+      } catch { return 0; }
+    }
+    return cleanupDeletedConversationArchivesInternal(force);
+  }
+
+  async function cleanupDeletedConversationArchivesInternal(force = false) {
     if (conversationArchiveGhostCleanupRunning) return 0;
     conversationArchiveGhostCleanupRunning = true;
 
@@ -9185,6 +10006,7 @@
 
       let deleted = 0;
       for (const conversation of candidates) {
+        if (braveFoxReliabilityRemainingMs() > 0) return deleted;
         const id = String(conversation?.id || '').trim();
         if (!id) continue;
         conversationArchiveExistenceChecks.set(id, Date.now());
@@ -9347,9 +10169,11 @@
     if (conversationArchiveDeletedUntilReload.has(id)) return false;
 
     try {
+      const previous = await getArchivedConversation(id).catch(() => null);
+      const archiveTitle = resolveArchiveCaptureTitle(id, payload.title, previous?.title);
+      if (!shouldAutomaticallyArchiveConversationTitle(archiveTitle)) return false;
       const { records, branchRecords, currentNodeId } = buildArchiveRecordsFromConversationPayload(id, payload);
       if (!records.length) return false;
-      const previous = await getArchivedConversation(id).catch(() => null);
       const now = Date.now();
       const firstTime = branchRecords.reduce((min, record) => record.createTime && (!min || record.createTime < min) ? record.createTime : min, 0);
       const last = branchRecords[branchRecords.length - 1] || null;
@@ -9357,7 +10181,7 @@
       const lastHuman = humanBranchRecords[humanBranchRecords.length - 1] || last;
       const conversation = {
         id,
-        title: String(payload.title || previous?.title || getArchiveDocumentTitleFallback()).trim() || 'Untitled Chat',
+        title: archiveTitle || 'Untitled Chat',
         url: `${location.origin}/c/${encodeURIComponent(id)}`,
         createdAt: Number(previous?.createdAt || firstTime || now),
         updatedAt: Number(lastHuman?.updateTime || lastHuman?.createTime || payload.update_time && normalizeArchiveTimestamp(payload.update_time) || now),
@@ -9451,6 +10275,8 @@
       currentConversationPromise,
       Promise.all(existingPromises)
     ]);
+    const archiveTitle = resolveArchiveCaptureTitle(conversationId, '', currentConversation?.title);
+    if (!shouldAutomaticallyArchiveConversationTitle(archiveTitle)) return false;
 
     const generationActive = isConversationGenerationActive();
     const index = conversationMetadataCaches.get(conversationId)?.index;
@@ -9535,7 +10361,7 @@
     writeTx.objectStore(CHAT_ARCHIVE_CONVERSATIONS_STORE).put({
       ...(currentConversation || {}),
       id: conversationId,
-      title: String(currentConversation?.title || getArchiveDocumentTitleFallback()),
+      title: archiveTitle || 'Untitled Chat',
       url: `${location.origin}/c/${encodeURIComponent(conversationId)}`,
       createdAt: Number(currentConversation?.createdAt || now),
       updatedAt: now,
@@ -9817,7 +10643,7 @@
   }
 
   function isArchiveImageRetryableStatus(status) {
-    return status === 408 || status === 425 || status === 429 || status >= 500;
+    return status === 408 || status === 425 || status >= 500;
   }
 
   function describeArchiveImageFailure(result) {
@@ -9846,7 +10672,7 @@
       const controller = new AbortController();
       const timer = window.setTimeout(() => controller.abort(), CHAT_ARCHIVE_IMAGE_FETCH_TIMEOUT_MS);
       try {
-        const response = await fetch(parsed.href, { ...init, signal: controller.signal });
+        const response = await braveFoxReliabilityFetch(parsed.href, { ...init, signal: controller.signal });
         if (response.ok) return { state: 'ok', response };
 
         const status = Number(response.status || 0) || 0;
@@ -9878,6 +10704,9 @@
           return lastFailure;
         }
       } catch (error) {
+        if (error?.name === 'BraveFoxReliabilityCooldown' || error?.name === 'BraveFoxReliabilityQueueBusy') {
+          return { state: 'failed', reason: 'ChatGPT request cooldown active' };
+        }
         const timedOut = error?.name === 'AbortError';
         lastFailure = {
           state: 'failed',
@@ -11395,14 +12224,31 @@
       }
     } catch {}
 
+    // The native chat title can arrive after the first message. Reuse the existing
+    // maintenance interval to schedule one local tail capture when a title changes
+    // on the SAME route; don't add a new observer or send an extra API request.
+    conversationArchiveObservedTitleRoute = getCurrentConversationId();
+    conversationArchiveObservedDocumentTitle = String(document.title || '');
     window.setInterval(() => {
+      const currentArchiveRoute = getCurrentConversationId();
+      const currentDocumentTitle = String(document.title || '');
+      if (currentArchiveRoute !== conversationArchiveObservedTitleRoute) {
+        // A route transition can briefly retain the previous chat's document title.
+        conversationArchiveObservedTitleRoute = currentArchiveRoute;
+        conversationArchiveObservedDocumentTitle = currentDocumentTitle;
+      } else if (currentDocumentTitle !== conversationArchiveObservedDocumentTitle) {
+        conversationArchiveObservedDocumentTitle = currentDocumentTitle;
+        if (currentArchiveRoute && shouldAutomaticallyArchiveConversationTitle(getArchiveDocumentTitleFallback())) {
+          scheduleConversationArchiveDomCapture(650);
+        }
+      }
       ensureConversationArchiveButton();
       if (isChatGptLibraryLocation()) reconcileConversationArchiveLibraryNewMenu();
       linkPendingArchiveContextToCurrentConversation();
       if (!getCurrentConversationId()) consumeConversationArchiveHandoffIfReady();
     }, 500);
 
-    if (!conversationArchiveGhostCleanupInterval) {
+    if (CHAT_ARCHIVE_AUTO_GHOST_CLEANUP && !conversationArchiveGhostCleanupInterval) {
       conversationArchiveGhostCleanupInterval = window.setInterval(() => {
         void cleanupDeletedConversationArchives(false);
       }, CHAT_ARCHIVE_GHOST_CLEANUP_INTERVAL_MS);
@@ -11421,7 +12267,7 @@
     // First route may already contain a fully rendered conversation when this script starts.
     scheduleConversationArchiveDomCapture(350);
     window.setTimeout(consumeConversationArchiveHandoffIfReady, 150);
-    window.setTimeout(() => void cleanupDeletedConversationArchives(false), 8000);
+    if (CHAT_ARCHIVE_AUTO_GHOST_CLEANUP) window.setTimeout(() => void cleanupDeletedConversationArchives(false), 120000);
   }
 
   function getCurrentConversationId() {
@@ -11760,16 +12606,34 @@
 
     hydrateConversationMetadataCacheFromSharedStorage(conversationId);
     const cached = conversationMetadataCaches.get(conversationId);
+    const fallbackIndex = cached?.index?.byId instanceof Map
+      ? cached.index
+      : { byId: new Map(), ordered: { user: [], assistant: [] } };
+    const now = Date.now();
     if (
       !force &&
       cached?.index?.byId instanceof Map &&
-      Date.now() - Number(cached.fetchedAt || 0) < MESSAGE_TIMESTAMP_API_CACHE_MS
+      now - Number(cached.fetchedAt || 0) < MESSAGE_TIMESTAMP_API_CACHE_MS
     ) {
       return cached.index;
     }
 
     const activeFetch = conversationMetadataFetches.get(conversationId);
     if (activeFetch) return activeFetch;
+    if (braveFoxReliabilityRemainingMs() > 0) return fallbackIndex;
+    if (now - Number(conversationMetadataLastFailureAt.get(conversationId) || 0) < MESSAGE_METADATA_FAILED_RETRY_MS) {
+      return fallbackIndex;
+    }
+    if (force && cached?.index?.byId instanceof Map &&
+        now - Number(conversationMetadataLastAttemptAt.get(conversationId) || 0) < MESSAGE_METADATA_FORCE_REFRESH_MIN_MS) {
+      return fallbackIndex;
+    }
+    conversationMetadataLastAttemptAt.set(conversationId, now);
+    if (conversationMetadataLastAttemptAt.size > 40) {
+      const oldest = conversationMetadataLastAttemptAt.keys().next().value;
+      conversationMetadataLastAttemptAt.delete(oldest);
+      conversationMetadataLastFailureAt.delete(oldest);
+    }
 
     const request = (async () => {
       try {
@@ -11777,7 +12641,7 @@
         const requestConversation = async token => {
           const headers = { Accept: 'application/json' };
           if (token) headers.Authorization = `Bearer ${token}`;
-          return fetch(url, {
+          return braveFoxReliabilityFetch(url, {
             method: 'GET',
             credentials: 'include',
             cache: 'no-store',
@@ -11796,15 +12660,13 @@
           // A cached bearer token can expire independently of the page session. Clear it
           // and force a fresh /api/auth/session lookup before retrying once.
           conversationAccessToken = '';
+          conversationAccessTokenRetryAt = 0;
           token = await resolveConversationAccessToken();
           if (token) response = await requestConversation(token);
         }
 
-        // If session lookup itself is unavailable, retain one cookie-auth fallback rather
-        // than giving up entirely. This is fallback-only; a valid bearer token always wins.
-        if (!response.ok && !token) {
-          response = await requestConversation('');
-        }
+        // The first request already used cookie auth when no token was available.
+        // Do not repeat that same request after a failure.
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         conversationArchiveExistenceApiHealthyAt = Date.now();
 
@@ -11825,11 +12687,11 @@
           source: 'api'
         });
         persistConversationMetadataIndexToSharedStorage(conversationId, index);
+        conversationMetadataLastFailureAt.delete(conversationId);
         return index;
       } catch {
-        return cached?.index?.byId instanceof Map
-          ? cached.index
-          : { byId: new Map(), ordered: { user: [], assistant: [] } };
+        conversationMetadataLastFailureAt.set(conversationId, Date.now());
+        return fallbackIndex;
       } finally {
         conversationMetadataFetches.delete(conversationId);
       }
@@ -11949,10 +12811,11 @@
     apiQueuedMessageTimestampTurns.add(turnRoot);
     try {
       for (let attempt = 0; attempt < 3; attempt += 1) {
+        if (braveFoxReliabilityRemainingMs() > 0) return false;
         if (attempt > 0) await delayMessageTimestampProbe(attempt === 1 ? 500 : 1200);
         if (!turnRoot.isConnected) return false;
 
-        const index = await fetchConversationMessageMetadataIndex(conversationId, attempt > 0);
+        const index = await fetchConversationMessageMetadataIndex(conversationId, false);
         const messageIds = collectConversationMessageIds(turnRoot);
         if (surface instanceof Element) {
           for (const id of collectConversationMessageIds(surface)) {
@@ -12645,6 +13508,138 @@
     });
   }
 
+  function getConversationLoadErrorLabelNode(container) {
+    if (!(container instanceof Element)) return null;
+
+    // The newer centered/reload layout nests the heading two divs deep, unlike
+    // the older bordered panel where the heading is a direct text node.
+    if (container.matches(CHATGPT_CONVERSATION_LOAD_ERROR_CENTERED_SELECTOR)) {
+      const heading = container.querySelector(':scope > div.flex.flex-col.items-center.gap-2 > div.text-lg');
+      if (!heading) return null;
+      for (const child of heading.childNodes) {
+        if (child.nodeType === Node.TEXT_NODE && normalizeText(child.nodeValue)) return child;
+      }
+      return null;
+    }
+
+    for (const child of container.childNodes) {
+      if (child.nodeType === Node.TEXT_NODE && normalizeText(child.nodeValue)) return child;
+    }
+    return null;
+  }
+
+  function getConversationLoadErrorRetryButton(container) {
+    if (container.matches(CHATGPT_CONVERSATION_LOAD_ERROR_CENTERED_SELECTOR)) {
+      const row = container.querySelector(':scope > div.flex.w-full.flex-wrap.items-center.justify-center.gap-2');
+      return row?.querySelector(':scope > button[type="button"]') || null;
+    }
+    return Array.from(container.children).find(child => child.matches('button[type="button"]')) || null;
+  }
+
+  function customizeConversationLoadError(scope = document) {
+    const settings = CHATGPT_CONVERSATION_LOAD_ERROR_CUSTOMIZATION;
+    if (!scope) return;
+
+    const messageCustom = settings.enabled && typeof settings.messageText === 'string' ? settings.messageText : null;
+    const retryCustom = settings.enabled && typeof settings.retryButtonText === 'string' ? settings.retryButtonText : null;
+
+    const apply = container => {
+      const messageNode = getConversationLoadErrorLabelNode(container);
+      if (!messageNode) return;
+
+      const messageLabel = normalizeText(messageNode.nodeValue);
+      if (!braveFoxIsConversationLoadErrorLabel(messageLabel)) return;
+
+      // Match the retry control in either known layout, not an unrelated button.
+      // Edit text nodes in place so React's native click handler and markup survive.
+      const retryButton = getConversationLoadErrorRetryButton(container);
+      if (!retryButton) return;
+      braveFoxReliabilityMarkLoadPanel(container);
+      if (messageCustom === null && retryCustom === null) return;
+      const walker = document.createTreeWalker(retryButton, NodeFilter.SHOW_TEXT);
+      let retryNode = null;
+      for (let textNode = walker.nextNode(); textNode; textNode = walker.nextNode()) {
+        const label = normalizeText(textNode.nodeValue);
+        if (CHATGPT_CONVERSATION_LOAD_RETRY_NATIVE_LABELS.has(label) || label === normalizeText(retryCustom)) {
+          retryNode = textNode;
+          break;
+        }
+      }
+      if (!retryNode) return;
+
+      if (messageCustom !== null) {
+        // Text nodes preserve ChatGPT's native controls; pre-line renders configured newlines.
+        if (messageCustom.includes('\n') && messageNode.parentElement) {
+          messageNode.parentElement.style.whiteSpace = 'pre-line';
+        }
+        const displayText = braveFoxConversationLoadErrorText();
+        if (messageNode.nodeValue !== displayText) messageNode.nodeValue = displayText;
+      }
+      if (retryCustom !== null && retryNode.nodeValue !== retryCustom) retryNode.nodeValue = retryCustom;
+    };
+
+    if (scope instanceof Element) {
+      const ancestor = scope.closest(CHATGPT_CONVERSATION_LOAD_ERROR_SELECTOR);
+      if (ancestor) apply(ancestor);
+    }
+    if (typeof scope.querySelectorAll === 'function') {
+      for (const container of scope.querySelectorAll(CHATGPT_CONVERSATION_LOAD_ERROR_SELECTOR)) apply(container);
+    }
+  }
+
+  function customizeHistoryLoadError(scope = document) {
+    const settings = CHATGPT_HISTORY_LOAD_ERROR_CUSTOMIZATION;
+    if (!settings.enabled || !scope) return;
+
+    const messageCustom = typeof settings.messageText === 'string' ? settings.messageText : null;
+    const retryCustom = typeof settings.retryButtonText === 'string' ? settings.retryButtonText : null;
+    if (messageCustom === null && retryCustom === null) return;
+
+    const apply = container => {
+      // Require the native history-load message, not just any status or retry button.
+      const messageNode = Array.from(container.childNodes).find(child =>
+        child.nodeType === Node.TEXT_NODE && normalizeText(child.nodeValue)
+      );
+      if (!messageNode) return;
+      const messageLabel = normalizeText(messageNode.nodeValue);
+      if (!CHATGPT_HISTORY_LOAD_ERROR_NATIVE_LABELS.has(messageLabel) &&
+          messageLabel !== normalizeText(messageCustom)) return;
+
+      const button = container.querySelector(':scope > button[type="button"]');
+      if (!button) return;
+      // Edit only text nodes, never replace the button/SVG or interfere with Retry.
+      const walker = document.createTreeWalker(button, NodeFilter.SHOW_TEXT);
+      let retryNode = null;
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        const label = normalizeText(node.nodeValue);
+        if (CHATGPT_HISTORY_LOAD_RETRY_NATIVE_LABELS.has(label) ||
+            label === normalizeText(retryCustom)) {
+          retryNode = node;
+          break;
+        }
+      }
+      if (!retryNode) return;
+
+      if (messageCustom !== null) {
+        if (messageCustom.includes('\n') && messageNode.parentElement) {
+          messageNode.parentElement.style.whiteSpace = 'pre-line';
+        }
+        if (messageNode.nodeValue !== messageCustom) messageNode.nodeValue = messageCustom;
+      }
+      if (retryCustom !== null && retryNode.nodeValue !== retryCustom) {
+        retryNode.nodeValue = retryCustom;
+      }
+    };
+
+    if (scope instanceof Element) {
+      const container = scope.closest(CHATGPT_HISTORY_LOAD_ERROR_SELECTOR);
+      if (container) apply(container);
+    }
+    if (typeof scope.querySelectorAll === 'function') {
+      for (const container of scope.querySelectorAll(CHATGPT_HISTORY_LOAD_ERROR_SELECTOR)) apply(container);
+    }
+  }
+
   function applyConversationPresentation(scope = document) {
     // Exact live-DOM hooks first; role inference remains fallback for older buckets.
     paintExactRevampConversationSurfaces(scope);
@@ -12713,6 +13708,8 @@
     collapseAnalysisActivityPanels(scope);
     applyConversationPresentation(scope);
     replaceCustomizableAssistantErrorText(scope);
+    customizeConversationLoadError(scope);
+    customizeHistoryLoadError(scope);
     replaceCustomizableHomeHeadline(scope);
     replaceCustomizableChatGptBannerText(scope);
     replaceFixedAssistantNoticeText(scope);

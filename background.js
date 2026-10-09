@@ -2227,3 +2227,293 @@ async function main() {
 main().catch(error => {
   console.error(`${LOG_PREFIX} Fatal initialization failure:`, error);
 });
+
+// === BraveFox ChatGPT Reliability — passive, non-blocking network diagnostics ===
+// This module never changes, blocks, replays or redirects ChatGPT's own requests.
+(() => {
+  'use strict';
+  const extension = globalThis.browser?.webRequest ? globalThis.browser : globalThis.chrome;
+  if (!extension?.webRequest || !extension?.runtime?.onMessage) return;
+
+  const PROTOCOL = 'bravefox:chat-reliability:v1';
+  const SESSION_KEY = 'bravefoxChatReliabilityCooldownV1';
+  const inFlight = new Map();
+  const recentGets = new Map();
+  const tabStats = new Map();
+  let cooldownUntil = 0;
+  let lastStatus = 0;
+  const options = { urls: ['https://chatgpt.com/*'], types: ['xmlhttprequest', 'main_frame', 'sub_frame', 'other', 'script', 'image', 'stylesheet', 'font', 'media'] };
+  const now = () => Date.now();
+
+  // Exact GET endpoints used when restoring an existing conversation and its list.
+  // Keep only endpoint categories, never request URLs or conversation identifiers.
+  function diagnosticKind(url, method) {
+    if (method !== 'GET') return '';
+    try {
+      const path = new URL(url).pathname;
+      if (/^\/backend-api\/conversation\/[^/]+\/?$/.test(path)) return 'conversation GET';
+      if (/^\/backend-api\/conversations\/?$/.test(path)) return 'conversation list';
+      if (/^\/api\/auth\/session\/?$/.test(path)) return 'auth session';
+    } catch {}
+    return '';
+  }
+
+  const diagnosticDefaults = () => ({
+    loadRequests: 0, loadSuccess: 0, load429: 0, load5xx: 0,
+    loadOther4xx: 0, loadNetworkErrors: 0, loadConsecutiveFailures: 0,
+    loadFailureStartAt: 0, lastLoadFailureAt: 0, lastLoadSuccessAt: 0,
+    lastLoadStatus: 0, lastLoadFailureStatus: 0, lastLoadAt: 0, listErrors: 0, list429: 0,
+    authErrors: 0, recentLoadEvents: [],
+    lastLoad429At: 0, lastLoad429RetryAfterMs: 0,
+    lastLoad429RetryAfterState: 'unavailable'
+  });
+
+  // A small per-tab timeline: endpoint category + status + time + numeric retry hint.
+  // Never record URLs, conversation identifiers, request bodies or raw headers.
+  function appendEvent(stat, kind, status, stamp, request) {
+    if (!stat) return;
+    const item = { kind, status, at: stamp };
+    if (status === 429 && kind === 'conversation GET') {
+      item.retryAfterState = request?.retryAfterState || 'unavailable';
+      item.retryAfterMs = request?.retryAfterMs || 0;
+    }
+    stat.recentLoadEvents.push(item);
+    if (stat.recentLoadEvents.length > 16) stat.recentLoadEvents.shift();
+  }
+
+  function recordDiagnostic(stat, kind, status, stamp, request) {
+    if (!stat || !kind) return;
+    const failure = status === 'network' || (typeof status === 'number' && status >= 400);
+    if (kind === 'conversation GET') {
+      stat.loadRequests++;
+      stat.lastLoadAt = stamp;
+      stat.lastLoadStatus = typeof status === 'number' ? status : 0;
+      if (failure) {
+        if (!stat.loadConsecutiveFailures) stat.loadFailureStartAt = stamp;
+        stat.loadConsecutiveFailures++;
+        stat.lastLoadFailureAt = stamp;
+        stat.lastLoadFailureStatus = typeof status === 'number' ? status : 0;
+        if (status === 429) {
+          stat.load429++;
+          stat.lastLoad429At = stamp;
+          stat.lastLoad429RetryAfterState = request?.retryAfterState || 'unavailable';
+          stat.lastLoad429RetryAfterMs = request?.retryAfterMs || 0;
+        } else if (status === 'network') stat.loadNetworkErrors++;
+        else if (status >= 500) stat.load5xx++;
+        else if (status >= 400 && status < 500) stat.loadOther4xx++;
+        appendEvent(stat, kind, status, stamp, request);
+      } else if (typeof status === 'number' && ((status >= 200 && status < 300) || status === 304)) {
+        const hadFailures = stat.loadConsecutiveFailures > 0;
+        stat.loadSuccess++;
+        stat.lastLoadSuccessAt = stamp;
+        stat.loadConsecutiveFailures = 0;
+        stat.loadFailureStartAt = 0;
+        // A successful HTTP response is a recovery *signal*, not proof that React recovered.
+        if (hadFailures) appendEvent(stat, kind, status, stamp);
+      }
+    } else if (failure && kind === 'conversation list') {
+      stat.listErrors++;
+      if (status === 429) stat.list429++;
+      appendEvent(stat, kind, status, stamp);
+    } else if (failure && kind === 'auth session') {
+      stat.authErrors++;
+      appendEvent(stat, kind, status, stamp);
+    }
+  }
+
+  function sendTabState(tabId) {
+    if (!Number.isInteger(tabId) || tabId < 0) return;
+    try {
+      const sent = extension.tabs?.sendMessage?.(tabId, { type: PROTOCOL + ':state', snapshot: snapshot(tabId) });
+      if (sent && typeof sent.catch === 'function') sent.catch(() => {});
+    } catch {}
+  }
+
+  function categoryOf(url) {
+    try {
+      const path = new URL(url).pathname;
+      if (path.startsWith('/backend-api/conversation/')) return 'conversation';
+      if (path.startsWith('/backend-api/')) return 'backend';
+      if (path.startsWith('/api/auth/')) return 'authentication';
+      if (/\.(?:js|css|woff2?|png|jpe?g|webp|svg|avif)(?:$|\/)/i.test(path)) return 'asset';
+      return 'other';
+    } catch { return 'other'; }
+  }
+
+  // Ephemeral fingerprint only. Never retain full URLs, conversation IDs or query strings.
+  function fingerprint(method, url) {
+    let hash = 2166136261;
+    try {
+      const input = method + ':' + new URL(url).pathname;
+      for (let i = 0; i < input.length; i++) {
+        hash ^= input.charCodeAt(i);
+        hash = Math.imul(hash, 16777619);
+      }
+    } catch {}
+    return hash >>> 0;
+  }
+
+  function counters(tabId) {
+    if (!Number.isInteger(tabId) || tabId < 0) return null;
+    if (!tabStats.has(tabId)) {
+      if (tabStats.size >= 80) tabStats.delete(tabStats.keys().next().value);
+      tabStats.set(tabId, { requests: 0, suspectedDuplicates: 0, rateLimits: 0, serverErrors: 0, networkErrors: 0, lastStatus: 0, updatedAt: 0, ...diagnosticDefaults() });
+    }
+    return tabStats.get(tabId);
+  }
+
+  function snapshot(tabId) {
+    return {
+      ...({ requests: 0, suspectedDuplicates: 0, rateLimits: 0, serverErrors: 0, networkErrors: 0, lastStatus: 0 }),
+      ...diagnosticDefaults(),
+      diagnosticsVersion: 3,
+      tabScoped: true,
+      ...(tabStats.get(tabId) || {}),
+      cooldownUntil: cooldownUntil > now() ? cooldownUntil : 0,
+      lastObservedStatus: lastStatus
+    };
+  }
+
+  // The diagnostic hint is NOT BraveFox's 5-minute optional-request cooldown.
+  // Keep the server's suggested duration (up to 24h) distinct from our own cap.
+  function retryAfterHint(headers) {
+    if (!Array.isArray(headers) || headers.length === 0) return { state: 'unavailable', ms: 0 };
+    const header = headers.find(h => String(h.name || '').toLowerCase() === 'retry-after');
+    if (!header) return { state: 'missing', ms: 0 };
+    const value = String(header.value || '').trim();
+    if (!value) return { state: 'invalid', ms: 0 };
+    const seconds = /^\d+(?:\.\d+)?$/.test(value) ? Number(value) : NaN;
+    const duration = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(value) - now();
+    if (!Number.isFinite(duration) || duration < 0) return { state: 'invalid', ms: 0 };
+    return { state: 'valid', ms: Math.min(24 * 60 * 60 * 1000, Math.ceil(duration)) };
+  }
+
+  function parseRetryAfter(value) {
+    const input = String(value || '').trim();
+    if (!input) return 0;
+    const seconds = Number(input);
+    const ms = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(input) - now();
+    return Number.isFinite(ms) ? Math.min(300000, Math.max(1000, ms)) : 0;
+  }
+
+  function broadcastState() {
+    for (const tabId of tabStats.keys()) {
+      try {
+        // Fire and forget. Closed tabs and temporarily missing listeners are expected.
+        const sent = extension.tabs?.sendMessage?.(tabId, { type: PROTOCOL + ':state', snapshot: snapshot(tabId) });
+        if (sent && typeof sent.catch === 'function') sent.catch(() => {});
+      } catch {}
+    }
+  }
+
+  function applyCooldown(ms) {
+    const target = now() + Math.max(15000, Math.min(300000, ms || 60000));
+    if (target <= cooldownUntil) return;
+    cooldownUntil = target;
+    try {
+      const written = extension.storage?.session?.set?.({ [SESSION_KEY]: target });
+      if (written && typeof written.catch === 'function') written.catch(() => {});
+    } catch {}
+    broadcastState();
+  }
+
+  // MV3 service workers can restart. Restore a small expiry timestamp, never a request log.
+  const sessionReady = (async () => {
+    try {
+      if (!extension.storage?.session) return;
+      const value = await extension.storage.session.get(SESSION_KEY);
+      cooldownUntil = Math.max(cooldownUntil, Number(value?.[SESSION_KEY] || 0));
+    } catch {}
+  })();
+
+  try {
+    extension.webRequest.onBeforeRequest.addListener(details => {
+      const stamp = now();
+      const stat = counters(details.tabId);
+      if (stat) { stat.requests++; stat.updatedAt = stamp; }
+      const category = categoryOf(details.url);
+      if (details.method === 'GET' && category !== 'asset') {
+        const key = `${details.tabId}:${fingerprint('GET', details.url)}`;
+        const previous = recentGets.get(key) || 0;
+        if (stat && stamp - previous < 1250) stat.suspectedDuplicates++;
+        recentGets.set(key, stamp);
+        if (recentGets.size > 300) recentGets.clear();
+      }
+      inFlight.set(details.requestId, {
+        tabId: details.tabId, category, retryAfterMs: 0,
+        retryAfterState: 'unavailable',
+        diagnosticKind: diagnosticKind(details.url, details.method)
+      });
+      if (inFlight.size > 1500) inFlight.clear();
+    }, options);
+
+    extension.webRequest.onHeadersReceived.addListener(details => {
+      const entry = inFlight.get(details.requestId);
+      if (!entry || details.statusCode !== 429) return;
+      const hint = retryAfterHint(details.responseHeaders);
+      entry.retryAfterState = hint.state;
+      entry.retryAfterMs = hint.ms;
+    }, options, ['responseHeaders']);
+
+    extension.webRequest.onCompleted.addListener(details => {
+      const entry = inFlight.get(details.requestId);
+      inFlight.delete(details.requestId);
+      lastStatus = details.statusCode || 0;
+      const stat = counters(details.tabId);
+      const stamp = now();
+      if (stat) {
+        stat.lastStatus = lastStatus;
+        stat.updatedAt = stamp;
+        recordDiagnostic(stat, entry?.diagnosticKind, details.statusCode || 0, stamp, entry);
+      }
+      if (entry?.diagnosticKind) sendTabState(details.tabId);
+      if (details.statusCode === 429) {
+        if (stat) stat.rateLimits++;
+        if (entry?.category !== 'asset') applyCooldown(entry?.retryAfterMs || 60000);
+      } else if (details.statusCode >= 500) {
+        if (stat) stat.serverErrors++;
+      }
+      if (details.statusCode === 429 || details.statusCode >= 500) broadcastState();
+    }, options);
+
+    extension.webRequest.onErrorOccurred.addListener(details => {
+      const entry = inFlight.get(details.requestId);
+      inFlight.delete(details.requestId);
+      // Abort/cancel during navigation or tab close is not a network outage.
+      const cancelled = /(?:ABORT|CANCEL|BINDING_ABORT)/i.test(String(details.error || ''));
+      if (cancelled) return;
+      const stat = counters(details.tabId);
+      if (stat) {
+        stat.networkErrors++;
+        stat.updatedAt = now();
+        recordDiagnostic(stat, entry?.diagnosticKind, 'network', now(), entry);
+      }
+      if (entry?.diagnosticKind) sendTabState(details.tabId);
+    }, options);
+  } catch (error) {
+    console.warn('[BraveFox Chat Reliability] Passive listener unavailable:', error);
+  }
+
+  extension.tabs?.onRemoved?.addListener(tabId => {
+    tabStats.delete(tabId);
+  });
+
+  extension.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (!message || (message.type !== PROTOCOL + ':get' && message.type !== PROTOCOL + ':own-429')) return undefined;
+    const senderUrl = sender?.url || sender?.tab?.url || '';
+    if (!/^https:\/\/chatgpt\.com(?:\/|$)/i.test(senderUrl)) return undefined;
+    const tabId = sender?.tab?.id;
+    counters(tabId);
+    const operation = async () => {
+      await sessionReady;
+      if (message.type === PROTOCOL + ':own-429') applyCooldown(parseRetryAfter(message.retryAfter) || 60000);
+      return { ok: true, snapshot: snapshot(tabId) };
+    };
+    // Chromium callback-style listener; Firefox background listener may return a Promise.
+    if (typeof sendResponse === 'function') {
+      operation().then(sendResponse, () => sendResponse({ ok: false }));
+      return true;
+    }
+    return operation();
+  });
+})();

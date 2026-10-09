@@ -1,7 +1,7 @@
 (function () {
     'use strict';
 
-    // google.js of BraveFox Enhancer v29.3.3 Hybrid
+    // google.js of BraveFox Enhancer v29.3.7 Hybrid
 
     function isGoogleMapsOrEarthUrl(value = window.location.href) {
         try {
@@ -451,7 +451,12 @@
 
     // Resolve in the background from document_start. Filtering never waits for detection.
     // Until Tapio is positively and unambiguously detected, no soft-result rescue exists.
+    let braveFoxInitialGoogleAccountScopeSettled = false;
     const braveFoxInitialGoogleAccountScopePromise = braveFoxResolveGoogleAccountScope().catch(() => (braveFoxIsTapioAccount ? 'tapio' : 'restricted'));
+    braveFoxInitialGoogleAccountScopePromise.finally(() => {
+        braveFoxInitialGoogleAccountScopeSettled = true;
+        try { mainFilteringThrottled(); } catch (e) {}
+    });
 
     try {
         window.GoogleJS = window.GoogleJS || {};
@@ -465,6 +470,32 @@
             };
         };
     } catch (e) {}
+
+    // === RedirectHideLite, this never scans google's selectors, thus reducing false positives ===
+    const redirectHideLite = [
+
+    // Regular redirectHideRegexes
+	/Virtual laatikko/i, /Virtuaali laatikko/i, /Virtuaalilaatikko/i, /Virtuaalibox/i, /virtualmachine/i, /virtual machine/i, /kuvankäsittely/i, /waterf0x/i,  
+	/virtuaali kone/i, /virtuaali tietokone/i, /virtuaalitietokone/i, /hyper-v/i, /hyper v/i, /virtuaalimasiina/i, /virtuaali masiina/i, /virtuaalimasiini/i, 
+	/virtuaali masiini/i, /virtuaali workstation/i, /virtual workstation/i, /virtualworkstation/i, /vrbox/i, /vibox/i, /virtuaaliworkstation/i, /hypervisor/i,   
+	/virbox/i, /virtbox/i, /vir box/i, /virt box/i, /virtual box/i, /vi-machine/i, /vi machine/i, /virmachine/i, /vir-machine/i, /virbox virtual/i, /v-machine/i, 
+	/hyper visor/i, /vibox virtual/i, /vbox virtual/i, /vmachine/i, /v machine/i, /vimachine/i, /vir machine/i, /virt machine/i,/virtmachine/i, /p1p4r/i, /VMWare/i,
+	/virtumachine/i, /virtu-machine/i, /virtu machine/i, /diiva/i, /virtuamachine/i, /virtua-machine/i, /virtua machine/i, /vi mach/i, /vir mach/i, /virt mach/i, 
+	/VM Ware/i, /Virtualbox/i, /Virtual box/i, /Brave/i, /Browser/i, /Selain/i, /TOR-Selain/i, /MS Edge/i, /TOR-browser/i, /Opera/i, /Opera GX/i, /waterfox/i, 
+	/Browsi/i, /Browse/i, /safari/i, /Opera Browser/i, /Mozilla/i, /Firefox/i, /Firefux/i, /water fox/i, /waterfux/i, /water fux/i, /chr0m/i, /m1um/i, /vbox/i,
+	/hyperv/i, /virtbox virtual/i, /Virtual Machine/i, /virtu mach/i, /virt-machine/i, /virtuaalikone/i, /OracleVM/i, /VM Ware/i, /water f0x/i, /Machiine/i, 
+	/Macheine/i, /Machiene/i, /#/i, /##/i, /###/i, /@@/i, /#\*/i, /\*#/i, /@\*/i, /\*@/i, /#@/i, /@#/i,       
+
+
+    // Boundaried redirectHide regexes
+	/\bSol\b/i, /\bGemini\b/i, /\bClaude\b/i, /\bSonnet\b/i, /\bCopilot\b/i, /\bDALL[-\s]?E\b/i, /\bSora\b/i, /\bMidjourney\b/i, /\bGrok\b/i, /\bG!na\b/i, /\bGen\b/i, 
+	/\bStable[ -]?Diffusion\b/i, /\bComfy(?:UI|AI)\b/i, /\bmachine learning\b/i, /\bneural networks?\b/i, /\bMistral(?:[ -]?AI)?\b/i, /\bLlama(?:[ -]?[0-9.]+)?\b/i,
+	/\bteko[äa]ly\b/i, /\bLLMs?\b/i, /\bartificial intelligence\b/i, /\bgenerative AI\b/i, /\bPerplexity[ -]?AI\b/i, /\bMeta[ -]?AI\b/i, /\bAdobe[ -]?Firefly\b/i,
+	/\bRunComfy\b/i, /\bDeepSeek\b/i, /\bGrok\b/i, /\bAnthropic\b/i, /\bHugging[ -]?Face\b/i, /\bVM\b/i, /\bVMs\b/i, /\b5h3\b/i, /\bedit\b/i, /\bphotor\b/i, /\bGin4\b/i, 
+	/\bG1n4\b/i, /\bG1na\b/i, /\bGlna\b/i,  /\bAi-\b/i, /\b-Ai\b/i, /\bIA\b/i, /\bAI\b/i, /\bMLM\b/i, /\bLLM\b/i, /\bIas\b/i, /\b-Ia\b/i, /\bIa-\b/i, /\bM1mmusk4\b/i, 
+	/\bMimmusk4\b/i, /\bMimmuska\b/i, /\bM1mmi\b/i, /\bM1mmuska\b/i, /\bMimmi\b/i, /\bMimm1\b/i, /\btyttöjä\b/i, /\bGina\b/i, /\bnaisia\b/i, /\btytöt\b/i, /\bnaiset\b/i, 
+    ];
+
 
     // === INSTANT WHITE OVERLAY ===
     let overlay = document.createElement('div');
@@ -976,7 +1007,7 @@
 	/striper/i, /stripes/i, /shetakeoff/i, /takeoffher/i, /takesoffher/i, /shetakesoff/i, /takingoff/i, /tookoffher/i, /shetookoff/i, /baring/i, /bares/i, /bliswwe/i, /retouch/i, 
 	/touchup/i, /touch up/i, /tush/i, /lex bl/i, /image ai/i, /edit ai/i, /deviant/i, /Lex Cabr/i, /Lex Carb/i, /Lex Kauf/i, /Lex Man/i, /nudecrawler/i, /unc1oth/i, /photo AI/i, 
 	/pict AI/i, /pics app/i, /picsart/i, /enhance image/i, /erootti/i, /vegi/i, /vegen/i, /faceswap/i, /DeepSeek/i, /deepnude ai/i, /deepnude-ai/i, /object/i, /Roxan/i, /Perez/i, 
-	/Mickie/i, /Micky/i, /vagena/i, /birppis/i,  /aitool/i, /Lana Perry/i, /Del Rey/i, /Tiffa/i, /Stratt/i, /puzz/i, /vulv/i, /clito/i, /clita/i, /cl1t/i, /cloth/i, /uncloth/i, 
+	/Mickie/i, /Micky/i, /vagena/i, /birppis/i, /aitool/i, /Lana Perry/i, /Del Rey/i, /Tiffa/i, /Stratt/i, /puzz/i, /vulv/i, /clito/i, /clita/i, /cl1t/i, /cloth/i, /uncloth/i, 
 	/decloth/i, /rem cloth/i, /del cloth/i, /babyg/i, /eras cloth/i, /Bella/i, /Tiffy/i, /vagi/i, /vagene/i, /Del Ray/i, /CJ Lana/i, /generator/i, /Liv org/i, /Stee/i, /playboy/i, 
 	/Stewart/i, /off pant/i, /rem pant/i, /Kristen Stewart/i, /Steward/i, /Brit Bake/i,  /pantie/i, /panty/i, /pants/i, /poses/i, /Sydnee/i, /del pant/i, /eras pant/i, /her pant/i, 
 	/she pant/i, /pussy/i, /Babe/i, /content adult/i, /porn/i, /editing/i, /AI Tool/i, /Chelsey/i, /Zel Veg/i, /Ch3l/i, /Sweeney/i, /input face/i, /upload face/i, /editor/i, /Twat/i,
@@ -1009,9 +1040,8 @@
 	/lewdy/i, /lewdi/i, /lewdie's/i, /Torrie/i, /Dreamboot/i, /Dream boot/i, /dpnod/i, /dpnood/i, /dpnud/i, /depnud/i, /depnuud/i, /depenud/i, /depenuu/i, /dpepenud/i, /dpeepenud/i, 
 	/dpeepnud/i, /dpeependu/i, /dpeepndu/i, /softw/i, /img online/i, /photo online/i, /pic online/i, /Elina WWE/i, /Elyna WWE/i, /Elina Blac/i, /Elina Blak/i, /Fantop/i, /Fan top/i, 
 	/Fan-top/i, /Topfan/i, /Top fan/i, /Top-fan/i, /Top-fans/i, /fanstopia/i, /Jenni/i, /fans top/i, /topiafan/i, /topia fan/i, /topia-fan/i, /topifan/i, /topi fan/i, /topi-fan/i, 
-	/topaifan/i, /topai fan/i, /topai-fan/i, /fans-topia/i, /fans-topai/i, /Henni/i, /Lawren/i, /Lawrenc/i, /Lawrence/i, /Jennif/i, /Brave/i, /Browser/i, /Selain/i, /TOR-Selain/i, 
-	/MS Edge/i, /TOR-browser/i, /Opera/i, /Opera GX/i, /Browsi/i, /Browse/i, /safari/i, /Opera Browser/i, /Mozilla/i, /Firefox/i, /Firefux/i, /waterfox/i, /water fox/i, /waterfux/i, 
-	/water fux/i, /softorbit/i, /soft orbit/i, /StaphMc/i, /Staph McMahon/i, /MeekMahan/i, /MeekMahon/i, /MekMahon/i, /MekMahan/i, /MekMahaan/i, /Mek Mahaan/i, /4ut0/i, /Meek Mahaan/i, 
+	/topaifan/i, /topai fan/i, /topai-fan/i, /fans-topia/i, /fans-topai/i, /Henni/i, /Lawren/i, /Lawrenc/i, /Lawrence/i, /Jennif/i, /softorbit/i, /soft orbit/i, /Staph McMahon/i,  
+	/MeekMahan/i, /MeekMahon/i, /MekMahon/i, /MekMahan/i, /MekMahaan/i, /Mek Mahaan/i, /4ut0/i, /Meek Mahaan/i, /nainen/i, /naikkoset/i, /mimmejä/i, /misu/i, /pimu/i, /lahiopekoni/i, 
 	/Meek Mahan/i, /Meek Mahon/i, /Mek Mahon/i, /Co-Ai/i, /Com-Ai/i, /CoAi/i, /ComAi/i, /ComfAi/i, /ComfoAi/i, /ComforAi/i, /ComfortAi/i, /ComfortaAi/i, /ComfortabAi/i, /ComfortablAi/i, 
 	/ComfortableAi/i, /Comf-Ai/i, /Comfo-Ai/i, /Comfor-Ai/i, /Comfort-Ai/i, /Comforta-Ai/i, /Comfortab-Ai/i, /Comfortabl-Ai/i, /Comfortable-Ai/i, /Runcomfy/i, /Run comfy/i, /Run-comfy/i, 
 	/Aut1111/i, /Becky/i, /Becki/i, /Rebecca/i, /Amber Heard/i, /without cloth/i, /without pant/i, /without tshirt/i, /without t-shirt/i, /without boxer/i, /b0x3r/i, /women without/i,  
@@ -1034,7 +1064,7 @@
 	/animat pho/i,/animat ima/i, /animat img/i, /pic animat/i, /pho animat/i, /animat pic/i, /img animat/i, /ima animat/i, /photo animat/i, /image animat/i, /make pic mov/i, /make pho mov/i, 
 	/make img mov/i, /make ima mov/i, /gif pic/i, /gif pho/i, /gif img/i, /gif ima/i, /photo to gif/i, /image to gif/i, /pic to gif/i, /pic to vid/i, /photo to video/i, /image to video/i,  
 	/vld3/i, /v1d3/i, /g!f/i, /RemovingAI/i, /blowjob/i, /bjob/i, /mangoai/i, /mangoapp/i, /mango-app/i, /ai-app/i, /mangoanim/i, /mango anim/i, /mango-anim/i, /lantaai/i, /lantaaa/i, /EXGF/i,
-	/motionai/i, /chr0m/i, /m1um/i, /changemotion/i, /swapmotion/i, /motionsw/i, /motionc/i, /poseai/i, /AIblow/i, /AIsuck/i, /AI-suck/i, /drool/i, /RemovingAI/i, /bjob/i, /Down Marie/i, 
+	/motionai/i, /changemotion/i, /swapmotion/i, /motionsw/i, /motionc/i, /poseai/i, /AIblow/i, /AIsuck/i, /AI-suck/i, /drool/i,/Down Marie/i, /lähiopekoni/i, /lähiöpekoni/i, /lahiöpekoni/i,
 	/blowjob/i, /BJob/i, /B-J0b/i, /B-Job/i, /Suckjob/i, /Suck-job/i,  /Suckj0b/i, /Suck-j0b/i, /SDuck/i, /Mouthjob/i, /Mouth-job/i, /MouthAI/i, /MouthinAI/i, /MouthingAI/i, /AIMouth/i, /wedge/i,
 	/BlowAI/i, /BlowsAI/i, /BlowingAI/i, /JobAI/i, /AIJob/i, /Mouthig/i, /ZuckCock/i, /ZuckC/i, /ZuckD/i, /ZuckP/i, /Zuckz/i, /Zucks/i, /Zuckc/i, /Zuzkc/i, /YouZuck/i, /EX-GF/i, /TitsAI/i,
 	/ZuckYou/i, /Cuck/i, /Guck/i, /Cheeks/i, /Sukc/i, /AISucc/i, /SuccAI/i, /Suqz/i, /Suqs/i, /Suqc/i, /Suqq/i, /Suqq/i, /Suqi/i, /Suqz/i, /Sucq/i, /cukc/i, /boob/i, /b0ob/i, /fagger/i, /wedgi/i,     
@@ -1050,7 +1080,7 @@
 	/OpensHerLegs/i, /SpreadLeg/i, /SpreadHerLeg/i, /cunnn/i, /strips/i, /SpreadsLeg/i, /SpreadsHerLeg/i, /HerThig/i, /HerLeg/i, /HerThic/i, /SheThig/i, /SheLeg/i, /SheThic/i, /HerLeg/i, /HerThic/i, 
 	/LegShe/i, /LegsShe/i, /Thicc/i, /ThickShe/i, /fondl/i, /bdsm/i, /censor/i, /reveals all/i, /reveali/i, /revealing/i, /stripp/i, /strips/i, /stripz/i, /stripi/i, /striper/i, /stripes/i, /striped/i, 
 	/shetakeoff/i, /takeoffher/i, /takesoffher/i, /shetakesoff/i, /takingoff/i, /tookoffher/i, /shetookoff/i, /baring/i, /bares/i, /artintel/i, /Zendaya/i, /AIZuck/i, /Stratu/i, /Kairi/i, /artintel/i, 
-	/machinelearning/i, /sweee/i,
+	/RemovingAI/i, /bjob/i, /StaphMc/i, /machinelearning/i, /sweee/i, 
 	 
 
 
@@ -1060,14 +1090,12 @@
 
     // Boundaried Nuclear regexes
 	/\bgirl\b/i, /\blady\b/i, /\bshe\b/i, /\bher\b/i, /\banal\b/i, /\bsex\b/i, /\bbra\b/i, /\bass\b/i, /\bmorph\b/i, /\bVega\b/i, /\bSlut\b/i, /\bFap\b/i, /\bTor\b/i, /\bBoob\b/i, 
-	/\bAMX\b/i, /\bAnal-\b/i, /\bAlexa\b/i, /\bAleksa\b/i, /\bAi-\b/i, /\b-Ai\b/i, /\bADM\b/i, /\bADMX\b/i, /\bAis\b/i, /\bedit\b/i, /\bIzzi\b/i, /\bDame\b/i, /\bNox\b/i, /\bLiv\b/i,  
-	/\bSol\b/i, /\bEmma\b/i, /\bRiho\b/i, /\bJaida\b/i, /\bCum\b/i, /\bAnal\b/i, /\bTay\b/i, /\balexa wwe\b/i, /\bazz\b/i, /\bLana\b/i, /\bFuku\b/i, /\bMina\b/i, /\bMachaine\b/i,
-	/\bjaida\b/i, /\bRembg\b/i, /\bRem bg\b/i, /\bDel bg\b/i, /\bDelbg\b/i, /\bMorf\b/i, /\bIA\b/i, /\bAI\b/i, /\bIas\b/i, /\b-Ia\b/i, /\bIa-\b/i,  /\bMLM\b/i, /\bLLM\b/i, /\bGen\b/i, 
-	/\bTits\b/i, /\b5he\b/i, /\bChaturbate\b/i, /\bToni\b/i, /\bStripchat\b/i, /\b0rg\b/i, /\bg45m\b/i, /\bSX\b/i, /\bNud\b/i, /\bdpnod\b/i, /\bdp nod\b/i, /\bsh3\b/i, /\bGrils\b/i, 
-	/\b5h3\b/i, /\bphotor\b/i, /\bGina\b/i, /\bGin4\b/i, /\bG1n4\b/i, /\bG1na\b/i, /\bGlna\b/i, /\bG!na\b/i, /\bGril\b/i,  /\bGail\b/i, /\bAshley\b/i, /\bPamela\b/i, /\bBrooke\b/i, 
-	/\bTylo\b/i, /\bCatherine\b/i, /\bBridget\b/i, /\bSally\b/i, /\bvsco\b/i, /\bdp nood\b/i, /\bdp nod\b/i, /\bdep nod\b/i, /\bFux\b/i, /\bButt\b/i, /\bLily\b/i, /\bLilly\b/i, 
-	/\bAmber\b/i, /\bFuk\b/i, /\bFuc\b/i, /\bmotion\b/i, /\bH3r\b/i, /\bS0ft\b/i, /\b50ft\b/i, /\bFag\b/i, /\bThekla\b/i, /\bTit\b/i, /\bShotzi\b/i, /\bPant\b/i, /\bElena\b/i, 
-	/\bExGF\b/i, /\bEx-GF\b/i, /\bZoey\b/i, /\bSuck\b/i, /\bSucks\b/i,
+	/\bAMX\b/i, /\bAnal-\b/i, /\bAlexa\b/i, /\bAleksa\b/i, /\bADM\b/i, /\bADMX\b/i, /\bAis\b/i, /\b5he\b/i, /\b0rg\b/i, /\bg45m\b/i, /\bSX\b/i, /\bNud\b/i, /\bdpnod\b/i, /\bdp nod\b/i, 
+	/\bsh3\b/i, /\bGrils\b/i, /\bIzzi\b/i, /\bDame\b/i, /\bNox\b/i, /\bLiv\b/i, /\bEmma\b/i, /\bRiho\b/i, /\bJaida\b/i, /\bCum\b/i, /\bAnal\b/i, /\bTay\b/i, /\balexa wwe\b/i, /\bazz\b/i, 
+	/\bLana\b/i, /\bFuku\b/i, /\bMina\b/i, /\bMachaine\b/i, /\bjaida\b/i, /\bRembg\b/i, /\bRem bg\b/i, /\bDel bg\b/i, /\bDelbg\b/i, /\bMorf\b/i, /\bTits\b/i, /\bChaturbate\b/i, /\bToni\b/i, 
+	/\bStripchat\b/i, /\bGril\b/i,  /\bGail\b/i, /\bAshley\b/i, /\bPamela\b/i, /\bBrooke\b/i, /\bTylo\b/i, /\bCatherine\b/i, /\bBridget\b/i, /\bSally\b/i, /\bvsco\b/i, /\bdp nood\b/i, 
+	/\bdp nod\b/i, /\bdep nod\b/i, /\bFux\b/i, /\bButt\b/i, /\bLily\b/i, /\bLilly\b/i, /\bAmber\b/i, /\bFuk\b/i, /\bFuc\b/i, /\bmotion\b/i, /\bH3r\b/i, /\bS0ft\b/i, /\b50ft\b/i, /\bFag\b/i, 
+	/\bThekla\b/i, /\bTit\b/i, /\bShotzi\b/i, /\bPant\b/i, /\bElena\b/i, /\bExGF\b/i, /\bEx-GF\b/i, /\bZoey\b/i, /\bSuck\b/i, /\bSucks\b/i,
 	
 
     // Finnish Nuclear regex list
@@ -1130,62 +1158,37 @@
 	/see[- ]?through/i,
 	/vaat.*pois/i,
     
-
-        // AI Terms
-        /\bGemini\b/i, /\bClaude\b/i, /\bSonnet\b/i, /\bCopilot\b/i,
-        /\bDALL[-\s]?E\b/i, /\bSora\b/i, /\bMidjourney\b/i, /\bGrok\b/i,
-        /\bStable[ -]?Diffusion\b/i, /\bComfy(?:UI|AI)\b/i, /\bRunComfy\b/i,
-        /\bDeepSeek\b/i, /\bGrok\b/i, /\bAnthropic\b/i, /\bHugging[ -]?Face\b/i,
-        /\bMistral(?:[ -]?AI)?\b/i, /\bLlama(?:[ -]?[0-9.]+)?\b/i,
-        /\bPerplexity[ -]?AI\b/i, /\bMeta[ -]?AI\b/i, /\bAdobe[ -]?Firefly\b/i,
-        /\bLLMs?\b/i, /\bartificial intelligence\b/i, /\bgenerative AI\b/i,
-        /\bmachine learning\b/i, /\bneural networks?\b/i, /\bteko[äa]ly\b/i,
 ];
-
-
-    // Query-only redirect terms (never hide ordinary result links/cards)
-    const queryRedirectTerms = [
-    	/#/i, /##/i, /###/i, /@@/i, /#\*/i, /\*#/i, /@\*/i, /\*@/i, /#@/i, /@#/i,
-    ];
 
 
     // Regexes of result/link/card-only terms. These never redirect a search by themselves.
     const resultHideTerms = [
-	/Virtual laatikko/i, /Virtuaali laatikko/i, /Virtuaalilaatikko/i, /Virtuaalibox/i, /virtualmachine/i, /virtual machine/i, /kuvankäsittely/i, /M0u7h/i,  
-	/virtuaali kone/i, /virtuaali tietokone/i, /virtuaalitietokone/i, /hyper-v/i, /hyper v/i, /virtuaalimasiina/i, /virtuaali masiina/i, /virtuaalimasiini/i, 
-	/virtuaali masiini/i, /virtuaali workstation/i, /virtual workstation/i, /virtualworkstation/i, /vrbox/i, /vibox/i, /virtuaaliworkstation/i, /hypervisor/i,   
-	/virbox/i, /virtbox/i, /vir box/i, /virt box/i, /virtual box/i, /vi-machine/i, /vi machine/i, /virmachine/i, /vir-machine/i, /virbox virtual/i, /v-machine/i, 
-	/hyper visor/i, /vibox virtual/i, /vbox virtual/i, /vmachine/i, /v machine/i, /vimachine/i, /vir machine/i, /virt machine/i, /ma71c/i, /virtmachine/i, /p1p4r/i, 
-	/virtumachine/i, /virtu-machine/i, /virtu machine/i, /diiva/i, /virtuamachine/i, /virtua-machine/i, /virtua machine/i, /vi mach/i, /vir mach/i, /virt mach/i, 
-	/VM Ware/i, /Virtualbox/i, /Virtual box/i, /ilåtyttå/i, /ilåtyttö/i, /iløtyttö/i, /iløtytto/i, /iløtyttø/i, /il0tyttö/i, /il0tytto/i, /il0tytt0/i, /il0tyttå/i,  
-	/1lotyttö/i, /1lotytto/i, /!lotyttö/i, /ilotyttø/i, /ilotytt0/i, /ilotytto/i, /kuvake\.net/i, /ilåtalå/i, /ilotalå/i, /tyttöjä/i, /naisia/i, /tytöt/i, /naiset/i, 
-	/nainen/i, /naikkoset/i, /mimmejä/i, /misu/i, /pimu/i, /lahiopekoni/i, /lähiopekoni/i, /lähiöpekoni/i, /lahiöpekoni/i, /li1vi/i, /p3rs aukko/i, /p3r5 aukko/i, 
-	/per5 aukko/i, /p3rs-aukko/i, /p3r5 aukko/i, /0nli/i, /p3rse/i, /pers3/i, /p3rs3/i, /per5e/i, /per53/i, /p3r5e/i, /p3r53/i, /rints/i, /r1nts/i, /r1nt5/i, /rint5/i, 
-	/pip4r/i, /p1par/i, /rintalii/i, /rinta lii/i, /r1nta/i, /r1nt4/i, /rint4/i, /l1ivi/i, /sexi/i, /liiv1/i, /l1iv1/i, /li1v1/i, /l11v1/i, /l11vi/i, /mat1c/i, /m4tic/i,  
-	/ma7ic/i, /ma71c/i, /m4tic/i, /ComfyUI/i, /ma7ic/i, /0r9g4/i, /0r1q4/i, /0r1qa/i, /0rlg4h/i, /or1g@h/i,/0rg4/i, /org4/i, /orgy/i, /orgi/i, /org@/i, /0rg@/i, /0rgi/i,  
-	/0riga/i, /0r1g4/i, /0rlg4/i, /orlg4/i, /0rlg@/i, /orlg@/i, /or1ga/i, /orig4/i, /0rlga/i, /0rrg4/i, /orrg4/i, /or1g@/i, /0r1g@/i, /0r1ga/i, /0r!g@/i, /0r!g4/i, /d!c/i,  
-	/0r9ga/i, /reveals/i, /reveali/i, /revealing/i, /reveale/i, /booba/i, /Waaa/i, /V14gr/i, /w333d/i, /w3333/i, /we333/i, /w3e33/i, /w33e3/i, /w333e/i, /we33e/i, /we3e3/i, 
-	/w3e3e/i, /weee/i, /f4gg/i, /fagg3/i, /wedg1/i, /wedg!/i, /w3dg/i, /w33d/i, /we3d/i, /w3ed/i, /wemen's/i, /wemen/i, /wemon's/i, /ldaies/i, /laadie/i, /laadis/i, /leydis/i, 
-	/5uck/i, /Beba/i, /Bepa/i, /al4ston/i, /p!llu/i, /p!mppi/i, /V1agr/i, /V!agr/i, /V!4gr/i, /Vi4gr/i, /V14gr/i, /Viagr/i, /c3n5o/i, /zen5o/i, /z3n5o/i, /s3n5o/i, /sen5o/i, 
-	/s3nso/i, /s3nc/i, /ph0t/i, /p1c/i, /picc/i, /im4g/i, /image online/i, /hawt/i, /h4wt/i, /h0wt/i, /d!ck/i, /dlck/i, /wemons/i, /d1c/i, /d!k/i, /c0ck/i, /d!c/i, /onl1/i, 
-	/fappp/i, /p05/i, /po5/i, /p0s/i, /postur/i, /posin/i, /Anthr/i, /Antro/i, /s0ftw/i, /w4r3/i, /p41n/i, /pa1n/i, /Elyina/i, /Eliyna/i, /bik1/i, /0nl1/i, /t0ol/i, /to0l/i, 
-	/t00l/i, /70ol/i, /7o0l/i, /700l/i, /Elayna/i, /Eleyna/i, /Elyna/i, /Sxuel/i, /Sxual/i, /Sxu3l/i, /5xu3l/i, /5xu4l/i, /5xual/i, /dre4m/i, /dr34m/i, /bo0th/i, /b0oth/i, 
-	/b0o7h/i, /bo07h/i, /b007h/i, /b00th/i, /booo/i, /b0oo/i, /bo0o/i, /boo0/i, /b000/i, /booo/i, /n000/i, /no0d/i, /n0od/i, /K3wc/i, /7ush/i, /7u5h/i, /tu5h/i, /b4re/i, 
-	/bar3/i, /b4r3/i, /b4r1/i, /bar1/i, /4ppl1/i, /appl1/i, /pr0gram/i, /progr4m/i, /pr0gr4m/i, /pr0/i, /zenzor/i, /cencor/i, /cenzor/i, /cens0/i, /c3ns/i, /cen5/i, /c3n5/i, 
-	/cen5o/i, /sencor/i, /zencor/i, /zensor/i, /leydies/i, /b4re/i, /j0b/i, /w0rk/i, /bj0b/i, /dr0ol/i, /dro0l/i, /dr00l/i, /BJAI/i, /AIBJ/i, /BJ0b/i, /M4rie/i, /Mar1e/i, 
-	/ph0t/i, /pho7/i, /ph07/i, /1m4g/i, /im4g/i, /1mag/i, /!m4g/i, /!mg/i, /v1d3/i, /bl0w/i, /b4ri/i, /striped/i, /v3rc/i, /v3rz/i, /v3rs/i, /v3r5/i, /sk1r/i, /5kir/i, 
-	/5k1r/i, /Mouthj0b/i, /M0uthjob/i, /M0uthj0b/i, /Mouth-j0b/i, /M0uth/i, /Mou7h/i,  /Prim3r/i, /Pr1m3r/i, /Pr1mer/i, /Primar/i, /Pr1m4r/i, /Pr1mar/i, /LaPr1ma/i, 
-	/L4Pr1ma/i, /LaPr1m4/i, /LaPrim4/i, /LaPrim3/i, /LaPr1m3/i, /b0xer/i, /4uto/i, /Jenn1/i, /J3nn1/i, /J3nni/i, /J3nn4/i, /b0x3r/i, /Jenn4/i, /waterf0x/i, /water f0x/i, 
-	/ed17/i, /5hag/i, /5h4g/i, /sh4g/i, /3dg1n/i, /ed!t/i, /edi7/i, /3d!7/i, /pa!g/i, /3d!t/i, /P4IG3/i, /Paig3/i, /P4ige/i, /pa1g/i, /3dit/i, /ed1t/i, /Tw4t/i, /Brltt/i, 
-	/St3ph/i, /her0/i, /h3r0/i, /h3ro/i, /pr0mpt/i, /pr0mp7/i, /Chel5/i, /3d1t/i, /5k1r/i, /m4tic/i, /OracleVM/i, /VMWare/i, /VM Ware/i, /wuhmans/i, /wahmans/i, /wehmans/i, 
-	/Torr1/i, /Torr!/i, /Virtual Machine/i, /0rig4/i, /per5 aukko/i,  /virtu mach/i, /virt-machine/i, /il0tyttø/i, /pa!g/i, /iløtalo/i, /0rga5m/i, /m47ic/i, /m471c/i, 
-	/hyperv/i, /vbox/i, /virtbox virtual/i, /0rig@/i, /Aut0/i, /ed!7/i, /5xuel/i, /n00d/i, /gr4m/i, /4ppli/i, /war3/i, /0rg@5m/i, /p4in/i, /d1ck/i, /M0uth-job/i, /w4re/i, 
-	/blowj0b/i, /3d17/i, /promp7/i, /wee3e/i, /virtuaalikone/i, /5yvä/i, /v1de/i, /!mag/i, /!m4g/i, /palg3/i,
-
-
-    // Boundaried result link/card regexes
-	/\bM1mmusk4\b/i, /\bMimmusk4\b/i, /\bMimmi\b/i, /\bMimmuska\b/i, /\bM1mmi\b/i, /\bM1mmuska\b/i, /\bMimm1\b/i, /\bMachiine\b/i, /\bMacheine\b/i, /\bMachiene\b/i, /\bVM\b/i, /\bVMs\b/i,
+	/ilåtyttå/i, /ilåtyttö/i, /iløtyttö/i, /iløtytto/i, /iløtyttø/i, /il0tyttö/i, /il0tytto/i, /il0tytt0/i, /il0tyttå/i, /1lotyttö/i, /1lotytto/i, /!lotyttö/i, /0nli/i,
+	/ilotyttø/i, /ilotytt0/i, /ilotytto/i, /kuvake\.net/i, /ilåtalå/i, /ilotalå/i, /li1vi/i, /p3rs aukko/i, /p3r5 aukko/i, /per5 aukko/i, /p3rs-aukko/i, /p3r5 aukko/i,  
+	/p3rse/i, /pers3/i, /p3rs3/i, /per5e/i, /per53/i, /p3r5e/i, /p3r53/i, /rints/i, /r1nts/i, /r1nt5/i, /rint5/i, /pip4r/i, /p1par/i, /rintalii/i, /rinta lii/i, /r1nta/i, 
+	/r1nt4/i, /rint4/i, /l1ivi/i, /sexi/i, /liiv1/i, /l1iv1/i, /li1v1/i, /l11v1/i, /l11vi/i, /mat1c/i, /m4tic/i, /ma7ic/i, /ma71c/i, /m4tic/i, /ComfyUI/i, /ma7ic/i, /0r9g4/i, 
+	/0r1q4/i, /0r1qa/i, /0rlg4h/i, /or1g@h/i,/0rg4/i, /org4/i, /orgy/i, /orgi/i, /org@/i, /0rg@/i, /0rgi/i, /0riga/i, /0r1g4/i, /0rlg4/i, /orlg4/i, /0rlg@/i, /orlg@/i, /or1ga/i, 
+	/orig4/i, /0rlga/i, /0rrg4/i, /orrg4/i, /or1g@/i, /0r1g@/i, /0r1ga/i, /0r!g@/i, /0r!g4/i, /d!c/i, /0r9ga/i, /booba/i, /Waaa/i, /V14gr/i, /w333d/i, /w3333/i, /wemen's/i,
+	/we333/i, /w3e33/i, /w33e3/i, /w333e/i, /we33e/i, /we3e3/i, /w3e3e/i, /weee/i, /f4gg/i, /fagg3/i, /wedg1/i, /wedg!/i, /w3dg/i, /w33d/i, /we3d/i, /w3ed/i, /wemen/i, /pr0/i,
+	/ldaies/i, /laadie/i, /laadis/i, /leydis/i, /5uck/i, /Beba/i, /Bepa/i, /al4ston/i,  /p4in/i, /p!mppi/i, /V1agr/i, /V!agr/i, /V!4gr/i, /Vi4gr/i, /V14gr/i, /Viagr/i, /c3n5o/i, 
+	/zen5o/i, /z3n5o/i, /s3n5o/i, /sen5o/i, /s3nso/i, /s3nc/i, /ph0t/i, /p1c/i, /picc/i, /im4g/i, /image online/i, /d!ck/i, /dlck/i, /wemons/i, /d1c/i, /d!k/i, /c0ck/i, /d!c/i, 
+	/onl1/i, /fappp/i, /p05/i, /po5/i, /p0s/i, /postur/i, /posin/i, /Anthr/i, /Antro/i, /s0ftw/i, /w4r3/i, /p41n/i, /pa1n/i, /Elyina/i, /Eliyna/i, /bik1/i, /0nl1/i, /t0ol/i,
+	/to0l/i, /t00l/i, /70ol/i, /7o0l/i, /700l/i, /Elayna/i, /Eleyna/i, /Elyna/i, /Sxuel/i, /Sxual/i, /Sxu3l/i, /5xu3l/i, /5xu4l/i, /5xual/i, /dre4m/i, /dr34m/i, /bo0th/i, 
+	/b0oth/i, /b0o7h/i, /bo07h/i, /b007h/i, /b00th/i, /booo/i, /b0oo/i, /bo0o/i, /boo0/i, /b000/i, /booo/i, /n000/i, /no0d/i, /n0od/i, /K3wc/i, /7ush/i, /7u5h/i, /tu5h/i, 
+	/b4re/i, /bar3/i, /b4r3/i, /b4r1/i, /bar1/i, /4ppl1/i, /appl1/i, /pr0gram/i, /progr4m/i, /pr0gr4m/i, /wemon's/i, /zenzor/i, /cencor/i, /cenzor/i, /cens0/i, /c3ns/i, 
+	/cen5/i, /c3n5/i, /cen5o/i, /sencor/i, /zencor/i, /zensor/i, /leydies/i, /b4re/i, /j0b/i, /w0rk/i, /bj0b/i, /dr0ol/i, /dro0l/i, /dr00l/i, /BJAI/i, /AIBJ/i, /BJ0b/i, 
+	/M4rie/i, /Mar1e/i, /ph0t/i, /pho7/i, /ph07/i, /1m4g/i, /im4g/i, /1mag/i, /!m4g/i, /!mg/i, /v1d3/i, /bl0w/i, /striped/i, /b4ri/i, /v3rc/i, /v3rz/i, /v3rs/i, /v3r5/i, 
+	/sk1r/i, /5kir/i, /5k1r/i, /Mouthj0b/i, /M0uthjob/i, /M0uthj0b/i, /Mouth-j0b/i, /M0uth/i, /Mou7h/i,  /Prim3r/i, /Pr1m3r/i, /Pr1mer/i, /Primar/i, /Pr1m4r/i, /Pr1mar/i, 
+	/LaPr1ma/i, /L4Pr1ma/i, /LaPr1m4/i, /LaPrim4/i, /LaPrim3/i, /LaPr1m3/i, /w4re/i, /Jenn1/i, /J3nn1/i, /J3nni/i, /b0xer/i, /4uto/i, /J3nn4/i, /b0x3r/i, /Jenn4/i, /M0u7h/i, 
+	/5hag/i, /5h4g/i, /sh4g/i, /3dg1n/i, /ed!t/i, /edi7/i, /3d!7/i, /pa!g/i, /3d!t/i, /P4IG3/i, /Paig3/i, /P4ige/i, /pa1g/i, /3dit/i, /ed1t/i, /Tw4t/i, /Brltt/i, /St3ph/i, 
+	/her0/i, /h3r0/i, /h3ro/i, /pr0mpt/i, /pr0mp7/i, /Chel5/i, /3d1t/i, /5k1r/i, /m4tic/i, /wuhmans/i, /wahmans/i, /wehmans/i, /Torr1/i, /Torr!/i, /0rig4/i, /per5 aukko/i, 
+	/il0tyttø/i, /pa!g/i, /iløtalo/i, /0rga5m/i, /m47ic/i, /m471c/i, /ma71c/i, /0rig@/i, /Aut0/i, /ed!7/i, /5xuel/i, /n00d/i, /gr4m/i, /4ppli/i, /war3/i, /0rg@5m/i, /d1ck/i,
+	/ed17/i, /p!llu/i, /blowj0b/i, /3d17/i, /promp7/i, /wee3e/i, /5yvä/i, /v1de/i, /!mag/i, /!m4g/i, /palg3/i, /M0uth-job/i, 
     ];
+
+
+
+
 
     // The soft tier is authoritative for exact VM/image-processing patterns. CurrentSystem had
     // a handful of exact duplicates in Nuclear; keep the soft tier authoritative for those exact patterns.
@@ -1281,9 +1284,9 @@
 
     ];
 
-    // These have the same behavior as queryRedirectTerms:
-    // redirect queries, never hide ordinary links by themselves.
-    queryRedirectTerms.push(...specialRedirectRegexes);
+    // Keep specialized patterns in the same combined tier: direct-query redirects plus
+    // real result/link/image-card hiding, but no suggestion/correction redirect checks.
+    redirectHideLite.push(...specialRedirectRegexes);
 
     // Search Allow Terms list, these should not redirect (probably). 
     const searchAllowTerms = [
@@ -1403,7 +1406,7 @@
 	/pyörtyminen/i, /turvotus/i, /ödeema/i, /vilunväristys/i, /yöhikoilu/i, /laihtuminen/i, /ruokahaluttomuus/i, /nestehukka/i, /verikoe/i, /laboratoriokoe/i, /verenkuva/i, /lasko/i, /maksa-arvot/i, /munuaisarvot/i, /bilirubiini/i, 
 	/albumiini/i, /elektrolyytti/i, /natrium/i, /kalium/i, /kalsium/i, /B12-vitamiini/i, /ferritiini/i, /sydänfilmi/i, /magneettikuvaus/i, /tietokonetomografia/i, /ultraääni/i, /röntgen/i, /angiografia/i, /sydämen ultraääni/i, 
 	/tähystys/i, /gastroskopia/i, /kolonoskopia/i, /koepala/i, /patologia/i, /histologia/i, /sytologia/i, /radiologia/i, /radiologi/i, /patologi/i, /lääke/i, /lääkitys/i, /resepti/i, /annostus/i, /annos/i, /tabletti/i, /kapseli/i, 
-	/infuusio/i, /suonensisäinen/i, /kipulääke/i, /opioidi/i, /statiini/i, /antikoagulaatio/i, /sisätaudit/i, /gastroenterologia/i, /anestesiologia/i, /oramorfiini/i, /morfiini/i,
+	/infuusio/i, /suonensisäinen/i, /kipulääke/i, /opioidi/i, /statiini/i, /antikoagulaatio/i, /sisätaudit/i, /gastroenterologia/i, /anestesiologia/i, /oramorfiini/i, /morfiini/i, /rutto/i, /ruton/i, /oire/i, /oireet/i,
 
 
 	// Boundaried search regexes (mixed languages)
@@ -1428,6 +1431,10 @@
     const GJ_centralPolicyVerdictCache = new Map();
     const GJ_centralPolicyPending = new Set();
     let GJ_centralPolicyFlushTimer = 0;
+    let GJ_centralPolicyGeneration = 0;
+    let GJ_centralPolicySnapshotLoaded = false;
+    let GJ_centralPolicySnapshotFingerprint = '';
+    let GJ_centralPolicySnapshotRequest = 0;
 
     function GJ_centralPolicyRuntime() {
         try {
@@ -1632,9 +1639,13 @@
         return '';
     }
 
-    function GJ_onCentralPolicyUpdated() {
+    function GJ_onCentralPolicyUpdated(invalidateResultCaches = false) {
+        // A newly resolved URL needs another pass, but not a destructive organic-card
+        // refresh. Other cached links and image cards still need their async hard-deny
+        // verdicts reapplied as soon as the background classification comes back.
         try {
             document.querySelectorAll('[data-gj-cache], [data-gj-cache-img]').forEach(node => {
+                if (!invalidateResultCaches && node.hasAttribute('data-googlejs-organic-card')) return;
                 node.removeAttribute('data-gj-cache');
                 node.removeAttribute('data-gj-cache-img');
             });
@@ -1649,9 +1660,13 @@
         if (!GJ_centralPolicyPending.size) return;
 
         const urls = Array.from(GJ_centralPolicyPending).slice(0, 192);
+        const generation = GJ_centralPolicyGeneration;
         urls.forEach(url => GJ_centralPolicyPending.delete(url));
 
         GJ_sendCentralPolicyMessage({ type: GJ_CENTRAL_POLICY_CLASSIFY_TYPE, urls }).then(response => {
+            // Results requested before a real policy revision must never repopulate the
+            // cache after it has been invalidated by that newer policy.
+            if (generation !== GJ_centralPolicyGeneration) return;
             let changed = false;
 
             if (response?.ok && Array.isArray(response.verdicts)) {
@@ -1681,6 +1696,7 @@
             if (changed) GJ_onCentralPolicyUpdated();
             if (GJ_centralPolicyPending.size) GJ_queueCentralPolicyFlush();
         }).catch(() => {
+            if (generation !== GJ_centralPolicyGeneration) return;
             urls.forEach(url => {
                 if (!GJ_centralPolicyVerdictCache.has(url)) GJ_centralPolicyPending.add(url);
             });
@@ -1701,18 +1717,48 @@
         GJ_queueCentralPolicyFlush();
     }
 
-    function GJ_loadCentralPolicySnapshot() {
+    function GJ_centralPolicySnapshotKey(snapshot) {
+        // Host-list ordering can change without the effective finite policy changing.
+        // A stable fingerprint avoids throwing away already validated results for that.
+        const sorted = values => values.map(value => String(value)).sort();
+        return JSON.stringify({
+            allowedHosts: sorted(snapshot.allowedHosts),
+            allowedPathRules: snapshot.allowedPathRules.map(rule =>
+                JSON.stringify([String(rule?.host || ''), String(rule?.pathPrefix || '')])).sort(),
+            blockedSites: sorted(snapshot.blockedSites),
+            blockedTLDs: sorted(snapshot.blockedTLDs)
+        });
+    }
+
+    function GJ_loadCentralPolicySnapshot(revalidateFetchedHosts = false) {
+        const request = ++GJ_centralPolicySnapshotRequest;
         GJ_sendCentralPolicyMessage({ type: GJ_CENTRAL_POLICY_SNAPSHOT_TYPE }).then(response => {
-            if (!response?.ok || !response.snapshot) return;
-            GJ_centralPolicySnapshot = {
+            if (request !== GJ_centralPolicySnapshotRequest || !response?.ok || !response.snapshot) return;
+            const nextSnapshot = {
                 allowedHosts: Array.isArray(response.snapshot.allowedHosts) ? response.snapshot.allowedHosts.slice() : [],
                 allowedPathRules: Array.isArray(response.snapshot.allowedPathRules) ? response.snapshot.allowedPathRules.map(rule => ({ ...rule })) : [],
                 blockedSites: Array.isArray(response.snapshot.blockedSites) ? response.snapshot.blockedSites.slice() : [],
                 blockedTLDs: Array.isArray(response.snapshot.blockedTLDs) ? response.snapshot.blockedTLDs.slice() : []
             };
-            GJ_centralPolicyVerdictCache.clear();
-            GJ_centralPolicyPending.clear();
-            GJ_onCentralPolicyUpdated();
+            const fingerprint = GJ_centralPolicySnapshotKey(nextSnapshot);
+            const firstSnapshot = !GJ_centralPolicySnapshotLoaded;
+            const finitePolicyChanged = !firstSnapshot && fingerprint !== GJ_centralPolicySnapshotFingerprint;
+            GJ_centralPolicySnapshot = nextSnapshot;
+            GJ_centralPolicySnapshotFingerprint = fingerprint;
+            GJ_centralPolicySnapshotLoaded = true;
+
+            // The first snapshot arrives asynchronously, often AFTER clean results were
+            // classified. Never discard those verdicts simply because it arrived.
+            // Later unchanged snapshots likewise need no destructive refresh. A real
+            // hosts-file update (which is not represented in the finite snapshot) DOES.
+            if (finitePolicyChanged || revalidateFetchedHosts) {
+                GJ_centralPolicyGeneration++;
+                GJ_centralPolicyVerdictCache.clear();
+                GJ_centralPolicyPending.clear();
+                GJ_onCentralPolicyUpdated(true);
+            } else if (firstSnapshot) {
+                GJ_onCentralPolicyUpdated();
+            }
         }).catch(() => {});
     }
 
@@ -1721,9 +1767,9 @@
         const storageApi = globalThis.browser?.storage || globalThis.chrome?.storage;
         storageApi?.onChanged?.addListener((changes, areaName) => {
             if (areaName !== 'local' || (!changes.lastUpdate && !changes.hostsChunks && !changes.hostsTotal && !changes['bfb:hosts-meta:v1'])) return;
-            GJ_centralPolicyVerdictCache.clear();
-            GJ_centralPolicyPending.clear();
-            GJ_loadCentralPolicySnapshot();
+            // Storage events can signal a real fetched-hosts change even when the finite
+            // snapshot is identical. Revalidate only after the fresh snapshot arrives.
+            GJ_loadCentralPolicySnapshot(true);
         });
     } catch (e) {}
 
@@ -1776,6 +1822,7 @@
         /^https?:\/\/(?:www\.)?findidfb\.com(?:[\/:?#]|$)/i,
         /^https?:\/\/(?:www\.)?lookup-id\.com(?:[\/:?#]|$)/i,
         /^https?:\/\/(?:www\.)?wiktionary\.org(?:[\/:?#]|$)/i,
+        /^https?:\/\/(?:www\.)?terve\.fi(?:[\/:?#]|$)/i,
     ];
 
     // Precise deny paths on otherwise allowed hosts. Keep this list anchored and
@@ -3667,8 +3714,8 @@
 
     dedupeRegexArray(nuclearRegex);
     dedupeRegexArray(resultHideTerms);
+    dedupeRegexArray(redirectHideLite);
     dedupeRegexArray(searchAllowTerms);
-    dedupeRegexArray(queryRedirectTerms);
     dedupeRegexArray(allowedResultURLs);
     dedupeRegexArray(priorityBlockedResultURLPatterns);
     dedupeRegexArray(blockedResultURLPatterns);
@@ -3783,14 +3830,15 @@
         return testRegexList(searchAllowTerms, text);
     }
 
-    // Query/form/suggestion redirect tier. Never called by result decisions.
-    function containsQueryRedirectTerms(text) {
-        return testRegexList(queryRedirectTerms, text);
-    }
-
     // Result/link/card hide tier. Never called by query decisions.
     function containsResultHideTerms(text) {
         return testRegexList(resultHideTerms, text);
+    }
+
+    // Combined lite rules apply only to direct searches and real result/link/image cards.
+    // Suggestion/correction callers opt out explicitly; Nuclear still applies to them.
+    function containsRedirectHideLite(text) {
+        return testRegexList(redirectHideLite, text);
     }
 
     // === AI-BOUNDARY FUNCTION (USED FOR QUERIES ETC.) ===
@@ -3861,7 +3909,7 @@
 	//Finnish words list
 	/aika/i, /aikuinen/i, /saippua/i, /aisti/i, /aivo/i, /tilaisuus/i, /aikuiskoulutus/i, /paikka/i, /saippua/i, /aivast/i, /hais/i, /mais/i, /kais/i, /tais/i, /raiska/i, /raippa/i, 
 	/pais/i, /alainen/i, /koululainen/i, /Kuinka/i, /Miten/i, /Miksi/i, /Milloin/i, /Milloin/i, /Miksei/i, /aita/i, /aidan/i, /maailma/i, /avoin/i, /avaim/i, /avain/i, /aivan/i,
-        /maanantai/i, /tiistai/i, /torstai/i, /perjantai/i, /lauantai/i, /sunnuntai/i,
+        /maanantai/i, /tiistai/i, /torstai/i, /perjantai/i, /lauantai/i, /sunnuntai/i, /rutto/i, /ruton/i, /oire/i, /oireet/i,
         ];
 
 
@@ -3937,11 +3985,12 @@
     }
 
     // === SCOPED POLICY ENGINE ===
-    // Nuclear is absolute on every account. resultHide is result-only and never redirects a query.
+    // Nuclear is absolute on every account. resultHideTerms only hides results; redirectHideLite
+    // redirects direct queries and hides result/link/image cards, but never scans suggestions.
     // Tapio gets one narrow exception: after hard denies, an explicitly allowed destination may
-    // rescue a resultHide match. Signed-out/unknown/other accounts get no such rescue.
-    // Query:  nuclearRegex/AI -> searchAllowTerms -> legacy query-only redirect tier -> none
-    // Result: nuclearRegex/AI -> hard URL/TLD denies -> Tapio allowed-URL rescue -> resultHideTerms
+    // rescue a soft result hide. Signed-out/unknown/other accounts get no such rescue.
+    // Query:  nuclearRegex/AI -> searchAllowTerms -> redirectHideLite -> none
+    // Result: nuclearRegex/AI -> hard URL/TLD denies -> Tapio allowed-URL rescue -> resultHideTerms/redirectHideLite
     //         -> normal allowed URL -> generic blocked result URL -> none
     // Image:  same as Result, with hard image URL denies and a final generic WebP fallback.
 
@@ -3971,7 +4020,7 @@
         return Array.from(new Set(candidates));
     }
 
-    function decideQueryPolicy(text) {
+    function decideQueryPolicy(text, includeRedirectHideLite = true) {
         const input = String(text || '');
         if (!input) return NO_POLICY_DECISION;
 
@@ -3991,15 +4040,16 @@
             return makePolicyDecision(POLICY_ACTION.ALLOW, 'query', 'searchAllowTerms', allowHit, input);
         }
 
-        const redirectHit = containsQueryRedirectTerms(input);
+        // Only direct searches use this tier. Google's spelling/correction suggestions opt out.
+        const redirectHit = includeRedirectHideLite ? containsRedirectHideLite(input) : false;
         if (redirectHit) {
-            return makePolicyDecision(POLICY_ACTION.REDIRECT, 'query', 'queryRedirectTerms', redirectHit, input);
+            return makePolicyDecision(POLICY_ACTION.REDIRECT, 'query', 'redirectHideLite', redirectHit, input);
         }
 
         return NO_POLICY_DECISION;
     }
 
-    function decideResultPolicy(url, text, isImage = false) {
+    function decideResultPolicy(url, text, isImage = false, includeLite = true) {
         let candidates = getResultURLCandidates(url);
 
         // Organic Google cards can expose the real destination only in rendered breadcrumb/text
@@ -4061,7 +4111,9 @@
         }
 
         const allowedURL = candidates.find(isResultURLAllowed);
-        const hideHit = containsResultHideTerms(signal);
+        const regularHideHit = containsResultHideTerms(signal);
+        const liteHideHit = includeLite ? containsRedirectHideLite(signal) : false;
+        const hideHit = regularHideHit || liteHideHit;
 
         // Dad-mode is intentionally narrow: only an explicitly allowed destination may rescue an
         // actual resultHide match. Nuclear and all hard URL/image denies have already won above.
@@ -4070,7 +4122,7 @@
         }
 
         if (hideHit) {
-            return makePolicyDecision(POLICY_ACTION.HIDE, isImage ? 'image' : 'result', 'resultHideTerms', hideHit, signal);
+            return makePolicyDecision(POLICY_ACTION.HIDE, isImage ? 'image' : 'result', regularHideHit ? 'resultHideTerms' : 'redirectHideLite', hideHit, signal);
         }
 
         // Outside Tapio mode an allowlisted URL still keeps its normal URL-level exception, but it
@@ -4092,8 +4144,8 @@
         return NO_POLICY_DECISION;
     }
 
-    function shouldRemoveElement(url, text, isImage = false) {
-        return decideResultPolicy(url, text, isImage).action === POLICY_ACTION.HIDE;
+    function shouldRemoveElement(url, text, isImage = false, includeLite = true) {
+        return decideResultPolicy(url, text, isImage, includeLite).action === POLICY_ACTION.HIDE;
     }
 
     // Compatibility wrapper retained for existing submit/input/preflight hooks.
@@ -4122,7 +4174,7 @@
             },
             {
                 name: 'explicit AI vocabulary is Nuclear before query allow terms',
-                decision: decideQueryPolicy('ChatGPT RuneScape'),
+                decision: decideQueryPolicy('DeepSeek RuneScape'),
                 expectedAction: POLICY_ACTION.REDIRECT,
                 expectedReason: 'nuclearRegex'
             },
@@ -4139,9 +4191,10 @@
                 expectedReason: 'searchAllowTerms'
             },
             {
-                name: 'resultHide term never redirects a normal query',
-                decision: decideQueryPolicy('Virtual laatikko'),
-                expectedNotAction: POLICY_ACTION.REDIRECT
+                name: 'redirectHideLite redirects a direct query',
+                decision: decideQueryPolicy('Selain'),
+                expectedAction: POLICY_ACTION.REDIRECT,
+                expectedReason: 'redirectHideLite'
             },
             {
                 name: 'Tapio explicit allow rescues soft resultHide',
@@ -4153,13 +4206,52 @@
                 name: 'non-Tapio explicit allow cannot rescue soft resultHide',
                 decision: withTapioState(false, () => decideResultPolicy('https://www.youtube.com/watch?v=123', 'Virtual laatikko', false)),
                 expectedAction: POLICY_ACTION.HIDE,
-                expectedReason: 'resultHideTerms'
+                expectedReason: 'redirectHideLite'
             },
             {
                 name: 'Tapio cannot rescue soft resultHide on an unallowed site',
                 decision: withTapioState(true, () => decideResultPolicy('https://example.com/project', 'Virtual laatikko', false)),
                 expectedAction: POLICY_ACTION.HIDE,
-                expectedReason: 'resultHideTerms'
+                expectedReason: 'redirectHideLite'
+            },
+            {
+                name: 'Rutto oireet search is allowed',
+                decision: decideQueryPolicy('Rutto oireet'),
+                expectedNotAction: POLICY_ACTION.REDIRECT
+            },
+            {
+                name: 'Google suggestion with Selain never redirects through the lite tier',
+                decision: decideQueryPolicy('Näytetään tulokset haulla Rutto oireet Selain', false),
+                expectedNotAction: POLICY_ACTION.REDIRECT
+            },
+            {
+                name: 'Exact lite term never redirects from a suggestion selector',
+                decision: decideQueryPolicy('Selain', false),
+                expectedNotAction: POLICY_ACTION.REDIRECT
+            },
+            {
+                name: 'Former special query terms now also hide actual result cards',
+                decision: withTapioState(false, () => decideResultPolicy('https://example.com/article', 'make move', false)),
+                expectedAction: POLICY_ACTION.HIDE,
+                expectedReason: 'redirectHideLite'
+            },
+            {
+                name: 'Lite terms hide a normal web result',
+                decision: withTapioState(false, () => decideResultPolicy('https://example.com/article', 'Selain', false)),
+                expectedAction: POLICY_ACTION.HIDE,
+                expectedReason: 'redirectHideLite'
+            },
+            {
+                name: 'Lite terms hide an image card',
+                decision: withTapioState(false, () => decideResultPolicy('https://example.com/photo.jpg', 'Selain', true)),
+                expectedAction: POLICY_ACTION.HIDE,
+                expectedReason: 'redirectHideLite'
+            },
+            {
+                name: 'Lite terms ignore suggestion-only text',
+                decision: withTapioState(false, () => decideResultPolicy('https://example.com/article', 'Selain', false, false)),
+                expectedAction: POLICY_ACTION.NONE,
+                expectedReason: 'no-match'
             },
             {
                 name: 'Nuclear overrides Tapio allowed-result rescue',
@@ -4169,7 +4261,7 @@
             },
             {
                 name: 'AI Nuclear overrides Tapio allowed-result rescue',
-                decision: withTapioState(true, () => decideResultPolicy('https://www.youtube.com/watch?v=123', 'ChatGPT', false)),
+                decision: withTapioState(true, () => decideResultPolicy('https://www.youtube.com/watch?v=123', 'DeepSeek', false)),
                 expectedAction: POLICY_ACTION.HIDE,
                 expectedReason: 'nuclearRegex'
             },
@@ -4341,7 +4433,7 @@
         try {
             const signal = collectGoogleImageSignal(node);
             if (!signal) return false;
-            return decideResultPolicy('', signal, true).action === POLICY_ACTION.HIDE;
+            return decideResultPolicy('', signal, true, !isWithinSuggestionNode(node)).action === POLICY_ACTION.HIDE;
         } catch (e) {}
         return false;
     }
@@ -4445,7 +4537,7 @@
 
     function getSuggestionSelectors() {
         const base = [
-            '#fprsl', '#fprs', '#oFNiHe', '.QRYxYe', '.NNMgCf', '.spell_orig', '.gL9Hy', '#bres', 'div.y6Uyqe',
+            '#fprsl', '#fprs', '.QRYxYe', '.NNMgCf', '.spell_orig', '.gL9Hy', '#bres', 'div.y6Uyqe',
             'span.gL9Hy', 'a.spell', 'p.spell_orig', '.KDCVqf', '.card-section.p64x9c',
             '[aria-label*="Did you mean"]', '[aria-label*="Showing results for"]',
             '[aria-label*="Tarkoititko"]', '[aria-label*="Näytetään tulokset haulla"]',
@@ -4472,9 +4564,10 @@
     }
 
     // === SUGGESTION/CORRECTION TEXT CHECKER ===
-    // Suggestions use the same scoped query policy as typed/submitted searches.
+    // Suggestions keep Nuclear/AI policy but skip redirectHideLite entirely.
+    // This includes #oFNiHe and Did you mean?/Showing results for: banners.
     function getSuggestionForbiddenMatch(text) {
-        const decision = decideQueryPolicy(text);
+        const decision = decideQueryPolicy(text, false);
         return decision.action === POLICY_ACTION.REDIRECT
             ? (decision.match || decision.reason)
             : false;
@@ -4960,6 +5053,8 @@ function swapSearchTabs() {
     ].join(',');
     let googleCentralGateObserver = null;
     let googleCentralGateScanQueued = false;
+    let googleCentralGateNeedsLocalPass = false;
+    const googleCentralGateApprovedSignals = new WeakMap();
 
     function ensureGoogleCentralPolicyGateStyle() {
         if (document.getElementById(GOOGLEJS_CENTRAL_GATE_STYLE_ID)) return;
@@ -5040,6 +5135,17 @@ function swapSearchTabs() {
         }
     }
 
+    function getGoogleCentralPolicyGateResultSignature(result, link) {
+        const url = link?.href && !link.href.startsWith('data:') ? link.href : '';
+        return JSON.stringify([url, getGoogleWebResultRenderedSignal(result, link)]);
+    }
+
+    function isGoogleCentralPolicyGateResultApproved(result, link) {
+        const approved = googleCentralGateApprovedSignals.get(result);
+        return Boolean(approved && approved.link === link &&
+            approved.signature === getGoogleCentralPolicyGateResultSignature(result, link));
+    }
+
     function getGoogleCentralPolicyGateShellFamily(result, link) {
         const shells = new Set();
         try {
@@ -5067,9 +5173,14 @@ function swapSearchTabs() {
         const shells = getGoogleCentralPolicyGateShellFamily(result, link);
         shells.forEach(shell => {
             try {
-                shell.setAttribute(GOOGLEJS_CENTRAL_GATE_ATTR, normalizedState);
-                if (normalizedState === 'ready') shell.removeAttribute('aria-hidden');
-                else shell.setAttribute('aria-hidden', 'true');
+                if (shell.getAttribute(GOOGLEJS_CENTRAL_GATE_ATTR) !== normalizedState) {
+                    shell.setAttribute(GOOGLEJS_CENTRAL_GATE_ATTR, normalizedState);
+                }
+                if (normalizedState === 'ready') {
+                    if (shell.hasAttribute('aria-hidden')) shell.removeAttribute('aria-hidden');
+                } else if (shell.getAttribute('aria-hidden') !== 'true') {
+                    shell.setAttribute('aria-hidden', 'true');
+                }
             } catch (e) {}
         });
     }
@@ -5084,7 +5195,11 @@ function swapSearchTabs() {
             // Set the state on every single-result shell in the ancestor family. The document-start
             // CSS can match more than one nested Google wrapper, so approving only one wrapper can
             // otherwise leave an inner/outer layer invisibly gated.
-            setGoogleCentralPolicyGateShellState(result, link, state);
+            // The early central-only scan must not reveal a new/changed result before
+            // blockResults() has also checked its local nuclear/URL/text policy.
+            const visibleState = state === 'ready' && !isGoogleCentralPolicyGateResultApproved(result, link)
+                ? 'pending' : state;
+            setGoogleCentralPolicyGateShellState(result, link, visibleState);
             return state;
         } catch (e) {
             return 'ready';
@@ -5111,27 +5226,43 @@ function swapSearchTabs() {
 
     function gateGoogleOrganicResultsImmediately() {
         ensureGoogleCentralPolicyGateStyle();
+        let needsLocalApproval = false;
         try {
             releaseSharedGoogleCentralPolicyGateShells();
             collectGoogleWebResultCards().forEach((link, result) => {
-                syncGoogleWebResultCentralPolicyGate(result, link);
+                const state = syncGoogleWebResultCentralPolicyGate(result, link);
+                if (state === 'ready' && !isGoogleCentralPolicyGateResultApproved(result, link)) {
+                    needsLocalApproval = true;
+                }
             });
         } catch (e) {}
+        return needsLocalApproval;
     }
 
-    function queueGoogleCentralGateScan() {
+    function queueGoogleCentralGateScan(revalidateLocal = false) {
+        if (revalidateLocal) googleCentralGateNeedsLocalPass = true;
         if (googleCentralGateScanQueued) return;
         googleCentralGateScanQueued = true;
         queueMicrotask(() => {
             googleCentralGateScanQueued = false;
-            gateGoogleOrganicResultsImmediately();
+            const needsLocalPass = googleCentralGateNeedsLocalPass;
+            googleCentralGateNeedsLocalPass = false;
+            const needsLocalApproval = gateGoogleOrganicResultsImmediately();
+            // Google can update the text of an approved card without changing its URL.
+            // Finish its local nuclear/URL/text check in this same pre-paint microtask.
+            // Waiting for the normal 18ms + animation-frame pass visibly blanks cards.
+            if ((needsLocalPass || needsLocalApproval) && !isRedirecting && !isGoogleImageSearch()) {
+                blockResults();
+            }
+            if (!overlayRemoved && needsLocalPass) maybeReleaseOverlay();
         });
     }
 
     function preGateGoogleCentralPolicyMutationNode(node) {
+        let needsLocalPass = false;
         try {
             const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
-            if (!element) return;
+            if (!element) return false;
 
             const links = new Set();
             const nearestLink = element.closest?.('a[href]');
@@ -5142,12 +5273,41 @@ function swapSearchTabs() {
             element.querySelectorAll?.(GOOGLE_WEB_LOCAL_PRIMARY_LINK_SELECTOR).forEach(link => {
                 if (isGoogleWebPrimaryResultLink(link)) links.add(link);
             });
+            // Snippet/metadata text can change without including the title anchor in
+            // the mutated subtree. Resolve its nearest single-result shell as well;
+            // otherwise the central scan re-pends the card but never runs its local
+            // policy until the next 18ms/rAF scan, producing visible missing-card frames.
+            let ancestor = element;
+            for (let depth = 0; ancestor && depth < 14; depth++, ancestor = ancestor.parentElement) {
+                if (ancestor.matches?.('#search, #rso, #res')) break;
+                if (!ancestor.matches?.(GOOGLEJS_CENTRAL_GATE_SHELL_SELECTOR) ||
+                    countPrimaryResultLinksWithin(ancestor) !== 1) continue;
+                const primary = ancestor.querySelector(GOOGLE_WEB_LOCAL_PRIMARY_LINK_SELECTOR);
+                if (isGoogleWebPrimaryResultLink(primary)) {
+                    links.add(primary);
+                    break;
+                }
+            }
 
             links.forEach(link => {
                 const result = findGoogleWebResultContainer(link);
-                if (result) setGoogleCentralPolicyGateShellState(result, link, 'pending');
+                if (!result) return;
+                // Unchanged, approved cards never lose their ready state merely because
+                // Google updates some unrelated wrapper around the result.
+                if (isGoogleCentralPolicyGateResultApproved(result, link)) {
+                    const url = link.href && !link.href.startsWith('data:') ? link.href : '';
+                    const state = getGoogleResultCentralPolicyGateState(url, getGoogleWebResultRenderedSignal(result, link));
+                    setGoogleCentralPolicyGateShellState(result, link, state);
+                    if (state !== 'ready') needsLocalPass = true;
+                } else {
+                    // A changed URL/text or new card must pass BOTH central and local
+                    // policy before its pending state is allowed to clear.
+                    setGoogleCentralPolicyGateShellState(result, link, 'pending');
+                    needsLocalPass = true;
+                }
             });
         } catch (e) {}
+        return needsLocalPass;
     }
 
     function installGoogleCentralPolicyEarlyGateObserver() {
@@ -5158,15 +5318,16 @@ function swapSearchTabs() {
                 // MutationObserver callbacks run before rendering. Strip any stale `ready` state from
                 // recycled/new result shells synchronously in this callback, then do the heavier
                 // classification in one queued microtask. This closes the SPA/recycled-node flash gap.
+                let needsLocalPass = false;
                 for (const mutation of mutations) {
-                    if (mutation.type === 'attributes') {
-                        preGateGoogleCentralPolicyMutationNode(mutation.target);
-                        continue;
-                    }
-                    preGateGoogleCentralPolicyMutationNode(mutation.target);
-                    mutation.addedNodes?.forEach(preGateGoogleCentralPolicyMutationNode);
+                    if (preGateGoogleCentralPolicyMutationNode(mutation.target)) needsLocalPass = true;
+                    if (mutation.type === 'attributes') continue;
+                    mutation.addedNodes?.forEach(node => {
+                        if (preGateGoogleCentralPolicyMutationNode(node)) needsLocalPass = true;
+                    });
                 }
-                queueGoogleCentralGateScan();
+                if (needsLocalPass && !overlayRemoved) googleOverlayLastResultChangeAt = Date.now();
+                queueGoogleCentralGateScan(needsLocalPass);
             });
             googleCentralGateObserver.observe(document.documentElement, {
                 childList: true,
@@ -5423,7 +5584,7 @@ function swapSearchTabs() {
                 const cacheKey = linkText.length + ':' + link.href;
                 if (link.getAttribute('data-gj-cache') === cacheKey) continue;
 
-                if (shouldRemoveElement(link.href, linkText, false)) {
+                if (shouldRemoveElement(link.href, linkText, false, !isWithinSuggestionNode(link))) {
                     let parent = link;
                     let levels = 0;
                     while (parent && levels < 15) { 
@@ -5508,13 +5669,14 @@ function swapSearchTabs() {
                     const resultUrl = link && link.href && !link.href.startsWith('data:') ? link.href : '';
                     const centralGateState = syncGoogleWebResultCentralPolicyGate(result, link, resultText);
                     const cacheKey = resultText.length + ':' + resultUrl;
-                    if (centralGateState !== 'pending' &&
+                    if (centralGateState === 'ready' &&
+                        isGoogleCentralPolicyGateResultApproved(result, link) &&
                         result.getAttribute('data-gj-cache') === cacheKey) {
                         googleWebResultAudit.keptCards++;
                         return;
                     }
 
-                    const decision = decideResultPolicy(resultUrl, resultText, false);
+                    const decision = decideResultPolicy(resultUrl, resultText, false, !isWithinSuggestionNode(result));
                     if (decision.action === POLICY_ACTION.HIDE) {
                         googleWebResultAudit.hiddenCards++;
                         if (googleWebResultAudit.hidden.length < 20) {
@@ -5526,6 +5688,10 @@ function swapSearchTabs() {
                             });
                         }
                         removeGoogleWebResultCardCompletely(result);
+                    } else if (centralGateState === 'blocked') {
+                        // Never let a new hard central denial fall through to the ready branch.
+                        googleWebResultAudit.hiddenCards++;
+                        removeGoogleWebResultCardCompletely(result);
                     } else if (centralGateState === 'pending') {
                         // Local policy found nothing wrong, but the authoritative hosts verdict has
                         // not returned yet. Keep the card invisible and deliberately uncached so the
@@ -5534,6 +5700,10 @@ function swapSearchTabs() {
                         result.setAttribute('data-googlejs-organic-card', '1');
                     } else {
                         googleWebResultAudit.keptCards++;
+                        googleCentralGateApprovedSignals.set(result, {
+                            link,
+                            signature: getGoogleCentralPolicyGateResultSignature(result, link)
+                        });
                         setGoogleCentralPolicyGateShellState(result, link, 'ready');
                         result.setAttribute('data-gj-cache', cacheKey);
                         result.setAttribute('data-googlejs-organic-card', '1');
@@ -5547,7 +5717,7 @@ function swapSearchTabs() {
         if (isRedirecting) return;
         try {
             const selectorsToHide = [
-                'span.gL9Hy', '.spell_orig', '.KDCVqf.card-section.p64x9c', '#oFNiHe', '#taw',
+                'span.gL9Hy', '.spell_orig', '.KDCVqf.card-section.p64x9c', '#taw',
                 '.QRYxYe', '.NNMgCf', '#bres > div.ULSxyf', 'div.ULSxyf', '#bres',
                 'div[role="listitem"]:has(a[href*="udm=39"])',
                 'div[role="listitem"]:has(a[href*="udm=50"])'
@@ -5749,6 +5919,38 @@ function swapSearchTabs() {
         blockImageResults();
     }
 
+    // The white overlay is a page-wide release barrier, not merely a DOM-ready timer.
+    // Only show the search page after local and central decisions are complete for every
+    // live organic card. A short quiet period absorbs Google's initial hydration burst.
+    let googleOverlayReleaseTimer = null;
+    let googleOverlayLastResultChangeAt = Date.now();
+    const GOOGLEJS_OVERLAY_RESULT_SETTLE_MS = 350;
+
+    function areGoogleOverlayResultDecisionsComplete() {
+        if (!GJ_centralPolicySnapshotLoaded || !braveFoxInitialGoogleAccountScopeSettled) return false;
+        if (googleCentralGateScanQueued || googleCentralGateNeedsLocalPass || filteringScheduled) return false;
+        if (isGoogleImageSearch()) {
+            if (!googleImagesFirstPassDone) return false;
+            return !document.querySelector(
+                '.isv-r:not([data-googlejs-cleared="1"]):not([data-googlejs-hidden="1"]), ' +
+                '.eA0Zlc:not([data-googlejs-cleared="1"]):not([data-googlejs-hidden="1"]), ' +
+                '.rg_bx:not([data-googlejs-cleared="1"]):not([data-googlejs-hidden="1"])'
+            );
+        }
+
+        const cards = collectGoogleWebResultCards();
+        if (!cards.size && !document.querySelector('#search, #rso, #res')) return false;
+        for (const [result, link] of cards) {
+            if (!result.isConnected || !isGoogleCentralPolicyGateResultApproved(result, link)) return false;
+            const url = link.href && !link.href.startsWith('data:') ? link.href : '';
+            if (getGoogleResultCentralPolicyGateState(url, getGoogleWebResultRenderedSignal(result, link)) !== 'ready') return false;
+            for (const shell of getGoogleCentralPolicyGateShellFamily(result, link)) {
+                if (shell.getAttribute(GOOGLEJS_CENTRAL_GATE_ATTR) !== 'ready') return false;
+            }
+        }
+        return true;
+    }
+
     function removeOverlayNow() {
         if (overlay && overlay.parentNode && !overlayRemoved) {
             overlay.parentNode.removeChild(overlay);
@@ -5758,16 +5960,28 @@ function swapSearchTabs() {
     }
 
     function maybeReleaseOverlay() {
-        if (isRedirecting || overlayRemoved) return;
-        if (document.readyState === 'loading') return;
-
-        if (isGoogleImageSearch() && !googleImagesFirstPassDone) {
+        if (isRedirecting || overlayRemoved || document.readyState === 'loading') return;
+        if (hasForbiddenSuggestionText() || !areGoogleOverlayResultDecisionsComplete()) {
+            if (googleOverlayReleaseTimer !== null) {
+                clearTimeout(googleOverlayReleaseTimer);
+                googleOverlayReleaseTimer = null;
+            }
             return;
         }
-        
-        if (!hasForbiddenSuggestionText()) {
-            setTimeout(removeOverlayNow, isGoogleImageSearch() ? 60 : 150);
-        }
+        if (googleOverlayReleaseTimer !== null) return;
+        const quietTimeLeft = Math.max(0, GOOGLEJS_OVERLAY_RESULT_SETTLE_MS -
+            (Date.now() - googleOverlayLastResultChangeAt));
+        googleOverlayReleaseTimer = setTimeout(() => {
+            googleOverlayReleaseTimer = null;
+            // A fresh Google mutation or outstanding async verdict cancels release.
+            if (isRedirecting || overlayRemoved || document.readyState === 'loading' ||
+                hasForbiddenSuggestionText() || !areGoogleOverlayResultDecisionsComplete()) return;
+            if (Date.now() - googleOverlayLastResultChangeAt < GOOGLEJS_OVERLAY_RESULT_SETTLE_MS) {
+                maybeReleaseOverlay();
+                return;
+            }
+            removeOverlayNow();
+        }, Math.max(quietTimeLeft, isGoogleImageSearch() ? 60 : 150));
     }
 
     function tryRemoveOverlayOnHomepage() {
@@ -5786,6 +6000,9 @@ function swapSearchTabs() {
         requestAnimationFrame(() => {
             mainFiltering();
             filteringScheduled = false;
+            // mainFiltering() observes filteringScheduled=true while running. Once
+            // that frame is done, give the overlay barrier a fresh release check.
+            if (!overlayRemoved) maybeReleaseOverlay();
         });
     }
 
