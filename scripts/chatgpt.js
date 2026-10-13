@@ -22,6 +22,16 @@
 
   if (window.top !== window) return;
 
+  // Avoid duplicate listeners, archive modals and exporters if this content script
+  // is injected again into the same document. The document marker also works across
+  // separate extension execution worlds, unlike a variable scoped to this IIFE.
+  const CHATGPT_SCRIPT_ACTIVE_ATTR = 'data-bravefox-chatgpt-script-active';
+  if (window.__braveFoxChatGptScriptActive) return;
+  const scriptRoot = document.documentElement;
+  if (scriptRoot?.hasAttribute(CHATGPT_SCRIPT_ACTIVE_ATTR)) return;
+  window.__braveFoxChatGptScriptActive = true;
+  if (scriptRoot) scriptRoot.setAttribute(CHATGPT_SCRIPT_ACTIVE_ATTR, '1');
+
   // Resolve the actual WebExtension API by capability. Some installed-app/PWA
   // environments may expose a non-extension `browser` global, so blindly preferring
   // `browser` can hide Chrome's real `chrome.runtime` object.
@@ -535,10 +545,26 @@
   const CHAT_ARCHIVE_GHOST_CONFIRM_DELAY_MS = 1500;
   const CHAT_ARCHIVE_EXISTENCE_HEALTH_MAX_AGE_MS = 15 * 60 * 1000;
   const CHAT_ARCHIVE_GHOST_MAX_CHECKS_PER_PASS = 3;
-  const CHAT_ARCHIVE_IMAGE_CONCURRENCY = 2;
+  // Fetch more images concurrently while the existing shared request-spacing and
+  // cooldown safeguards continue to pace BraveFox's ChatGPT API requests.
+  const CHAT_ARCHIVE_IMAGE_CONCURRENCY = 4;
+  // Keep successful images in bounded tab memory for repeat HTML exports. Do not
+  // persist private image data or cache failures; closing the tab clears this.
+  const CHAT_ARCHIVE_IMAGE_CACHE_MAX_BYTES = 48 * 1024 * 1024;
+  const CHAT_ARCHIVE_IMAGE_CACHE_TTL_MS = 20 * 60 * 1000;
   const CHAT_ARCHIVE_IMAGE_FETCH_TIMEOUT_MS = 20000;
   const CHAT_ARCHIVE_IMAGE_FETCH_ATTEMPTS = 2;
   const CHAT_ARCHIVE_IMAGE_RETRY_DELAY_MS = 450;
+  // Queue admission is not an image failure. Allow a bounded, visible wait for
+  // BraveFox's shared request queue / ChatGPT cooldown without bypassing either.
+  const CHAT_ARCHIVE_IMAGE_MAX_ADMISSION_WAIT_MS = 6 * 60 * 1000;
+  // The export lock is held on the document (rather than in an IIFE variable) so
+  // duplicate content-script instances cannot both save the same conversation.
+  const CHAT_ARCHIVE_HTML_EXPORT_LOCK_ATTR = 'data-bravefox-archive-html-export-lock';
+  const CHAT_ARCHIVE_HTML_EXPORT_LOCK_STALE_MS = 90 * 60 * 1000;
+  const CHAT_ARCHIVE_HTML_EXPORT_REPEAT_WINDOW_MS = 3000;
+  const CHAT_ARCHIVE_DOWNLOAD_DOCK_ID = 'bravefox-chat-archive-download-dock';
+  const CHAT_ARCHIVE_DOWNLOAD_DOCK_STYLE_ID = 'bravefox-chat-archive-download-dock-style';
 
   const CHATGPT_BANNER_HIDE_KEY = 'bravefoxChatGptHiddenModelNotices_v1';
   const CHATGPT_BANNER_CLOSE_MENU_ID = 'bravefox-chatgpt-banner-close-menu';
@@ -742,6 +768,8 @@
   let conversationArchiveUiRefreshTimer = 0;
   let conversationArchiveLastHandoffId = '';
   let conversationArchiveSelectedConversationId = '';
+  let conversationArchiveRenderSerial = 0;
+  let conversationArchiveManualRun = null;
   let conversationArchiveChannel = null;
   let conversationArchiveLibraryMenuTimer = 0;
   const conversationArchivePayloadSyncs = new Map();
@@ -984,19 +1012,23 @@
   }
 
   async function braveFoxReliabilityFetch(input, options = {}) {
+    // Optional callback for archive requests: network timeout begins only after
+    // the shared rate-limiter admits a request, not while it waits in its queue.
+    const { onBraveFoxRequestStart, ...requestOptions } = options;
     let host = '';
     try { host = new URL(String(input), location.origin).hostname.toLowerCase(); } catch {}
     const chatGptOwned = host === 'chatgpt.com';
     if (chatGptOwned && BRAVEFOX_RELIABILITY_REQUEST_CONTROL.enabled) {
       braveFoxReliabilityThrowIfPaused();
-      await braveFoxReliabilityWaitForOwnRequestSlot(options.signal);
+      await braveFoxReliabilityWaitForOwnRequestSlot(requestOptions.signal);
       braveFoxReliabilityThrowIfPaused();
     }
 
     let response;
     try {
+      if (typeof onBraveFoxRequestStart === 'function') onBraveFoxRequestStart();
       if (chatGptOwned) braveFoxOwnRequestStats.sent += 1;
-      response = await fetch(input, options);
+      response = await fetch(input, requestOptions);
     } catch (error) {
       if (chatGptOwned && BRAVEFOX_RELIABILITY_REQUEST_CONTROL.enabled && error?.name !== 'AbortError') {
         braveFoxOwnRequestStats.networkErrors += 1;
@@ -1291,6 +1323,10 @@
     root.id = 'bravefox-reliability-root';
     const toggle = braveFoxReliabilityMakeButton('BraveFox · Reliability', () => {
       braveFoxReliabilityPanelOpen = !braveFoxReliabilityPanelOpen;
+      if (braveFoxReliabilityPanelOpen && conversationArchiveDownloadDockOpen) {
+        conversationArchiveDownloadDockOpen = false;
+        refreshConversationArchiveDownloadDock();
+      }
       braveFoxReliabilityRefreshUi();
     });
     toggle.setAttribute('data-bf-reliability-toggle', '');
@@ -2227,12 +2263,14 @@
         pointer-events: auto !important;
       }
 
+      ${!IS_FIREFOX_ANDROID ? `
       html.${MESSAGE_TIMESTAMP_PROBE_CLASS} [role="menu"],
       html.${MESSAGE_TIMESTAMP_PROBE_CLASS} [role="menuitem"] {
         visibility: hidden !important;
         opacity: 0 !important;
         pointer-events: none !important;
       }
+      ` : ''}
 
       [class*="CodeBlock-module__code"] div {
         background-color: #ffffff !important;
@@ -3251,12 +3289,90 @@
     captureConversationComposerSelection();
   }
 
+  // === FIREFOX ANDROID: KEEP THE NATIVE COMPOSER CONTROLS NATIVE ===
+  // The legacy mobile composer can use unlabeled SVG buttons and portal-mounted
+  // attachment menus. Its controls are not ChatGPT settings or protected routes.
+  // Avoid broad click/menu handling on the composer itself; never synthesize a
+  // click, cancel a tap, hide an attachment popup, or change ChatGPT's DOM here.
+  function isFirefoxAndroidNativeComposerControl(target) {
+    if (!IS_FIREFOX_ANDROID || !(target instanceof Element)) return false;
+    const control = target.closest('button, [role="button"]');
+    if (!(control instanceof Element)) return false;
+    if (control.closest('aside, nav, [data-testid*="sidebar" i]')) return false;
+
+    const inputSelector =
+      '#prompt-textarea, [data-testid="composer-input"], ' +
+      'textarea, [contenteditable="true"], [role="textbox"]';
+    let parent = control.parentElement;
+    for (let depth = 0; parent && depth < 6 && parent !== document.body; depth += 1) {
+      if (parent.querySelector(inputSelector)) {
+        const composer = parent.matches(
+          'form, [data-testid*="composer" i], [class*="composer" i]'
+        );
+        if (composer || depth <= 3) return true;
+      }
+      parent = parent.parentElement;
+    }
+    return false;
+  }
+
+  // This is read-only and does not depend on ChatGPT using a particular mobile
+  // composer generation. The value can be checked in remote Firefox DevTools.
+  function installFirefoxAndroidComposerMenuDiagnostic() {
+    if (!IS_FIREFOX_ANDROID) return;
+    const attribute = 'data-bravefox-mobile-plus-diagnostic';
+    const inspect = (control, phase, event) => {
+      if (!(control instanceof Element)) return;
+      const popups = Array.from(document.querySelectorAll(
+        '[role="menu"], [role="dialog"], [data-radix-menu-content], [data-slot*="popover-content"]'
+      ));
+      const visiblePopups = popups.filter(node => {
+        const style = getComputedStyle(node);
+        const rect = node.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0 && style.display !== 'none' &&
+          style.visibility !== 'hidden' && Number(style.opacity) !== 0;
+      });
+      const rect = control.getBoundingClientRect();
+      const hit = rect.width && rect.height ? document.elementFromPoint(
+        rect.left + rect.width / 2, rect.top + rect.height / 2
+      ) : null;
+      const report = {
+        phase,
+        cancelled: !!event?.defaultPrevented,
+        expanded: control.getAttribute('aria-expanded'),
+        openPopupCount: visiblePopups.length,
+        allPopupCount: popups.length,
+        hit: !hit ? 'none' : (control.contains(hit) ? 'control' : 'other'),
+        timestampProbeActive: document.documentElement.classList.contains(MESSAGE_TIMESTAMP_PROBE_CLASS)
+      };
+      document.documentElement.setAttribute(attribute, JSON.stringify(report));
+    };
+    document.addEventListener('pointerdown', event => {
+      if (!event.isTrusted || !isFirefoxAndroidNativeComposerControl(event.target)) return;
+      const control = event.target.closest('button, [role="button"]');
+      inspect(control, 'pointerdown', event);
+    }, true);
+    document.addEventListener('click', event => {
+      if (!event.isTrusted || !isFirefoxAndroidNativeComposerControl(event.target)) return;
+      const control = event.target.closest('button, [role="button"]');
+      inspect(control, 'click-capture', event);
+      queueMicrotask(() => inspect(control, 'click-settled', event));
+      window.setTimeout(() => inspect(control, 'after-350ms', event), 350);
+    }, true);
+  }
+
+  installFirefoxAndroidComposerMenuDiagnostic();
+
   function installInteractionGuards() {
     document.addEventListener('click', event => {
       if (event.isTrusted) {
         captureConversationModelChoiceFromEvent(event);
         captureConversationSendIntentFromEvent(event);
       }
+
+      // Native Firefox Android composer tools (including the legacy + menu) are
+      // not protected-route controls; do not run the general menu guard on them.
+      if (isFirefoxAndroidNativeComposerControl(event.target)) return;
 
       if (event.isTrusted) {
         const analysisToggle = getElementFromEvent(event, 'button[aria-expanded][aria-labelledby]');
@@ -4012,6 +4128,7 @@
     };
 
     document.addEventListener('pointerdown', event => {
+      if (isFirefoxAndroidNativeComposerControl(event.target)) return;
       if (thinkingEffortVisualRepairing) return;
 
       const exactControl = getExactReasoningControl(event.target, false);
@@ -4105,6 +4222,7 @@
     document.addEventListener('pointercancel', finishPointerInteraction, true);
 
     document.addEventListener('click', event => {
+      if (isFirefoxAndroidNativeComposerControl(event.target)) return;
       if (thinkingEffortVisualRepairing) return;
 
       const exactControl = getExactReasoningControl(event.target, false);
@@ -10163,15 +10281,29 @@
     }
   }
 
-  async function archiveConversationPayload(conversationId, payload) {
+  function getArchivePayloadConversationId(payload) {
+    if (!payload || typeof payload !== 'object') return '';
+    const candidates = [payload.conversation_id, payload.id, payload?.conversation?.id];
+    return String(candidates.find(value => typeof value === 'string' && value.trim()) || '').trim();
+  }
+
+  async function archiveConversationPayload(conversationId, payload, options = {}) {
     const id = String(conversationId || '').trim();
     if (!id || !payload || typeof payload !== 'object') return false;
-    if (conversationArchiveDeletedUntilReload.has(id)) return false;
+    // A stale/mismatched response MUST NOT contaminate the requested archive.
+    // Manual requests require an explicit identity; automatic reads never accept a
+    // conflicting one, even if ChatGPT happened to return HTTP 200.
+    const payloadId = getArchivePayloadConversationId(payload);
+    if (!payloadId || payloadId !== id) {
+      console.warn('[BraveFox Enhancer] Refused conversation archive: API identity did not match the requested conversation.');
+      return false;
+    }
+    if (!options.manual && conversationArchiveDeletedUntilReload.has(id)) return false;
 
     try {
       const previous = await getArchivedConversation(id).catch(() => null);
-      const archiveTitle = resolveArchiveCaptureTitle(id, payload.title, previous?.title);
-      if (!shouldAutomaticallyArchiveConversationTitle(archiveTitle)) return false;
+      const archiveTitle = resolveArchiveCaptureTitle(id, payload.title || options.titleHint, previous?.title);
+      if (!options.manual && !shouldAutomaticallyArchiveConversationTitle(archiveTitle)) return false;
       const { records, branchRecords, currentNodeId } = buildArchiveRecordsFromConversationPayload(id, payload);
       if (!records.length) return false;
       const now = Date.now();
@@ -10205,7 +10337,19 @@
       );
       tx.objectStore(CHAT_ARCHIVE_CONVERSATIONS_STORE).put(conversation);
       const messageStore = tx.objectStore(CHAT_ARCHIVE_MESSAGES_STORE);
+      const authoritativeKeys = new Set(records.map(record => record.key));
       for (const record of records) messageStore.put(record);
+      // API history is authoritative. Earlier DOM captures or buggy responses
+      // may have left other chats' message keys under this ID. Remove records
+      // absent from the verified payload, otherwise exporting the same ID can
+      // still mix in stale/cross-chat content even after a successful resync.
+      const staleCursor = messageStore.index('conversationId').openCursor(IDBKeyRange.only(id));
+      staleCursor.onsuccess = () => {
+        const cursor = staleCursor.result;
+        if (!cursor) return;
+        if (!authoritativeKeys.has(String(cursor.primaryKey))) cursor.delete();
+        cursor.continue();
+      };
       await archiveTransactionDone(tx);
 
       void ensureAutomaticConversationArchiveSnapshot(id, conversation).catch(() => {});
@@ -10275,6 +10419,18 @@
       currentConversationPromise,
       Promise.all(existingPromises)
     ]);
+    // ChatGPT can display the previous chat's DOM after its URL has switched.
+    // DOM content has no intrinsically trusted conversation ID. Never persist
+    // that content until at least one message ID is verified for this route
+    // by the API-backed archive or its per-conversation metadata index.
+    const verifiedIds = new Set(Array.isArray(currentConversation?.currentBranchMessageIds)
+      ? currentConversation.currentBranchMessageIds : []);
+    const indexForRoute = conversationMetadataCaches.get(conversationId)?.index;
+    if (indexForRoute?.byId instanceof Map) {
+      for (const id of indexForRoute.byId.keys()) verifiedIds.add(id);
+    }
+    if (!verifiedIds.size || !prepared.some(item => verifiedIds.has(item.messageId))) return false;
+    if (conversationId !== getCurrentConversationId()) return false;
     const archiveTitle = resolveArchiveCaptureTitle(conversationId, '', currentConversation?.title);
     if (!shouldAutomaticallyArchiveConversationTitle(archiveTitle)) return false;
 
@@ -10351,6 +10507,9 @@
       records.push(record);
     }
 
+    // Awaiting IndexedDB metadata may span a route transition. Recheck the URL
+    // before the write, not just at the start of capture.
+    if (conversationId !== getCurrentConversationId()) return false;
     const now = Date.now();
     const writeTx = db.transaction(
       [CHAT_ARCHIVE_CONVERSATIONS_STORE, CHAT_ARCHIVE_MESSAGES_STORE],
@@ -10586,7 +10745,13 @@
     ]);
     if (!conversation) return '';
     const snapshot = snapshotId ? snapshots.find(item => item.id === snapshotId) : null;
-    const branch = getArchivedCurrentBranch(messages, snapshot);
+    // Prefer the API-verified message ID chain over legacy onCurrentBranch
+    // flags, which may include stale records from a previous faulty capture.
+    const branchPointer = snapshot || (Array.isArray(conversation.currentBranchMessageIds) &&
+      conversation.currentBranchMessageIds.length
+        ? { messageIds: conversation.currentBranchMessageIds }
+        : null);
+    const branch = getArchivedCurrentBranch(messages, branchPointer);
     const lines = [
       `# ${conversation.title || 'ChatGPT Conversation'}`,
       '',
@@ -10611,14 +10776,63 @@
     );
   }
 
+  const archiveImageFallbackKeys = new WeakMap();
+  let archiveImageFallbackKeyCounter = 0;
   function getArchiveAttachmentCacheKey(attachment) {
-    return String(
+    const key = String(
       attachment?.id ||
       attachment?.assetPointer ||
       attachment?.imageUrl ||
-      attachment?.name ||
       ''
     ).trim();
+    if (key) return key;
+    if (!attachment || typeof attachment !== 'object') return '';
+    // Two different attachments can have the same name (or no name at all).
+    // Give each unnamed/unidentified attachment its own stable export-time key.
+    let fallback = archiveImageFallbackKeys.get(attachment);
+    if (!fallback) {
+      fallback = `archive-image-${++archiveImageFallbackKeyCounter}`;
+      archiveImageFallbackKeys.set(attachment, fallback);
+    }
+    return fallback;
+  }
+
+  const archiveEmbeddedImageCache = new Map();
+  let archiveEmbeddedImageCacheBytes = 0;
+
+  function archiveImageResultFromCache(conversationId, key) {
+    const cacheKey = `${conversationId}\u0000${key}`;
+    const cached = archiveEmbeddedImageCache.get(cacheKey);
+    if (!cached) return null;
+    if (Date.now() - cached.at > CHAT_ARCHIVE_IMAGE_CACHE_TTL_MS) {
+      archiveEmbeddedImageCache.delete(cacheKey);
+      archiveEmbeddedImageCacheBytes -= cached.bytes;
+      return null;
+    }
+    // Map insertion order doubles as an inexpensive least-recently-used list.
+    archiveEmbeddedImageCache.delete(cacheKey);
+    archiveEmbeddedImageCache.set(cacheKey, cached);
+    return cached.result;
+  }
+
+  function rememberArchiveImageResult(conversationId, key, result) {
+    if (!result?.dataUrl || !key) return;
+    const bytes = result.dataUrl.length * 2;
+    if (bytes > CHAT_ARCHIVE_IMAGE_CACHE_MAX_BYTES) return;
+    const cacheKey = `${conversationId}\u0000${key}`;
+    const existing = archiveEmbeddedImageCache.get(cacheKey);
+    if (existing) {
+      archiveEmbeddedImageCacheBytes -= existing.bytes;
+      archiveEmbeddedImageCache.delete(cacheKey);
+    }
+    archiveEmbeddedImageCache.set(cacheKey, { result, bytes, at: Date.now() });
+    archiveEmbeddedImageCacheBytes += bytes;
+    while (archiveEmbeddedImageCacheBytes > CHAT_ARCHIVE_IMAGE_CACHE_MAX_BYTES) {
+      const oldest = archiveEmbeddedImageCache.keys().next().value;
+      if (oldest === undefined) break;
+      archiveEmbeddedImageCacheBytes -= archiveEmbeddedImageCache.get(oldest).bytes;
+      archiveEmbeddedImageCache.delete(oldest);
+    }
   }
 
   function archiveBlobToDataUrl(blob, fallbackMimeType = '') {
@@ -10643,7 +10857,7 @@
   }
 
   function isArchiveImageRetryableStatus(status) {
-    return status === 408 || status === 425 || status >= 500;
+    return status === 408 || status === 425 || status === 429 || status >= 500;
   }
 
   function describeArchiveImageFailure(result) {
@@ -10658,7 +10872,19 @@
     await new Promise(resolve => window.setTimeout(resolve, CHAT_ARCHIVE_IMAGE_RETRY_DELAY_MS * multiplier));
   }
 
-  async function fetchArchiveImageRequest(url, init = {}) {
+  function archiveImageAdmissionWaitMs() {
+    const now = Date.now();
+    const cooldownMs = braveFoxReliabilityRemainingMs();
+    const nextSlot = Math.max(
+      braveFoxReliabilityReadSharedNumber(BRAVEFOX_RELIABILITY_SHARED_SLOT_KEY),
+      braveFoxOptionalNextRequestAt
+    );
+    const excessQueueMs = Math.max(0, nextSlot - now - BRAVEFOX_RELIABILITY_REQUEST_CONTROL.maxQueueDelayMs);
+    // Sleep in chunks so diagnostics can accurately show a paused export.
+    return Math.min(10000, Math.max(900, cooldownMs || excessQueueMs || BRAVEFOX_RELIABILITY_REQUEST_CONTROL.minSpacingMs));
+  }
+
+  async function fetchArchiveImageRequest(url, init = {}, onRequestState = null) {
     const target = String(url || '').trim();
     if (!target) return { state: 'failed', reason: 'missing URL' };
 
@@ -10667,12 +10893,20 @@
       return { state: 'failed', reason: 'invalid URL' };
     }
 
+    const admissionStartedAt = Date.now();
     let lastFailure = { state: 'failed', reason: 'request failed' };
-    for (let attempt = 1; attempt <= CHAT_ARCHIVE_IMAGE_FETCH_ATTEMPTS; attempt += 1) {
+    for (let attempt = 1; attempt <= CHAT_ARCHIVE_IMAGE_FETCH_ATTEMPTS;) {
       const controller = new AbortController();
-      const timer = window.setTimeout(() => controller.abort(), CHAT_ARCHIVE_IMAGE_FETCH_TIMEOUT_MS);
+      let timer = 0;
       try {
-        const response = await braveFoxReliabilityFetch(parsed.href, { ...init, signal: controller.signal });
+        const response = await braveFoxReliabilityFetch(parsed.href, {
+          ...init,
+          signal: controller.signal,
+          onBraveFoxRequestStart: () => {
+            if (typeof onRequestState === 'function') onRequestState('fetching', 0);
+            timer = window.setTimeout(() => controller.abort(), CHAT_ARCHIVE_IMAGE_FETCH_TIMEOUT_MS);
+          }
+        });
         if (response.ok) return { state: 'ok', response };
 
         const status = Number(response.status || 0) || 0;
@@ -10695,17 +10929,19 @@
           };
         }
 
-        lastFailure = {
-          state: 'failed',
-          status,
-          reason: response.statusText || `HTTP ${status || 'error'}`
-        };
-        if (!isArchiveImageRetryableStatus(status) || attempt >= CHAT_ARCHIVE_IMAGE_FETCH_ATTEMPTS) {
-          return lastFailure;
-        }
+        lastFailure = { state: 'failed', status, reason: response.statusText || `HTTP ${status || 'error'}` };
+        if (!isArchiveImageRetryableStatus(status) || attempt >= CHAT_ARCHIVE_IMAGE_FETCH_ATTEMPTS) return lastFailure;
       } catch (error) {
         if (error?.name === 'BraveFoxReliabilityCooldown' || error?.name === 'BraveFoxReliabilityQueueBusy') {
-          return { state: 'failed', reason: 'ChatGPT request cooldown active' };
+          // No network request was made. Do not consume a fetch attempt or
+          // count this image as failed simply because another tab has the slot.
+          if (Date.now() - admissionStartedAt >= CHAT_ARCHIVE_IMAGE_MAX_ADMISSION_WAIT_MS) {
+            return { state: 'failed', reason: 'request slot unavailable for six minutes' };
+          }
+          const waitMs = archiveImageAdmissionWaitMs();
+          if (typeof onRequestState === 'function') onRequestState('waiting', waitMs);
+          await new Promise(resolve => window.setTimeout(resolve, waitMs));
+          continue;
         }
         const timedOut = error?.name === 'AbortError';
         lastFailure = {
@@ -10714,15 +10950,17 @@
         };
         if (attempt >= CHAT_ARCHIVE_IMAGE_FETCH_ATTEMPTS) return lastFailure;
       } finally {
-        window.clearTimeout(timer);
+        if (timer) window.clearTimeout(timer);
       }
 
+      if (typeof onRequestState === 'function') onRequestState('retrying', CHAT_ARCHIVE_IMAGE_RETRY_DELAY_MS * attempt);
       await waitForArchiveImageRetry(attempt);
+      attempt += 1;
     }
     return lastFailure;
   }
 
-  async function fetchArchiveImageResponse(url, token = '', expectedMimeType = '') {
+  async function fetchArchiveImageResponse(url, token = '', expectedMimeType = '', onRequestState = null) {
     const target = String(url || '').trim();
     if (!target) return { state: 'failed', reason: 'missing image URL' };
     if (/^data:image\//i.test(target)) {
@@ -10746,7 +10984,7 @@
       credentials: sameOrigin ? 'include' : 'omit',
       cache: 'no-store',
       headers
-    });
+    }, onRequestState);
     if (fetched.state !== 'ok') return fetched;
 
     const response = fetched.response;
@@ -10770,7 +11008,7 @@
     }
   }
 
-  async function resolveArchiveImageDescriptor(descriptorUrl, token, attachment) {
+  async function resolveArchiveImageDescriptor(descriptorUrl, token, attachment, onRequestState = null) {
     const headers = { Accept: 'application/json' };
     if (token) headers.Authorization = `Bearer ${token}`;
     const fetched = await fetchArchiveImageRequest(descriptorUrl, {
@@ -10778,7 +11016,7 @@
       credentials: 'include',
       cache: 'no-store',
       headers
-    });
+    }, onRequestState);
     if (fetched.state !== 'ok') return fetched;
 
     const response = fetched.response;
@@ -10805,10 +11043,10 @@
     if (!downloadUrl) {
       return { state: 'failed', status: response.status, reason: 'descriptor contained no download URL' };
     }
-    return fetchArchiveImageResponse(downloadUrl, token, attachment.mimeType);
+    return fetchArchiveImageResponse(downloadUrl, token, attachment.mimeType, onRequestState);
   }
 
-  async function resolveArchiveImageAttachment(conversationId, attachment, token = '') {
+  async function resolveArchiveImageAttachment(conversationId, attachment, token = '', routePreference = null, onRequestState = null) {
     if (!isArchiveImageAttachment(attachment)) {
       return { state: 'failed', reason: 'attachment is not an image' };
     }
@@ -10820,8 +11058,9 @@
     const observations = [];
 
     if (directUrl) {
-      const direct = await fetchArchiveImageResponse(directUrl, token, attachment.mimeType);
+      const direct = await fetchArchiveImageResponse(directUrl, token, attachment.mimeType, onRequestState);
       if (direct.state === 'resolved') return direct;
+      if (direct.status === 429 || /request slot unavailable/i.test(String(direct.reason || ''))) return direct;
       observations.push({ source: 'direct image URL', result: direct });
     }
 
@@ -10835,10 +11074,21 @@
         `${location.origin}/files/download/${encodedFileId}?conversation_id=${encodedConversationId}&inline=false`
       ];
 
-      for (const descriptorUrl of descriptorUrls) {
-        const result = await resolveArchiveImageDescriptor(descriptorUrl, token, attachment);
-        if (result.state === 'resolved') return result;
+      const preferredIndex = Number.isInteger(routePreference?.index) ? routePreference.index : -1;
+      const endpoints = descriptorUrls.map((url, index) => ({ url, index }));
+      if (preferredIndex >= 0 && preferredIndex < endpoints.length) {
+        endpoints.sort((a, b) => (a.index === preferredIndex ? -1 : b.index === preferredIndex ? 1 : a.index - b.index));
+      }
+      for (const { url: descriptorUrl, index } of endpoints) {
+        const result = await resolveArchiveImageDescriptor(descriptorUrl, token, attachment, onRequestState);
+        if (result.state === 'resolved') {
+          if (routePreference) routePreference.index = index;
+          return result;
+        }
         observations.push({ source: descriptorUrl, result });
+        // A real HTTP 429 must not be followed by a burst of alternate
+        // attachment endpoints; BraveFox has already started a cooldown.
+        if (result.status === 429 || /request slot unavailable/i.test(String(result.reason || ''))) return result;
 
         // A backend response that explicitly identifies this file/attachment as gone is
         // sufficient evidence; do not burn through legacy fallback endpoints after that.
@@ -10887,7 +11137,7 @@
     };
   }
 
-  async function buildArchiveEmbeddedImageMap(conversationId, branch, onProgress = null) {
+  async function buildArchiveEmbeddedImageMap(conversationId, branch, onProgress = null, includeImages = true) {
     const unique = new Map();
     for (const message of Array.isArray(branch) ? branch : []) {
       for (const attachment of Array.isArray(message?.attachments) ? message.attachments : []) {
@@ -10896,11 +11146,15 @@
         if (key && !unique.has(key)) unique.set(key, attachment);
       }
     }
+    if (!includeImages) {
+      // Text-only export: count image attachments without contacting image endpoints.
+      return { resolved: new Map(), unavailable: new Map(), failed: new Map(), total: unique.size };
+    }
     if (!unique.size) {
       if (typeof onProgress === 'function') {
         try { onProgress({ completed: 0, total: 0, resolved: 0, unavailable: 0, failed: 0 }); } catch {}
       }
-      return { resolved: new Map(), unavailable: new Map(), total: 0 };
+      return { resolved: new Map(), unavailable: new Map(), failed: new Map(), total: 0 };
     }
 
     let token = '';
@@ -10908,19 +11162,38 @@
     const entries = Array.from(unique.entries());
     const resolved = new Map();
     const unavailable = new Map();
+    const failedImages = new Map();
     const failures = [];
     let cursor = 0;
     let completed = 0;
+    let active = 0;
+    const waitingImages = new Set();
+    let cacheHits = 0;
+    const activeImages = new Map();
+    const recentImages = [];
+    let lastActivity = '';
+    const imageName = (attachment, index) =>
+      String(attachment?.name || attachment?.id || `Image ${index + 1}`).slice(0, 110);
+    // A working endpoint is tried first for subsequent images, but all fallback
+    // URLs remain available. This never assumes a missing file means a dead route.
+    const routePreference = { index: -1 };
 
     const reportProgress = () => {
       if (typeof onProgress !== 'function') return;
       try {
         onProgress({
+          phase: 'images',
           completed,
           total: entries.length,
+          active,
+          waiting: waitingImages.size,
+          cacheHits,
           resolved: resolved.size,
           unavailable: unavailable.size,
-          failed: failures.length
+          failed: failures.length,
+          activeItems: Array.from(activeImages.values()),
+          recentItems: recentImages.slice(-6),
+          lastActivity
         });
       } catch {}
     };
@@ -10931,18 +11204,52 @@
         const index = cursor++;
         if (index >= entries.length) return;
         const [key, attachment] = entries[index];
-        let result = null;
-        try {
-          result = await resolveArchiveImageAttachment(conversationId, attachment, token);
-        } catch (error) {
-          result = { state: 'failed', reason: String(error?.message || error || 'unexpected resolver error') };
+        const name = imageName(attachment, index);
+        let result = archiveImageResultFromCache(conversationId, key);
+        if (result) {
+          cacheHits += 1;
+          lastActivity = `Reused cached image: ${name}`;
+        } else {
+          active += 1;
+          activeImages.set(index, name);
+          lastActivity = `Fetching: ${name}`;
+          reportProgress();
+          try {
+            result = await resolveArchiveImageAttachment(conversationId, attachment, token, routePreference, (state, delayMs) => {
+              if (state === 'waiting') {
+                waitingImages.add(index);
+                activeImages.set(index, `Waiting for request slot: ${name}`);
+                lastActivity = `Queue/cooldown: ${name} · retrying in ${Math.ceil(delayMs / 1000)}s`;
+              } else {
+                waitingImages.delete(index);
+                activeImages.set(index, state === 'retrying' ? `Retrying: ${name}` : name);
+                lastActivity = state === 'retrying' ? `Retrying: ${name}` : `Fetching: ${name}`;
+              }
+              reportProgress();
+            });
+          } catch (error) {
+            result = { state: 'failed', reason: String(error?.message || error || 'unexpected resolver error') };
+          } finally {
+            active -= 1;
+            activeImages.delete(index);
+            waitingImages.delete(index);
+          }
         }
 
+        const outcome = result?.state === 'resolved' && result.dataUrl ? 'Embedded'
+          : result?.state === 'missing' ? 'Unavailable' : 'Failed';
+        lastActivity = `${outcome}: ${name}`;
+        recentImages.push(lastActivity);
+        if (recentImages.length > 6) recentImages.shift();
         if (result?.state === 'resolved' && result.dataUrl) {
           resolved.set(key, result);
+          rememberArchiveImageResult(conversationId, key, result);
         } else if (result?.state === 'missing') {
           unavailable.set(key, result);
         } else {
+          // A failed fetch is not a reason to discard the entire HTML archive.
+          // Retain the attachment in its original message as unavailable metadata.
+          failedImages.set(key, result || { state: 'failed', reason: 'unknown retrieval failure' });
           failures.push({
             key,
             attachment,
@@ -10959,22 +11266,33 @@
     const workerCount = Math.min(CHAT_ARCHIVE_IMAGE_CONCURRENCY, entries.length);
     await Promise.all(Array.from({ length: workerCount }, () => worker()));
 
-    if (failures.length) {
-      const examples = failures.slice(0, 5).map(item => {
-        const name = String(item.attachment?.name || item.attachment?.id || item.key || 'image');
-        return `${name}: ${item.status ? `HTTP ${item.status} · ` : ''}${item.reason}`;
-      });
-      const more = failures.length > examples.length ? `\n…plus ${failures.length - examples.length} more.` : '';
-      const error = new Error(
-        `HTML export stopped because ${failures.length} of ${entries.length} image attachments could not be verified. ` +
-        `No images were silently skipped. Retry the export when the connection/API is healthy.\n\n${examples.join('\n')}${more}`
-      );
-      error.name = 'BraveFoxArchiveImageExportIncompleteError';
-      error.failures = failures;
-      throw error;
-    }
+    return { resolved, unavailable, failed: failedImages, total: entries.length };
+  }
 
-    return { resolved, unavailable, total: entries.length };
+  function summarizeArchiveImageFailures(imageResolution) {
+    const categories = new Map();
+    const failed = [
+      ...Array.from(imageResolution?.failed?.values?.() || []),
+      ...Array.from(imageResolution?.unavailable?.values?.() || [])
+    ];
+    for (const result of failed) {
+      const status = Number(result?.status || 0) || 0;
+      const reason = String(result?.reason || '').toLowerCase();
+      const label = status === 401 || status === 403 ? `access denied (HTTP ${status})`
+        : status === 404 || status === 410 ? `not found (HTTP ${status})`
+        : status === 429 ? 'rate limited (HTTP 429)'
+        : status ? `HTTP ${status}`
+        : /slot unavailable|cooldown|queue.*full|paused/.test(reason) ? 'request admission timed out'
+        : /timed out|timeout/.test(reason) ? 'request timed out'
+        : /no retrievable url|no.*file id/.test(reason) ? 'missing download reference'
+        : /failed to fetch|network|cors|load failed/.test(reason) ? 'network or cross-origin error'
+        : 'other retrieval error';
+      categories.set(label, (categories.get(label) || 0) + 1);
+    }
+    return Array.from(categories.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([label, count]) => `${count} ${label}`)
+      .join(' · ');
   }
 
   function removeEmbeddedImagePlaceholder(text, embeddedImageCount) {
@@ -10986,7 +11304,7 @@
       .trim();
   }
 
-  async function buildConversationArchiveHtml(conversationId, snapshotId = '', onProgress = null) {
+  async function buildConversationArchiveHtml(conversationId, snapshotId = '', onProgress = null, includeImages = true) {
     const [conversation, messages, snapshots] = await Promise.all([
       getArchivedConversation(conversationId),
       getArchivedMessages(conversationId),
@@ -10994,15 +11312,36 @@
     ]);
     if (!conversation) return '';
     const snapshot = snapshotId ? snapshots.find(item => item.id === snapshotId) : null;
-    const branch = getArchivedCurrentBranch(messages, snapshot);
+    const branchPointer = snapshot || (Array.isArray(conversation.currentBranchMessageIds) &&
+      conversation.currentBranchMessageIds.length
+        ? { messageIds: conversation.currentBranchMessageIds }
+        : null);
+    const branch = getArchivedCurrentBranch(messages, branchPointer);
     const title = String(conversation.title || 'ChatGPT Conversation');
     const exportedAt = Date.now();
     const archiveStateAt = Number(snapshot?.createdAt || conversation.updatedAt || 0);
     const sourceUrl = String(conversation.url || '');
 
-    const imageResolution = await buildArchiveEmbeddedImageMap(conversationId, branch, onProgress);
+    const imageResolution = await buildArchiveEmbeddedImageMap(conversationId, branch, onProgress, includeImages);
+    if (typeof onProgress === 'function') {
+      try { onProgress({ phase: 'writing', completed: imageResolution.total, total: imageResolution.total }); } catch {}
+    }
+    const imageStats = {
+      total: imageResolution.total,
+      embedded: imageResolution.resolved.size,
+      missing: includeImages ? imageResolution.total - imageResolution.resolved.size : 0,
+      excluded: includeImages ? 0 : imageResolution.total,
+      failureSummary: includeImages ? summarizeArchiveImageFailures(imageResolution) : ''
+    };
     const embeddedImages = imageResolution.resolved;
     const unavailableImages = imageResolution.unavailable;
+    const failedImages = imageResolution.failed;
+    const imageSummary = includeImages
+      ? `Images embedded: ${imageStats.embedded}/${imageStats.total}${imageStats.missing ? ` · Could not download: ${imageStats.missing}` : ''}`
+      : `Images intentionally excluded: ${imageStats.excluded}`;
+    const imageExportNote = includeImages
+      ? 'Images successfully retrieved are embedded directly in this HTML. Images that could not be downloaded remain listed as attachment metadata in their original messages; the HTML export is not cancelled.'
+      : 'This text-only HTML export intentionally excludes image data. Image attachments remain listed as metadata in their original messages.';
     const messageHtml = branch.map(message => {
       const isUser = message.role === 'user';
       const roleLabel = isUser ? 'You' : 'ChatGPT';
@@ -11034,16 +11373,20 @@
         ? `<ul class="attachments">${fallbackAttachments.map(item => {
             const name = String(item.name || item.id || 'Attachment');
             const key = getArchiveAttachmentCacheKey(item);
-            const permanentlyUnavailable = Boolean(key && unavailableImages.has(key) && isArchiveImageAttachment(item));
+            const imageWasExcluded = !includeImages && isArchiveImageAttachment(item);
+            const imageUnavailable = Boolean(includeImages && key &&
+              (unavailableImages.has(key) || failedImages.has(key)) && isArchiveImageAttachment(item));
             const details = [
               item.mimeType,
               item.size ? `${item.size} bytes` : '',
-              permanentlyUnavailable ? 'image unavailable at export time' : ''
+              imageWasExcluded ? 'image intentionally excluded' : '',
+              imageUnavailable ? 'image unavailable at export time' : ''
             ].filter(Boolean).join(' · ');
             return `<li>${escapeArchiveHtml(name)}${details ? ` <span>${escapeArchiveHtml(details)}</span>` : ''}</li>`;
           }).join('')}</ul>`
         : '';
-      const visibleText = removeEmbeddedImagePlaceholder(message.plainText, embedded.length);
+      const imageAttachmentCount = attachments.filter(isArchiveImageAttachment).length;
+      const visibleText = removeEmbeddedImagePlaceholder(message.plainText, imageAttachmentCount);
       return `
         <article class="message ${isUser ? 'user' : 'assistant'}">
           <header>
@@ -11056,7 +11399,7 @@
         </article>`;
     }).join('\n');
 
-    return `<!doctype html>
+    const html = `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -11098,12 +11441,14 @@
     <h1>${escapeArchiveHtml(title)}</h1>
     <div class="meta">Local BraveFox archive · ${branch.length} messages · archive state ${escapeArchiveHtml(formatArchiveDateTime(archiveStateAt, true))}</div>
     <div class="meta">Exported ${escapeArchiveHtml(formatArchiveDateTime(exportedAt, true))}${sourceUrl ? ` · <a href="${escapeArchiveHtml(sourceUrl)}">Open original conversation</a>` : ''}</div>
+    <div class="meta">${escapeArchiveHtml(imageSummary)}</div>
   </section>
   ${messageHtml || '<p>No archived messages in this checkpoint.</p>'}
-  <div class="foot">Timestamps are original ChatGPT message creation times when authoritative metadata was available. Missing timestamps are shown as unavailable rather than replaced with archive/export time. Image attachments are embedded directly in this HTML. An image is left as attachment metadata only when the server explicitly reported it unavailable (404/410); ambiguous retrieval failures stop the export instead of silently skipping images.</div>
+  <div class="foot">Timestamps are original ChatGPT message creation times when authoritative metadata was available. Missing timestamps are shown as unavailable rather than replaced with archive/export time. ${escapeArchiveHtml(imageExportNote)}</div>
 </main>
 </body>
 </html>`;
+    return { html, imageStats };
   }
 
   function downloadConversationArchiveBlob(filename, content, mimeType) {
@@ -11116,7 +11461,8 @@
     document.documentElement.appendChild(link);
     link.click();
     link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    // Give browsers time to begin reading large, image-heavy Blob downloads.
+    window.setTimeout(() => URL.revokeObjectURL(url), 60000);
   }
 
   async function exportConversationArchiveMarkdown(conversationId, snapshotId = '') {
@@ -11127,12 +11473,24 @@
     downloadConversationArchiveBlob(`${archiveSafeFileName(conversation.title)}.md`, markdown, 'text/markdown;charset=utf-8');
   }
 
-  async function exportConversationArchiveHtml(conversationId, snapshotId = '', onProgress = null) {
+  async function exportConversationArchiveHtml(conversationId, snapshotId = '', onProgress = null, includeImages = true, canSave = null) {
+    if (typeof onProgress === 'function') {
+      try { onProgress({ phase: 'preparing' }); } catch {}
+    }
     await prepareConversationArchiveForExport(conversationId);
     const conversation = await getArchivedConversation(conversationId);
-    if (!conversation) return;
-    const html = await buildConversationArchiveHtml(conversationId, snapshotId, onProgress);
-    downloadConversationArchiveBlob(`${archiveSafeFileName(conversation.title)}.html`, html, 'text/html;charset=utf-8');
+    if (!conversation) return null;
+    const { html, imageStats } = await buildConversationArchiveHtml(conversationId, snapshotId, onProgress, includeImages);
+    const suffix = includeImages ? '' : '-no-images';
+    if (typeof onProgress === 'function') {
+      try { onProgress({ phase: 'saving' }); } catch {}
+    }
+    // A superseded/duplicate exporter must never initiate a late HTML download.
+    if (typeof canSave === 'function' && !canSave()) {
+      throw new Error('HTML export lost ownership of the active download; no file was saved.');
+    }
+    downloadConversationArchiveBlob(`${archiveSafeFileName(conversation.title)}${suffix}.html`, html, 'text/html;charset=utf-8');
+    return imageStats;
   }
 
   async function exportConversationArchiveJson(conversationId) {
@@ -11406,12 +11764,36 @@
         background: var(--border-light, rgba(127,127,127,.22)) !important;
       }
 
+      /* Independent Archive access when the native Share toolbar does not mount,
+         including failed/blank conversation loads and /c/ routes without an ID. */
       #${CHAT_ARCHIVE_BUTTON_ID} {
-        color: inherit !important;
+        position: fixed !important;
+        top: calc(14px + env(safe-area-inset-top, 0px)) !important;
+        right: calc(70px + env(safe-area-inset-right, 0px)) !important;
+        z-index: 2147483500 !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 7px !important;
+        padding: 8px 12px !important;
+        min-height: 34px !important;
+        border: 1px solid var(--border-light, rgba(127,127,127,.30)) !important;
+        border-radius: 999px !important;
+        background: var(--main-surface-primary, #fff) !important;
+        color: var(--text-primary, #171717) !important;
+        font: inherit !important;
+        font-size: 13px !important;
+        line-height: 1.2 !important;
+        white-space: nowrap !important;
+        box-shadow: 0 2px 10px rgba(0,0,0,.10) !important;
         text-decoration: none !important;
         cursor: pointer !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
       }
       #${CHAT_ARCHIVE_BUTTON_ID} svg { flex: none !important; }
+      #${CHAT_ARCHIVE_BUTTON_ID}:focus-visible { outline: 2px solid currentColor !important; outline-offset: 2px !important; }
       #${CHAT_ARCHIVE_MODAL_ID} {
         position: fixed !important; inset: 0 !important; z-index: 2147483600 !important;
         background: rgba(0,0,0,.46) !important; display: flex !important; align-items: center !important; justify-content: center !important;
@@ -11422,10 +11804,16 @@
         background: var(--main-surface-primary, #fff) !important; color: var(--text-primary, #171717) !important;
         border: 1px solid var(--border-light, rgba(127,127,127,.30)) !important; border-radius: 16px !important;
         box-shadow: 0 24px 70px rgba(0,0,0,.28) !important; display: grid !important;
-        grid-template-rows: auto 1fr !important; overflow: hidden !important;
+        grid-template-rows: auto auto 1fr !important; overflow: hidden !important;
       }
       #${CHAT_ARCHIVE_MODAL_ID} .bf-archive-header { display:flex !important; align-items:center !important; gap:12px !important; padding:14px 16px !important; border-bottom:1px solid var(--border-light,rgba(127,127,127,.22)) !important; }
       #${CHAT_ARCHIVE_MODAL_ID} .bf-archive-header strong { font-size:16px !important; }
+      #${CHAT_ARCHIVE_MODAL_ID} .bf-archive-manual-controls {
+        display:flex !important; align-items:center !important; flex-wrap:wrap !important;
+        gap:8px !important; padding:10px 16px !important;
+        border-bottom:1px solid var(--border-light,rgba(127,127,127,.22)) !important;
+      }
+      #${CHAT_ARCHIVE_MODAL_ID} .bf-archive-manual-status { flex-basis:100% !important; font-size:12px !important; }
       #${CHAT_ARCHIVE_MODAL_ID} .bf-archive-close { margin-left:auto !important; }
       #${CHAT_ARCHIVE_MODAL_ID} .bf-archive-body { display:grid !important; grid-template-columns:minmax(250px,34%) 1fr !important; min-height:0 !important; }
       #${CHAT_ARCHIVE_MODAL_ID} .bf-archive-list { border-right:1px solid var(--border-light,rgba(127,127,127,.22)) !important; overflow:auto !important; padding:10px !important; }
@@ -11444,6 +11832,10 @@
       #${CHAT_ARCHIVE_MODAL_ID} .bf-archive-result { border-top:1px solid var(--border-light,rgba(127,127,127,.18)) !important; padding:10px 0 !important; }
       #${CHAT_ARCHIVE_MODAL_ID} .bf-archive-result pre { white-space:pre-wrap !important; font:inherit !important; font-size:12px !important; margin:6px 0 !important; max-height:130px !important; overflow:hidden !important; }
       @media (max-width: 760px) {
+        #${CHAT_ARCHIVE_BUTTON_ID} {
+          top: calc(58px + env(safe-area-inset-top, 0px)) !important;
+          right: calc(12px + env(safe-area-inset-right, 0px)) !important;
+        }
         #${CHAT_ARCHIVE_MODAL_ID} { padding:8px !important; }
         #${CHAT_ARCHIVE_MODAL_ID} .bf-archive-panel { width:100% !important; height:96vh !important; }
         #${CHAT_ARCHIVE_MODAL_ID} .bf-archive-body { grid-template-columns:1fr !important; grid-template-rows:34% 1fr !important; }
@@ -11501,6 +11893,9 @@
     button.removeAttribute('data-state');
     button.removeAttribute('aria-expanded');
     button.removeAttribute('aria-haspopup');
+    // Share is marked hidden before it is cloned; the Archive clone must not
+    // inherit Share's CSS-hiding marker.
+    button.removeAttribute(CHAT_ARCHIVE_SHARE_HIDDEN_ATTR);
 
     // Archive is a BraveFox action, not Share. Never inherit ChatGPT's transient
     // disabled state (Share is often disabled while a response is generating).
@@ -11524,11 +11919,50 @@
     return button;
   }
 
+  function isConversationArchiveChatRoute() {
+    // Match /c, /c/, /c/<id>, and further chat sub-paths. The archive UI must
+    // not rely on ChatGPT loading a conversation, rendering Share, or having an ID.
+    return /^\/c(?:\/|$)/i.test(String(location.pathname || ''));
+  }
+
+  function ensureConversationArchiveFloatingButton() {
+    if (!isConversationArchiveChatRoute()) return;
+    let button = document.getElementById(CHAT_ARCHIVE_BUTTON_ID);
+    if (!(button instanceof HTMLButtonElement)) {
+      button = document.createElement('button');
+      button.id = CHAT_ARCHIVE_BUTTON_ID;
+      button.type = 'button';
+      button.setAttribute('aria-label', 'Arkisto');
+      button.title = 'Keskusteluarkisto';
+      button.append(makeConversationArchiveChatIcon(16), document.createTextNode('Arkisto'));
+      button.addEventListener('click', event => {
+        event.preventDefault();
+        event.stopPropagation();
+        void openConversationArchiveModal();
+      });
+    }
+    // Outside the ChatGPT React root: a failed load or a remount cannot wipe it.
+    if (button.parentElement !== document.documentElement) document.documentElement.appendChild(button);
+  }
+
+  function isConversationArchiveToolbarVisible(button) {
+    if (!(button instanceof HTMLButtonElement) || !button.isConnected) return false;
+    for (let node = button; node instanceof Element; node = node.parentElement) {
+      if (node.hasAttribute('inert') || node.hasAttribute('hidden') ||
+          node.getAttribute('aria-hidden') === 'true') return false;
+      const style = window.getComputedStyle(node);
+      if (style.display === 'none' || style.visibility === 'hidden') return false;
+    }
+    const rect = button.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  }
+
   function ensureConversationArchiveToolbarButton() {
     const existing = document.querySelector(`button[${CHAT_ARCHIVE_TOOLBAR_BUTTON_ATTR}="true"]`);
 
-    if (!getCurrentConversationId()) {
+    if (!isConversationArchiveChatRoute()) {
       existing?.remove();
+      document.getElementById(CHAT_ARCHIVE_BUTTON_ID)?.remove();
       for (const share of document.querySelectorAll(`button[${CHAT_ARCHIVE_SHARE_HIDDEN_ATTR}="true"]`)) {
         share.removeAttribute(CHAT_ARCHIVE_SHARE_HIDDEN_ATTR);
       }
@@ -11537,31 +11971,40 @@
 
     const nativeShare = getConversationArchiveNativeShareButton();
     if (!(nativeShare instanceof HTMLButtonElement) || !nativeShare.parentElement) {
+      // On a failed ChatGPT conversation load there may be no header/Share at all.
+      // Never remove the only Archive entry point in that situation.
       existing?.remove();
+      ensureConversationArchiveFloatingButton();
       return;
     }
 
     nativeShare.setAttribute(CHAT_ARCHIVE_SHARE_HIDDEN_ATTR, 'true');
-    if (existing?.isConnected) {
+    let archiveButton = existing;
+    if (archiveButton?.isConnected) {
       // A clone created while Share was temporarily disabled must not stay disabled forever.
-      existing.disabled = false;
-      existing.removeAttribute('disabled');
-      existing.removeAttribute('aria-disabled');
-      existing.removeAttribute('data-disabled');
-      existing.removeAttribute('inert');
-      existing.tabIndex = 0;
-      if (nativeShare.nextElementSibling !== existing) nativeShare.after(existing);
-      return;
+      archiveButton.disabled = false;
+      archiveButton.removeAttribute('disabled');
+      archiveButton.removeAttribute('aria-disabled');
+      archiveButton.removeAttribute('data-disabled');
+      archiveButton.removeAttribute('inert');
+      archiveButton.removeAttribute(CHAT_ARCHIVE_SHARE_HIDDEN_ATTR);
+      archiveButton.tabIndex = 0;
+      if (nativeShare.nextElementSibling !== archiveButton) nativeShare.after(archiveButton);
+    } else {
+      archiveButton = makeConversationArchiveToolbarButton(nativeShare);
+      if (archiveButton) nativeShare.after(archiveButton);
     }
 
-    const archiveButton = makeConversationArchiveToolbarButton(nativeShare);
-    if (archiveButton) nativeShare.after(archiveButton);
+    // Use ChatGPT's toolbar when it actually displays. While it is loading,
+    // hidden, or unmounted, keep an independent Archive button available.
+    if (isConversationArchiveToolbarVisible(archiveButton)) {
+      document.getElementById(CHAT_ARCHIVE_BUTTON_ID)?.remove();
+    } else {
+      ensureConversationArchiveFloatingButton();
+    }
   }
 
   function ensureConversationArchiveButton() {
-    // Retire the brittle custom sidebar row. Archive access now has two stable homes:
-    // the in-chat toolbar (replacing Share) and Library > New.
-    document.getElementById(CHAT_ARCHIVE_BUTTON_ID)?.remove();
     ensureConversationArchiveToolbarButton();
   }
 
@@ -11907,6 +12350,540 @@
     if (isConversationArchiveLibraryNewTrigger(event.target)) armConversationArchiveLibraryNewMenu();
   }
 
+  function getArchiveManualApiError(response, context) {
+    const status = Number(response?.status || 0);
+    return new Error(status === 429
+      ? `${context}: ChatGPT rate-limited archive requests (HTTP 429). Bulk archiving stopped; the completed chats remain saved.`
+      : `${context}: ChatGPT returned HTTP ${status || 'unknown'}. No unrelated conversation was substituted.`);
+  }
+
+  async function fetchConversationArchiveManualJson(url, signal) {
+    const request = token => {
+      const headers = { Accept: 'application/json' };
+      if (token) headers.Authorization = `Bearer ${token}`;
+      return braveFoxReliabilityFetch(url, { method: 'GET', credentials: 'include', cache: 'no-store', headers, signal });
+    };
+    let token = conversationAccessToken || await resolveConversationAccessToken();
+    let response = await request(token || '');
+    if ((response.status === 401 || response.status === 403) && token) {
+      conversationAccessToken = '';
+      conversationAccessTokenRetryAt = 0;
+      token = await resolveConversationAccessToken();
+      if (token) response = await request(token);
+    }
+    if (!response.ok) throw getArchiveManualApiError(response, 'Archive request');
+    try { return await response.json(); }
+    catch { throw new Error('ChatGPT returned an unreadable archive response.'); }
+  }
+
+  async function createManualArchiveForConversation(conversationId, run, titleHint = '') {
+    const id = String(conversationId || '').trim();
+    if (!id) throw new Error('No conversation ID is available. Open a /c/<chat-id> page first.');
+    if (run?.cancelled) return false;
+    const url = `${location.origin}/backend-api/conversation/${encodeURIComponent(id)}`;
+    const payload = await fetchConversationArchiveManualJson(url, run?.controller?.signal);
+    if (run?.cancelled) return false;
+    const responseId = getArchivePayloadConversationId(payload);
+    if (responseId !== id) {
+      throw new Error(`Identity mismatch: ChatGPT did not return the requested conversation ${id}. Nothing was saved for it.`);
+    }
+    if (!payload.mapping || typeof payload.mapping !== 'object') {
+      throw new Error(`ChatGPT did not return complete message history for conversation ${id}.`);
+    }
+    const saved = await archiveConversationPayload(id, payload, { manual: true, titleHint });
+    if (!saved) throw new Error(`No complete history could be archived for conversation ${id}.`);
+    conversationArchiveDeletedUntilReload.delete(id);
+    return true;
+  }
+
+  function setConversationArchiveManualStatus(value) {
+    const status = document.querySelector(`#${CHAT_ARCHIVE_MODAL_ID} [data-bf-archive-manual-status]`);
+    if (status) status.textContent = String(value || '');
+  }
+
+  function updateConversationArchiveManualControls() {
+    const modal = document.getElementById(CHAT_ARCHIVE_MODAL_ID);
+    if (!modal) return;
+    const running = Boolean(conversationArchiveManualRun && !conversationArchiveManualRun.finished);
+    const currentButton = modal.querySelector('[data-bf-archive-create-current]');
+    const allButton = modal.querySelector('[data-bf-archive-create-all]');
+    const cancelButton = modal.querySelector('[data-bf-archive-cancel-all]');
+    if (currentButton) currentButton.disabled = running || !getCurrentConversationId();
+    if (allButton) allButton.disabled = running;
+    if (cancelButton) cancelButton.hidden = !running;
+  }
+
+  async function createConversationArchiveManually(mode) {
+    if (conversationArchiveManualRun && !conversationArchiveManualRun.finished) return;
+    const currentId = getCurrentConversationId();
+    if (mode === 'current' && !currentId) {
+      setConversationArchiveManualStatus('No chat ID in this URL; the current chat cannot be identified.');
+      return;
+    }
+    if (mode === 'all' && !window.confirm(
+      'Create local archives of ALL conversations accessible in your ChatGPT account history?\n\n' +
+      'This uses paced requests, can take a long time for large histories, and stops on errors or rate limits. ' +
+      'Keep this ChatGPT tab open; existing archives will not be deleted.'
+    )) return;
+
+    const run = { mode, controller: new AbortController(), cancelled: false, finished: false };
+    conversationArchiveManualRun = run;
+    updateConversationArchiveManualControls();
+    let saved = 0;
+    let skipped = 0;
+    let failed = 0;
+    const failures = [];
+    let errorText = '';
+    const assertRunning = () => {
+      if (run.cancelled || run.controller.signal.aborted) throw new DOMException('Archive cancelled', 'AbortError');
+    };
+    try {
+      if (mode === 'current') {
+        setConversationArchiveManualStatus(`Retrieving the exact chat at /c/${currentId}…`);
+        assertRunning();
+        if (await createManualArchiveForConversation(currentId, run)) {
+          saved += 1;
+          conversationArchiveSelectedConversationId = currentId;
+        }
+      } else {
+        const visited = new Set();
+        let offset = 0;
+        const pageSize = 50;
+        let pages = 0;
+        while (true) {
+          assertRunning();
+          setConversationArchiveManualStatus(`Loading ChatGPT conversation history… ${visited.size} discovered, ${saved} saved, ${failed} failed`);
+          const url = `${location.origin}/backend-api/conversations?offset=${offset}&limit=${pageSize}&order=updated`;
+          const payload = await fetchConversationArchiveManualJson(url, run.controller.signal);
+          const items = Array.isArray(payload?.items) ? payload.items : null;
+          if (!items) throw new Error('ChatGPT did not return a usable conversation list; bulk archive stopped.');
+          let newItems = 0;
+          for (const item of items) {
+            assertRunning();
+            const id = String(item?.id || item?.conversation_id || '').trim();
+            if (!id || visited.has(id)) continue;
+            newItems += 1;
+            visited.add(id);
+            setConversationArchiveManualStatus(`Archiving ${saved + failed + skipped + 1}/${visited.size} discovered · ${saved} saved, ${failed} failed · ${String(item?.title || id)}`);
+            try {
+              if (await createManualArchiveForConversation(id, run, String(item?.title || ''))) saved += 1;
+              else skipped += 1;
+            } catch (error) {
+              if (run.cancelled || error?.name === 'AbortError') throw error;
+              failed += 1;
+              const reason = String(error?.message || error);
+              failures.push(`${String(item?.title || id)}: ${reason}`);
+              // Cooldowns / authentication failures should stop, not hammer the API.
+              if (/429|rate.limit|paused|queue is full|http 401|http 403/i.test(reason)) throw error;
+            }
+          }
+          pages += 1;
+          offset += items.length;
+          const hasMore = typeof payload.has_more === 'boolean' ? payload.has_more
+            : (Number.isFinite(Number(payload.total)) && payload.total !== null
+              ? offset < Number(payload.total) : items.length >= pageSize);
+          if (!hasMore || !items.length || !newItems) break;
+          // Guard against an unexpectedly looping/non-paginating endpoint.
+          if (pages >= 10000) throw new Error('Conversation list pagination did not finish; bulk archive stopped.');
+        }
+      }
+    } catch (error) {
+      if (run.cancelled || error?.name === 'AbortError') {
+        errorText = 'Cancelled by user';
+      } else {
+        errorText = String(error?.message || error || 'Archive request failed');
+        console.error('[BraveFox Enhancer] Manual archive sync failed:', error);
+      }
+    } finally {
+      run.finished = true;
+      updateConversationArchiveManualControls();
+      const summary = `${mode === 'current' ? 'Current chat' : 'Available chat history'}: ${saved} archived, ${failed} failed${skipped ? `, ${skipped} skipped` : ''}.`;
+      setConversationArchiveManualStatus(errorText ? `${summary} ${errorText}.` : summary);
+      if (failures.length) console.warn('[BraveFox Enhancer] Failed individual conversation archives:', failures);
+      if (document.getElementById(CHAT_ARCHIVE_MODAL_ID)) void renderConversationArchiveModal();
+    }
+  }
+
+  function installConversationArchiveManualControls(modal) {
+    const container = modal.querySelector('[data-bf-archive-manual-controls]');
+    if (!(container instanceof HTMLElement)) return;
+    const makeButton = (text, attribute, handler) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = text;
+      button.setAttribute(attribute, 'true');
+      button.addEventListener('click', handler);
+      container.appendChild(button);
+      return button;
+    };
+    makeButton('Create archive of currently active chat window', 'data-bf-archive-create-current',
+      () => void createConversationArchiveManually('current'));
+    makeButton('Create archive of all available chat windows', 'data-bf-archive-create-all',
+      () => void createConversationArchiveManually('all'));
+    makeButton('Cancel archiving', 'data-bf-archive-cancel-all', () => {
+      const run = conversationArchiveManualRun;
+      if (!run || run.finished) return;
+      run.cancelled = true;
+      run.controller.abort();
+      setConversationArchiveManualStatus('Cancelling after the current operation…');
+    });
+    const status = document.createElement('div');
+    status.className = 'bf-archive-manual-status bf-archive-muted';
+    status.setAttribute('data-bf-archive-manual-status', 'true');
+    status.setAttribute('role', 'status');
+    status.textContent = 'Manual archive creation uses exact ChatGPT conversation IDs. Bulk mode reads accessible account history, not just open tabs.';
+    container.appendChild(status);
+    updateConversationArchiveManualControls();
+  }
+
+  // The Downloads dock reports the *same job* used by HTML export; it never
+  // performs independent fetches or starts another file download.
+  let conversationArchiveDownloadDockOpen = false;
+
+  function ensureConversationArchiveDownloadDock() {
+    const diagnostics = document.getElementById('bravefox-reliability-root');
+    let dock = document.getElementById(CHAT_ARCHIVE_DOWNLOAD_DOCK_ID);
+    if (!document.body) return null;
+    if (!document.getElementById(CHAT_ARCHIVE_DOWNLOAD_DOCK_STYLE_ID)) {
+      const style = document.createElement('style');
+      style.id = CHAT_ARCHIVE_DOWNLOAD_DOCK_STYLE_ID;
+      style.textContent = `
+        #bravefox-reliability-root{display:flex;align-items:flex-end;gap:8px}
+        #${CHAT_ARCHIVE_DOWNLOAD_DOCK_ID}{position:fixed;right:12px;bottom:12px;z-index:2147483645;font:12px system-ui,sans-serif;color:var(--text-primary,#222)}
+        #bravefox-reliability-root #${CHAT_ARCHIVE_DOWNLOAD_DOCK_ID}{position:relative;right:auto;bottom:auto;z-index:auto;flex:none}
+        #${CHAT_ARCHIVE_DOWNLOAD_DOCK_ID} button{cursor:pointer;font:inherit;color:inherit;background:var(--main-surface-primary,#fff);border:1px solid rgba(125,125,125,.35);border-radius:9px;padding:6px 9px}
+        #${CHAT_ARCHIVE_DOWNLOAD_DOCK_ID} [data-bf-download-toggle]{opacity:.94;box-shadow:0 2px 10px rgba(0,0,0,.1);max-width:min(260px,45vw);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background-image:linear-gradient(to right,rgba(22,163,74,.32) 0%,rgba(22,163,74,.32) var(--bf-download-progress,0%),transparent var(--bf-download-progress,0%),transparent 100%)}
+        #${CHAT_ARCHIVE_DOWNLOAD_DOCK_ID} [data-bf-download-panel]{position:absolute;bottom:41px;right:0;width:min(385px,calc(100vw - 24px));box-sizing:border-box;padding:12px;background:var(--main-surface-primary,#fff);border:1px solid rgba(125,125,125,.3);border-radius:12px;box-shadow:0 10px 35px rgba(0,0,0,.2);line-height:1.45}
+        #${CHAT_ARCHIVE_DOWNLOAD_DOCK_ID} [data-bf-download-panel][hidden]{display:none!important}
+        #${CHAT_ARCHIVE_DOWNLOAD_DOCK_ID} [data-bf-download-head]{display:flex;justify-content:space-between;align-items:center;gap:10px}
+        #${CHAT_ARCHIVE_DOWNLOAD_DOCK_ID} [data-bf-download-summary]{margin:10px 0 7px;overflow-wrap:anywhere;font-weight:600}
+        #${CHAT_ARCHIVE_DOWNLOAD_DOCK_ID} [data-bf-download-meter]{height:7px;background:rgba(127,127,127,.19);border-radius:999px;overflow:hidden}
+        #${CHAT_ARCHIVE_DOWNLOAD_DOCK_ID} [data-bf-download-fill]{height:100%;width:0%;background:#22c55e;transition:width .16s ease}
+        #${CHAT_ARCHIVE_DOWNLOAD_DOCK_ID} [data-bf-download-details]{margin:9px 0;white-space:pre-line;overflow-wrap:anywhere;opacity:.85}
+        #${CHAT_ARCHIVE_DOWNLOAD_DOCK_ID} [data-bf-download-active]{margin:7px 0 0;padding-left:18px;max-height:85px;overflow:auto;overflow-wrap:anywhere}
+        #${CHAT_ARCHIVE_DOWNLOAD_DOCK_ID} [data-bf-download-recent]{margin:6px 0 0;padding-left:18px;max-height:110px;overflow:auto;overflow-wrap:anywhere;opacity:.78}
+        #${CHAT_ARCHIVE_DOWNLOAD_DOCK_ID} [data-bf-download-note]{margin:8px 0 0;white-space:pre-line;overflow-wrap:anywhere}
+        #${CHAT_ARCHIVE_DOWNLOAD_DOCK_ID} [data-bf-download-active]:empty,#${CHAT_ARCHIVE_DOWNLOAD_DOCK_ID} [data-bf-download-recent]:empty{display:none}
+        @media(max-width:600px){#${CHAT_ARCHIVE_DOWNLOAD_DOCK_ID} [data-bf-download-panel]{position:fixed;left:12px;right:12px;bottom:52px;width:auto;max-height:calc(100vh - 75px);overflow:auto}}
+        html.bravefox-chatgpt-gated #${CHAT_ARCHIVE_DOWNLOAD_DOCK_ID}{display:none!important}
+      `;
+      (document.head || document.documentElement).appendChild(style);
+    }
+    if (!dock) {
+      dock = document.createElement('div');
+      dock.id = CHAT_ARCHIVE_DOWNLOAD_DOCK_ID;
+      const toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.setAttribute('data-bf-download-toggle', '');
+      toggle.setAttribute('aria-label', 'BraveFox archive download progress');
+      toggle.setAttribute('aria-expanded', 'false');
+      toggle.textContent = 'Downloads';
+      const panel = document.createElement('section');
+      panel.hidden = true;
+      panel.setAttribute('data-bf-download-panel', '');
+      panel.setAttribute('aria-label', 'BraveFox archive download details');
+      const heading = document.createElement('div');
+      heading.setAttribute('data-bf-download-head', '');
+      const title = document.createElement('strong');
+      title.textContent = 'Archive downloads';
+      const close = document.createElement('button');
+      close.type = 'button';
+      close.textContent = 'Collapse';
+      close.addEventListener('click', () => {
+        conversationArchiveDownloadDockOpen = false;
+        refreshConversationArchiveDownloadDock();
+      });
+      heading.append(title, close);
+      const summary = document.createElement('div');
+      summary.setAttribute('data-bf-download-summary', '');
+      summary.setAttribute('role', 'status');
+      const meter = document.createElement('div');
+      meter.setAttribute('data-bf-download-meter', '');
+      meter.setAttribute('role', 'progressbar');
+      meter.setAttribute('aria-label', 'Images processed');
+      meter.setAttribute('aria-valuemin', '0');
+      meter.setAttribute('aria-valuemax', '100');
+      const fill = document.createElement('div');
+      fill.setAttribute('data-bf-download-fill', '');
+      meter.append(fill);
+      const details = document.createElement('div');
+      details.setAttribute('data-bf-download-details', '');
+      const activeLabel = document.createElement('strong');
+      activeLabel.textContent = 'Fetching now';
+      activeLabel.setAttribute('data-bf-download-active-label', '');
+      const activeList = document.createElement('ul');
+      activeList.setAttribute('data-bf-download-active', '');
+      const recentLabel = document.createElement('strong');
+      recentLabel.textContent = 'Recent activity';
+      recentLabel.setAttribute('data-bf-download-recent-label', '');
+      const recentList = document.createElement('ul');
+      recentList.setAttribute('data-bf-download-recent', '');
+      const note = document.createElement('p');
+      note.setAttribute('data-bf-download-note', '');
+      panel.append(heading, summary, meter, details, activeLabel, activeList, recentLabel, recentList, note);
+      dock.append(toggle, panel);
+      toggle.addEventListener('click', () => {
+        conversationArchiveDownloadDockOpen = !conversationArchiveDownloadDockOpen;
+        if (conversationArchiveDownloadDockOpen && braveFoxReliabilityPanelOpen) {
+          braveFoxReliabilityPanelOpen = false;
+          braveFoxReliabilityRefreshUi();
+        }
+        refreshConversationArchiveDownloadDock();
+      });
+    }
+    if (diagnostics) {
+      const diagnosticsToggle = diagnostics.querySelector('[data-bf-reliability-toggle]');
+      if (diagnosticsToggle && dock.parentElement !== diagnostics) diagnostics.insertBefore(dock, diagnosticsToggle);
+    } else if (!dock.isConnected) {
+      document.body.appendChild(dock);
+    }
+    return dock;
+  }
+
+  function refreshConversationArchiveDownloadDock() {
+    const dock = ensureConversationArchiveDownloadDock();
+    if (!dock) return;
+    const toggle = dock.querySelector('[data-bf-download-toggle]');
+    const panel = dock.querySelector('[data-bf-download-panel]');
+    const summary = dock.querySelector('[data-bf-download-summary]');
+    const meter = dock.querySelector('[data-bf-download-meter]');
+    const fill = dock.querySelector('[data-bf-download-fill]');
+    const details = dock.querySelector('[data-bf-download-details]');
+    const activeList = dock.querySelector('[data-bf-download-active]');
+    const recentList = dock.querySelector('[data-bf-download-recent]');
+    const note = dock.querySelector('[data-bf-download-note]');
+    const job = conversationArchiveHtmlExportJob;
+    panel.hidden = !conversationArchiveDownloadDockOpen;
+    toggle.setAttribute('aria-expanded', String(conversationArchiveDownloadDockOpen));
+    if (!job) {
+      toggle.style.setProperty('--bf-download-progress', '0%');
+      toggle.textContent = 'Downloads';
+      summary.textContent = 'No archive export started in this tab.';
+      details.textContent = 'Start Export HTML from Local Chat Archive to monitor its progress here.';
+      meter.hidden = true;
+      note.textContent = '';
+      activeList.replaceChildren();
+      recentList.replaceChildren();
+      dock.querySelector('[data-bf-download-active-label]').hidden = true;
+      dock.querySelector('[data-bf-download-recent-label]').hidden = true;
+      return;
+    }
+    const current = job.progress || {};
+    const counts = job.imageProgress || current;
+    const total = Math.max(0, Number(counts.total || 0));
+    const completed = Math.min(total, Math.max(0, Number(counts.completed || 0)));
+    const percentage = total ? Math.round(completed / total * 100) : 0;
+    const embedded = Math.max(0, Number(counts.resolved || 0));
+    const unavailable = Math.max(0, Number(counts.unavailable || 0) + Number(counts.failed || 0));
+    const active = Math.max(0, Number(counts.active || 0));
+    const waiting = Math.max(0, Math.min(active, Number(counts.waiting || 0)));
+    const phase = String(current.phase || 'preparing');
+    const seconds = Math.max(0, Math.floor((Date.now() - job.startedAt) / 1000));
+    const stage = !job.running ? (job.failed ? 'Failed' : unavailable ? 'Completed with warnings' : 'Completed')
+      : phase === 'images' ? `Processing: ${percentage}% · ${completed}/${total}`
+      : phase === 'writing' ? 'Building HTML…'
+      : phase === 'saving' ? 'Starting HTML download…'
+      : 'Preparing archive…';
+    toggle.style.setProperty('--bf-download-progress', `${percentage}%`);
+    toggle.textContent = job.running && phase === 'images' ? stage : `Downloads · ${stage}`;
+    toggle.setAttribute('aria-label', `BraveFox Downloads: ${stage}`);
+    summary.textContent = `${job.title || 'Selected conversation'} · ${job.includeImages ? 'HTML with images' : 'HTML (no images)'}`;
+    meter.hidden = !job.includeImages || total === 0;
+    fill.style.width = `${percentage}%`;
+    meter.setAttribute('aria-valuenow', String(percentage));
+    meter.setAttribute('aria-valuetext', `${completed} of ${total} images processed`);
+    const sinceLast = Math.max(0, Math.floor((Date.now() - job.lastCompletedAt) / 1000));
+    const lines = [stage, job.includeImages
+      ? `${completed}/${total} processed · ${embedded} embedded · ${unavailable} unavailable · ${Math.max(0, total - completed)} remaining`
+      : 'Images excluded intentionally · no image fetching',
+      `${Math.max(0, active - waiting)} fetching · ${waiting} waiting for request slot · ${seconds}s elapsed`];
+    if (job.running && waiting) lines.push('BraveFox is pacing requests or respecting a ChatGPT cooldown; waiting images are not failures.');
+    else if (job.running && active && sinceLast >= 8) lines.push(`Waiting ${sinceLast}s for an image request to finish (export still active).`);
+    details.textContent = lines.join('\n');
+    const activeItems = Array.isArray(counts.activeItems) ? counts.activeItems : [];
+    const recentItems = Array.isArray(counts.recentItems) ? counts.recentItems : [];
+    activeList.replaceChildren(...activeItems.slice(0, 4).map(name => {
+      const item = document.createElement('li');
+      item.textContent = String(name).slice(0, 110);
+      return item;
+    }));
+    recentList.replaceChildren(...recentItems.slice(-6).reverse().map(value => {
+      const item = document.createElement('li');
+      item.textContent = String(value).slice(0, 140);
+      return item;
+    }));
+    dock.querySelector('[data-bf-download-active-label]').hidden = !activeItems.length;
+    dock.querySelector('[data-bf-download-recent-label]').hidden = !recentItems.length;
+    note.textContent = !job.running ? String(job.message || '') :
+      (phase === 'preparing' ? 'Reading the selected local archive before image retrieval.' :
+        phase === 'images' ? 'Failed images will remain as attachment entries in the HTML.' :
+        'Finishing the same export. No additional HTML download will be started.');
+  }
+
+  let conversationArchiveHtmlExportJob = null;
+
+  function archiveHtmlExportLockRoot() {
+    return document.documentElement;
+  }
+
+  function claimConversationArchiveHtmlExportLock(conversationId, snapshotId, includeImages) {
+    const root = archiveHtmlExportLockRoot();
+    if (!root) return null;
+    const now = Date.now();
+    const previous = String(root.getAttribute(CHAT_ARCHIVE_HTML_EXPORT_LOCK_ATTR) || '');
+    if (previous) {
+      const timestamp = Number(previous.split(':')[0]);
+      if (Number.isFinite(timestamp) && now - timestamp >= 0 && now - timestamp < CHAT_ARCHIVE_HTML_EXPORT_LOCK_STALE_MS) return null;
+    }
+    const signature = `${String(conversationId)}:${String(snapshotId)}:${includeImages ? 'images' : 'no-images'}`;
+    const lastSignature = root.getAttribute('data-bravefox-archive-html-last-signature');
+    const lastStarted = Number(root.getAttribute('data-bravefox-archive-html-last-start') || 0);
+    if (lastSignature === signature && now - lastStarted >= 0 &&
+        now - lastStarted < CHAT_ARCHIVE_HTML_EXPORT_REPEAT_WINDOW_MS) return null;
+
+    const token = `${now}:${Math.random().toString(36).slice(2)}`;
+    root.setAttribute(CHAT_ARCHIVE_HTML_EXPORT_LOCK_ATTR, token);
+    root.setAttribute('data-bravefox-archive-html-last-signature', signature);
+    root.setAttribute('data-bravefox-archive-html-last-start', String(now));
+    return token;
+  }
+
+  function ownsConversationArchiveHtmlExportLock(token) {
+    return Boolean(token && archiveHtmlExportLockRoot()?.getAttribute(CHAT_ARCHIVE_HTML_EXPORT_LOCK_ATTR) === token);
+  }
+
+  function releaseConversationArchiveHtmlExportLock(token) {
+    if (ownsConversationArchiveHtmlExportLock(token)) {
+      archiveHtmlExportLockRoot().removeAttribute(CHAT_ARCHIVE_HTML_EXPORT_LOCK_ATTR);
+    }
+  }
+
+  function refreshConversationArchiveHtmlExportUi() {
+    const modal = document.getElementById(CHAT_ARCHIVE_MODAL_ID);
+    if (!modal) return;
+    const withImages = modal.querySelector('[data-bf-archive-html-with-images]');
+    const withoutImages = modal.querySelector('[data-bf-archive-html-no-images]');
+    const status = modal.querySelector('[data-bf-archive-html-progress]');
+    if (!withImages || !withoutImages || !status) return;
+    const job = conversationArchiveHtmlExportJob;
+    const lockActive = Boolean(archiveHtmlExportLockRoot()?.getAttribute(CHAT_ARCHIVE_HTML_EXPORT_LOCK_ATTR));
+    const busy = Boolean(job?.running || lockActive);
+    withImages.disabled = busy;
+    withoutImages.disabled = busy;
+    withImages.textContent = 'Export HTML';
+    withoutImages.textContent = 'Export HTML (no images)';
+    status.hidden = !job && !lockActive;
+    if (!job) {
+      if (lockActive) status.textContent = 'An HTML export is already active in this tab.';
+      return;
+    }
+
+    const seconds = Math.max(0, Math.floor((Date.now() - job.startedAt) / 1000));
+    if (job.conversationId !== conversationArchiveSelectedConversationId) {
+      status.textContent = job.running ? `An HTML export of another selected chat is still running (${seconds}s elapsed).` : '';
+      status.hidden = !job.running;
+      return;
+    }
+    if (!job.running) {
+      status.textContent = job.message || '';
+      status.style.whiteSpace = 'pre-line';
+      return;
+    }
+    const progress = job.progress || {};
+    const phase = String(progress.phase || 'preparing');
+    if (phase === 'images') {
+      const completed = Number(progress.completed || 0);
+      const total = Number(progress.total || 0);
+      const active = Number(progress.active || 0);
+      const waiting = Number(progress.waiting || 0);
+      const errors = Number(progress.failed || 0) + Number(progress.unavailable || 0);
+      const cached = Number(progress.cacheHits || 0);
+      withImages.textContent = `Embedding images ${completed}/${total}…`;
+      const sinceLast = Math.max(0, Math.floor((Date.now() - job.lastCompletedAt) / 1000));
+      const details = [
+        `${completed}/${total} images checked`,
+        `${Number(progress.resolved || 0)} embedded`,
+        `${Math.max(0, active - waiting)} fetching`,
+        ...(waiting ? [`${waiting} waiting for request slot`] : []),
+        `${errors} unavailable`,
+        ...(cached ? [`${cached} reused`] : []),
+        `${seconds}s elapsed`
+      ];
+      if (sinceLast >= 8 && active > 0) details.push(`waiting ${sinceLast}s on pending requests`);
+      status.textContent = details.join(' · ');
+    } else {
+      if (job.includeImages) withImages.textContent = 'Preparing HTML…';
+      else withoutImages.textContent = 'Preparing HTML…';
+      const phaseLabel = phase === 'saving' ? 'Starting HTML download' :
+        phase === 'writing' ? 'Building the HTML document' : 'Preparing saved conversation';
+      status.textContent = `${phaseLabel} · ${seconds}s elapsed`;
+    }
+  }
+
+  async function runConversationArchiveHtmlExport(conversationId, snapshotId = '', includeImages = true, title = '') {
+    if (conversationArchiveHtmlExportJob?.running) return;
+    const token = claimConversationArchiveHtmlExportLock(conversationId, snapshotId, includeImages);
+    if (!token) {
+      refreshConversationArchiveHtmlExportUi();
+      return;
+    }
+    const job = {
+      conversationId,
+      includeImages,
+      title: String(title || 'Selected conversation').slice(0, 160),
+      startedAt: Date.now(),
+      lastCompletedAt: Date.now(),
+      progress: { phase: 'preparing' },
+      imageProgress: null,
+      failed: false,
+      running: true,
+      message: ''
+    };
+    conversationArchiveHtmlExportJob = job;
+    const heartbeat = window.setInterval(() => {
+      refreshConversationArchiveHtmlExportUi();
+      refreshConversationArchiveDownloadDock();
+    }, 1000);
+    refreshConversationArchiveHtmlExportUi();
+    refreshConversationArchiveDownloadDock();
+    try {
+      const stats = await exportConversationArchiveHtml(conversationId, snapshotId, progress => {
+        if (conversationArchiveHtmlExportJob !== job) return;
+        if (Number(progress?.completed || 0) > Number(job.progress?.completed || 0)) {
+          job.lastCompletedAt = Date.now();
+        }
+        job.progress = progress;
+        if (progress?.phase === 'images') job.imageProgress = progress;
+        refreshConversationArchiveHtmlExportUi();
+        refreshConversationArchiveDownloadDock();
+      }, includeImages, () => ownsConversationArchiveHtmlExportLock(token));
+      if (stats == null) throw new Error('Selected conversation was not found in local archives.');
+      job.progress = { phase: 'completed' };
+      const count = Math.max(0, Number(stats.total || 0));
+      job.message = includeImages
+        ? `HTML download started · ${stats.embedded}/${count} images embedded${stats.missing ? ` · ${stats.missing} unavailable` : ''}.`
+        : 'Image-free HTML download started.';
+      if (includeImages && stats.missing > 0) {
+        // Keep the warning in the archive panel instead of a blocking alert. A
+        // native alert could obscure a newly started progress UI and confuse
+        // the browser's sequencing of queued export clicks.
+        job.message += `\nWarning: ${stats.missing} of ${count} images could not be downloaded. They remain listed as attachments in the HTML.`;
+        if (stats.failureSummary) job.message += `\nFailure types: ${stats.failureSummary}.`;
+      }
+    } catch (error) {
+      job.failed = true;
+      job.progress = { phase: 'failed' };
+      job.message = `HTML export failed: ${String(error?.message || error || 'unknown error')}`;
+      console.error('BraveFox HTML archive export failed', error);
+    } finally {
+      job.running = false;
+      releaseConversationArchiveHtmlExportLock(token);
+      window.clearInterval(heartbeat);
+      refreshConversationArchiveHtmlExportUi();
+      refreshConversationArchiveDownloadDock();
+    }
+  }
+
   function closeConversationArchiveModal() {
     document.getElementById(CHAT_ARCHIVE_MODAL_ID)?.remove();
   }
@@ -11952,6 +12929,7 @@
   }
 
   async function renderConversationArchiveModal() {
+    const renderSerial = ++conversationArchiveRenderSerial;
     const modal = document.getElementById(CHAT_ARCHIVE_MODAL_ID);
     if (!modal) return;
     const listHost = modal.querySelector('[data-bf-archive-list]');
@@ -11959,12 +12937,14 @@
     if (!(listHost instanceof HTMLElement) || !(detailHost instanceof HTMLElement)) return;
 
     const conversations = await getArchivedConversations().catch(() => []);
+    if (renderSerial !== conversationArchiveRenderSerial || !modal.isConnected) return;
     const currentId = getCurrentConversationId();
-    if (!conversationArchiveSelectedConversationId || !conversations.some(item => item.id === conversationArchiveSelectedConversationId)) {
-      conversationArchiveSelectedConversationId = conversations.some(item => item.id === currentId)
-        ? currentId
-        : conversations[0]?.id || '';
+    if (conversationArchiveSelectedConversationId &&
+        !conversations.some(item => item.id === conversationArchiveSelectedConversationId)) {
+      conversationArchiveSelectedConversationId = '';
     }
+    // Do not silently select some other (often the newest) chat when this route
+    // has no archive. That was especially confusing on failed-load pages.
 
     listHost.replaceChildren();
     if (!conversations.length) {
@@ -11997,8 +12977,18 @@
 
     detailHost.replaceChildren();
     const selected = conversations.find(item => item.id === conversationArchiveSelectedConversationId);
-    if (!selected) return;
+    if (!selected) {
+      const notice = document.createElement('div');
+      notice.className = 'bf-archive-muted';
+      notice.textContent = currentId
+        ? 'No archive selected. Choose a saved conversation or create an archive of this chat above.'
+        : 'Choose a saved conversation or create archives from your available ChatGPT history.';
+      detailHost.appendChild(notice);
+      return;
+    }
     const snapshots = await getArchivedSnapshots(selected.id).catch(() => []);
+    if (renderSerial !== conversationArchiveRenderSerial || !modal.isConnected ||
+        selected.id !== conversationArchiveSelectedConversationId) return;
 
     const heading = document.createElement('h2');
     heading.textContent = selected.title || 'Untitled Chat';
@@ -12006,6 +12996,9 @@
     const meta = document.createElement('div');
     meta.className = 'bf-archive-muted';
     meta.textContent = `${selected.messageCount || 0} messages · ${snapshots.length} checkpoints · last saved ${formatArchiveDateTime(selected.archivedAt)}`;
+    const identity = document.createElement('div');
+    identity.className = 'bf-archive-muted';
+    identity.textContent = `Selected archive: ${selected.id}${selected.id === currentId ? ' (this chat)' : ' (another chat)'}`;
 
     const snapshotSelect = document.createElement('select');
     snapshotSelect.setAttribute('data-bf-archive-snapshot-select', 'true');
@@ -12079,32 +13072,20 @@
         if (deleteArchiveButton.isConnected) deleteArchiveButton.disabled = false;
       }
     });
-    actionButton('Continue in new chat', async () => {
-      await beginConversationArchiveContinuation(selected.id, snapshotSelect.value);
+    const exportNoImagesButton = actionButton('Export HTML (no images)', () => {
+      void runConversationArchiveHtmlExport(selected.id, snapshotSelect.value, false, selected.title);
     });
-    const exportHtmlButton = actionButton('Export HTML', async () => {
-      const oldLabel = exportHtmlButton.textContent;
-      exportHtmlButton.disabled = true;
-      exportHtmlButton.textContent = 'Embedding images…';
-      try {
-        await exportConversationArchiveHtml(selected.id, snapshotSelect.value, progress => {
-          if (!exportHtmlButton.isConnected) return;
-          const total = Number(progress?.total || 0) || 0;
-          const completed = Number(progress?.completed || 0) || 0;
-          exportHtmlButton.textContent = total
-            ? `Embedding images ${completed}/${total}…`
-            : 'Building HTML…';
-        });
-      } catch (error) {
-        console.error('BraveFox HTML archive export failed', error);
-        window.alert(String(error?.message || error || 'HTML export failed.'));
-      } finally {
-        if (exportHtmlButton.isConnected) {
-          exportHtmlButton.disabled = false;
-          exportHtmlButton.textContent = oldLabel;
-        }
-      }
+    exportNoImagesButton.setAttribute('data-bf-archive-html-no-images', 'true');
+    const exportHtmlButton = actionButton('Export HTML', () => {
+      void runConversationArchiveHtmlExport(selected.id, snapshotSelect.value, true, selected.title);
     });
+    exportHtmlButton.setAttribute('data-bf-archive-html-with-images', 'true');
+    const htmlExportStatus = document.createElement('div');
+    htmlExportStatus.className = 'bf-archive-muted';
+    htmlExportStatus.setAttribute('data-bf-archive-html-progress', 'true');
+    htmlExportStatus.setAttribute('role', 'status');
+    htmlExportStatus.style.margin = '0 0 12px';
+    htmlExportStatus.hidden = true;
     actionButton('Export Markdown', () => void exportConversationArchiveMarkdown(selected.id, snapshotSelect.value));
     actionButton('Export JSON', () => void exportConversationArchiveJson(selected.id));
     actionButton('Open original', () => window.open(`${location.origin}/c/${encodeURIComponent(selected.id)}`, '_blank', 'noopener'));
@@ -12162,10 +13143,11 @@
       linkedNote.className = 'bf-archive-muted';
       linkedNote.style.marginTop = '12px';
       linkedNote.textContent = `This chat is linked to archive ${linked.sourceConversationId.slice(0, 8)}…`;
-      detailHost.append(heading, meta, linkedNote, snapshotSelect, actions, searchLabel, searchInput, results);
+      detailHost.append(heading, meta, identity, linkedNote, snapshotSelect, actions, htmlExportStatus, searchLabel, searchInput, results);
     } else {
-      detailHost.append(heading, meta, snapshotSelect, actions, searchLabel, searchInput, results);
+      detailHost.append(heading, meta, identity, snapshotSelect, actions, htmlExportStatus, searchLabel, searchInput, results);
     }
+    refreshConversationArchiveHtmlExportUi();
   }
 
   async function openConversationArchiveModal() {
@@ -12175,6 +13157,7 @@
       await renderConversationArchiveModal();
       return;
     }
+    conversationArchiveSelectedConversationId = getCurrentConversationId();
     modal = document.createElement('div');
     modal.id = CHAT_ARCHIVE_MODAL_ID;
     modal.innerHTML = `
@@ -12184,12 +13167,14 @@
           <span class="bf-archive-muted">Full local history · deduplicated checkpoints</span>
           <button type="button" class="bf-archive-close">Close</button>
         </div>
+        <div class="bf-archive-manual-controls" data-bf-archive-manual-controls></div>
         <div class="bf-archive-body">
           <div class="bf-archive-list" data-bf-archive-list></div>
           <div class="bf-archive-detail" data-bf-archive-detail></div>
         </div>
       </div>
     `;
+    installConversationArchiveManualControls(modal);
     modal.querySelector('.bf-archive-close')?.addEventListener('click', closeConversationArchiveModal);
     modal.addEventListener('mousedown', event => {
       if (event.target === modal) closeConversationArchiveModal();
@@ -12207,6 +13192,8 @@
   function startConversationArchiveSystem() {
     ensureConversationArchiveStyles();
     ensureConversationArchiveButton();
+    if (document.body) refreshConversationArchiveDownloadDock();
+    else document.addEventListener('DOMContentLoaded', refreshConversationArchiveDownloadDock, { once: true });
     document.addEventListener('pointerdown', handleConversationArchivePointerDown, true);
     document.addEventListener('keydown', handleConversationArchiveLibraryKeyDown, true);
     void openConversationArchiveDb().catch(error => {
@@ -12233,6 +13220,10 @@
       const currentArchiveRoute = getCurrentConversationId();
       const currentDocumentTitle = String(document.title || '');
       if (currentArchiveRoute !== conversationArchiveObservedTitleRoute) {
+        if (document.getElementById(CHAT_ARCHIVE_MODAL_ID)) {
+          conversationArchiveSelectedConversationId = currentArchiveRoute;
+          scheduleConversationArchiveModalRefresh(10);
+        }
         // A route transition can briefly retain the previous chat's document title.
         conversationArchiveObservedTitleRoute = currentArchiveRoute;
         conversationArchiveObservedDocumentTitle = currentDocumentTitle;
@@ -12243,6 +13234,11 @@
         }
       }
       ensureConversationArchiveButton();
+      if (!document.getElementById(CHAT_ARCHIVE_DOWNLOAD_DOCK_ID)?.isConnected ||
+          (document.getElementById('bravefox-reliability-root') &&
+            document.getElementById(CHAT_ARCHIVE_DOWNLOAD_DOCK_ID)?.parentElement?.id !== 'bravefox-reliability-root')) {
+        ensureConversationArchiveDownloadDock();
+      }
       if (isChatGptLibraryLocation()) reconcileConversationArchiveLibraryNewMenu();
       linkPendingArchiveContextToCurrentConversation();
       if (!getCurrentConversationId()) consumeConversationArchiveHandoffIfReady();
@@ -13217,6 +14213,7 @@
   }
 
   async function probeConversationTimestamp(turnRoot, role, menuButton) {
+    if (IS_FIREFOX_ANDROID) return;
     if (!(turnRoot instanceof Element) || !(menuButton instanceof HTMLButtonElement)) return;
     if (!turnRoot.isConnected || !menuButton.isConnected) return;
     if (turnRoot.hasAttribute(MESSAGE_TIMESTAMP_ATTR) && turnRoot.getAttribute(MESSAGE_TIMESTAMP_SOURCE_ATTR) !== 'observed') return;
@@ -13244,6 +14241,9 @@
   }
 
   function scheduleConversationTimestampProbe(turnRoot, role, actionRow) {
+    // Firefox Android's attachment menu may share a portal with message menus.
+    // Never open, probe, or close ChatGPT-owned popups just to obtain timestamps.
+    if (IS_FIREFOX_ANDROID) return;
     if (!(turnRoot instanceof Element) || completedMessageTimestampTurns.has(turnRoot)) return;
 
     const timestampSource = turnRoot.getAttribute(MESSAGE_TIMESTAMP_SOURCE_ATTR) || '';

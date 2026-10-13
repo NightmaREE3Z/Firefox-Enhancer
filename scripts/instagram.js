@@ -926,6 +926,8 @@ let isFeedScanPhase = true;
     // without turning network ALLOW into a durable approval cache entry.
     const networkFeedRejectedPostIDs = new Set();
     const networkFeedApprovedPostIDs = new Set();
+    // Complete captions confirmed by MAIN world, separate from whole-post approval.
+    const networkFeedCaptionVerifiedPostIDs = new Set();
     const networkFeedRejectReasons = new Map();
     const NETWORK_FEED_DECISION_LIMIT = 5000;
 
@@ -941,6 +943,11 @@ let isFeedScanPhase = true;
                 const oldest = networkFeedApprovedPostIDs.values().next().value;
                 if (oldest === undefined) break;
                 networkFeedApprovedPostIDs.delete(oldest);
+            }
+            while (networkFeedCaptionVerifiedPostIDs.size > NETWORK_FEED_DECISION_LIMIT) {
+                const oldest = networkFeedCaptionVerifiedPostIDs.values().next().value;
+                if (oldest === undefined) break;
+                networkFeedCaptionVerifiedPostIDs.delete(oldest);
             }
         } catch {}
     }
@@ -958,8 +965,19 @@ let isFeedScanPhase = true;
                     const reasons = Array.isArray(item.reasons) ? item.reasons.slice(0, 8) : [];
                     if (!networkFeedRejectedPostIDs.has(id) || networkFeedApprovedPostIDs.has(id)) changed = true;
                     networkFeedApprovedPostIDs.delete(id);
+                    networkFeedCaptionVerifiedPostIDs.delete(id);
                     networkFeedRejectedPostIDs.add(id);
                     networkFeedRejectReasons.set(id, reasons);
+                    continue;
+                }
+
+                if (item.decision === 'caption-verified') {
+                    // This is caption evidence only. Never use it to bypass the
+                    // existing on-article checks or an authoritative rejection.
+                    if (!networkFeedRejectedPostIDs.has(id) && !networkFeedCaptionVerifiedPostIDs.has(id)) {
+                        networkFeedCaptionVerifiedPostIDs.add(id);
+                        changed = true;
+                    }
                     continue;
                 }
 
@@ -974,6 +992,7 @@ let isFeedScanPhase = true;
                     networkFeedRejectedPostIDs.delete(id);
                     networkFeedRejectReasons.delete(id);
                     networkFeedApprovedPostIDs.add(id);
+                    if (item.captionVerified === true) networkFeedCaptionVerifiedPostIDs.add(id);
                 }
             }
             trimNetworkFeedDecisions();
@@ -1592,22 +1611,48 @@ function isElementProtected(element) {
         return texts;
     }
 
+
+    // An allowed term only exempts a banned MATCH it overlaps. A harmless emoji,
+    // game reference or other allowed text elsewhere in the same caption cannot
+    // silently whitelist a separate banned name.
+    function keywordRegexMatchesOutsideAllowedSpan(regex, text) {
+        try {
+            const value = String(text || '');
+            if (!keywordRegexMatches(regex, value)) return false;
+            const lower = value.toLowerCase();
+            const flags = regex.flags.includes('g') ? regex.flags : regex.flags + 'g';
+            const matcher = new RegExp(regex.source, flags);
+            let match;
+            let inspected = 0;
+            while ((match = matcher.exec(value)) && inspected++ < 256) {
+                const start = match.index;
+                const end = start + Math.max(1, match[0].length);
+                const overlapsAllowed = allowedWordsLower.some(word => {
+                    if (!word) return false;
+                    const at = lower.indexOf(word, Math.max(0, start - word.length + 1));
+                    return at >= 0 && at < end && at + word.length > start;
+                });
+                if (!overlapsAllowed) return true;
+                if (!match[0].length) matcher.lastIndex++;
+            }
+        } catch {}
+        return false;
+    }
+
     function articleHasBannedCaption(article) {
         try {
             const texts = collectCaptionTextsFromArticle(article);
             const combinedText = texts.join(' ');
             for (const t of texts) {
                 const low = t.toLowerCase();
-                if (!allowedWordsLower.some(w => low.includes(w)) &&
-                    keywordsToHide.some(rx => keywordRegexMatches(rx, low))) {
+                if (keywordsToHide.some(rx => keywordRegexMatchesOutsideAllowedSpan(rx, low))) {
                     return true;
                 }
             }
             const handles = extractHandlesFromText(combinedText);
             for (const h of handles) {
                 if (instagramAccountsSet.has(h)) return true;
-                if (!allowedWordsLower.some(w => h.includes(w)) &&
-                    keywordsToHide.some(rx => keywordRegexMatches(rx, h))) {
+                if (keywordsToHide.some(rx => keywordRegexMatchesOutsideAllowedSpan(rx, h))) {
                     return true;
                 }
             }
@@ -1617,16 +1662,13 @@ function isElementProtected(element) {
                     const val = node.getAttribute(attr);
                     if (!val) return;
                     const low = val.toLowerCase();
-                    if (!allowedWordsLower.some(w => low.includes(w))) {
-                        if (keywordsToHide.some(rx => keywordRegexMatches(rx, low))) { throw 'BANNED_FOUND'; }
-                        extractHandlesFromText(val).forEach(h => {
-                            if (instagramAccountsSet.has(h)) { throw 'BANNED_FOUND'; }
-                            if (!allowedWordsLower.some(w => h.includes(w)) &&
-                                keywordsToHide.some(rx => keywordRegexMatches(rx, h))) {
-                                throw 'BANNED_FOUND';
-                            }
-                        });
-                    }
+                    if (keywordsToHide.some(rx => keywordRegexMatchesOutsideAllowedSpan(rx, low))) { throw 'BANNED_FOUND'; }
+                    extractHandlesFromText(val).forEach(h => {
+                        if (instagramAccountsSet.has(h) ||
+                            keywordsToHide.some(rx => keywordRegexMatchesOutsideAllowedSpan(rx, h))) {
+                            throw 'BANNED_FOUND';
+                        }
+                    });
                 });
             }
             const links = article.querySelectorAll('a[href]');
@@ -1645,8 +1687,7 @@ function isElementProtected(element) {
                     if (instagramAccountsSet.has(candidateUser)) return true;
                 }
                 const hrefLow = hrefRaw.toLowerCase();
-                if (!allowedWordsLower.some(w => hrefLow.includes(w)) &&
-                    keywordsToHide.some(rx => keywordRegexMatches(rx, hrefRaw))) {
+                if (keywordsToHide.some(rx => keywordRegexMatchesOutsideAllowedSpan(rx, hrefLow))) {
                     return true;
                 }
             }
@@ -5106,6 +5147,27 @@ injectInlineCSS();
                     contain-intrinsic-block-size: 1px !important;
                     pointer-events: none !important;
                 }
+                /* Home captions with More/Lisää are withheld until the complete caption
+                   has been inspected. Brief pending content keeps its ordinary size. */
+                html[data-bf-ig-home-feed-hybrid="1"] main article[data-bf-caption-pending="1"],
+                html[data-bf-ig-home-feed-hybrid="1"] main article[data-bf-caption-probing="1"] {
+                    visibility: hidden !important;
+                    pointer-events: none !important;
+                }
+                /* Unknown Home captions keep native geometry. Compaction to 1px while
+                   offscreen created a sudden full-height expansion on upward scroll.
+                   The bounded provisional fallback prevents indefinite blank cards. */
+                /* Expanding a hidden caption must not resize the feed or change scroll
+                   position. This temporary, article-local height is cleared after collapse. */
+                html[data-bf-ig-home-feed-hybrid="1"] main article[data-bf-caption-probing="1"] {
+                    box-sizing: border-box !important;
+                    height: var(--bf-caption-probe-height) !important;
+                    min-height: var(--bf-caption-probe-height) !important;
+                    max-height: var(--bf-caption-probe-height) !important;
+                    overflow: clip !important;
+                    transition: none !important;
+                    animation: none !important;
+                }
             `;
             if (document.documentElement) {
                 if (isMetaManglerHomeFeedPath()) document.documentElement.setAttribute('data-bf-ig-home-feed-hybrid', '1');
@@ -5405,6 +5467,7 @@ injectInlineCSS();
             scanGeneration: 0,
             pumpTimer: null,
             pumpScheduled: false,
+            pumpDueAt: 0,
             reconcileTimer: null,
             reconcileDueAt: 0,
             scrollUntil: 0,
@@ -5413,6 +5476,17 @@ injectInlineCSS();
             lastUserInputAt: 0,
             userInputSerial: 0,
             idleHandle: null,
+            captionProbeResults: new Map(),
+            captionProbeArticles: new Set(),
+            // Displayed-but-unverified IDs are session-only. Recycled React hosts must not
+            // conceal an already displayed post and then wait 1.7s all over again.
+            sessionProvisionalPostIDs: new Set(),
+            // Diagnostic-only: bounded, deduplicated transitions, not content or identifiers.
+            diagnosticDecisions: new Map(),
+            diagnosticRecentTransitions: [],
+            diagnosticReasons: { network: 0, cached: 0, 'badge-or-follow': 0, 'visible-text': 0, 'full-scan': 0, other: 0 },
+            diagnosticCounts: { reject: 0, approve: 0, provisional: 0 },
+            diagnosticLastDecisionAt: 0,
             route: ''
         };
         return __BF2760_HOME_V5_STATE;
@@ -5597,6 +5671,23 @@ injectInlineCSS();
         } catch {}
     }
 
+    function __bf2760HomeV6JSetCaptionPending(article, pending) {
+        try {
+            if (!article) return;
+            if (pending) article.setAttribute('data-bf-caption-pending', '1');
+            else article.removeAttribute('data-bf-caption-pending');
+        } catch {}
+    }
+
+    function __bf2760HomeV6JClearCaptionProbe(article) {
+        try {
+            if (!article) return;
+            article.removeAttribute('data-bf-caption-probing');
+            article.style.removeProperty('--bf-caption-probe-height');
+            __bf2760HomeV5State().captionProbeArticles.delete(article);
+        } catch {}
+    }
+
     function __bf2760HomeV6EStillRejected(id) {
         try {
             return !!id && (networkFeedRejectedPostIDs.has(id) || feedBannedPostIDs.has(id) || scannedPostsCache.get(id) === true);
@@ -5717,6 +5808,124 @@ injectInlineCSS();
         } catch {}
     }
 
+    // ===== Home-feed starvation diagnostics (passive, privacy-safe) =====
+    // Count distinct Post-ID transitions, not every periodic re-rejection. Never send
+    // Post IDs, captions, authors, full URLs, or blocklist entries to MAIN world.
+    function __bf2760HomeV1Decision(id, decision, reason = 'other') {
+        try {
+            if (!id || !__bf2760HomeV5Active()) return;
+            const state = __bf2760HomeV5State();
+            const previous = state.diagnosticDecisions.get(id);
+            if (previous === decision) return;
+            state.diagnosticDecisions.delete(id);
+            state.diagnosticDecisions.set(id, decision);
+            while (state.diagnosticDecisions.size > 120) {
+                const oldest = state.diagnosticDecisions.keys().next().value;
+                if (oldest === undefined) break;
+                state.diagnosticDecisions.delete(oldest);
+            }
+            state.diagnosticCounts[decision] = (state.diagnosticCounts[decision] || 0) + 1;
+            if (decision === 'reject') {
+                const group = Object.prototype.hasOwnProperty.call(state.diagnosticReasons, reason) ? reason : 'other';
+                state.diagnosticReasons[group]++;
+            }
+            state.diagnosticLastDecisionAt = Date.now();
+            state.diagnosticRecentTransitions.push({
+                time: state.diagnosticLastDecisionAt, decision,
+                reason: decision === 'reject' ? reason : 'none'
+            });
+            while (state.diagnosticRecentTransitions.length > 24) state.diagnosticRecentTransitions.shift();
+        } catch {}
+    }
+
+    function __bf2760HomeV1PublishDiagnostics(articles) {
+        try {
+            if (!__bf2760HomeV5Active() || document.hidden) return;
+            const state = __bf2760HomeV5State();
+            const snapshot = {
+                version: 1, time: Date.now(), articles: 0, nearViewport: 0,
+                collapsedNear: 0, pendingNear: 0, displayCandidatesNear: 0,
+                unknownIDNear: 0, queued: state.queue.length, scanning: state.scanning,
+                networkRejectedMounted: 0, cachedRejectedMounted: 0,
+                recentRejections: state.diagnosticCounts.reject,
+                recentApprovals: state.diagnosticCounts.approve,
+                recentProvisionals: state.diagnosticCounts.provisional,
+                decisionReasons: { ...state.diagnosticReasons },
+                recentTransitions: state.diagnosticRecentTransitions.slice(-24),
+                lastDecisionAt: state.diagnosticLastDecisionAt
+            };
+            const vh = window.innerHeight || document.documentElement.clientHeight || 900;
+            const candidates = articles || state.root?.querySelectorAll?.('article') || [];
+            let checked = 0;
+            for (const article of candidates) {
+                if (!article?.isConnected || checked++ >= 48) break;
+                snapshot.articles++;
+                const id = __bf2760HomeV5GetArticlePostID(article);
+                if (id && networkFeedRejectedPostIDs.has(id)) snapshot.networkRejectedMounted++;
+                if (id && (feedBannedPostIDs.has(id) || scannedPostsCache.get(id) === true)) snapshot.cachedRejectedMounted++;
+                const rect = article.getBoundingClientRect?.();
+                if (!rect || rect.bottom < -vh * 0.35 || rect.top > vh * 1.35) continue;
+                snapshot.nearViewport++;
+                if (article.hasAttribute('data-bf-home-v6e-contained')) snapshot.collapsedNear++;
+                else if (article.hasAttribute('data-bf-caption-pending') || article.hasAttribute('data-bf-home-v6e-hidden')) snapshot.pendingNear++;
+                else if (!id) snapshot.unknownIDNear++;
+                else if (rect.height > 1) snapshot.displayCandidatesNear++;
+            }
+            // v3: measure native loading geometry without touching scroll position,
+            // styles, attributes, or Instagram's IntersectionObserver callbacks.
+            // Keep this inside the existing 1.8s diagnostic snapshot cadence.
+            try {
+                const viewport = window.innerHeight || document.documentElement.clientHeight || 900;
+                const scroller = document.scrollingElement || document.documentElement;
+                const top = Math.max(0, Number(window.scrollY) || Number(scroller?.scrollTop) || 0);
+                const pageHeight = Math.max(viewport, Number(scroller?.scrollHeight) || 0);
+                snapshot.viewportHeightPx = Math.round(viewport);
+                snapshot.scrollTopPx = Math.round(top);
+                snapshot.documentHeightPx = Math.round(pageHeight);
+                snapshot.scrollRemainingPx = Math.round(Math.max(0, pageHeight - top - viewport));
+                snapshot.scrollSettling = Date.now() < state.scrollUntil || Date.now() < state.userInputUntil;
+
+                const feedRect = state.root?.getBoundingClientRect?.();
+                snapshot.feedRootBottomPx = feedRect ? Math.round(feedRect.bottom) : -1;
+                let lastBottom = -1;
+                let positionChecks = 0;
+                for (const article of candidates) {
+                    if (!article?.isConnected || ++positionChecks > 100) break;
+                    const rect = article.getBoundingClientRect?.();
+                    if (rect && rect.height > 1 && rect.bottom > lastBottom) lastBottom = rect.bottom;
+                }
+                snapshot.lastArticleBottomPx = lastBottom < 0 ? -1 : Math.round(lastBottom);
+                snapshot.lastArticleGapPx = lastBottom < 0 ? -1 : Math.round(lastBottom - viewport);
+
+                const loadingSelector = [
+                    '[role="progressbar"]', '[role="status"]', '[aria-busy="true"]',
+                    'svg[aria-label*="Loading" i]', 'svg[aria-label*="Ladataan" i]',
+                    'svg[aria-label*="Carregando" i]'
+                ].join(',');
+                const indicators = state.root?.querySelectorAll?.(loadingSelector) || [];
+                snapshot.nativeLoadingIndicators = 0;
+                snapshot.nearLoadingIndicators = 0;
+                snapshot.nearestLoadingTopPx = -1;
+                let nearestDistance = Infinity;
+                for (let i = 0; i < indicators.length && i < 24; i++) {
+                    const indicator = indicators[i];
+                    if (indicator.closest?.('article[data-bf-home-v6e-contained]')) continue;
+                    const rect = indicator.getBoundingClientRect?.();
+                    if (!rect || rect.width <= 0 || rect.height <= 0) continue;
+                    snapshot.nativeLoadingIndicators++;
+                    if (rect.bottom < -viewport || rect.top > viewport * 2) continue;
+                    snapshot.nearLoadingIndicators++;
+                    const distance = rect.top >= 0 && rect.top <= viewport ? 0 : Math.min(Math.abs(rect.top), Math.abs(rect.top - viewport));
+                    if (distance < nearestDistance) {
+                        nearestDistance = distance;
+                        snapshot.nearestLoadingTopPx = Math.round(rect.top);
+                    }
+                }
+            } catch {}
+            window.postMessage({ __metamanglerType: 'ig-home-feed-diagnostics-v1', snapshot }, location.origin);
+        } catch {}
+    }
+
     function __bf2760HomeV5RememberDecision(id, banned, verification = '') {
         try {
             if (!id) return;
@@ -5753,6 +5962,12 @@ injectInlineCSS();
             state.missingIDSince.delete(article);
             state.articleGenerations.set(article, (state.articleGenerations.get(article) || 0) + 1);
             __bf2760HomeV5RemoveQueued(article, priorID);
+            if (priorID) state.captionProbeResults.delete(priorID);
+            __bf2760HomeV6JClearCaptionProbe(article);
+            __bf2760HomeV6JSetCaptionPending(article, false);
+            article.removeAttribute('data-bf-caption-unresolved');
+            article.removeAttribute('data-bf-caption-provisional');
+            article.removeAttribute('data-bf-caption-expansion-requested');
             __bf2760HomeV5RestoreArticle(article);
         } catch {}
     }
@@ -5762,25 +5977,71 @@ injectInlineCSS();
             if (!article?.isConnected || !id) return;
             const currentID = __bf2760HomeV5GetArticlePostID(article);
             if (currentID !== id) return;
+            __bf2760HomeV1Decision(id, 'approve');
             __bf2760HomeV5RememberDecision(id, false, verification);
             __bf2760HomeV5RemoveQueued(article, id);
             const state = __bf2760HomeV5State();
             state.articleIDs.set(article, id);
             state.dirtyArticles.delete(article);
+            state.captionProbeResults.delete(id);
+            state.sessionProvisionalPostIDs.delete(id);
+            __bf2760HomeV6JClearCaptionProbe(article);
+            __bf2760HomeV6JSetCaptionPending(article, false);
+            article.removeAttribute('data-bf-caption-unresolved');
+            article.removeAttribute('data-bf-caption-provisional');
+            article.removeAttribute('data-bf-caption-expansion-requested');
             __bf2760HomeV5RestoreArticle(article);
         } catch {}
     }
 
-    function __bf2760HomeV5Reject(article, id, hide = true) {
+    function __bf2760HomeV5Reject(article, id, hide = true, reason = 'other') {
         try {
             if (!article?.isConnected || !id) return;
             const currentID = __bf2760HomeV5GetArticlePostID(article);
             if (currentID && currentID !== id) return;
+            __bf2760HomeV1Decision(id, 'reject', reason);
             __bf2760HomeV5RememberDecision(id, true);
             __bf2760HomeV5RemoveQueued(article, id);
             const state = __bf2760HomeV5State();
             state.articleIDs.set(article, id);
+            state.captionProbeResults.delete(id);
+            state.sessionProvisionalPostIDs.delete(id);
+            __bf2760HomeV6JClearCaptionProbe(article);
+            __bf2760HomeV6JSetCaptionPending(article, false);
+            article.removeAttribute('data-bf-caption-unresolved');
+            article.removeAttribute('data-bf-caption-provisional');
+            article.removeAttribute('data-bf-caption-expansion-requested');
             if (hide) __bf2760HomeV5QueueRetirement(article, id);
+        } catch {}
+    }
+
+    // An initial Home payload doesn't always carry network caption evidence. Keeping
+    // every such More/Lisää post indefinitely hidden deadlocks the feed. This is a
+    // *temporary display permission*, NOT a persistent full-caption approval.
+    // Network rejects and immediate/visible banned signals still win at every pass.
+    function __bf2760HomeV6KProvisional(article, id) {
+        try {
+            if (!article?.isConnected || __bf2760HomeV5GetArticlePostID(article) !== id) return;
+            if (networkFeedRejectedPostIDs.has(id) || feedBannedPostIDs.has(id) ||
+                __bf2760HomeV5ImmediateRejectSignal(article, id) || __bf2760HomeV5CheapContentCheck(article)) {
+                __bf2760HomeV5Reject(article, id, true);
+                return;
+            }
+            const state = __bf2760HomeV5State();
+            // An old slot above the viewport must not expand below the user mid-scroll.
+            const rect = article.getBoundingClientRect?.();
+            if (rect && rect.bottom < -80) return;
+            __bf2760HomeV5RemoveQueued(article, id);
+            state.articleIDs.set(article, id);
+            state.dirtyArticles.delete(article);
+            state.captionProbeResults.delete(id);
+            rememberSet(state.sessionProvisionalPostIDs, id);
+            __bf2760HomeV6JSetCaptionPending(article, false);
+            article.removeAttribute('data-bf-caption-unresolved');
+            article.removeAttribute('data-bf-caption-expansion-requested');
+            article.setAttribute('data-bf-caption-provisional', id);
+            __bf2760HomeV1Decision(id, 'provisional');
+            __bf2760HomeV5RestoreArticle(article);
         } catch {}
     }
 
@@ -5833,6 +6094,9 @@ injectInlineCSS();
 
             if (state.queuedArticles.has(article) || state.queuedIDs.has(id)) return;
             const attempts = Math.max(0, candidate?.attempts || 0) + 1;
+            // Do not compact UNKNOWN posts offscreen: the same article may return into
+            // view later. A new 1px->full-height transition is an avoidable scroll jump.
+            article.removeAttribute('data-bf-caption-unresolved');
             const retryDelay = Math.min(5000, Math.max(delay, 350 * Math.pow(1.65, Math.min(attempts, 6))));
             const now = performance.now();
             state.queuedArticles.add(article);
@@ -5859,9 +6123,17 @@ injectInlineCSS();
             article.removeAttribute('data-feed-scan-done');
 
             const id = __bf2760HomeV5GetArticlePostID(article);
+            if (article.hasAttribute('data-bf-caption-unresolved')) {
+                const rect = article.getBoundingClientRect?.();
+                const vh = window.innerHeight || document.documentElement.clientHeight || 900;
+                if (rect && rect.bottom >= -vh * 2.0 && rect.top <= vh * 2.5) {
+                    article.removeAttribute('data-bf-caption-unresolved');
+                }
+            }
             const priorID = state.articleIDs.get(article) || '';
             const fingerprint = __bf2760HomeV6EGetArticleFingerprint(article);
             if (!id) {
+                if (!priorID) __bf2760HomeV6JSetCaptionPending(article, false);
                 if (priorID) {
                     const priorFingerprint = state.articleFingerprints.get(article) || '';
                     if (fingerprint && priorFingerprint && fingerprint !== priorFingerprint) {
@@ -5872,7 +6144,11 @@ injectInlineCSS();
                     }
                     let since = state.missingIDSince.get(article);
                     if (!Number.isFinite(since)) { since = performance.now(); state.missingIDSince.set(article, since); }
-                    const grace = __bf2760HomeV6ENearViewport(article) ? 90 : 180;
+                    // Instagram briefly removes/replaces timestamp links during virtual
+                    // feed recycling. 90/180ms discarded already-seen identities and
+                    // forced another pending->approved transition on upward scrolling.
+                    // A changed fingerprint still invalidates immediately above.
+                    const grace = __bf2760HomeV6ENearViewport(article) ? 1200 : 1600;
                     if (performance.now() - since > grace) __bf2760HomeV5ForgetArticle(article);
                     else __bf2760HomeV5ScheduleReconcile(Math.min(100, grace));
                 }
@@ -5883,18 +6159,27 @@ injectInlineCSS();
             if (priorID && priorID !== id) {
                 state.articleGenerations.set(article, (state.articleGenerations.get(article) || 0) + 1);
                 __bf2760HomeV5RemoveQueued(article, priorID);
+                state.captionProbeResults.delete(priorID);
+                __bf2760HomeV6JClearCaptionProbe(article);
+                __bf2760HomeV6JSetCaptionPending(article, false);
+                article.removeAttribute('data-bf-caption-unresolved');
+                article.removeAttribute('data-bf-caption-provisional');
+                article.removeAttribute('data-bf-caption-expansion-requested');
                 __bf2760HomeV5RestoreArticle(article);
             }
             state.articleIDs.set(article, id);
             if (fingerprint) state.articleFingerprints.set(article, fingerprint);
+            // Never reveal an article mid-probe if a network classification arrives
+            // while its caption is still expanded behind the visibility gate.
+            if (state.scanning && state.scanArticle === article && state.scanID === id) return;
             const wasDirty = state.dirtyArticles.has(article);
             if (wasDirty) state.dirtyArticles.delete(article);
             const identityChanged = !priorID || priorID !== id;
 
             // Structured/network and durable rejects always win. Persist a network
             // rejection once it reaches the DOM so recycled hosts keep the same decision.
-            if (networkFeedRejectedPostIDs.has(id)) { __bf2760HomeV5Reject(article, id, true); return; }
-            if (feedBannedPostIDs.has(id) || scannedPostsCache.get(id) === true) { __bf2760HomeV5Reject(article, id, true); return; }
+            if (networkFeedRejectedPostIDs.has(id)) { __bf2760HomeV5Reject(article, id, true, 'network'); return; }
+            if (feedBannedPostIDs.has(id) || scannedPostsCache.get(id) === true) { __bf2760HomeV5Reject(article, id, true, 'cached'); return; }
             // Explicit on-post AI/recommendation/sponsor badges are authoritative DOM
             // fallbacks, but scan them only on a new identity or a real React mutation.
             if ((identityChanged || wasDirty) && __bf2760HomeV5ImmediateRejectSignal(article, id)) {
@@ -5902,33 +6187,116 @@ injectInlineCSS();
                 return;
             }
             if (networkFeedApprovedPostIDs.has(id)) {
+                // Even a previously allowed network ID must lose to a real banned
+                // name/keyword visible in newly hydrated DOM content.
+                if ((identityChanged || wasDirty) && __bf2760HomeV5CheapContentCheck(article)) {
+                    __bf2760HomeV5Reject(article, id, true);
+                    return;
+                }
+                // MAIN-world ALLOW is emitted only for complete, policy-checked media.
+                __bf2760HomeV6JSetCaptionPending(article, false);
+                state.captionProbeResults.delete(id);
                 __bf2760HomeV5RemoveQueued(article, id);
+                article.removeAttribute('data-bf-caption-unresolved');
+                article.removeAttribute('data-bf-caption-provisional');
+                article.removeAttribute('data-bf-caption-expansion-requested');
                 __bf2760HomeV5RestoreArticle(article);
                 return;
             }
 
+            const captionHasMore = __bf2760HomeV5HasMoreButton(article);
+            // A previously visible provisional post may be mounted into a different
+            // React article when scrolling upward. Preserve its display permission by
+            // Post ID, but still reject any current banned/AI/recommendation signals.
+            if (state.sessionProvisionalPostIDs.has(id)) {
+                if (__bf2760HomeV5ImmediateRejectSignal(article, id) ||
+                    __bf2760HomeV5CheapContentCheck(article)) {
+                    __bf2760HomeV5Reject(article, id, true);
+                    return;
+                }
+                // Keep the click-capture veil while a user-triggered More/Lisää
+                // expansion is in flight. Do not reveal expanded unverified text.
+                if (article.getAttribute('data-bf-caption-expansion-requested') === id) {
+                    // The click handler owns the bounded 160ms verification window;
+                    // don't approve before React finishes inserting expanded text.
+                    return;
+                }
+                if (networkFeedCaptionVerifiedPostIDs.has(id)) {
+                    __bf2760HomeV5Approve(article, id, 'expanded');
+                    return;
+                }
+                __bf2760HomeV5RemoveQueued(article, id);
+                state.captionProbeResults.delete(id);
+                state.dirtyArticles.delete(article);
+                article.setAttribute('data-bf-caption-provisional', id);
+                article.removeAttribute('data-bf-caption-unresolved');
+                __bf2760HomeV6JSetCaptionPending(article, false);
+                __bf2760HomeV5RestoreArticle(article);
+                return;
+            }
+            // Provisional Home cards are always monitored, never cached as clean.
+            // React text changes and network evidence can still promote/reject them.
+            if (article.getAttribute('data-bf-caption-provisional') === id) {
+                if ((identityChanged || wasDirty) && __bf2760HomeV5CheapContentCheck(article)) {
+                    __bf2760HomeV5Reject(article, id, true);
+                    return;
+                }
+                if (networkFeedCaptionVerifiedPostIDs.has(id)) {
+                    article.removeAttribute('data-bf-caption-provisional');
+                    __bf2760HomeV5Queue(article, id, { notBefore: performance.now() });
+                    __bf2760HomeV5SchedulePump(0);
+                    return;
+                }
+                if (article.getAttribute('data-bf-caption-expansion-requested') === id && !captionHasMore) {
+                    // The user actually expanded the caption; the DOM now contains the
+                    // visible complete text. A new full-text pass can be made durable.
+                    if (__bf2760HomeV5CheapContentCheck(article)) __bf2760HomeV5Reject(article, id, true);
+                    else __bf2760HomeV5Approve(article, id, 'expanded');
+                    return;
+                }
+                // A random hydration mutation must not re-hide the same card.
+                __bf2760HomeV6JSetCaptionPending(article, false);
+                article.removeAttribute('data-bf-caption-unresolved');
+                __bf2760HomeV5RestoreArticle(article);
+                return;
+            }
+            const captionNeedsVerification = !feedDeepVerifiedPostIDs.has(id) &&
+                !networkFeedCaptionVerifiedPostIDs.has(id) &&
+                (captionHasMore || state.captionProbeResults.has(id));
             if (feedApprovedPostIDs.has(id)) {
-                // An approval made before Instagram exposed a More/Lisää control is not
-                // allowed to become a permanent blind spot. Only re-check an approved
-                // post when React actually mutated that host; periodic reconciliation
-                // stays cheap for stable approved posts.
                 if (wasDirty && __bf2760HomeV5CheapContentCheck(article)) {
                     __bf2760HomeV5Reject(article, id, true);
                     return;
                 }
-                if (wasDirty && __bf2760HomeV5HasMoreButton(article) && !feedDeepVerifiedPostIDs.has(id)) {
+                if (captionNeedsVerification) {
+                    // A shallow cache entry is NOT a complete-caption approval, but
+                    // pulling visibility after the post was already shown causes the
+                    // 'vanish then snap back' loop on upward scroll. Downgrade it to
+                    // session-only provisional display, still checking current content
+                    // and allowing later network evidence to promote/reject it.
+                    if (__bf2760HomeV5ImmediateRejectSignal(article, id) ||
+                        __bf2760HomeV5CheapContentCheck(article)) {
+                        __bf2760HomeV5Reject(article, id, true);
+                        return;
+                    }
                     feedApprovedPostIDs.delete(id);
                     approvedPostIDs.delete(id);
                     scannedPostsCache.delete(id);
                     scheduleFeedDecisionCacheSave();
+                    rememberSet(state.sessionProvisionalPostIDs, id);
+                    __bf2760HomeV5RemoveQueued(article, id);
+                    state.captionProbeResults.delete(id);
+                    article.setAttribute('data-bf-caption-provisional', id);
+                    article.removeAttribute('data-bf-caption-unresolved');
+                    __bf2760HomeV6JSetCaptionPending(article, false);
                     __bf2760HomeV5RestoreArticle(article);
-                    if (allowQueue) __bf2760HomeV5Queue(article, id);
                     return;
                 }
                 __bf2760HomeV5Approve(article, id, feedDeepVerifiedPostIDs.has(id) ? 'expanded' : 'stable');
                 return;
             }
 
+            __bf2760HomeV6JSetCaptionPending(article, captionNeedsVerification);
             __bf2760HomeV5RestoreArticle(article);
             if (allowQueue) __bf2760HomeV5Queue(article, id);
         } catch {}
@@ -5991,13 +6359,19 @@ injectInlineCSS();
     function __bf2760HomeV5PickCandidate() {
         try {
             const state = __bf2760HomeV5State();
-            if (!state.queue.length || Date.now() < state.scrollUntil || Date.now() < state.userInputUntil) return null;
+            if (!state.queue.length) return null;
+            const quietUntil = Math.max(state.scrollUntil, state.userInputUntil);
+            if (Date.now() < quietUntil) {
+                // A wake-up during wheel/scroll quiet time must not strand the queue.
+                __bf2760HomeV5SchedulePump(quietUntil - Date.now() + 20);
+                return null;
+            }
             const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 900;
             let bestIndex = -1;
             let bestScore = Infinity;
+            let nextEligibleAt = Infinity;
             const now = performance.now();
             const compactedQueue = [];
-            const idleFor = Date.now() - Math.max(state.lastScrollAt || 0, state.lastUserInputAt || 0);
 
             for (const entry of state.queue) {
                 const article = entry?.article;
@@ -6007,38 +6381,46 @@ injectInlineCSS();
                     state.queuedIDs.delete(entry.id); state.queuedArticles.delete(article); continue;
                 }
 
-                if (networkFeedApprovedPostIDs.has(entry.id)) {
+                if (networkFeedApprovedPostIDs.has(entry.id) && !__bf2760HomeV5CheapContentCheck(article)) {
                     state.queuedIDs.delete(entry.id);
                     state.queuedArticles.delete(article);
+                    state.captionProbeResults.delete(entry.id);
+                    __bf2760HomeV6JSetCaptionPending(article, false);
+                    article.removeAttribute('data-bf-caption-unresolved');
                     __bf2760HomeV5RestoreArticle(article);
                     continue;
                 }
 
                 const compactedIndex = compactedQueue.length;
                 compactedQueue.push(entry);
-                if ((entry.notBefore || 0) > now) continue;
+                if ((entry.notBefore || 0) > now) {
+                    nextEligibleAt = Math.min(nextEligibleAt, entry.notBefore);
+                    continue;
+                }
                 const rect = article.getBoundingClientRect?.();
                 if (!rect) continue;
-                const hasMore = __bf2760HomeV5HasMoreButton(article);
-                const belowSafe = rect.top > viewportHeight * 1.50;
-                const aboveSafe = rect.bottom < -viewportHeight * 1.35;
-                if (hasMore && !belowSafe && !aboveSafe) continue;
-                if (hasMore && aboveSafe && idleFor < 1800) continue;
-
-                let score;
-                if (!hasMore) {
-                    const distance = rect.top > viewportHeight ? rect.top - viewportHeight : (rect.bottom < 0 ? -rect.bottom : 0);
-                    score = distance + Math.max(0, (entry.attempts || 0) * 80);
-                } else if (belowSafe) {
-                    score = Math.max(0, rect.top - viewportHeight) + Math.max(0, (entry.attempts || 0) * 120);
-                } else {
-                    score = 100000 + Math.abs(rect.bottom) + Math.max(0, (entry.attempts || 0) * 150);
-                }
+                const hasMore = __bf2760HomeV5HasMoreButton(article) || state.captionProbeResults.has(entry.id);
+                // The caption is paint-hidden and height-frozen during probing, so a
+                // visible Home article no longer has to wait until it scrolls away.
+                const distance = rect.top > viewportHeight ? rect.top - viewportHeight :
+                    (rect.bottom < 0 ? -rect.bottom : 0);
+                let score = distance + Math.max(0, (entry.attempts || 0) * (hasMore ? 110 : 80));
                 score -= Math.min(800, Math.max(0, now - (entry.enqueuedAt || now)) * 0.05);
                 if (score < bestScore) { bestScore = score; bestIndex = compactedIndex; }
             }
 
-            if (bestIndex < 0) { state.queue = compactedQueue; return null; }
+            if (bestIndex < 0) {
+                state.queue = compactedQueue;
+                // The old coordinator stopped pumping when every entry had a future
+                // notBefore. Only periodic 1.8s reconciliation restarted it.
+                if (compactedQueue.length) {
+                    const delay = Number.isFinite(nextEligibleAt)
+                        ? Math.max(20, nextEligibleAt - performance.now() + 12)
+                        : 220;
+                    __bf2760HomeV5SchedulePump(delay);
+                }
+                return null;
+            }
             const selected = compactedQueue[bestIndex] || null;
             state.queue = compactedQueue.filter((_, index) => index !== bestIndex);
             return selected;
@@ -6082,92 +6464,133 @@ injectInlineCSS();
         return new Promise(resolve => {
             const scanState = __bf2760HomeV5State();
             const inputSerial = scanState.userInputSerial;
-            let expanded = false;
             let finished = false;
-            const done = (result) => {
-                if (finished) return;
-                finished = true;
-                resolve(result);
-            };
+            let finalResult = 'retry';
+            const beforeTextLength = String(article?.textContent || '').length;
             const identityValid = () => {
                 try {
-                    const state = __bf2760HomeV5State();
                     return !!article?.isConnected &&
                         __bf2760HomeV5GetArticlePostID(article) === id &&
-                        (state.articleGenerations.get(article) || 0) === generation;
+                        (scanState.articleGenerations.get(article) || 0) === generation;
                 } catch { return false; }
             };
             const scanActive = () => {
                 try { return identityValid() && __bf2760HomeV5Active() && !document.hidden; } catch { return false; }
             };
-            const stillSafeToExpand = () => {
+            const beginProbe = () => {
+                if (!identityValid()) return false;
+                __bf2760HomeV6JSetCaptionPending(article, true);
+                const rect = article.getBoundingClientRect?.();
+                if (rect && rect.height > 1 && Number.isFinite(rect.height)) {
+                    article.style.setProperty('--bf-caption-probe-height', `${rect.height}px`);
+                }
+                article.setAttribute('data-bf-caption-probing', '1');
+                scanState.captionProbeArticles.add(article);
+                return true;
+            };
+            const endProbe = () => {
+                // Leave the pending visibility gate up until the caller explicitly
+                // approves/rejects the fully checked, collapsed post.
+                __bf2760HomeV6JClearCaptionProbe(article);
+            };
+            const done = result => {
+                if (finished) return;
+                finished = true;
+                endProbe();
+                resolve(result);
+            };
+            const collapsed = () => {
                 try {
-                    const state = __bf2760HomeV5State();
-                    if (!scanActive() || state.userInputSerial !== inputSerial || Date.now() < state.userInputUntil) return false;
-                    const rect = article.getBoundingClientRect?.();
-                    const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 900;
-                    const belowSafe = rect.top > viewportHeight * 1.55;
-                    const aboveSafe = rect.bottom < -viewportHeight * 1.35 &&
-                        Date.now() - Math.max(state.lastScrollAt || 0, state.lastUserInputAt || 0) >= 1800;
-                    return !!rect && (belowSafe || aboveSafe);
+                    return __bf2760HomeV5HasMoreButton(article) &&
+                        !__bf2760HomeV6CFindLessButton(article) &&
+                        String(article.textContent || '').length <= beforeTextLength + 12;
                 } catch { return false; }
             };
-            const collapse = () => {
+            const requestCollapse = originalButton => {
                 try {
-                    if (!expanded || !identityValid()) return false;
                     const less = __bf2760HomeV6CFindLessButton(article);
-                    if (!less) return false;
-                    try { less.click(); return true; } catch { return false; }
-                } catch { return false; }
+                    if (less) { less.click(); return true; }
+                    if (originalButton?.isConnected) { originalButton.click(); return true; }
+                } catch {}
+                return false;
             };
-
             try {
-                if (!scanActive() || !stillSafeToExpand()) return done('retry');
+                if (!scanActive() || Date.now() < scanState.userInputUntil || Date.now() < scanState.scrollUntil) return done('retry');
+                const previous = scanState.captionProbeResults.get(id);
                 const button = Array.from(article.querySelectorAll('[role="button"], button, span')).find(el => {
                     const text = __bf2760HomeV5Normalize(el?.textContent);
                     return text === 'more' || text === 'lisää' || text === 'more...' || text === 'lisää...';
                 });
-                // The caller observed More/Lisää. If React removed it before the click,
-                // the caption is still in a hydration transition; retry rather than
-                // turning that race into a permanent clean decision.
-                if (!button) return done('retry');
+                if (!previous && !button) return done('retry');
+                if (!beginProbe()) return done('retry');
 
-                try { button.click(); expanded = true; } catch { return done('retry'); }
+                // A previous attempt saw the full caption but Instagram hadn't yet
+                // returned to its collapsed state. Only verify the rollback this time.
+                if (previous) {
+                    if (collapsed()) {
+                        scanState.captionProbeResults.delete(id);
+                        return done(previous);
+                    }
+                    requestCollapse(button);
+                    setTimeout(() => {
+                        if (!identityValid()) return done('retry');
+                        if (collapsed()) {
+                            scanState.captionProbeResults.delete(id);
+                            return done(previous);
+                        }
+                        return done('retry');
+                    }, 130);
+                    return;
+                }
+
+                try {
+                    button.click();
+                    // If Instagram supplies no reversible Less control, this ID must
+                    // not be treated as an ordinary no-More clean caption on retry.
+                    scanState.captionProbeResults.set(id, 'retry');
+                } catch { return done('retry'); }
                 const startedAt = performance.now();
-
+                const verifyRollback = () => {
+                    if (!identityValid()) return done('retry');
+                    if (collapsed()) {
+                        scanState.captionProbeResults.delete(id);
+                        return done(finalResult);
+                    }
+                    if (performance.now() - startedAt > 1100) return done('retry');
+                    setTimeout(verifyRollback, 50);
+                };
+                const finishExpanded = result => {
+                    finalResult = result;
+                    scanState.captionProbeResults.set(id, result);
+                    requestCollapse(button);
+                    setTimeout(verifyRollback, 60);
+                };
                 const poll = () => {
                     try {
                         if (!identityValid()) return done('retry');
-                        if (!scanActive() || !stillSafeToExpand()) {
-                            collapse();
+                        if (!scanActive() || scanState.userInputSerial !== inputSerial || Date.now() < scanState.userInputUntil) {
+                            requestCollapse(button);
                             return done('retry');
                         }
-                        if (__bf2760HomeV5CheapContentCheck(article)) {
-                            collapse();
-                            return done('banned');
-                        }
-
                         const less = __bf2760HomeV6CFindLessButton(article);
                         const moreStillPresent = __bf2760HomeV5HasMoreButton(article);
-                        const expansionObserved = !!less || !moreStillPresent;
-                        if (expansionObserved) {
-                            collapse();
-                            return done('clean-expanded');
+                        const textExpanded = String(article.textContent || '').length > beforeTextLength + 12;
+                        const expansionObserved = !!less || !moreStillPresent || textExpanded;
+                        if (!expansionObserved) {
+                            if (performance.now() - startedAt >= 760) {
+                                requestCollapse(button);
+                                return done('retry');
+                            }
+                            return setTimeout(poll, 50);
                         }
-
-                        if (performance.now() - startedAt >= 760) {
-                            collapse();
-                            return done('retry');
-                        }
-                        setTimeout(poll, 60);
+                        finishExpanded(__bf2760HomeV5CheapContentCheck(article) ? 'banned' : 'clean-expanded');
                     } catch {
-                        collapse();
+                        requestCollapse(button);
                         done('retry');
                     }
                 };
                 setTimeout(poll, 60);
             } catch {
-                collapse();
                 done('retry');
             }
         });
@@ -6193,14 +6616,23 @@ injectInlineCSS();
             state.scanID = id;
             state.scanGeneration = generation;
 
-            const hasMore = __bf2760HomeV5HasMoreButton(article);
+            const hasMore = __bf2760HomeV5HasMoreButton(article) || state.captionProbeResults.has(id);
             const beforeBanned = __bf2760HomeV5CheapContentCheck(article);
             const candidateAge = performance.now() - Number(candidate.enqueuedAt || performance.now());
             let work;
             if (beforeBanned) {
                 work = Promise.resolve('banned');
+            } else if (hasMore && networkFeedCaptionVerifiedPostIDs.has(id)) {
+                // Full caption already screened before rendering. Keep Instagram's
+                // own More/Lisää button and collapsed state untouched.
+                work = Promise.resolve('clean-expanded');
             } else if (hasMore) {
-                work = __bf2760HomeV5ExpandAndScan(article, id, generation);
+                // Network classification is opportunistic: the initial Home response may
+                // never provide caption evidence for this Post ID. Do NOT wait forever.
+                // After a bounded grace period, show a provisional (uncached) card,
+                // continuing to check its real text and any subsequent expansion.
+                work = Promise.resolve(candidateAge >= 1700 || candidate.attempts >= 2
+                    ? 'provisional' : 'await-network-caption');
             } else if (candidateAge < 520) {
                 // Give a freshly inserted React article a short hydration window before
                 // declaring a no-More caption fully visible. Late mutations still revoke
@@ -6214,26 +6646,35 @@ injectInlineCSS();
                 try {
                     if (!__bf2760HomeV5Active() || document.hidden) return;
                     if (!article?.isConnected || __bf2760HomeV5GetArticlePostID(article) !== id || (state.articleGenerations.get(article) || 0) !== generation) return;
-                    if (result === 'retry' || result === 'retry-hydration') {
-                        __bf2760HomeV6CRequeueCandidate(candidate, result === 'retry-hydration' ? 240 : 550);
+                    if (result === 'retry' || result === 'retry-hydration' || result === 'await-network-caption') {
+                        __bf2760HomeV6CRequeueCandidate(candidate, result === 'retry-hydration' ? 240 :
+                            result === 'await-network-caption' ? 900 : 550);
+                        return;
+                    }
+                    if (result === 'provisional') {
+                        const rect = article.getBoundingClientRect?.();
+                        if (rect && rect.bottom < -80) __bf2760HomeV6CRequeueCandidate(candidate, 1200);
+                        else __bf2760HomeV6KProvisional(article, id);
                         return;
                     }
                     if (result === 'clean-stable' || result === 'clean-expanded') {
                         // MAIN-world classification can complete while DOM verification
                         // is already in flight, so structured rejects win at commit time.
                         if (networkFeedRejectedPostIDs.has(id)) {
-                            __bf2760HomeV5Reject(article, id, true);
+                            __bf2760HomeV5Reject(article, id, true, 'network');
                         } else if (__bf2760HomeV5ImmediateRejectSignal(article, id)) {
-                            __bf2760HomeV5Reject(article, id, true);
+                            __bf2760HomeV5Reject(article, id, true, 'badge-or-follow');
                         } else if (networkFeedApprovedPostIDs.has(id)) {
+                            state.captionProbeResults.delete(id);
+                            __bf2760HomeV6JSetCaptionPending(article, false);
                             __bf2760HomeV5RestoreArticle(article);
                         } else if (__bf2760HomeV5CheapContentCheck(article)) {
-                            __bf2760HomeV5Reject(article, id, true);
+                            __bf2760HomeV5Reject(article, id, true, 'visible-text');
                         } else {
                             __bf2760HomeV5Approve(article, id, result === 'clean-expanded' ? 'expanded' : 'stable');
                         }
                     } else if (result === 'banned') {
-                        __bf2760HomeV5Reject(article, id, true);
+                        __bf2760HomeV5Reject(article, id, true, 'full-scan');
                     } else {
                         __bf2760HomeV6CRequeueCandidate(candidate, 700);
                     }
@@ -6249,7 +6690,7 @@ injectInlineCSS();
                 state.scanArticle = null;
                 state.scanID = null;
                 state.scanGeneration = 0;
-                __bf2760HomeV5SchedulePump(100);
+                __bf2760HomeV5SchedulePump(state.queue.length ? 40 : 100);
             });
         } catch {}
     }
@@ -6258,20 +6699,26 @@ injectInlineCSS();
         try {
             if (!__bf2760HomeV5Active()) return;
             const state = __bf2760HomeV5State();
-            if (state.pumpScheduled) return;
+            const wait = Math.max(0, Number(delay) || 0);
+            const dueAt = performance.now() + wait;
+            // An early timer must not block an urgent new candidate, nor should a
+            // slower retry timer overwrite an earlier one. Keep exactly one wake-up.
+            if (state.pumpScheduled && state.pumpDueAt <= dueAt) return;
+            if (state.pumpScheduled && state.pumpTimer !== null) {
+                clearTimeout(state.pumpTimer);
+                state.pumpTimer = null;
+            }
             state.pumpScheduled = true;
+            state.pumpDueAt = dueAt;
             state.pumpTimer = setTimeout(() => {
                 state.pumpTimer = null;
                 state.pumpScheduled = false;
-                const run = () => __bf2760HomeV5RunOne();
-                try {
-                    if (typeof requestIdleCallback === 'function') {
-                        state.idleHandle = requestIdleCallback(run, { timeout: 500 });
-                    } else {
-                        run();
-                    }
-                } catch { run(); }
-            }, Math.max(0, delay));
+                state.pumpDueAt = 0;
+                // The Home coordinator already limits itself to one scan at a time
+                // and respects input/scroll quiet windows. Requiring browser idle for
+                // *every* post added up to 500ms of latency per candidate at startup.
+                __bf2760HomeV5RunOne();
+            }, wait);
         } catch {}
     }
 
@@ -6311,6 +6758,7 @@ injectInlineCSS();
                 if (++seen >= 12) break;
             }
             __bf2760HomeV5ProcessRetirements(12);
+            __bf2760HomeV1PublishDiagnostics(articles);
             __bf2760HomeV5SchedulePump(90);
         } catch {}
     }
@@ -6373,6 +6821,7 @@ injectInlineCSS();
             const state = __bf2760HomeV5State();
             try { state.observer?.disconnect(); } catch {}
             state.observer = null;
+            const previousRoot = state.root;
             state.root = null;
             state.queue.length = 0;
             state.queuedIDs.clear();
@@ -6387,6 +6836,24 @@ injectInlineCSS();
             state.retiredArticles.clear();
             state.tombstones = new WeakMap();
             state.collapseFailedIDs.clear();
+            for (const article of state.captionProbeArticles) {
+                __bf2760HomeV6JClearCaptionProbe(article);
+                __bf2760HomeV6JSetCaptionPending(article, false);
+            }
+            state.captionProbeArticles.clear();
+            previousRoot?.querySelectorAll?.('article[data-bf-caption-pending], article[data-bf-caption-unresolved], article[data-bf-caption-provisional], article[data-bf-caption-expansion-requested]').forEach(article => {
+                __bf2760HomeV6JSetCaptionPending(article, false);
+                article.removeAttribute('data-bf-caption-unresolved');
+                article.removeAttribute('data-bf-caption-provisional');
+                article.removeAttribute('data-bf-caption-expansion-requested');
+            });
+            state.captionProbeResults.clear();
+            state.sessionProvisionalPostIDs.clear();
+            state.diagnosticDecisions.clear();
+            state.diagnosticRecentTransitions.length = 0;
+            state.diagnosticCounts = { reject: 0, approve: 0, provisional: 0 };
+            state.diagnosticReasons = { network: 0, cached: 0, 'badge-or-follow': 0, 'visible-text': 0, 'full-scan': 0, other: 0 };
+            state.diagnosticLastDecisionAt = 0;
             state.missingIDSince = new WeakMap();
             state.articleFingerprints = new WeakMap();
             state.dirtyArticles = new WeakSet();
@@ -6400,6 +6867,7 @@ injectInlineCSS();
             if (state.reconcileTimer !== null) { try { clearTimeout(state.reconcileTimer); } catch {} }
             if (state.idleHandle !== null && typeof cancelIdleCallback === 'function') { try { cancelIdleCallback(state.idleHandle); } catch {} }
             state.pumpTimer = null;
+            state.pumpDueAt = 0;
             state.reconcileTimer = null;
             state.reconcileDueAt = 0;
             state.idleHandle = null;
@@ -6531,6 +6999,39 @@ injectInlineCSS();
         }, 450);
     }
 
+    // Only provisional Home posts need this capture guard: hide the card just before
+    // React expands More/Lisää, then let the existing observer inspect the full text.
+    // A bounded fallback always restores the card if React didn't expand it.
+    onEvent(window, 'click', event => {
+        try {
+            if (!__bf2760HomeV5Active() || document.hidden) return;
+            const target = event?.target?.closest?.('span, button, [role="button"]');
+            if (!target || !['more', 'more...', 'lisää', 'lisää...'].includes(__bf2760HomeV5Normalize(target.textContent))) return;
+            const article = target.closest?.('article');
+            if (!article?.isConnected) return;
+            const id = __bf2760HomeV5GetArticlePostID(article);
+            if (!id || article.getAttribute('data-bf-caption-provisional') !== id) return;
+            article.setAttribute('data-bf-caption-expansion-requested', id);
+            __bf2760HomeV6JSetCaptionPending(article, true);
+            setTimeout(() => {
+                try {
+                    if (!__bf2760HomeV5Active() || !article.isConnected ||
+                        __bf2760HomeV5GetArticlePostID(article) !== id ||
+                        article.getAttribute('data-bf-caption-provisional') !== id) return;
+                    if (__bf2760HomeV5CheapContentCheck(article) ||
+                        __bf2760HomeV5ImmediateRejectSignal(article, id)) {
+                        __bf2760HomeV5Reject(article, id, true);
+                    } else if (!__bf2760HomeV5HasMoreButton(article)) {
+                        __bf2760HomeV5Approve(article, id, 'expanded');
+                    } else {
+                        article.removeAttribute('data-bf-caption-expansion-requested');
+                        __bf2760HomeV6JSetCaptionPending(article, false);
+                    }
+                } catch { __bf2760HomeV6JSetCaptionPending(article, false); }
+            }, 160);
+        } catch {}
+    }, { capture: true, passive: true });
+
     if (!window.__bf2760HomeV6EInputHookInstalled) {
         window.__bf2760HomeV6EInputHookInstalled = true;
         const markHomeFeedUserInputV6E = () => {
@@ -6562,8 +7063,8 @@ injectInlineCSS();
             const state = __bf2760HomeV5State();
             state.lastScrollAt = Date.now();
             state.scrollUntil = state.lastScrollAt + 180;
-            __bf2760HomeV5ScheduleReconcile(300);
-            __bf2760HomeV5SchedulePump(320);
+            __bf2760HomeV5ScheduleReconcile(70);
+            __bf2760HomeV5SchedulePump(170);
         }, { capture: true, passive: true });
     }
 

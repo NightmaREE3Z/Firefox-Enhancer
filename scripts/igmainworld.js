@@ -38,7 +38,397 @@
             const PAGINATION_FIRST_SPARSE = 36;
             const CONFIG_SEND_GRACE_MS = 450;
             const feedPageStats = [];
+            // Diagnostic-only counters. No URLs, usernames, captions, tokens or Post IDs.
+            // Nothing in this object changes filtering, request bodies, or pagination.
+            const bfFeedTelemetryV1 = {
+                version: 1,
+                startedAt: Date.now(),
+                network: {
+                    recognizedXHR: 0,
+                    completedXHR: 0,
+                    recognizedFetch: 0,
+                    otherHomeGraphqlXHR: 0,
+                    otherHomeGraphqlFetch: 0,
+                    homeGraphqlStarted: 0,
+                    homeGraphqlCompleted: 0,
+                    homeGraphqlFailed: 0,
+                    latestHomeGraphqlAt: 0,
+                    latestHomeGraphqlDoneAt: 0,
+                    matchedConnections: 0,
+                    originalEdges: 0,
+                    deliveredEdges: 0,
+                    lastFeedRequestAt: 0,
+                    lastFeedResponseAt: 0,
+                    lastConnectionAt: 0,
+                    payloadsWithoutConnection: 0,
+                    parseFailures: 0,
+                    otherHomeStarted: 0,
+                    otherHomeCompleted: 0,
+                    otherHomeFailed: 0,
+                    lastOtherHomeAt: 0,
+                    lastOtherHomeDoneAt: 0,
+                    homeFeedAPIStarted: 0,
+                    // Zero-delivery continuation recovery; counters only, no cursor data.
+                    emptyContinuationPages: 0,
+                    rearmCycles: 0,
+                    rearmAttempts: 0,
+                    rearmFollowupsSeen: 0,
+                    rearmExhausted: 0,
+                    rearmSkippedOffscreen: 0,
+                    lastRearmAt: 0,
+                    rearmState: 'idle',
+                    // Sparse initial bootstrap: DOM is exhausted before any recognized
+                    // feed pagination response. Kept separate from empty-page counts.
+                    initialSparseStalls: 0,
+                    initialSparseRearmCycles: 0,
+                    initialSparseRearmAttempts: 0,
+                    initialSparseRearmFollowupsSeen: 0,
+                    initialSparseRearmExhausted: 0,
+                    initialSparseRearmState: 'idle'
+                },
+                pages: feedPageStats,
+                // Capped metadata only. Never retain URLs, variables, cursors, response
+                // text, account names, post identities, headers or auth tokens here.
+                requestHistory: [],
+                operationCounts: {},
+                // v3: categorized first-party XHR/fetch metadata, never request URLs.
+                otherRequestHistory: [],
+                otherRequestCategories: {},
+                dom: null,
+                domHistory: [],
+                recentDecisions: []
+            };
+            try { window.__bfInstagramFeedDiagnosticsV1 = bfFeedTelemetryV1; } catch {}
+
+            // ===== v2 passive Home GraphQL operation census =====
+            // Capture request *metadata* across GraphQL formats, not just the one
+            // pagination operation we know how to sanitize. No request/response
+            // rewrites, no extra network calls, and no body/URL logging.
+            const BF_DIAG_REQUEST_LIMIT = 48;
+            const BF_DIAG_OP_LIMIT = 48;
+
+            function bfIsHomeDiagV2() {
+                try { return location.hostname === 'www.instagram.com' && (location.pathname === '/' || !location.pathname); }
+                catch { return false; }
+            }
+
+            function bfIsGraphqlRequestV2(value) {
+                try {
+                    const url = new URL(String(value || ''), location.origin);
+                    if (url.hostname !== 'www.instagram.com') return false;
+                    return /^\/(?:api\/)?graphql(?:\/query)?\/?$/i.test(url.pathname);
+                } catch { return false; }
+            }
+
+            function bfSafeOperationNameV2(value) {
+                try {
+                    const name = String(value || '').trim();
+                    // GraphQL friendly names, never arbitrary URL/body fragments.
+                    if (!/^[A-Za-z][A-Za-z0-9_]{2,95}$/.test(name)) return '';
+                    if (!/(?:Polaris|Query|Mutation|Subscription|_subscribe|Feed)/i.test(name)) return '';
+                    return name;
+                } catch { return ''; }
+            }
+
+            function bfFormParamsV2(value) {
+                try {
+                    if (value instanceof URLSearchParams) return value;
+                    if (typeof value === 'string' && value.length <= 180000) return new URLSearchParams(value);
+                } catch {}
+                return null;
+            }
+
+            function bfGraphqlMetadataV2(url, body, friendlyHeader, method) {
+                const data = {
+                    operation: '(unlabeled)',
+                    transportMethod: /^(GET|POST)$/i.test(String(method || '')) ? String(method).toUpperCase() : 'other',
+                    kind: 'unknown',
+                    hasCursor: false,
+                    hasDocId: false,
+                    first: null
+                };
+                try {
+                    const query = new URL(String(url || ''), location.origin).searchParams;
+                    const form = bfFormParamsV2(body);
+                    const read = (key) => form?.get(key) || query.get(key) || '';
+                    const friendly = bfSafeOperationNameV2(friendlyHeader) || bfSafeOperationNameV2(read('fb_api_req_friendly_name'));
+                    if (friendly) data.operation = friendly;
+                    data.hasDocId = !!read('doc_id');
+                    const rawVariables = read('variables');
+                    if (rawVariables && rawVariables.length <= 120000) {
+                        const vars = JSON.parse(rawVariables);
+                        if (vars && typeof vars === 'object' && !Array.isArray(vars)) {
+                            data.hasCursor = typeof vars.after === 'string' && !!vars.after;
+                            if (Number.isInteger(vars.first) && vars.first >= 0 && vars.first <= 200) data.first = vars.first;
+                            if (vars.variant === 'home') data.kind = data.hasCursor ? 'home-pagination' : 'home-initial';
+                            else data.kind = data.hasCursor ? 'other-pagination' : 'other-query';
+                        }
+                    }
+                } catch {}
+                return data;
+            }
+
+            function bfRegisterGraphqlV2(transport, method, url, body, friendlyHeader) {
+                try {
+                    if (!bfIsHomeDiagV2() || !bfIsGraphqlRequestV2(url)) return null;
+                    const n = bfFeedTelemetryV1.network;
+                    n.homeGraphqlStarted++;
+                    n.latestHomeGraphqlAt = Date.now();
+                    const record = {
+                        time: n.latestHomeGraphqlAt,
+                        transport,
+                        ...bfGraphqlMetadataV2(url, body, friendlyHeader, method),
+                        status: 'pending',
+                        elapsedMs: null
+                    };
+                    bfFeedTelemetryV1.requestHistory.push(record);
+                    while (bfFeedTelemetryV1.requestHistory.length > BF_DIAG_REQUEST_LIMIT) bfFeedTelemetryV1.requestHistory.shift();
+                    const counts = bfFeedTelemetryV1.operationCounts;
+                    const name = record.operation;
+                    if (!Object.prototype.hasOwnProperty.call(counts, name) && Object.keys(counts).length >= BF_DIAG_OP_LIMIT) {
+                        counts['(other operations)'] = (counts['(other operations)'] || 0) + 1;
+                    } else {
+                        counts[name] = (counts[name] || 0) + 1;
+                    }
+                    return record;
+                } catch { return null; }
+            }
+
+            function bfCompleteGraphqlV2(record, status) {
+                try {
+                    if (!record || record.status !== 'pending') return;
+                    const n = bfFeedTelemetryV1.network;
+                    n.homeGraphqlCompleted++;
+                    n.latestHomeGraphqlDoneAt = Date.now();
+                    record.elapsedMs = Math.max(0, n.latestHomeGraphqlDoneAt - record.time);
+                    // Status code only; no server responses or error text.
+                    record.status = Number.isInteger(status) && status >= 100 && status <= 599 ? status : 0;
+                    if (record.status < 200 || record.status >= 400) n.homeGraphqlFailed++;
+                } catch {}
+            }
+
+            // ===== v3 passive Home request-path census =====
+            // Attach to the *existing* XHR/fetch wrappers. Only classify fixed,
+            // first-party endpoint families; never expose URL paths, params, headers,
+            // variables, bodies, responses, cookies, or identifiers. No rewrites.
+            const BF_DIAG_OTHER_LIMIT_V3 = 48;
+            function bfClassifyOtherHomeRequestV3(rawUrl) {
+                try {
+                    if (!bfIsHomeDiagV2()) return '';
+                    const url = new URL(String(rawUrl || ''), location.origin);
+                    if (url.hostname !== 'www.instagram.com' && url.hostname !== 'i.instagram.com') return '';
+                    const path = url.pathname || '/';
+                    if (bfIsGraphqlRequestV2(rawUrl) || /^\/(?:api\/)?graphql(?:\/|$)/i.test(path)) return '';
+                    if (/^\/api\/v1\/feed(?:\/|$)/i.test(path)) return 'feed-api';
+                    if (/^\/api\/v1\/stories(?:\/|$)/i.test(path)) return 'stories-api';
+                    if (/^\/api\/v1\//i.test(path)) return 'other-api-v1';
+                    if (/^\/api\//i.test(path)) return 'other-api';
+                    if (/^\/ajax\//i.test(path)) return 'ajax';
+                    if (/^\/web\//i.test(path)) return 'web-api';
+                    if (/^\/(?:async|feed)\//i.test(path)) return 'other-dynamic';
+                } catch {}
+                return '';
+            }
+
+            function bfRegisterOtherHomeRequestV3(transport, method, url) {
+                try {
+                    const category = bfClassifyOtherHomeRequestV3(url);
+                    if (!category) return null;
+                    const n = bfFeedTelemetryV1.network;
+                    n.otherHomeStarted++;
+                    n.lastOtherHomeAt = Date.now();
+                    if (category === 'feed-api') n.homeFeedAPIStarted++;
+                    const record = {
+                        time: n.lastOtherHomeAt,
+                        transport,
+                        category,
+                        method: /^(GET|POST)$/i.test(String(method || '')) ? String(method).toUpperCase() : 'other',
+                        status: 'pending', elapsedMs: null
+                    };
+                    bfFeedTelemetryV1.otherRequestHistory.push(record);
+                    while (bfFeedTelemetryV1.otherRequestHistory.length > BF_DIAG_OTHER_LIMIT_V3) bfFeedTelemetryV1.otherRequestHistory.shift();
+                    const counts = bfFeedTelemetryV1.otherRequestCategories;
+                    counts[category] = (counts[category] || 0) + 1;
+                    return record;
+                } catch { return null; }
+            }
+
+            function bfCompleteOtherHomeRequestV3(record, status) {
+                try {
+                    if (!record || record.status !== 'pending') return;
+                    const n = bfFeedTelemetryV1.network;
+                    n.otherHomeCompleted++;
+                    n.lastOtherHomeDoneAt = Date.now();
+                    record.elapsedMs = Math.max(0, n.lastOtherHomeDoneAt - record.time);
+                    record.status = Number.isInteger(status) && status >= 100 && status <= 599 ? status : 0;
+                    if (record.status < 200 || record.status >= 400) n.otherHomeFailed++;
+                } catch {}
+            }
             let paginationFirstTarget = PAGINATION_FIRST_MIN;
+
+            // ===== Bounded native feed-trigger recovery =====
+            // Both an all-filtered pagination response and an exhausted bootstrap
+            // feed can strand Instagram's loader. Test evidence confirms a native
+            // scroll event can wake the bootstrap loader without moving the page.
+            // We never construct network requests, change cursors, or show blocked posts.
+            const EMPTY_REARM_DELAYS_MS = [900, 2500, 4800];
+            const INITIAL_SPARSE_STABLE_MS = 3000;
+            const INITIAL_SPARSE_MIN_UPTIME_MS = 6500;
+            let emptyRearmGeneration = 0;
+            const emptyRearmCycleTimes = [];
+            let initialSparseSince = 0;
+            let initialSparseRearmStarted = false;
+            let activeRearmFollowupCheck = null;
+
+            function bfStartNativeFeedRearm(source) {
+                try {
+                    const n = bfFeedTelemetryV1.network;
+                    const isInitial = source === 'initial-sparse';
+                    const now = Date.now();
+                    while (emptyRearmCycleTimes.length && now - emptyRearmCycleTimes[0] > 60000) {
+                        emptyRearmCycleTimes.shift();
+                    }
+                    // Shared limit: an initial rearm plus an empty-page follow-up
+                    // cannot cause an unbounded sequence of synthetic scrolls.
+                    if (emptyRearmCycleTimes.length >= 2) {
+                        n.rearmState = 'rate-limited';
+                        if (isInitial) n.initialSparseRearmState = 'rate-limited';
+                        return false;
+                    }
+                    emptyRearmCycleTimes.push(now);
+                    n.rearmCycles++;
+                    n.rearmState = isInitial ? 'initial-sparse-scheduled' : 'scheduled';
+                    if (isInitial) {
+                        n.initialSparseStalls++;
+                        n.initialSparseRearmCycles++;
+                        n.initialSparseRearmState = 'scheduled';
+                    }
+                    const generation = ++emptyRearmGeneration;
+                    const baselineRequests = n.recognizedXHR + n.recognizedFetch;
+                    let attempted = false;
+                    let followupRecorded = false;
+                    let skipped = false;
+                    // Record follow-ups at request start as well as at timer checks.
+                    // Fast empty replies can otherwise start a second cycle before
+                    // the first cycle's next scheduled check gets to run.
+                    const noteFollowup = () => {
+                        if (generation !== emptyRearmGeneration || followupRecorded ||
+                            n.recognizedXHR + n.recognizedFetch <= baselineRequests) return false;
+                        n.rearmFollowupsSeen++;
+                        if (isInitial) n.initialSparseRearmFollowupsSeen++;
+                        followupRecorded = true;
+                        n.rearmState = 'new-feed-request-observed';
+                        if (isInitial) n.initialSparseRearmState = 'new-feed-request-observed';
+                        return true;
+                    };
+                    activeRearmFollowupCheck = noteFollowup;
+
+                    for (let index = 0; index < EMPTY_REARM_DELAYS_MS.length; index++) {
+                        setTimeout(() => {
+                            try {
+                                if (generation !== emptyRearmGeneration) return;
+                                if (location.hostname !== 'www.instagram.com' || location.pathname !== '/' ||
+                                    document.hidden) {
+                                    n.rearmState = 'inactive';
+                                    if (isInitial) n.initialSparseRearmState = 'inactive';
+                                    return;
+                                }
+                                if (n.recognizedXHR + n.recognizedFetch > baselineRequests) {
+                                    noteFollowup();
+                                    return;
+                                }
+                                const snap = bfFeedTelemetryV1.dom;
+                                // An initial-feed wake must stop once the DOM has
+                                // viable content or the scanner has resumed work.
+                                if (isInitial && (!snap || Number(snap.displayCandidatesNear) > 0 ||
+                                    Number(snap.pendingNear) > 0 || Number(snap.queued) > 0 ||
+                                    snap.scanning === true || Number(snap.nearLoadingIndicators) < 1 ||
+                                    Number(snap.collapsedNear) < 1)) {
+                                    n.rearmState = 'initial-sparse-resolved';
+                                    n.initialSparseRearmState = 'resolved';
+                                    return;
+                                }
+                                const viewport = Math.max(1, window.innerHeight || 900);
+                                const remaining = Number(snap?.scrollRemainingPx);
+                                if (!snap || !Number.isFinite(remaining) ||
+                                    remaining > Math.max(1200, viewport * 1.5)) {
+                                    skipped = true;
+                                    n.rearmSkippedOffscreen++;
+                                    n.rearmState = 'not-near-bottom';
+                                    if (isInitial) n.initialSparseRearmState = 'not-near-bottom';
+                                    return;
+                                }
+                                attempted = true;
+                                n.rearmAttempts++;
+                                if (isInitial) n.initialSparseRearmAttempts++;
+                                n.lastRearmAt = Date.now();
+                                n.rearmState = 'native-scroll-event-dispatched';
+                                if (isInitial) n.initialSparseRearmState = 'native-scroll-event-dispatched';
+                                window.dispatchEvent(new Event('scroll'));
+                                if (index === EMPTY_REARM_DELAYS_MS.length - 1) {
+                                    setTimeout(() => {
+                                        try {
+                                            if (generation !== emptyRearmGeneration) return;
+                                            if (n.recognizedXHR + n.recognizedFetch > baselineRequests) {
+                                                noteFollowup();
+                                                return;
+                                            }
+                                            if (attempted) {
+                                                n.rearmExhausted++;
+                                                n.rearmState = 'no-new-feed-request';
+                                                if (isInitial) {
+                                                    n.initialSparseRearmExhausted++;
+                                                    n.initialSparseRearmState = 'no-new-feed-request';
+                                                }
+                                            } else if (skipped) {
+                                                n.rearmState = 'not-near-bottom';
+                                            }
+                                        } catch {}
+                                    }, 600);
+                                }
+                            } catch {}
+                        }, EMPTY_REARM_DELAYS_MS[index]);
+                    }
+                    return true;
+                } catch { return false; }
+            }
+
+            function bfStartEmptyContinuationRearm(item) {
+                try {
+                    if (!item || item.received < 1 || item.delivered !== 0 ||
+                        item.hasNextPage !== true || item.hasEndCursor !== true) return;
+                    bfFeedTelemetryV1.network.emptyContinuationPages++;
+                    bfStartNativeFeedRearm('empty-continuation');
+                } catch {}
+            }
+
+            function bfMaybeRearmSparseInitialFeed(snap) {
+                try {
+                    if (initialSparseRearmStarted) return;
+                    const n = bfFeedTelemetryV1.network;
+                    const eligible = location.hostname === 'www.instagram.com' &&
+                        location.pathname === '/' && !document.hidden &&
+                        n.recognizedXHR + n.recognizedFetch === 0 && n.matchedConnections === 0 &&
+                        snap && Number(snap.articles) >= 2 && Number(snap.collapsedNear) >= 1 &&
+                        Number(snap.displayCandidatesNear) === 0 && Number(snap.pendingNear) === 0 &&
+                        Number(snap.queued) === 0 && snap.scanning === false &&
+                        snap.scrollSettling !== true && Number(snap.nearLoadingIndicators) > 0 &&
+                        Number.isFinite(Number(snap.scrollRemainingPx)) &&
+                        Number(snap.scrollRemainingPx) <= Math.max(1200, (window.innerHeight || 900) * 1.5);
+                    if (!eligible) {
+                        initialSparseSince = 0;
+                        return;
+                    }
+                    const now = Date.now();
+                    if (!initialSparseSince) initialSparseSince = now;
+                    if (now - bfFeedTelemetryV1.startedAt < INITIAL_SPARSE_MIN_UPTIME_MS ||
+                        now - initialSparseSince < INITIAL_SPARSE_STABLE_MS) return;
+                    // Once per document. If it fails, do not repeatedly nudge a
+                    // settled feed on each 1.8-second diagnostic snapshot.
+                    initialSparseRearmStarted = true;
+                    bfStartNativeFeedRearm('initial-sparse');
+                } catch {}
+            }
             try { window.__bfInstagramFeedSanitizerStatsV6H = feedPageStats; } catch {}
 
             let configuredKeywordRegexes = [];
@@ -141,31 +531,51 @@
                 return false;
             }
 
+
+            // Allow-list exceptions belong to the overlapping matched word, not to
+            // the entire caption. An unrelated emoji must not cancel "Sweeney".
+            function regexMatchesOutsideAllowedSpan(regex, text) {
+                try {
+                    const value = String(text || '');
+                    const lower = value.toLowerCase();
+                    const flags = regex.flags.includes('g') ? regex.flags : regex.flags + 'g';
+                    const matcher = new RegExp(regex.source, flags);
+                    let match;
+                    let inspected = 0;
+                    while ((match = matcher.exec(value)) && inspected++ < 256) {
+                        const start = match.index;
+                        const end = start + Math.max(1, match[0].length);
+                        const overlapsAllowed = configuredAllowedWords.some(word => {
+                            if (!word) return false;
+                            const at = lower.indexOf(word, Math.max(0, start - word.length + 1));
+                            return at >= 0 && at < end && at + word.length > start;
+                        });
+                        if (!overlapsAllowed) return true;
+                        if (!match[0].length) matcher.lastIndex++;
+                    }
+                } catch {}
+                return false;
+            }
+
             function configuredKeywordMatches(value) {
                 try {
                     const text = String(value || '');
-                    if (!text || textHasAllowedWord(text)) return false;
+                    if (!text) return false;
 
                     for (const regex of builtInCriticalRegexes) {
                         try {
-                            regex.lastIndex = 0;
-                            if (regex.test(text)) { regex.lastIndex = 0; return true; }
-                            regex.lastIndex = 0;
+                            if (regexMatchesOutsideAllowedSpan(regex, text)) return true;
                         } catch {}
                     }
                     if (!keywordConfigReady) return false;
                     for (const regex of configuredKeywordRegexes) {
                         try {
-                            regex.lastIndex = 0;
-                            if (regex.test(text)) { regex.lastIndex = 0; return true; }
-                            regex.lastIndex = 0;
+                            if (regexMatchesOutsideAllowedSpan(regex, text)) return true;
                         } catch {}
                     }
                     for (const regex of configuredKeywordRegexFallback) {
                         try {
-                            regex.lastIndex = 0;
-                            if (regex.test(text)) { regex.lastIndex = 0; return true; }
-                            regex.lastIndex = 0;
+                            if (regexMatchesOutsideAllowedSpan(regex, text)) return true;
                         } catch {}
                     }
                 } catch {}
@@ -207,6 +617,65 @@
                     } else if (data.__metamanglerType === 'ig-feed-classifier-ready') {
                         isolatedWorldReady = true;
                         flushPendingClassifications();
+                    } else if (data.__metamanglerType === 'ig-home-feed-diagnostics-v1') {
+                        // Read-only aggregate handoff from the isolated DOM coordinator.
+                        // Deliberately exclude post identity and content from exposed diagnostics.
+                        const snapshot = data.snapshot;
+                        if (!snapshot || snapshot.version !== 1 || typeof snapshot !== 'object') return;
+                        const allowed = [
+                            'time', 'articles', 'nearViewport', 'collapsedNear', 'pendingNear',
+                            'displayCandidatesNear', 'unknownIDNear', 'queued', 'scanning',
+                            'networkRejectedMounted', 'cachedRejectedMounted',
+                            'recentRejections', 'recentApprovals', 'recentProvisionals',
+                            'decisionReasons', 'lastDecisionAt',
+                            // v3: purely numerical, bounded layout/sentinel measurements.
+                            'viewportHeightPx', 'scrollTopPx', 'scrollRemainingPx',
+                            'documentHeightPx', 'feedRootBottomPx', 'lastArticleBottomPx',
+                            'lastArticleGapPx', 'nativeLoadingIndicators',
+                            'nearLoadingIndicators', 'nearestLoadingTopPx',
+                            'scrollSettling'
+                        ];
+                        const safe = { version: 1 };
+                        for (const key of allowed) {
+                            if (key === 'decisionReasons') {
+                                const reasons = snapshot.decisionReasons;
+                                if (reasons && typeof reasons === 'object') {
+                                    safe.decisionReasons = {};
+                                    for (const name of ['network', 'cached', 'badge-or-follow', 'visible-text', 'full-scan', 'other']) {
+                                        safe.decisionReasons[name] = Math.max(0, Number(reasons[name]) || 0);
+                                    }
+                                }
+                            } else if (typeof snapshot[key] === 'number' || typeof snapshot[key] === 'boolean') {
+                                safe[key] = snapshot[key];
+                            }
+                        }
+                        bfFeedTelemetryV1.dom = safe;
+                        bfFeedTelemetryV1.domHistory.push({
+                            time: safe.time, articles: safe.articles, nearViewport: safe.nearViewport,
+                            collapsedNear: safe.collapsedNear, pendingNear: safe.pendingNear,
+                            displayCandidatesNear: safe.displayCandidatesNear,
+                            unknownIDNear: safe.unknownIDNear, queued: safe.queued,
+                            feedRequests: bfFeedTelemetryV1.network.recognizedXHR + bfFeedTelemetryV1.network.recognizedFetch,
+                            homeGraphqlRequests: bfFeedTelemetryV1.network.homeGraphqlStarted,
+                            latestHomeGraphqlAt: bfFeedTelemetryV1.network.latestHomeGraphqlAt,
+                            otherHomeRequests: bfFeedTelemetryV1.network.otherHomeStarted,
+                            latestOtherHomeAt: bfFeedTelemetryV1.network.lastOtherHomeAt,
+                            feedAPIRequests: bfFeedTelemetryV1.network.homeFeedAPIStarted,
+                            scrollRemainingPx: safe.scrollRemainingPx,
+                            lastArticleGapPx: safe.lastArticleGapPx,
+                            nearLoadingIndicators: safe.nearLoadingIndicators,
+                            nearestLoadingTopPx: safe.nearestLoadingTopPx,
+                            connections: bfFeedTelemetryV1.network.matchedConnections
+                        });
+                        while (bfFeedTelemetryV1.domHistory.length > 36) bfFeedTelemetryV1.domHistory.shift();
+                        bfMaybeRearmSparseInitialFeed(safe);
+                        if (Array.isArray(snapshot.recentTransitions)) {
+                            bfFeedTelemetryV1.recentDecisions = snapshot.recentTransitions.slice(-24).map(item => ({
+                                time: Number(item?.time) || 0,
+                                decision: ['reject', 'approve', 'provisional'].includes(item?.decision) ? item.decision : 'other',
+                                reason: ['network', 'cached', 'badge-or-follow', 'visible-text', 'full-scan'].includes(item?.reason) ? item.reason : 'other'
+                            }));
+                        }
                     }
                 } catch {}
             });
@@ -550,6 +1019,11 @@
                     };
                     feedPageStats.push(item);
                     while (feedPageStats.length > 40) feedPageStats.shift();
+                    bfFeedTelemetryV1.network.matchedConnections++;
+                    bfFeedTelemetryV1.network.originalEdges += item.received;
+                    bfFeedTelemetryV1.network.deliveredEdges += item.delivered;
+                    bfFeedTelemetryV1.network.lastConnectionAt = item.time;
+                    bfStartEmptyContinuationRearm(item);
 
                     // If a sanitized page contributes almost no usable geometry, ask
                     // Instagram for a larger *next* native page. The server still owns
@@ -614,10 +1088,29 @@
                         }
 
                         filtered.push(edge);
-                        if (media && allConfigsReady() && mediaProjectionComplete(media) && !inspectMediaForBannedContent(media)) {
+                        if (media && allConfigsReady() && !inspectMediaForBannedContent(media)) {
                             const ownerFollowing = mediaOwnerFollowingState(media);
                             const connected = mediaHasFollowConnection(media);
-                            if (ownerFollowing === true || connected) addClassification(classifications, media, 'allow', decision?.reasons || ['network-safe']);
+                            // A verified complete caption is not the same as an ALLOW for the
+                            // entire post. Publish just this evidence when the response has
+                            // actual caption.text; the DOM coordinator still checks visible
+                            // text, labels, account links and other article metadata.
+                            if (mediaProjectionComplete(media) && (ownerFollowing === true || connected)) {
+                                addClassification(classifications, media, 'allow', decision?.reasons || ['network-safe']);
+                            }
+                            if (typeof media.caption?.text === 'string' && media.caption.text.trim()) {
+                                const code = mediaCode(media);
+                                const current = code && classifications.get(code);
+                                if (current && current.decision === 'allow') {
+                                    current.captionVerified = true;
+                                } else if (code && !current) {
+                                    classifications.set(code, {
+                                        id: code,
+                                        decision: 'caption-verified',
+                                        reasons: ['network-full-caption-checked']
+                                    });
+                                }
+                            }
                         }
                     }
 
@@ -720,7 +1213,10 @@
                     const result = sanitizePayloadObject(payload);
                     if (!result.changed) return { changed: false, text: rawText, payload };
                     return { changed: true, text: prefix + JSON.stringify(payload), payload };
-                } catch { return { changed: false, text: rawText, payload: null }; }
+                } catch {
+                    bfFeedTelemetryV1.network.parseFailures++;
+                    return { changed: false, text: rawText, payload: null };
+                }
             }
 
             function tuneHomePaginationBody(body) {
@@ -784,11 +1280,17 @@
                         try {
                             if (!state || !state.isFeed || state.processed || xhr.readyState !== 4) return;
                             state.processed = true;
+                            bfFeedTelemetryV1.network.completedXHR++;
+                            bfFeedTelemetryV1.network.lastFeedResponseAt = Date.now();
+                            const connectionCountBefore = bfFeedTelemetryV1.network.matchedConnections;
                             if (xhr.responseType === 'json') {
                                 const payload = nativeResponse(xhr);
                                 if (payload && typeof payload === 'object') {
                                     sanitizePayloadObject(payload);
                                     state.sanitizedJson = payload;
+                                }
+                                if (connectionCountBefore === bfFeedTelemetryV1.network.matchedConnections) {
+                                    bfFeedTelemetryV1.network.payloadsWithoutConnection++;
                                 }
                                 return;
                             }
@@ -796,6 +1298,9 @@
                                 const raw = nativeResponseText(xhr);
                                 const result = sanitizeJsonText(raw);
                                 if (result.changed) state.sanitizedText = result.text;
+                            }
+                            if (connectionCountBefore === bfFeedTelemetryV1.network.matchedConnections) {
+                                bfFeedTelemetryV1.network.payloadsWithoutConnection++;
                             }
                         } catch {}
                     }
@@ -839,8 +1344,10 @@
                             xhr.addEventListener('readystatechange', function() {
                                 try {
                                     const state = this.__bfFeedRequestStateV6H;
-                                    if (!state || !state.isFeed || this.readyState !== 4) return;
-                                    processFeedResponseIfReady(this, state);
+                                    if (!state || this.readyState !== 4) return;
+                                    bfCompleteGraphqlV2(state.diagRecord, this.status);
+                                    bfCompleteOtherHomeRequestV3(state.otherDiagRecord, this.status);
+                                    if (state.isFeed) processFeedResponseIfReady(this, state);
                                 } catch {}
                             });
                         } catch {}
@@ -850,6 +1357,7 @@
                         let result;
                         try {
                             const priorSerial = Number(this.__bfFeedRequestStateV6H?.serial || 0);
+                            this.__bfFeedDiagMethodV2 = typeof method === 'string' ? method : '';
                             this.__bfFeedRequestStateV6H = {
                                 serial: priorSerial + 1,
                                 url: String(url || ''),
@@ -859,7 +1367,9 @@
                                 processed: false,
                                 sanitizedText: null,
                                 sanitizedJson: null,
-                                responseViewInstalled: false
+                                responseViewInstalled: false,
+                                diagRecord: null,
+                                otherDiagRecord: null
                             };
                             try { delete this.responseText; } catch {}
                             try { delete this.response; } catch {}
@@ -890,6 +1400,15 @@
                                 const friendly = state.friendlyName === FEED_FRIENDLY_NAME;
                                 const root = state.rootField === FEED_ROOT_FIELD;
                                 state.isFeed = !!(urlMatch && (friendly || root || bodyLooksLikeFeed(body)));
+                                state.diagRecord = bfRegisterGraphqlV2('xhr', this.__bfFeedDiagMethodV2 || 'POST', state.url, body, state.friendlyName);
+                                state.otherDiagRecord = bfRegisterOtherHomeRequestV3('xhr', this.__bfFeedDiagMethodV2 || 'POST', state.url);
+                                if (state.isFeed) {
+                                    bfFeedTelemetryV1.network.recognizedXHR++;
+                                    bfFeedTelemetryV1.network.lastFeedRequestAt = Date.now();
+                                    try { activeRearmFollowupCheck?.(); } catch {}
+                                } else if (urlMatch && (location.pathname === '/' || location.pathname === '')) {
+                                    bfFeedTelemetryV1.network.otherHomeGraphqlXHR++;
+                                }
                                 state.processed = false;
                                 state.sanitizedText = null;
                                 state.sanitizedJson = null;
@@ -953,10 +1472,28 @@
                                 url = String(input || '');
                                 try { headers = new Headers((init && init.headers) || {}); } catch {}
                             }
-                            const friendly = headers?.get?.('x-fb-friendly-name') === FEED_FRIENDLY_NAME;
+                            const friendlyHeader = headers?.get?.('x-fb-friendly-name') || '';
+                            const diagRecord = bfRegisterGraphqlV2('fetch', init?.method || input?.method || 'GET', url, body, friendlyHeader);
+                            const otherDiagRecord = bfRegisterOtherHomeRequestV3('fetch', init?.method || input?.method || 'GET', url);
+                            if (otherDiagRecord) {
+                                promise.then(response => bfCompleteOtherHomeRequestV3(otherDiagRecord, response?.status))
+                                    .catch(() => bfCompleteOtherHomeRequestV3(otherDiagRecord, 0));
+                            }
+                            if (diagRecord) {
+                                promise.then(response => bfCompleteGraphqlV2(diagRecord, response?.status))
+                                    .catch(() => bfCompleteGraphqlV2(diagRecord, 0));
+                                if (!((friendlyHeader === FEED_FRIENDLY_NAME) ||
+                                    headers?.get?.('x-root-field-name') === FEED_ROOT_FIELD || bodyLooksLikeFeed(body))) {
+                                    bfFeedTelemetryV1.network.otherHomeGraphqlFetch++;
+                                }
+                            }
+                            const friendly = friendlyHeader === FEED_FRIENDLY_NAME;
                             const root = headers?.get?.('x-root-field-name') === FEED_ROOT_FIELD;
                             const direct = bodyLooksLikeFeed(body);
                             if (isFeedRequestUrl(url) && (friendly || root || direct)) {
+                                bfFeedTelemetryV1.network.recognizedFetch++;
+                                bfFeedTelemetryV1.network.lastFeedRequestAt = Date.now();
+                                try { activeRearmFollowupCheck?.(); } catch {}
                                 // Captured Home traffic uses XHR. Fetch stays read-only rather than
                                 // reconstructing Response objects; it still publishes classifications
                                 // if Instagram switches transports so the DOM verifier remains safe.

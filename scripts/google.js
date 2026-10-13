@@ -38,6 +38,27 @@
         return;
     }
 
+    // === GOOGLE PAGINATION CSS SAFETY NET ===
+    // Google embeds its pagination rules inside ordinary .MjjYud result wrappers on some
+    // pages. When a blocked organic result is removed, its nested <style> can disappear
+    // with it, leaving #botstuff with intact but unstyled page numbers on page 2+.
+    // Restore the exact native pagination rules seen in vanilla Google as a low-priority
+    // cascade layer. Google's own unlayered CSS always wins when it is available.
+    // No result DOM nodes, search URLs, or pagination links are altered by this fallback.
+    (function installGooglePaginationStyleFallback() {
+        try {
+            const styleId = 'googlejs-pagination-native-fallback';
+            if (document.getElementById(styleId)) return;
+
+            const style = document.createElement('style');
+            style.id = styleId;
+            style.textContent = `@layer googlejs-pagination-fallback {
+                .gUbm5e a:link{display:block;color:var(--JKqx2);font-weight:normal}.gUbm5e td{padding:0;text-align:center}.dlnXYb{color:var(--YLNNHc);font-weight:normal;overflow:hidden}.gUbm5e{margin:30px auto 30px;}.zuSX,.KLlkp{max-width:calc(100vw - 32px - 335px + 55px);min-width:84px;overflow:hidden}@media (max-width:484px){.U8leG .bQkv1e:nth-child(11),.TOlhBe .bQkv1e:nth-child(2){display:none}}@media (max-width:464px){.U8leG .bQkv1e:nth-child(10),.TOlhBe .bQkv1e:nth-child(3){display:none}}@media (max-width:359px){.U8leG .bQkv1e:nth-child(9),.TOlhBe .bQkv1e:nth-child(4){display:none}}@media (max-width:339px){.U8leG .bQkv1e:nth-child(8),.TOlhBe .bQkv1e:nth-child(5){display:none}}.D2pCqd{background:url(/images/nav_logo321.webp) no-repeat;background-size:167px;overflow:hidden;background-position:0 0;height:40px;display:block}.CsrMc{cursor:pointer}.DHTy1e{clear:both;text-decoration:inherit}.KLlkp .DHTy1e{float:right}.DHTy1e{text-wrap:nowrap}
+            }`;
+            (document.head || document.documentElement).appendChild(style);
+        } catch (e) {}
+    })();
+
     // === DOCUMENT-START ORGANIC RESULT DEFAULT GATE ===
     // Central host classification is asynchronous, so "hide after detection" can still flash a
     // server-rendered/hydrating result for a frame. Install the gate stylesheet before the rest of
@@ -58,9 +79,16 @@
                 'a[href] h3',
                 'h3 a[href]'
             ].join(', ');
+            // Gate individual result structures only. Broad wrappers such as .MjjYud,
+            // .g, article and li can also be Google's SHARED results container. When
+            // Google hydrates/reclasses such a wrapper after first paint, :has(h3)
+            // hides every approved card underneath until a rescan happens. That is the
+            // intermittent full-results-area flash seen on later pages.
+            // Keep default-hidden coverage on known single-card/title shells, and
+            // retain the explicit pending state applied by our synchronous observer.
             const shellSelectors = [
-                '.MjjYud', '.g', '.tF2Cxc', '.Gx5Zad', '.SoaBEf', '.M8OgIe', '.N54PNb',
-                '[data-snhf]', 'article', 'li', '.Ww4FFb', '.kb0PBd', '.yuRUbf'
+                '.tF2Cxc', '.Gx5Zad', '.SoaBEf', '.M8OgIe', '.N54PNb',
+                '.Ww4FFb', '.kb0PBd', '.yuRUbf'
             ];
             const pendingSelectors = [];
             for (const boundary of ['#search', '#rso', '#res']) {
@@ -498,7 +526,10 @@
 
 
     // === INSTANT WHITE OVERLAY ===
-    let overlay = document.createElement('div');
+    // A surviving overlay from an interrupted earlier content-script execution must
+    // be reused, not covered by a second overlay with the same ID. Otherwise the
+    // current instance removes its own cover but leaves the older full-screen cover.
+    let overlay = document.getElementById('google-blocker-blank') || document.createElement('div');
     overlay.id = 'google-blocker-blank';
     overlay.style.position = 'fixed';
     overlay.style.top = '0';
@@ -510,7 +541,7 @@
     overlay.style.pointerEvents = 'all';
     overlay.style.transition = 'none';
     overlay.style.display = 'block';
-    document.documentElement.appendChild(overlay);
+    if (!overlay.isConnected) document.documentElement.appendChild(overlay);
 
     try {
         document.documentElement.style.background = '#fff';
@@ -518,6 +549,8 @@
     } catch (e) {}
 
     let overlayRemoved = false;
+    // Visible in every DevTools execution world, even when content-script globals aren't.
+    try { document.documentElement.setAttribute('data-googlejs-startup-phase', 'overlay-active'); } catch (e) {}
 
     // === HELPER: DETECT GOOGLE IMAGE SEARCH ===
     function isGoogleImageSearch() {
@@ -638,6 +671,12 @@
                 display: none !important; visibility: hidden !important;
                 opacity: 0 !important; pointer-events: none !important; height: 0 !important;
                 max-height: 0 !important; overflow: hidden !important;
+            }
+
+            html.googlejs-image-search-active [data-googlejs-image-policy-pending="1"] {
+                visibility: hidden !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
             }
 
             /* Zero-glimpse first pass: image cards stay invisible until this script marks them clear.
@@ -905,6 +944,15 @@
         }
 
         const query = url.searchParams.get('q') || '';
+        // A native Google page-number link often omits oq/source even though it
+        // already carries safe=active, udm=14 and a valid start offset. Forcing
+        // those optional params triggers a SECOND network navigation on each click.
+        // Preserve the actual page, mode, and pagination hrefs instead.
+        const safeWebPageNumber = url.pathname === '/search' &&
+            /^(?:0|[1-9]\d*)$/.test(url.searchParams.get('start') || '') &&
+            url.searchParams.get('udm') === '14' &&
+            !url.searchParams.has('tbm') &&
+            url.searchParams.get('safe') === 'active';
         const ensureParam = (name, value) => {
             if (url.searchParams.get(name) !== value) {
                 url.searchParams.set(name, value);
@@ -912,7 +960,7 @@
             }
         };
 
-        if (query) ensureParam('oq', query);
+        if (query && !safeWebPageNumber) ensureParam('oq', query);
         ensureParam('safe', 'active');
 
         // Keep both browsers on the same stable, visible public-search parameters.
@@ -927,7 +975,7 @@
         });
 
         const source = url.searchParams.get('source') || '';
-        if (source !== 'lnms' && source !== 'chrome') {
+        if (!safeWebPageNumber && source !== 'lnms' && source !== 'chrome') {
             url.searchParams.set('source', 'chrome');
             changed = true;
         }
@@ -1430,11 +1478,16 @@
     };
     const GJ_centralPolicyVerdictCache = new Map();
     const GJ_centralPolicyPending = new Set();
+    // Do not enqueue an unresolved URL a second time while a background verdict is in flight.
+    const GJ_centralPolicyInFlight = new Set();
     let GJ_centralPolicyFlushTimer = 0;
     let GJ_centralPolicyGeneration = 0;
     let GJ_centralPolicySnapshotLoaded = false;
     let GJ_centralPolicySnapshotFingerprint = '';
     let GJ_centralPolicySnapshotRequest = 0;
+    let GJ_centralPolicySnapshotRetryTimer = null;
+    let GJ_centralPolicySnapshotRetryCount = 0;
+    let GJ_centralPolicySnapshotRetryRevalidate = false;
 
     function GJ_centralPolicyRuntime() {
         try {
@@ -1650,9 +1703,9 @@
                 node.removeAttribute('data-gj-cache-img');
             });
         } catch (e) {}
-        window.setTimeout(() => {
-            try { mainFilteringThrottled(); } catch (e) {}
-        }, 0);
+        // The pending gate already hides unverified results; schedule the recheck
+        // directly instead of spending another event-loop turn on a zero-ms timer.
+        try { mainFilteringThrottled(); } catch (e) {}
     }
 
     function GJ_flushCentralPolicyURLs() {
@@ -1661,43 +1714,51 @@
 
         const urls = Array.from(GJ_centralPolicyPending).slice(0, 192);
         const generation = GJ_centralPolicyGeneration;
-        urls.forEach(url => GJ_centralPolicyPending.delete(url));
+        urls.forEach(url => {
+            GJ_centralPolicyPending.delete(url);
+            GJ_centralPolicyInFlight.add(url);
+        });
 
         GJ_sendCentralPolicyMessage({ type: GJ_CENTRAL_POLICY_CLASSIFY_TYPE, urls }).then(response => {
-            // Results requested before a real policy revision must never repopulate the
-            // cache after it has been invalidated by that newer policy.
+            // A policy revision invalidates all in-flight work from the older generation.
             if (generation !== GJ_centralPolicyGeneration) return;
+            urls.forEach(url => GJ_centralPolicyInFlight.delete(url));
             let changed = false;
 
             if (response?.ok && Array.isArray(response.verdicts)) {
+                const requested = new Set(urls);
                 for (const verdict of response.verdicts) {
                     const href = GJ_normalizeCentralPolicyURL(verdict?.url);
-                    if (!href) continue;
+                    if (!href || !requested.has(href)) continue;
                     const action = verdict?.action === 'allow' || verdict?.action === 'block' ? verdict.action : 'none';
                     const previous = GJ_centralPolicyVerdictCache.get(href);
                     GJ_centralPolicyVerdictCache.set(href, action);
-                    // Pending no-glimpse result cards must be revisited even when the final
-                    // central verdict is `none`/clean. Otherwise a clean card could remain
-                    // hidden forever simply because only block/allow transitions triggered refreshes.
+                    // `none` is a validated clean result; it must also trigger release.
                     if (previous !== action) changed = true;
                 }
-            } else {
-                // A missing background response must never become a permanent clean verdict.
-                // Put the URLs back into the queue and try again on the next short pass.
+                // An incomplete reply is not permission to reveal any omitted URL.
                 urls.forEach(url => {
                     if (!GJ_centralPolicyVerdictCache.has(url)) GJ_centralPolicyPending.add(url);
                 });
-                if (GJ_centralPolicyPending.size) {
-                    window.setTimeout(GJ_queueCentralPolicyFlush, 300);
-                }
-                return;
+            } else {
+                // Service-worker failures remain fail-closed until a real verdict returns.
+                urls.forEach(url => {
+                    if (!GJ_centralPolicyVerdictCache.has(url)) GJ_centralPolicyPending.add(url);
+                });
             }
 
             if (changed) GJ_onCentralPolicyUpdated();
-            if (GJ_centralPolicyPending.size) GJ_queueCentralPolicyFlush();
+            if (GJ_centralPolicyPending.size) {
+                if (!response?.ok || urls.some(url => !GJ_centralPolicyVerdictCache.has(url))) {
+                    window.setTimeout(GJ_queueCentralPolicyFlush, 300);
+                } else {
+                    GJ_queueCentralPolicyFlush();
+                }
+            }
         }).catch(() => {
             if (generation !== GJ_centralPolicyGeneration) return;
             urls.forEach(url => {
+                GJ_centralPolicyInFlight.delete(url);
                 if (!GJ_centralPolicyVerdictCache.has(url)) GJ_centralPolicyPending.add(url);
             });
             if (GJ_centralPolicyPending.size) window.setTimeout(GJ_queueCentralPolicyFlush, 300);
@@ -1712,7 +1773,8 @@
 
     function GJ_queueCentralPolicyURL(value) {
         const href = GJ_normalizeCentralPolicyURL(value);
-        if (!href || GJ_centralPolicyVerdictCache.has(href) || GJ_centralPolicyPending.has(href)) return;
+        if (!href || GJ_centralPolicyVerdictCache.has(href) ||
+            GJ_centralPolicyPending.has(href) || GJ_centralPolicyInFlight.has(href)) return;
         GJ_centralPolicyPending.add(href);
         GJ_queueCentralPolicyFlush();
     }
@@ -1733,7 +1795,27 @@
     function GJ_loadCentralPolicySnapshot(revalidateFetchedHosts = false) {
         const request = ++GJ_centralPolicySnapshotRequest;
         GJ_sendCentralPolicyMessage({ type: GJ_CENTRAL_POLICY_SNAPSHOT_TYPE }).then(response => {
-            if (request !== GJ_centralPolicySnapshotRequest || !response?.ok || !response.snapshot) return;
+            if (request !== GJ_centralPolicySnapshotRequest) return;
+            if (!response?.ok || !response.snapshot) {
+                GJ_centralPolicySnapshotRetryRevalidate ||= revalidateFetchedHosts;
+                // Retry on a background/service-worker startup failure, but keep all
+                // unverified results hidden until a valid snapshot actually arrives.
+                if (GJ_centralPolicySnapshotRetryTimer === null) {
+                    const delay = Math.min(4000, 250 * (2 ** Math.min(4, GJ_centralPolicySnapshotRetryCount++)));
+                    GJ_centralPolicySnapshotRetryTimer = window.setTimeout(() => {
+                        GJ_centralPolicySnapshotRetryTimer = null;
+                        GJ_loadCentralPolicySnapshot(GJ_centralPolicySnapshotRetryRevalidate || revalidateFetchedHosts);
+                    }, delay);
+                }
+                return;
+            }
+            if (GJ_centralPolicySnapshotRetryTimer !== null) {
+                clearTimeout(GJ_centralPolicySnapshotRetryTimer);
+                GJ_centralPolicySnapshotRetryTimer = null;
+            }
+            GJ_centralPolicySnapshotRetryCount = 0;
+            revalidateFetchedHosts ||= GJ_centralPolicySnapshotRetryRevalidate;
+            GJ_centralPolicySnapshotRetryRevalidate = false;
             const nextSnapshot = {
                 allowedHosts: Array.isArray(response.snapshot.allowedHosts) ? response.snapshot.allowedHosts.slice() : [],
                 allowedPathRules: Array.isArray(response.snapshot.allowedPathRules) ? response.snapshot.allowedPathRules.map(rule => ({ ...rule })) : [],
@@ -1755,6 +1837,7 @@
                 GJ_centralPolicyGeneration++;
                 GJ_centralPolicyVerdictCache.clear();
                 GJ_centralPolicyPending.clear();
+                GJ_centralPolicyInFlight.clear();
                 GJ_onCentralPolicyUpdated(true);
             } else if (firstSnapshot) {
                 GJ_onCentralPolicyUpdated();
@@ -1763,13 +1846,88 @@
     }
 
     GJ_loadCentralPolicySnapshot();
+    // Hosts refresh notifications are not synonymous with a changed blocklist.
+    // Chrome writes lastUpdate and all hostsChunk_N values even when a download
+    // produces precisely the same hosts. Invalidating *every* approved Google
+    // result for that no-op makes the entire results area flash while URLs are
+    // classified again. Compare the stored policy payload before invalidating.
+    const googleCentralHostStorageEvents = [];
+    let googleCentralLastExplicitHostRevisionAt = 0;
+    function GJ_recordHostStorageEvent(action, changes) {
+        googleCentralHostStorageEvents.push({
+            at: new Date().toISOString(),
+            action,
+            keys: Object.keys(changes || {}).filter(key =>
+                key === 'lastUpdate' || key === 'hostsChunks' || key === 'hostsTotal' ||
+                key === 'bfb:hosts-meta:v1' || key.startsWith('hostsChunk_')).slice(0, 24),
+            generation: GJ_centralPolicyGeneration
+        });
+        if (googleCentralHostStorageEvents.length > 30) googleCentralHostStorageEvents.shift();
+    }
+    function GJ_hostsStorageValuesDiffer(before, after) {
+        if (before === after) return false;
+        if (Array.isArray(before) && Array.isArray(after)) {
+            if (before.length !== after.length) return true;
+            for (let index = 0; index < before.length; index++) {
+                if (before[index] !== after[index]) return true;
+            }
+            return false;
+        }
+        // Metadata objects may carry timestamps; treat changes conservatively.
+        if (before && after && typeof before === 'object' && typeof after === 'object') {
+            return JSON.stringify(before) !== JSON.stringify(after);
+        }
+        return true;
+    }
+    try {
+        window.GoogleJS = window.GoogleJS || {};
+        window.GoogleJS.getCentralHostRefreshHistory = () =>
+            googleCentralHostStorageEvents.map(event => ({ ...event, keys: event.keys.slice() }));
+    } catch (e) {}
     try {
         const storageApi = globalThis.browser?.storage || globalThis.chrome?.storage;
         storageApi?.onChanged?.addListener((changes, areaName) => {
-            if (areaName !== 'local' || (!changes.lastUpdate && !changes.hostsChunks && !changes.hostsTotal && !changes['bfb:hosts-meta:v1'])) return;
-            // Storage events can signal a real fetched-hosts change even when the finite
-            // snapshot is identical. Revalidate only after the fresh snapshot arrives.
-            GJ_loadCentralPolicySnapshot(true);
+            if (areaName !== 'local' || !changes) return;
+
+            const hostChunkKeys = Object.keys(changes).filter(key => /^hostsChunk_\d+$/.test(key));
+            const contentChanged = hostChunkKeys.some(key =>
+                GJ_hostsStorageValuesDiffer(changes[key]?.oldValue, changes[key]?.newValue));
+            const countsChanged = ['hostsChunks', 'hostsTotal'].some(key =>
+                changes[key] && GJ_hostsStorageValuesDiffer(changes[key].oldValue, changes[key].newValue));
+            const focusMasterChanged = Boolean(changes['bfb:hosts-meta:v1'] &&
+                GJ_hostsStorageValuesDiffer(changes['bfb:hosts-meta:v1'].oldValue,
+                    changes['bfb:hosts-meta:v1'].newValue));
+            const hasContentPayload = hostChunkKeys.length > 0 ||
+                Boolean(changes.hostsChunks || changes.hostsTotal);
+
+            if (contentChanged || countsChanged || focusMasterChanged) {
+                googleCentralLastExplicitHostRevisionAt = Date.now();
+                GJ_recordHostStorageEvent('policy-changed-revalidate', changes);
+                // Real dataset revisions must remain fail-closed, including updates
+                // that leave the finite policy snapshot unchanged.
+                GJ_loadCentralPolicySnapshot(true);
+                return;
+            }
+            if (hasContentPayload) {
+                GJ_recordHostStorageEvent('identical-hosts-no-revalidation', changes);
+                return;
+            }
+            if (changes.lastUpdate) {
+                // Firefox mirrors Focus Master revision events into the legacy
+                // lastUpdate key. The original revision was handled just above;
+                // do not invalidate all visible cards a second time.
+                if (Date.now() - googleCentralLastExplicitHostRevisionAt < 2000) {
+                    GJ_recordHostStorageEvent('duplicate-legacy-signal-ignored', changes);
+                    return;
+                }
+                // A standalone legacy update could represent a real hosts change:
+                // retain the old fail-closed behavior instead of silently trusting it.
+                if (GJ_hostsStorageValuesDiffer(changes.lastUpdate.oldValue,
+                    changes.lastUpdate.newValue)) {
+                    GJ_recordHostStorageEvent('legacy-update-revalidate', changes);
+                    GJ_loadCentralPolicySnapshot(true);
+                }
+            }
         });
     } catch (e) {}
 
@@ -1829,6 +1987,8 @@
     // narrow: these rules outrank allowedResultURLs without giving broad fragments
     // such as /x\.com/i or /ai\./i the same power.
     const priorityBlockedResultURLPatterns = [
+        // Strongly identified blocked hosts outrank generic URL allowances on every account.
+        /^https?:\/\/(?:[a-z0-9-]+\.)*tiktok\.com(?:[\/:?#]|$)/i,
         /^https?:\/\/(?:www|old|new)\.reddit\.com\/r\/(?:comfyui|stablediffusion|machinelearning|grok)(?:[\/?#]|$)/i,
     ];
 
@@ -3769,7 +3929,18 @@
         return false;
     }
 
+    // Google pagination is navigation, not a result or correction suggestion.
+    // Scope this narrowly to the actual footer controls, never the search root.
+    const GOOGLEJS_PAGINATION_SELECTOR = '#nav, #navcnt, #footcnt, #foot, #sfooter, .AaVjTc, #botstuff [role="navigation"]';
+
+    function isGooglePaginationElement(element) {
+        try {
+            return Boolean(element?.closest?.(GOOGLEJS_PAGINATION_SELECTOR));
+        } catch (e) { return false; }
+    }
+
     function isProtectedElement(element) {
+        if (isGooglePaginationElement(element)) return true;
         if (isFirefoxSearchNavigationElement(element)) return true;
         return protectedSelectors.some(selector => element.matches && element.matches(selector));
     }
@@ -3835,8 +4006,8 @@
         return testRegexList(resultHideTerms, text);
     }
 
-    // Combined lite rules apply only to direct searches and real result/link/image cards.
-    // Suggestion/correction callers opt out explicitly; Nuclear still applies to them.
+    // Redirect-only rules remain available for direct searches. Normal result/image
+    // cards use nuclearRegex, resultHideTerms, central hosts and blocked URL lists.
     function containsRedirectHideLite(text) {
         return testRegexList(redirectHideLite, text);
     }
@@ -3985,12 +4156,14 @@
     }
 
     // === SCOPED POLICY ENGINE ===
-    // Nuclear is absolute on every account. resultHideTerms only hides results; redirectHideLite
-    // redirects direct queries and hides result/link/image cards, but never scans suggestions.
+    // Nuclear is absolute on every account. resultHideTerms only hides results.
+    // redirectHideLite applies to direct search queries; it must not additionally
+    // consume normal web/image results because a multi-field snippet can accidentally
+    // satisfy a very broad redirect expression unrelated to the target destination.
     // Tapio gets one narrow exception: after hard denies, an explicitly allowed destination may
     // rescue a soft result hide. Signed-out/unknown/other accounts get no such rescue.
     // Query:  nuclearRegex/AI -> searchAllowTerms -> redirectHideLite -> none
-    // Result: nuclearRegex/AI -> hard URL/TLD denies -> Tapio allowed-URL rescue -> resultHideTerms/redirectHideLite
+    // Result: nuclearRegex/AI -> hard URL/TLD denies -> Tapio allowed-URL rescue -> resultHideTerms
     //         -> normal allowed URL -> generic blocked result URL -> none
     // Image:  same as Result, with hard image URL denies and a final generic WebP fallback.
 
@@ -4049,7 +4222,7 @@
         return NO_POLICY_DECISION;
     }
 
-    function decideResultPolicy(url, text, isImage = false, includeLite = true) {
+    function decideResultPolicy(url, text, isImage = false, includeLite = false) {
         let candidates = getResultURLCandidates(url);
 
         // Organic Google cards can expose the real destination only in rendered breadcrumb/text
@@ -4131,7 +4304,8 @@
             return makePolicyDecision(POLICY_ACTION.ALLOW, isImage ? 'image' : 'result', 'allowedResultURLs', allowedURL, signal);
         }
 
-        // Broad legacy URL fragments remain below anchored allowances.
+        // Broad legacy URL fragments remain below anchored allowances. Patterns like
+        // /x\.com/ would otherwise also match a permitted Netflix URL.
         const blockedURL = candidates.find(matchesBlockedResultURLPattern);
         if (blockedURL || matchesBlockedResultURLPattern(urlSignal)) {
             return makePolicyDecision(POLICY_ACTION.HIDE, isImage ? 'image' : 'result', 'blocked-result-url', blockedURL || urlSignal, signal);
@@ -4144,7 +4318,7 @@
         return NO_POLICY_DECISION;
     }
 
-    function shouldRemoveElement(url, text, isImage = false, includeLite = true) {
+    function shouldRemoveElement(url, text, isImage = false, includeLite = false) {
         return decideResultPolicy(url, text, isImage, includeLite).action === POLICY_ACTION.HIDE;
     }
 
@@ -4198,21 +4372,21 @@
             },
             {
                 name: 'Tapio explicit allow rescues soft resultHide',
-                decision: withTapioState(true, () => decideResultPolicy('https://www.youtube.com/watch?v=123', 'Virtual laatikko', false)),
+                decision: withTapioState(true, () => decideResultPolicy('https://www.youtube.com/watch?v=123', 'il0tytto', false)),
                 expectedAction: POLICY_ACTION.ALLOW,
                 expectedReason: 'tapio-allowed-result-rescue'
             },
             {
                 name: 'non-Tapio explicit allow cannot rescue soft resultHide',
-                decision: withTapioState(false, () => decideResultPolicy('https://www.youtube.com/watch?v=123', 'Virtual laatikko', false)),
+                decision: withTapioState(false, () => decideResultPolicy('https://www.youtube.com/watch?v=123', 'il0tytto', false)),
                 expectedAction: POLICY_ACTION.HIDE,
-                expectedReason: 'redirectHideLite'
+                expectedReason: 'resultHideTerms'
             },
             {
                 name: 'Tapio cannot rescue soft resultHide on an unallowed site',
-                decision: withTapioState(true, () => decideResultPolicy('https://example.com/project', 'Virtual laatikko', false)),
+                decision: withTapioState(true, () => decideResultPolicy('https://example.com/project', 'il0tytto', false)),
                 expectedAction: POLICY_ACTION.HIDE,
-                expectedReason: 'redirectHideLite'
+                expectedReason: 'resultHideTerms'
             },
             {
                 name: 'Rutto oireet search is allowed',
@@ -4230,22 +4404,22 @@
                 expectedNotAction: POLICY_ACTION.REDIRECT
             },
             {
-                name: 'Former special query terms now also hide actual result cards',
+                name: 'Redirect-only rules do not hide actual result cards',
                 decision: withTapioState(false, () => decideResultPolicy('https://example.com/article', 'make move', false)),
-                expectedAction: POLICY_ACTION.HIDE,
-                expectedReason: 'redirectHideLite'
+                expectedAction: POLICY_ACTION.NONE,
+                expectedReason: 'no-match'
             },
             {
-                name: 'Lite terms hide a normal web result',
+                name: 'Lite terms leave a normal web result alone',
                 decision: withTapioState(false, () => decideResultPolicy('https://example.com/article', 'Selain', false)),
-                expectedAction: POLICY_ACTION.HIDE,
-                expectedReason: 'redirectHideLite'
+                expectedAction: POLICY_ACTION.NONE,
+                expectedReason: 'no-match'
             },
             {
-                name: 'Lite terms hide an image card',
+                name: 'Lite terms leave an image card alone',
                 decision: withTapioState(false, () => decideResultPolicy('https://example.com/photo.jpg', 'Selain', true)),
-                expectedAction: POLICY_ACTION.HIDE,
-                expectedReason: 'redirectHideLite'
+                expectedAction: POLICY_ACTION.NONE,
+                expectedReason: 'no-match'
             },
             {
                 name: 'Lite terms ignore suggestion-only text',
@@ -4341,6 +4515,7 @@
     function hideElementSafely(el) {
         try {
             if (!el || !el.style) return;
+            if (isGooglePaginationElement(el)) return;
             if (isFirefoxSearchNavigationElement(el)) return;
             el.setAttribute('data-googlejs-hidden', '1');
             el.setAttribute('aria-hidden', 'true');
@@ -4429,11 +4604,11 @@
         return /(?:\.webp(?:[?#]|$)|format=webp|auto=webp|%2ewebp|%3dwebp)/i.test(s);
     }
 
-    function shouldRemoveGoogleImageNode(node) {
+    function shouldRemoveGoogleImageNode(node, suppliedSignal = '') {
         try {
-            const signal = collectGoogleImageSignal(node);
+            const signal = suppliedSignal || collectGoogleImageSignal(node);
             if (!signal) return false;
-            return decideResultPolicy('', signal, true, !isWithinSuggestionNode(node)).action === POLICY_ACTION.HIDE;
+            return decideResultPolicy('', signal, true, false).action === POLICY_ACTION.HIDE;
         } catch (e) {}
         return false;
     }
@@ -4452,9 +4627,22 @@
         return node;
     }
 
+    function markGoogleImageCardPending(node) {
+        try {
+            if (!node || node.nodeType !== 1) return;
+            node.setAttribute('data-googlejs-image-policy-pending', '1');
+            node.removeAttribute('data-googlejs-cleared');
+            const descendants = node.querySelectorAll?.('[data-attrid="images universal"], .isv-r, .eA0Zlc, .rg_bx, .wXeWr, .ivg-i') || [];
+            for (let i = 0; i < descendants.length && i < 20; i++) {
+                descendants[i].removeAttribute('data-googlejs-cleared');
+            }
+        } catch (e) {}
+    }
+
     function markGoogleImageCardCleared(node) {
         try {
             if (!node || node.nodeType !== 1) return;
+            node.removeAttribute('data-googlejs-image-policy-pending');
             node.setAttribute('data-googlejs-cleared', '1');
             const descendants = node.querySelectorAll ? node.querySelectorAll('[data-attrid="images universal"], .isv-r, .eA0Zlc, .rg_bx, .wXeWr, .ivg-i') : [];
             for (let i = 0; i < descendants.length && i < 20; i++) {
@@ -4537,7 +4725,7 @@
 
     function getSuggestionSelectors() {
         const base = [
-            '#fprsl', '#fprs', '.QRYxYe', '.NNMgCf', '.spell_orig', '.gL9Hy', '#bres', 'div.y6Uyqe',
+            '#fprsl', '#fprs', '.QRYxYe', '.NNMgCf', '.spell_orig', '.gL9Hy', 'div.y6Uyqe',
             'span.gL9Hy', 'a.spell', 'p.spell_orig', '.KDCVqf', '.card-section.p64x9c',
             '[aria-label*="Did you mean"]', '[aria-label*="Showing results for"]',
             '[aria-label*="Tarkoititko"]', '[aria-label*="Näytetään tulokset haulla"]',
@@ -5143,7 +5331,127 @@ function swapSearchTabs() {
     function isGoogleCentralPolicyGateResultApproved(result, link) {
         const approved = googleCentralGateApprovedSignals.get(result);
         return Boolean(approved && approved.link === link &&
+            approved.url === (link?.href || '') &&
+            approved.accountScope === braveFoxIsTapioAccount &&
+            approved.policyGeneration === GJ_centralPolicyGeneration &&
             approved.signature === getGoogleCentralPolicyGateResultSignature(result, link));
+    }
+
+    // Google can use an opaque /goto?url=CAES... link with no target hostname.
+    // A *trusted Google publisher badge* is usable only when it matches an explicitly
+    // blocked hostname, with a host-wide deny (not an unrelated path-only rule).
+    // This is derived from the existing URL lists, not a growing list of site names.
+    let googleBlockedPublisherLookup = null;
+    function getGoogleBlockedPublisherHostLookup() {
+        if (googleBlockedPublisherLookup) return googleBlockedPublisherLookup;
+        const lookup = new Map();
+        for (const rx of [...priorityBlockedResultURLPatterns, ...blockedResultURLPatterns, ...blockedImageURLPatterns]) {
+            const source = String(rx?.source || '');
+            const matches = source.match(/(?:[a-z0-9-]+\\\.)+[a-z]{2,16}/gi) || [];
+            for (const escapedHost of matches) {
+                const hostname = escapedHost.replace(/\\\./g, '.').replace(/^(?:www|m|mobile)\./, '');
+                const parts = hostname.split('.');
+                if (parts.length !== 2 || parts[0].length < 4) continue;
+                const candidate = `https://${hostname}/`;
+                // Only map a brand if the *homepage* itself is blocked. A narrow
+                // github.com/path rule must not make every GitHub result blocked.
+                const rootDenied = [...priorityBlockedResultURLPatterns, ...blockedResultURLPatterns, ...blockedImageURLPatterns]
+                    .some(rule => {
+                        rule.lastIndex = 0;
+                        return rule.test(candidate);
+                    });
+                if (!rootDenied) continue;
+                const brand = parts[0].replace(/[-_]/g, '').toLowerCase();
+                if (!lookup.has(brand)) lookup.set(brand, candidate);
+                else if (lookup.get(brand) !== candidate) lookup.set(brand, '');
+            }
+        }
+        googleBlockedPublisherLookup = lookup;
+        return lookup;
+    }
+
+    function getGoogleWebResultTrustedPublisherPolicyURL(result, link) {
+        try {
+            if (!result || !link || !result.contains(link) || !isGoogleWebPrimaryResultLink(link)) return '';
+            const actual = new URL(link.href);
+            if (!/^(?:www\.)?google\.[a-z.]+$/i.test(actual.hostname) ||
+                actual.pathname !== '/goto') return '';
+            const siteLabel = link.querySelector('.CA5RN .VuuXrf, .VuuXrf');
+            if (!siteLabel) return '';
+            const publisher = String(siteLabel.textContent || '').split(/[·•]/, 1)[0]
+                .trim().replace(/[-_\s]/g, '').toLowerCase();
+            if (!publisher || publisher.length < 4) return '';
+            return getGoogleBlockedPublisherHostLookup().get(publisher) || '';
+        } catch (e) {}
+        return '';
+    }
+
+    // Account scope can resolve after the first local filter pass. A soft match on
+    // an explicitly allowed URL cannot be irreversibly removed while Dad's account
+    // is still being identified. Hold it pending; nuclear and hard denies win now.
+    function shouldWaitForGoogleAllowedResultAccount(url, text, isImage, decision) {
+        if (braveFoxInitialGoogleAccountScopeSettled ||
+            decision?.action !== POLICY_ACTION.HIDE ||
+            decision.reason !== 'resultHideTerms') return false;
+        let candidates = getResultURLCandidates(url);
+        try {
+            GJ_extractCentralPolicyURLsFromText(decodeRepeatedly(String(text || '')))
+                .forEach(candidate => candidates.push(candidate));
+            if (isImage) {
+                extractUrlsFromSignal(decodeRepeatedly(String(text || '')))
+                    .forEach(candidate => candidates.push(candidate));
+            }
+        } catch (e) {}
+        return candidates.some(isResultURLAllowed);
+    }
+
+    function getGoogleWebResultPolicyText(result, link) {
+        // Match blockResults() exactly. The local safety decision must see the
+        // rendered title and snippet, not just the central URL candidate list.
+        const heading = link && (link.querySelector('h3') || link.closest('h3'));
+        const titleText = String((heading && (heading.innerText || heading.textContent)) ||
+            (link && (link.innerText || link.textContent)) || '');
+        const linkTitle = String((link && link.getAttribute('title')) || '');
+        const publisherPolicyURL = getGoogleWebResultTrustedPublisherPolicyURL(result, link);
+        return [result.innerText || result.textContent || '', titleText, linkTitle, publisherPolicyURL]
+            .join(' ')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .toLowerCase();
+    }
+
+    function keepApprovedGoogleWebResultVisibleIfStillSafe(result, link) {
+        // Google frequently alters snippet/metadata nodes on an already visible card.
+        // Recheck those changes synchronously, BEFORE returning it to a hidden state.
+        // A new card, changed primary URL, changed account, or changed policy generation
+        // must instead follow the ordinary fail-closed pending/blocked route.
+        const previous = googleCentralGateApprovedSignals.get(result);
+        if (!previous || !result?.isConnected || previous.link !== link ||
+            previous.accountScope !== braveFoxIsTapioAccount ||
+            previous.policyGeneration !== GJ_centralPolicyGeneration) return false;
+
+        const signature = getGoogleCentralPolicyGateResultSignature(result, link);
+        const currentUrl = link?.href || '';
+        if (previous.signature === signature && previous.url === currentUrl) return true;
+
+        // Revalidate BOTH policies before retaining ready. A changed destination
+        // must be independently classified: pending and blocked URLs NEVER inherit
+        // clearance from the old href, even on a previously approved result.
+        const text = getGoogleWebResultPolicyText(result, link);
+        if (getGoogleResultCentralPolicyGateState(currentUrl, text) !== 'ready' ||
+            decideResultPolicy(currentUrl, text, false, false).action === POLICY_ACTION.HIDE) {
+            return false;
+        }
+
+        googleCentralGateApprovedSignals.set(result, {
+            link,
+            url: currentUrl,
+            signature,
+            accountScope: braveFoxIsTapioAccount,
+            policyGeneration: GJ_centralPolicyGeneration
+        });
+        result.setAttribute('data-gj-cache', text.length + ':' + currentUrl);
+        return true;
     }
 
     function getGoogleCentralPolicyGateShellFamily(result, link) {
@@ -5155,12 +5463,19 @@ function swapSearchTabs() {
             const boundary = link.closest('#search, #rso, #res');
             let node = link.parentElement;
             let depth = 0;
+            // Only decorate descendants INSIDE the selected one-result card.
+            // The old walk continued beyond `result` to arbitrary ancestors. During
+            // Google hydration a shared wrapper can briefly contain one heading,
+            // receive `pending`, then gain the rest of its children: EVERY previously
+            // approved result goes invisible even though its own URL is unchanged.
             while (node && node !== boundary && depth < 14) {
+                if (result && !result.contains(node)) break;
                 if (node.matches?.(GOOGLEJS_CENTRAL_GATE_SHELL_SELECTOR)) {
                     const headingCount = countResultHeadingsWithin(node);
                     const primaryCount = countPrimaryResultLinksWithin(node);
                     if (headingCount <= 1 && primaryCount <= 1) shells.add(node);
                 }
+                if (node === result) break;
                 node = node.parentElement;
                 depth++;
             }
@@ -5174,6 +5489,9 @@ function swapSearchTabs() {
         shells.forEach(shell => {
             try {
                 if (shell.getAttribute(GOOGLEJS_CENTRAL_GATE_ATTR) !== normalizedState) {
+                    if (shell === result || shell.matches?.(GOOGLEJS_CENTRAL_GATE_SHELL_SELECTOR)) {
+                        rememberGoogleWebGateTransition(shell, shell.getAttribute(GOOGLEJS_CENTRAL_GATE_ATTR), normalizedState);
+                    }
                     shell.setAttribute(GOOGLEJS_CENTRAL_GATE_ATTR, normalizedState);
                 }
                 if (normalizedState === 'ready') {
@@ -5197,8 +5515,9 @@ function swapSearchTabs() {
             // otherwise leave an inner/outer layer invisibly gated.
             // The early central-only scan must not reveal a new/changed result before
             // blockResults() has also checked its local nuclear/URL/text policy.
-            const visibleState = state === 'ready' && !isGoogleCentralPolicyGateResultApproved(result, link)
-                ? 'pending' : state;
+            const stillApproved = isGoogleCentralPolicyGateResultApproved(result, link) ||
+                (state === 'ready' && keepApprovedGoogleWebResultVisibleIfStillSafe(result, link));
+            const visibleState = state === 'ready' && !stillApproved ? 'pending' : state;
             setGoogleCentralPolicyGateShellState(result, link, visibleState);
             return state;
         } catch (e) {
@@ -5217,7 +5536,9 @@ function swapSearchTabs() {
                 // Never let the document-start gate blank the entire bucket; its individual child
                 // result shells remain independently gated/classified.
                 if (countResultHeadingsWithin(shell) > 1 || countPrimaryResultLinksWithin(shell) > 1) {
-                    shell.setAttribute(GOOGLEJS_CENTRAL_GATE_ATTR, 'ready');
+                    if (shell.getAttribute(GOOGLEJS_CENTRAL_GATE_ATTR) !== 'ready') {
+                        shell.setAttribute(GOOGLEJS_CENTRAL_GATE_ATTR, 'ready');
+                    }
                     shell.removeAttribute('aria-hidden');
                 }
             });
@@ -5294,11 +5615,9 @@ function swapSearchTabs() {
                 if (!result) return;
                 // Unchanged, approved cards never lose their ready state merely because
                 // Google updates some unrelated wrapper around the result.
-                if (isGoogleCentralPolicyGateResultApproved(result, link)) {
-                    const url = link.href && !link.href.startsWith('data:') ? link.href : '';
-                    const state = getGoogleResultCentralPolicyGateState(url, getGoogleWebResultRenderedSignal(result, link));
-                    setGoogleCentralPolicyGateShellState(result, link, state);
-                    if (state !== 'ready') needsLocalPass = true;
+                if (isGoogleCentralPolicyGateResultApproved(result, link) ||
+                    keepApprovedGoogleWebResultVisibleIfStillSafe(result, link)) {
+                    setGoogleCentralPolicyGateShellState(result, link, 'ready');
                 } else {
                     // A changed URL/text or new card must pass BOTH central and local
                     // policy before its pending state is allowed to clear.
@@ -5326,8 +5645,10 @@ function swapSearchTabs() {
                         if (preGateGoogleCentralPolicyMutationNode(node)) needsLocalPass = true;
                     });
                 }
-                if (needsLocalPass && !overlayRemoved) googleOverlayLastResultChangeAt = Date.now();
-                queueGoogleCentralGateScan(needsLocalPass);
+                if (needsLocalPass) {
+                    if (!overlayRemoved) googleOverlayLastResultChangeAt = Date.now();
+                    queueGoogleCentralGateScan(true);
+                }
             });
             googleCentralGateObserver.observe(document.documentElement, {
                 childList: true,
@@ -5485,6 +5806,44 @@ function swapSearchTabs() {
         return cards;
     }
 
+    // === ORGANIC RESULT DIAGNOSTICS (READ ONLY) ===
+    // Keep a bounded history because the normal per-pass audit is reset on each scan.
+    // This never changes a verdict, result container, or visibility decision.
+    const googleWebResultRemovalHistory = [];
+    const googleWebGateTransitionHistory = [];
+
+    function rememberGoogleWebResultRemoval(title, url, reason, match) {
+        googleWebResultRemovalHistory.push({
+            at: new Date().toISOString(),
+            pageStart: new URLSearchParams(location.search).get('start') || '0',
+            title: String(title || '').trim().slice(0, 160),
+            url: String(url || '').slice(0, 500),
+            reason: String(reason || '').slice(0, 100),
+            match: String(match || '').slice(0, 250)
+        });
+        if (googleWebResultRemovalHistory.length > 80) googleWebResultRemovalHistory.shift();
+    }
+
+    function rememberGoogleWebGateTransition(result, previous, next) {
+        if (previous === next) return;
+        if (previous !== 'ready' || next !== 'pending') return;
+        const title = result?.querySelector?.('h3')?.textContent || '';
+        googleWebGateTransitionHistory.push({
+            at: new Date().toISOString(),
+            pageStart: new URLSearchParams(location.search).get('start') || '0',
+            title: String(title).trim().slice(0, 160),
+            from: previous,
+            to: next
+        });
+        if (googleWebGateTransitionHistory.length > 80) googleWebGateTransitionHistory.shift();
+    }
+
+    try {
+        window.GoogleJS = window.GoogleJS || {};
+        window.GoogleJS.getResultRemovalHistory = () => googleWebResultRemovalHistory.map(entry => ({ ...entry }));
+        window.GoogleJS.getGateTransitionHistory = () => googleWebGateTransitionHistory.map(entry => ({ ...entry }));
+    } catch (e) {}
+
     const googleWebResultAudit = {
         timestamp: '',
         detectedCards: 0,
@@ -5539,6 +5898,8 @@ function swapSearchTabs() {
             for (let i = 0; i < links.length; ++i) {
                 const link = links[i];
                 if (!link.href || link.href.startsWith('data:')) continue;
+                // Never rewrite or treat Google's own page numbers as result URLs.
+                if (isGooglePaginationElement(link)) continue;
 
                 // Firefox-only synthetic/native search tabs are navigation controls, not results.
                 // The old URL sweeper inspected every <a> without consulting isProtectedElement(),
@@ -5584,7 +5945,7 @@ function swapSearchTabs() {
                 const cacheKey = linkText.length + ':' + link.href;
                 if (link.getAttribute('data-gj-cache') === cacheKey) continue;
 
-                if (shouldRemoveElement(link.href, linkText, false, !isWithinSuggestionNode(link))) {
+                if (shouldRemoveElement(link.href, linkText, false, false)) {
                     let parent = link;
                     let levels = 0;
                     while (parent && levels < 15) { 
@@ -5659,12 +6020,7 @@ function swapSearchTabs() {
                     const heading = link && (link.querySelector('h3') || link.closest('h3'));
                     const titleText = String((heading && (heading.innerText || heading.textContent)) ||
                         (link && (link.innerText || link.textContent)) || '');
-                    const linkTitle = String((link && link.getAttribute('title')) || '');
-                    const resultText = [result.innerText || result.textContent || '', titleText, linkTitle]
-                        .join(' ')
-                        .replace(/\s+/g, ' ')
-                        .trim()
-                        .toLowerCase();
+                    const resultText = getGoogleWebResultPolicyText(result, link);
 
                     const resultUrl = link && link.href && !link.href.startsWith('data:') ? link.href : '';
                     const centralGateState = syncGoogleWebResultCentralPolicyGate(result, link, resultText);
@@ -5676,7 +6032,16 @@ function swapSearchTabs() {
                         return;
                     }
 
-                    const decision = decideResultPolicy(resultUrl, resultText, false, !isWithinSuggestionNode(result));
+                    const decision = decideResultPolicy(resultUrl, resultText, false, false);
+                    if (shouldWaitForGoogleAllowedResultAccount(resultUrl, resultText, false, decision)) {
+                        // This is NOT an approval; the finished account check will
+                        // classify and either rescue or remove the soft-matching card.
+                        googleCentralGateApprovedSignals.delete(result);
+                        result.removeAttribute('data-gj-cache');
+                        result.setAttribute('data-googlejs-organic-card', '1');
+                        setGoogleCentralPolicyGateShellState(result, link, 'pending');
+                        return;
+                    }
                     if (decision.action === POLICY_ACTION.HIDE) {
                         googleWebResultAudit.hiddenCards++;
                         if (googleWebResultAudit.hidden.length < 20) {
@@ -5687,10 +6052,12 @@ function swapSearchTabs() {
                                 match: String(decision.match || '').slice(0, 180)
                             });
                         }
+                        rememberGoogleWebResultRemoval(titleText, resultUrl, decision.reason, decision.match);
                         removeGoogleWebResultCardCompletely(result);
                     } else if (centralGateState === 'blocked') {
                         // Never let a new hard central denial fall through to the ready branch.
                         googleWebResultAudit.hiddenCards++;
+                        rememberGoogleWebResultRemoval(titleText, resultUrl, 'central-gate-block', '');
                         removeGoogleWebResultCardCompletely(result);
                     } else if (centralGateState === 'pending') {
                         // Local policy found nothing wrong, but the authoritative hosts verdict has
@@ -5702,7 +6069,10 @@ function swapSearchTabs() {
                         googleWebResultAudit.keptCards++;
                         googleCentralGateApprovedSignals.set(result, {
                             link,
-                            signature: getGoogleCentralPolicyGateResultSignature(result, link)
+                            url: resultUrl,
+                            signature: getGoogleCentralPolicyGateResultSignature(result, link),
+                            accountScope: braveFoxIsTapioAccount,
+                            policyGeneration: GJ_centralPolicyGeneration
                         });
                         setGoogleCentralPolicyGateShellState(result, link, 'ready');
                         result.setAttribute('data-gj-cache', cacheKey);
@@ -5718,7 +6088,7 @@ function swapSearchTabs() {
         try {
             const selectorsToHide = [
                 'span.gL9Hy', '.spell_orig', '.KDCVqf.card-section.p64x9c', '#taw',
-                '.QRYxYe', '.NNMgCf', '#bres > div.ULSxyf', 'div.ULSxyf', '#bres',
+                '.QRYxYe', '.NNMgCf',
                 'div[role="listitem"]:has(a[href*="udm=39"])',
                 'div[role="listitem"]:has(a[href*="udm=50"])'
             ];
@@ -5856,6 +6226,10 @@ function swapSearchTabs() {
         }
     }
 
+    // Content-aware image-result cache. A URL can change while the total text/URL
+    // length stays the same; the old length-only cache skipped that hard-deny update.
+    const googleImageApprovedSignals = new WeakMap();
+
     function blockImageResults() {
         if (isRedirecting) return;
         try {
@@ -5894,15 +6268,38 @@ function swapSearchTabs() {
                     }
                     if (container.closest('[data-googlejs-hidden="1"]')) return;
 
-                    const signalLength = collectGoogleImageSignal(container).length;
-                    const cacheKey = String(signalLength);
-                    if (container.getAttribute('data-gj-cache-img') === cacheKey && container.getAttribute('data-googlejs-cleared') === '1') return;
+                    const signal = collectGoogleImageSignal(container);
+                    const cacheKey = String(signal.length);
+                    if (container.getAttribute('data-gj-cache-img') === cacheKey &&
+                        container.getAttribute('data-googlejs-cleared') === '1' &&
+                        !container.hasAttribute('data-googlejs-image-policy-pending') &&
+                        googleImageApprovedSignals.get(container) === signal) return;
 
-                    if (shouldRemoveGoogleImageNode(container)) {
+                    // Only soft-matching, allowlisted images can wait for account
+                    // identification. A nuclear, URL, TLD or central denial never waits.
+                    const awaitAccount = !braveFoxInitialGoogleAccountScopeSettled &&
+                        shouldWaitForGoogleAllowedResultAccount('', signal, true,
+                            decideResultPolicy('', signal, true, false));
+                    if (awaitAccount) {
+                        googleImageApprovedSignals.delete(container);
+                        markGoogleImageCardPending(container);
+                    } else if (shouldRemoveGoogleImageNode(container, signal)) {
+                        googleImageApprovedSignals.delete(container);
                         hideGoogleImageCard(container);
                     } else {
-                        container.setAttribute('data-gj-cache-img', cacheKey);
-                        markGoogleImageCardCleared(container);
+                        const centralState = getGoogleResultCentralPolicyGateState('', signal);
+                        if (centralState === 'blocked') {
+                            googleImageApprovedSignals.delete(container);
+                            hideGoogleImageCard(container);
+                        } else if (centralState === 'pending') {
+                            googleImageApprovedSignals.delete(container);
+                            container.removeAttribute('data-gj-cache-img');
+                            markGoogleImageCardPending(container);
+                        } else {
+                            googleImageApprovedSignals.set(container, signal);
+                            container.setAttribute('data-gj-cache-img', cacheKey);
+                            markGoogleImageCardCleared(container);
+                        }
                     }
                 } catch (e) {}
             });
@@ -5924,11 +6321,17 @@ function swapSearchTabs() {
     // live organic card. A short quiet period absorbs Google's initial hydration burst.
     let googleOverlayReleaseTimer = null;
     let googleOverlayLastResultChangeAt = Date.now();
-    const GOOGLEJS_OVERLAY_RESULT_SETTLE_MS = 350;
+    let googleInitialFullFilterPassCompleted = false;
+    const GOOGLEJS_OVERLAY_RESULT_SETTLE_MS = 45;
 
     function areGoogleOverlayResultDecisionsComplete() {
-        if (!GJ_centralPolicySnapshotLoaded || !braveFoxInitialGoogleAccountScopeSettled) return false;
-        if (googleCentralGateScanQueued || googleCentralGateNeedsLocalPass || filteringScheduled) return false;
+        if (!GJ_centralPolicySnapshotLoaded || !braveFoxInitialGoogleAccountScopeSettled ||
+            !googleInitialFullFilterPassCompleted) return false;
+        // Web Search protects each unapproved card independently below; a pending
+        // scan must not starve the full-page reveal indefinitely.
+        // Keep Image Search's original strict readiness barrier.
+        if (isGoogleImageSearch() &&
+            (googleCentralGateScanQueued || googleCentralGateNeedsLocalPass || filteringScheduled)) return false;
         if (isGoogleImageSearch()) {
             if (!googleImagesFirstPassDone) return false;
             return !document.querySelector(
@@ -5941,25 +6344,81 @@ function swapSearchTabs() {
         const cards = collectGoogleWebResultCards();
         if (!cards.size && !document.querySelector('#search, #rso, #res')) return false;
         for (const [result, link] of cards) {
-            if (!result.isConnected || !isGoogleCentralPolicyGateResultApproved(result, link)) return false;
+            if (!result.isConnected) continue;
             const url = link.href && !link.href.startsWith('data:') ? link.href : '';
-            if (getGoogleResultCentralPolicyGateState(url, getGoogleWebResultRenderedSignal(result, link)) !== 'ready') return false;
-            for (const shell of getGoogleCentralPolicyGateShellFamily(result, link)) {
-                if (shell.getAttribute(GOOGLEJS_CENTRAL_GATE_ATTR) !== 'ready') return false;
+            const centralState = getGoogleResultCentralPolicyGateState(url, getGoogleWebResultRenderedSignal(result, link));
+            const approved = centralState === 'ready' && isGoogleCentralPolicyGateResultApproved(result, link);
+            const shells = getGoogleCentralPolicyGateShellFamily(result, link);
+            if (approved && [...shells].every(shell => shell.getAttribute(GOOGLEJS_CENTRAL_GATE_ATTR) === 'ready')) {
+                continue;
             }
+
+            // A slow/failed background verdict must not make the entire Google results page
+            // permanently white after the initial local filters, account scope, and central
+            // snapshot have finished. Keep this specific unapproved card hidden instead.
+            // This never approves it: the ordinary callback still decides remove vs. ready.
+            setGoogleCentralPolicyGateShellState(result, link, 'pending');
+            if (!shells.size || getComputedStyle(result).visibility !== 'hidden') return false;
         }
         return true;
     }
 
     function removeOverlayNow() {
-        if (overlay && overlay.parentNode && !overlayRemoved) {
-            overlay.parentNode.removeChild(overlay);
-            overlayRemoved = true;
-            devLog('Overlay removed (safe)');
+        if (overlayRemoved) return;
+        // Only called after the existing full local, account, and central-policy
+        // release barrier succeeds. Clean up duplicate covers left by interrupted
+        // injections, too, so an old one cannot keep an approved page white.
+        document.querySelectorAll('[id="google-blocker-blank"]').forEach(node => {
+            try { node.parentNode && node.parentNode.removeChild(node); } catch (e) {}
+        });
+        overlayRemoved = true;
+        try {
+            document.documentElement.setAttribute('data-googlejs-startup-phase', 'released');
+            document.documentElement.setAttribute('data-googlejs-overlay-wait', 'released');
+        } catch (e) {}
+        if (googleOverlayRecoveryTimer !== null) {
+            clearTimeout(googleOverlayRecoveryTimer);
+            googleOverlayRecoveryTimer = null;
         }
+        devLog('Overlay removed (safe)');
+    }
+
+    // The one-shot release timer can be canceled while Google is hydrating or
+    // classification is in flight. Always retry from a separate, bounded monitor.
+    // This does NOT release a pending/blocked card or skip any policy checks.
+    let googleOverlayRecoveryTimer = null;
+    let googleOverlayRecoveryChecks = 0;
+    function scheduleGoogleOverlayRecovery() {
+        if (googleOverlayRecoveryTimer !== null || overlayRemoved || isRedirecting) return;
+        const delay = googleOverlayRecoveryChecks === 0 ? 650 :
+            googleOverlayRecoveryChecks < 12 ? 350 : 900;
+        googleOverlayRecoveryTimer = setTimeout(() => {
+            googleOverlayRecoveryTimer = null;
+            if (overlayRemoved || isRedirecting) return;
+            googleOverlayRecoveryChecks++;
+            if (document.readyState !== 'loading') {
+                // Recover from a missed notification as well as from an approval
+                // state that changed during a canceled one-shot release.
+                if (!filteringScheduled) mainFilteringThrottled();
+                maybeReleaseOverlay();
+            }
+            scheduleGoogleOverlayRecovery();
+        }, delay);
     }
 
     function maybeReleaseOverlay() {
+        // Accessible even when DevTools is in a different JavaScript execution world.
+        // This status is observational only and does not change approval decisions.
+        if (!overlayRemoved) {
+            const blockers = [];
+            if (isRedirecting) blockers.push('redirecting');
+            if (document.readyState === 'loading') blockers.push('document-loading');
+            if (!GJ_centralPolicySnapshotLoaded) blockers.push('central-snapshot');
+            if (!braveFoxInitialGoogleAccountScopeSettled) blockers.push('account-detection');
+            if (!googleInitialFullFilterPassCompleted) blockers.push('initial-local-pass');
+            if (isGoogleImageSearch() && !googleImagesFirstPassDone) blockers.push('image-first-pass');
+            try { document.documentElement.setAttribute('data-googlejs-overlay-wait', blockers.join(',') || 'result-release-check'); } catch (e) {}
+        }
         if (isRedirecting || overlayRemoved || document.readyState === 'loading') return;
         if (hasForbiddenSuggestionText() || !areGoogleOverlayResultDecisionsComplete()) {
             if (googleOverlayReleaseTimer !== null) {
@@ -5981,8 +6440,28 @@ function swapSearchTabs() {
                 return;
             }
             removeOverlayNow();
-        }, Math.max(quietTimeLeft, isGoogleImageSearch() ? 60 : 150));
+        }, Math.max(quietTimeLeft, isGoogleImageSearch() ? 35 : 45));
     }
+
+    try {
+        window.GoogleJS = window.GoogleJS || {};
+        window.GoogleJS.getOverlayGateStatus = () => ({
+            overlayRemoved,
+            initialFullFilterPassCompleted: googleInitialFullFilterPassCompleted,
+            overlayCount: document.querySelectorAll('[id="google-blocker-blank"]').length,
+            forbiddenSuggestion: hasForbiddenSuggestionText(),
+            pendingOrUnapprovedCards: [...collectGoogleWebResultCards()].filter(([card, link]) =>
+                card.isConnected && !isGoogleCentralPolicyGateResultApproved(card, link)).length,
+            elapsedSinceLastResultChangeMs: Date.now() - googleOverlayLastResultChangeAt,
+            accountDetectionSettled: braveFoxInitialGoogleAccountScopeSettled,
+            centralSnapshotLoaded: GJ_centralPolicySnapshotLoaded,
+            centralQueuedURLs: GJ_centralPolicyPending.size,
+            centralInFlightURLs: GJ_centralPolicyInFlight.size,
+            scanQueued: googleCentralGateScanQueued,
+            filteringScheduled,
+            liveCards: collectGoogleWebResultCards().size
+        });
+    } catch (e) {}
 
     function tryRemoveOverlayOnHomepage() {
         if (isRedirecting || overlayRemoved) return;
@@ -5997,13 +6476,27 @@ function swapSearchTabs() {
     function mainFilteringThrottled() {
         if (filteringScheduled) return;
         filteringScheduled = true;
-        requestAnimationFrame(() => {
-            mainFiltering();
-            filteringScheduled = false;
-            // mainFiltering() observes filteringScheduled=true while running. Once
-            // that frame is done, give the overlay barrier a fresh release check.
-            if (!overlayRemoved) maybeReleaseOverlay();
-        });
+        let completed = false;
+        let fallbackTimer = null;
+        const completePass = () => {
+            if (completed) return;
+            completed = true;
+            if (fallbackTimer !== null) clearTimeout(fallbackTimer);
+            try {
+                mainFiltering();
+            } catch (error) {
+                // A transient Google DOM error must never leave the scheduler
+                // permanently set to busy, trapping the safety overlay forever.
+                devLog('Filtering pass failed:', error);
+            } finally {
+                filteringScheduled = false;
+                if (!overlayRemoved) maybeReleaseOverlay();
+            }
+        };
+        try { requestAnimationFrame(completePass); } catch (e) {}
+        // Browser background throttling or a missed animation frame cannot leave
+        // an approved page stuck behind the overlay indefinitely.
+        fallbackTimer = setTimeout(completePass, 280);
     }
 
     function mainFiltering() {
@@ -6041,10 +6534,15 @@ function swapSearchTabs() {
             blockElementsByPhrases();
         }
 
+        googleInitialFullFilterPassCompleted = true;
+        if (!overlayRemoved) {
+            try { document.documentElement.setAttribute('data-googlejs-startup-phase', 'local-filtering-complete'); } catch (e) {}
+        }
         maybeReleaseOverlay();
         tryRemoveOverlayOnHomepage();
     }
 
+    let googleOrdinaryRescanTimer = null;
     function startFilteringAndObserve() {
         devLog('Setting up mutation observer');
         interceptSearchInputChanges();
@@ -6057,10 +6555,12 @@ function swapSearchTabs() {
                 try { removeGoogleImagesRelatedSearchBlocks(); } catch (e) {}
             }
             if (mutationTouchesOnlyOpenImagePreview(mutations)) return;
-            setTimeout(() => {
+            if (googleOrdinaryRescanTimer !== null) return;
+            googleOrdinaryRescanTimer = setTimeout(() => {
+                googleOrdinaryRescanTimer = null;
                 if (isRedirecting) return;
                 mainFilteringThrottled();
-            }, isGoogleImageSearch() ? 8 : 18);
+            }, isGoogleImageSearch() ? 8 : 0);
         });
 
         const observerOptions = isFirefoxAndroid
@@ -6124,7 +6624,12 @@ function swapSearchTabs() {
     }
     waitForBodyAndObserve();
 
-    function init() { startFilteringAndObserve(); }
+    function init() {
+        // Start recovery before filtering so even an exception during the first
+        // Google DOM pass cannot strand the overlay with no future wake-up.
+        scheduleGoogleOverlayRecovery();
+        startFilteringAndObserve();
+    }
 
     if (document.readyState === "loading") {
         devLog('Document loading - waiting for DOMContentLoaded');
