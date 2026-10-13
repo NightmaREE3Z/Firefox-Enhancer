@@ -3316,6 +3316,106 @@
     return false;
   }
 
+  // ChatGPT can mount the + attachment menu in a React portal, outside the
+  // composer. On Firefox Android, native camera/photo/file choices must keep
+  // their original trusted user gesture. Never cancel, replay, or synchronously
+  // curate this menu from BraveFox's document-level event handlers.
+  const FIREFOX_ANDROID_ATTACHMENT_MENU_LABELS = new Set([
+    'kamera', 'valokuvat', 'tiedostot', 'luo kuva', 'verkkohaku',
+    'camera', 'photos', 'files', 'create image', 'search the web',
+    'take photo', 'photo library', 'upload file', 'upload files'
+  ]);
+  const FIREFOX_ANDROID_ATTACHMENT_UPLOAD_LABELS = new Set([
+    'kamera', 'valokuvat', 'tiedostot',
+    'camera', 'photos', 'files', 'take photo', 'photo library',
+    'upload file', 'upload files'
+  ]);
+
+  function firefoxAndroidAttachmentMenuLabel(element) {
+    if (!(element instanceof Element)) return '';
+    for (const value of [
+      element.getAttribute('aria-label'),
+      element.getAttribute('title'),
+      element.textContent
+    ]) {
+      const label = normalizeText(value);
+      if (FIREFOX_ANDROID_ATTACHMENT_MENU_LABELS.has(label)) return label;
+    }
+    return '';
+  }
+
+  function isFirefoxAndroidAttachmentMenuRoot(root) {
+    if (!IS_FIREFOX_ANDROID || !(root instanceof Element)) return false;
+    // Never inspect whole-page ancestors; the real + menu is a small popup.
+    if (root === document.body || root === document.documentElement) return false;
+    const rootText = String(root.textContent || '');
+    if (rootText.length > 480 ||
+        !/(kamera|valokuvat|tiedostot|camera|photos|files|photo library|take photo|upload file)/i.test(rootText)) return false;
+
+    const uploadLabels = new Set();
+    const collect = element => {
+      const label = firefoxAndroidAttachmentMenuLabel(element);
+      if (FIREFOX_ANDROID_ATTACHMENT_UPLOAD_LABELS.has(label)) uploadLabels.add(label);
+    };
+    collect(root);
+    let inspected = 0;
+    for (const item of root.querySelectorAll('button, [role="menuitem"], [role="button"], li, span, p, div')) {
+      if (++inspected > 100) return false;
+      collect(item);
+    }
+    // Require multiple distinct attachment actions; unrelated 'Files' buttons
+    // elsewhere on ChatGPT must continue to use the ordinary BraveFox guards.
+    return uploadLabels.size >= 2;
+  }
+
+  function isFirefoxAndroidNativeAttachmentMenuControl(target) {
+    if (!IS_FIREFOX_ANDROID || !(target instanceof Element)) return false;
+    let action = target;
+    for (let depth = 0; action && depth < 7; depth += 1, action = action.parentElement) {
+      if (action === document.body || action === document.documentElement) break;
+      if (!firefoxAndroidAttachmentMenuLabel(action)) continue;
+      let parent = action.parentElement;
+      for (let level = 0; parent && level < 7; level += 1, parent = parent.parentElement) {
+        if (parent === document.body || parent === document.documentElement) break;
+        if (isFirefoxAndroidAttachmentMenuRoot(parent)) return true;
+      }
+    }
+    return false;
+  }
+
+  function isFirefoxAndroidNativeAttachmentInteraction(target) {
+    if (!IS_FIREFOX_ANDROID || !(target instanceof Element)) return false;
+    if (isFirefoxAndroidNativeComposerControl(target) ||
+        isFirefoxAndroidNativeAttachmentMenuControl(target)) return true;
+
+    // Some ChatGPT mobile buckets render the native upload actions as ordinary
+    // buttons rather than [role=menuitem]. The click may originate from an SVG
+    // or span; look at its nearest *actual control*, not the full portal text.
+    // Limit this fallback to ordinary chat routes. Directly protected pages and
+    // unrelated account/Library menus retain their normal BraveFox protections.
+    if (!(/^(?:\/|\/c\/[^/]+\/?)$/.test(location.pathname))) return false;
+    const control = target.closest('button, [role="menuitem"], [role="button"], label, li');
+    if (!(control instanceof Element) || control.closest('aside, nav, [data-testid*="sidebar" i]')) return false;
+    const label = normalizeText([
+      control.getAttribute('aria-label') || '',
+      control.getAttribute('title') || '',
+      String(control.textContent || '').trim()
+    ].filter(Boolean).join(' '));
+    if (!/^(?:kamera|valokuvat|tiedostot|luo kuva|verkkohaku|camera|photos|files|create image|search the web|take photo|photo library|upload files?|choose files?)$/i.test(label)) return false;
+    const popup = control.closest(
+      '[role="menu"], [role="dialog"], [data-radix-menu-content], ' +
+      '[data-slot*="popover-content"], [data-state="open"]'
+    );
+    // If ChatGPT does not assign a formal popup role, only accept a nearby
+    // group containing more than one distinct native attachment option.
+    if (popup) return true;
+    let parent = control.parentElement;
+    for (let depth = 0; parent && depth < 5 && parent !== document.body; depth++, parent = parent.parentElement) {
+      if (isFirefoxAndroidAttachmentMenuRoot(parent)) return true;
+    }
+    return false;
+  }
+
   // This is read-only and does not depend on ChatGPT using a particular mobile
   // composer generation. The value can be checked in remote Firefox DevTools.
   function installFirefoxAndroidComposerMenuDiagnostic() {
@@ -3361,18 +3461,20 @@
     }, true);
   }
 
-  installFirefoxAndroidComposerMenuDiagnostic();
+  // Keep this debug probe available for remote inspection, but do not run it
+  // while real Android upload controls need uninterrupted user activation.
+  // installFirefoxAndroidComposerMenuDiagnostic();
 
   function installInteractionGuards() {
     document.addEventListener('click', event => {
+      // Preserve the original trusted click from ChatGPT's portal-mounted
+      // attachment menu through to Firefox/Android's native picker.
+      if (isFirefoxAndroidNativeAttachmentInteraction(event.target)) return;
+
       if (event.isTrusted) {
         captureConversationModelChoiceFromEvent(event);
         captureConversationSendIntentFromEvent(event);
       }
-
-      // Native Firefox Android composer tools (including the legacy + menu) are
-      // not protected-route controls; do not run the general menu guard on them.
-      if (isFirefoxAndroidNativeComposerControl(event.target)) return;
 
       if (event.isTrusted) {
         const analysisToggle = getElementFromEvent(event, 'button[aria-expanded][aria-labelledby]');
@@ -3546,6 +3648,7 @@
     }, true);
 
     document.addEventListener('keydown', event => {
+      if (isFirefoxAndroidNativeAttachmentInteraction(event.target)) return;
       if (event.isTrusted) captureConversationSendIntentFromEvent(event);
 
       if (event.isTrusted && (event.key === 'Enter' || event.key === ' ')) {
@@ -4107,6 +4210,52 @@
     });
   }
 
+  // Firefox Android: do not run model-tier capture logic for unrelated native
+  // ChatGPT controls. Unlike the broad per-document listeners, this checks only
+  // the actual picker/slider ancestry. Instant/Pro are still blocked in their
+  // real reasoning controls and settings/model menus.
+  function isFirefoxAndroidReasoningInteraction(target) {
+    if (!IS_FIREFOX_ANDROID) return true;
+    if (!(target instanceof Element)) return false;
+    if (target.closest(THINKING_EFFORT_EXACT_CONTROL_SELECTOR + ', ' +
+        THINKING_EFFORT_EXACT_ROOT_SELECTOR)) return true;
+    if (isThinkingEffortTriggerControl(target)) return true;
+
+    const control = target.closest(
+      'button, [role="button"], [role="menuitem"], [role="option"], ' +
+      '[role="radio"], [role="slider"], input[type="range"]'
+    );
+    if (control instanceof Element) {
+      if (control.matches(THINKING_EFFORT_SLIDER_SELECTOR) && isThinkingEffortSlider(control)) return true;
+      const label = normalizeText([
+        control.textContent || '', control.getAttribute('aria-label') || '',
+        control.getAttribute('title') || ''
+      ].join(' '));
+      if (/^(instant|välitön|valiton|pro)$/i.test(label)) {
+        const menu = control.closest(THINKING_EFFORT_POPUP_SELECTOR);
+        if (menu) return true;
+      }
+    }
+
+    // Current mobile UI may draw the reasoning selector as a custom slider with
+    // no role=slider element. Accept its *small* popup only if that popup clearly
+    // contains reasoning-specific terms, not a normal attachments popup.
+    let node = target;
+    for (let depth = 0; node && depth < 6 && node !== document.body; depth += 1, node = node.parentElement) {
+      if (!(node instanceof Element)) break;
+      if (node.matches(THINKING_EFFORT_EXACT_CONTROL_SELECTOR + ', ' +
+          THINKING_EFFORT_EXACT_ROOT_SELECTOR)) return true;
+      if (!node.matches(THINKING_EFFORT_POPUP_SELECTOR)) continue;
+      const content = normalizeText(node.textContent);
+      if (content.length > 650) continue;
+      if (THINKING_EFFORT_CONTEXT_TERMS.some(term => content.includes(term))) return true;
+      for (const slider of node.querySelectorAll(THINKING_EFFORT_SLIDER_SELECTOR)) {
+        if (isThinkingEffortSlider(slider)) return true;
+      }
+    }
+    return false;
+  }
+
   function installThinkingEffortEdgeLock() {
     installExactReasoningStateObserver();
 
@@ -4128,7 +4277,7 @@
     };
 
     document.addEventListener('pointerdown', event => {
-      if (isFirefoxAndroidNativeComposerControl(event.target)) return;
+      if (!isFirefoxAndroidReasoningInteraction(event.target)) return;
       if (thinkingEffortVisualRepairing) return;
 
       const exactControl = getExactReasoningControl(event.target, false);
@@ -4171,6 +4320,8 @@
     }, true);
 
     document.addEventListener('pointermove', event => {
+      if (!activeExactReasoningControl && !activeThinkingEffortSlider &&
+          !isFirefoxAndroidReasoningInteraction(event.target)) return;
       const exactControl = activeExactReasoningControl;
       if (exactControl?.isConnected) {
         if (
@@ -4195,6 +4346,8 @@
     }, true);
 
     const finishPointerInteraction = event => {
+      if (!activeExactReasoningControl && !activeThinkingEffortSlider &&
+          !isFirefoxAndroidReasoningInteraction(event.target)) return;
       const exactControl = activeExactReasoningControl;
       if (
         exactControl?.isConnected &&
@@ -4222,7 +4375,7 @@
     document.addEventListener('pointercancel', finishPointerInteraction, true);
 
     document.addEventListener('click', event => {
-      if (isFirefoxAndroidNativeComposerControl(event.target)) return;
+      if (!isFirefoxAndroidReasoningInteraction(event.target)) return;
       if (thinkingEffortVisualRepairing) return;
 
       const exactControl = getExactReasoningControl(event.target, false);
@@ -4273,6 +4426,7 @@
     }, true);
 
     document.addEventListener('keydown', event => {
+      if (!isFirefoxAndroidReasoningInteraction(event.target)) return;
       const exactControl = getExactReasoningControl(event.target, false);
       if (exactControl) {
         const value = readExactReasoningValue(exactControl);
@@ -4352,6 +4506,7 @@
 
     for (const eventName of ['input', 'change', 'focusin']) {
       document.addEventListener(eventName, event => {
+        if (!isFirefoxAndroidReasoningInteraction(event.target)) return;
         const exactControl = getExactReasoningControl(event.target, false);
         if (exactControl && isExactReasoningInstant(exactControl)) {
           if (eventName !== 'focusin') cancelBlockedEdgeInteraction(event);
@@ -5200,6 +5355,13 @@
           for (const addedNode of mutation.addedNodes) {
             const node = addedNode instanceof Element ? addedNode : addedNode.parentElement;
             if (!(node instanceof Element)) continue;
+
+            // A native Android attachment popup is ChatGPT-owned. Do not touch
+            // its portal DOM or run unrelated popup repair logic against it.
+            if (IS_FIREFOX_ANDROID && (
+              isFirefoxAndroidAttachmentMenuRoot(node) ||
+              isFirefoxAndroidNativeAttachmentMenuControl(node)
+            )) continue;
 
             if (
               node.matches(CHATGPT_CONVERSATION_LOAD_ERROR_SELECTOR) ||
@@ -12342,6 +12504,7 @@
   }
 
   function handleConversationArchivePointerDown(event) {
+    if (isFirefoxAndroidNativeAttachmentInteraction(event.target)) return;
     if (isConversationArchiveLibraryNewTrigger(event.target)) armConversationArchiveLibraryNewMenu();
   }
 
