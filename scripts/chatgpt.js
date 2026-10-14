@@ -263,6 +263,17 @@
   let sidebarRecentsStageReleased = false;
   let sidebarStageFailOpenTimer = 0;
 
+  // Preserve a *UI entry* for the retired GPT-5.5 model in the native composer
+  // model menu. The experiment only opens the old ChatGPT model URL in a new tab;
+  // the server is still authoritative and may silently reject the requested model.
+  // Disable here to remove this compatibility experiment without touching the
+  // normal ChatGPT picker or any of the Firefox Android attachment-menu fixes.
+  const LEGACY_GPT55_MENU_ENABLED = true;
+  const LEGACY_GPT55_MODEL_PARAM = 'gpt-5-5-thinking';
+  const LEGACY_GPT55_MENU_ATTR = 'data-bravefox-legacy-gpt55-menu-entry';
+  const LEGACY_GPT55_STYLE_ID = 'bravefox-legacy-gpt55-menu-style';
+  let legacyGpt55MenuRestoreTimer = 0;
+
   const MODELS_TO_REMOVE = new Set([
     'gpt-5 instant',
     'gpt-5 thinking mini',
@@ -567,6 +578,11 @@
   const CHAT_ARCHIVE_DOWNLOAD_DOCK_STYLE_ID = 'bravefox-chat-archive-download-dock-style';
 
   const CHATGPT_BANNER_HIDE_KEY = 'bravefoxChatGptHiddenModelNotices_v1';
+  const CHATGPT_BANNER_PREFS_LOADING_CLASS = 'bravefox-chatgpt-banner-prefs-loading';
+  const CHATGPT_BANNER_PERMANENTLY_HIDDEN_ATTR = 'data-bravefox-banner-permanently-hidden';
+  // Persist the notice's own model identity, not the latest model mentioned in
+  // conversation history. React may render a GPT-5.5 notice in a GPT-6 chat.
+  const CHATGPT_BANNER_GPT55_RETIREMENT_MODEL_SLUG = 'gpt-5-5-thinking';
   const CHATGPT_BANNER_CLOSE_MENU_ID = 'bravefox-chatgpt-banner-close-menu';
   const CHATGPT_BANNER_CLOSE_MENU_OPEN_ATTR = 'data-bravefox-banner-close-menu-open';
   const CHATGPT_BANNER_MENU_TRIGGER_ATTR = 'data-bravefox-banner-menu-trigger';
@@ -1512,6 +1528,11 @@
   // real Library button mounts; the Recent gate opens when the real Projects section mounts.
   document.documentElement.classList.add(SIDEBAR_TOP_WAIT_CLASS, SIDEBAR_RECENTS_WAIT_CLASS);
 
+  // Until extension-local saved notices are loaded, keep Android announcement banners
+  // from painting once and then vanishing. Only closeable announcement surfaces are
+  // guarded; chat turns, the sidebar and attachment controls are left alone.
+  if (IS_FIREFOX_ANDROID) document.documentElement.classList.add(CHATGPT_BANNER_PREFS_LOADING_CLASS);
+
   injectStyles();
   // Warm ChatGPT's bearer token immediately in the background. Full conversation
   // history lives behind /backend-api/conversation/{id}; having the token ready
@@ -1520,6 +1541,9 @@
   void synchronizeRoute();
   installNavigationGuards();
   installInteractionGuards();
+  // Re-use the existing low-overhead popup observer instead of polling ChatGPT.
+  // A native GPT-5.5 entry is never replaced while ChatGPT still provides one.
+  installLegacyGpt55ModelMenuPreserver();
   installThinkingEffortEdgeLock();
   installEscapeHatchObserver();
   scheduleConversationSelectionFastRefresh();
@@ -1531,7 +1555,13 @@
   scheduleGeneralUiScan(true);
   scheduleSidebarPolishRetries();
   scheduleGoogleOnlyLoginCleanupRetries();
-  void ensureHiddenChatGptBannerPrefsLoaded().then(() => scheduleGeneralUiScan(true));
+  void ensureHiddenChatGptBannerPrefsLoaded().then(() => {
+    // Apply saved preferences synchronously while the short Android paint guard is
+    // still active. Unhide native announcements that are not in the saved list.
+    try { hidePreviouslyDismissedChatGptBanners(document); }
+    finally { document.documentElement.classList.remove(CHATGPT_BANNER_PREFS_LOADING_CLASS); }
+    scheduleGeneralUiScan(true);
+  });
 
   function setInlinePaintGate(active) {
     const root = document.documentElement;
@@ -1593,6 +1623,40 @@
       }
 
       .${HIDDEN_CLASS} {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+
+      /* A tiny Android pre-paint guard while the stored preference is read.
+       * This stops the initial notice flash without blanket-hiding page content.
+       * The class is removed after saved notices have been individually hidden. */
+      html.${CHATGPT_BANNER_PREFS_LOADING_CLASS} :is(
+        [data-testid*="banner" i],
+        [data-testid*="notice" i],
+        [data-testid*="announcement" i],
+        [data-testid*="upsell" i],
+        aside, [role="alert"], [role="status"]
+      ):has(:is(
+        button[data-testid="close-button"],
+        button[aria-label="Close" i],
+        button[aria-label="Sulje" i],
+        button[aria-label*="dismiss" i]
+      )):not(:has([data-message-author-role])) {
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+
+      /* Permanently hidden retirement notices must leave no empty Android layout
+       * shell. Collapse up to three notice-only wrappers without detaching any
+       * React-owned nodes. :only-child ensures other content remains visible if
+       * React later inserts a sibling into the same container. */
+      [${CHATGPT_BANNER_PERMANENTLY_HIDDEN_ATTR}="true"],
+      :is(div, aside, section):has(> [${CHATGPT_BANNER_PERMANENTLY_HIDDEN_ATTR}="true"]:only-child),
+      :is(div, aside, section):has(> :is(div, aside, section):only-child > [${CHATGPT_BANNER_PERMANENTLY_HIDDEN_ATTR}="true"]:only-child),
+      :is(div, aside, section):has(> :is(div, aside, section):only-child > :is(div, aside, section):only-child > [${CHATGPT_BANNER_PERMANENTLY_HIDDEN_ATTR}="true"]:only-child) {
         display: none !important;
         visibility: hidden !important;
         opacity: 0 !important;
@@ -3470,6 +3534,9 @@
       // Preserve the original trusted click from ChatGPT's portal-mounted
       // attachment menu through to Firefox/Android's native picker.
       if (isFirefoxAndroidNativeAttachmentInteraction(event.target)) return;
+      // A compatibility link is not a native model change. Do not record it as
+      // GPT-5.5 selection in conversation metadata before server confirmation.
+      if (event.target instanceof Element && event.target.closest(`[${LEGACY_GPT55_MENU_ATTR}]`)) return;
 
       if (event.isTrusted) {
         captureConversationModelChoiceFromEvent(event);
@@ -3798,6 +3865,170 @@
     return null;
   }
 
+  // === GPT-5.5 menu preservation experiment ===================================
+  // Re-create one menu row only after ChatGPT stops offering it natively. The
+  // legacy URL parameter is an experimental same-tab request, not a guarantee
+  // that ChatGPT will accept a model unavailable to this account.
+  function legacyGpt55MenuModelKind(label) {
+    const text = normalizeText(label);
+    if (/^gpt[-\s]?5[.\s-]?5(?:\b|$)/.test(text)) return '5.5';
+    if (/^gpt[-\s]?5[.\s-]?6(?:\b|$)/.test(text)) return '5.6';
+    if (/^gpt[-\s]?6(?:\b|$)/.test(text)) return '6';
+    return '';
+  }
+
+  function ensureLegacyGpt55MenuStyle() {
+    if (document.getElementById(LEGACY_GPT55_STYLE_ID)) return;
+    const style = document.createElement('style');
+    style.id = LEGACY_GPT55_STYLE_ID;
+    style.textContent = `
+      [${LEGACY_GPT55_MENU_ATTR}="true"] {
+        box-sizing: border-box !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        justify-content: center !important;
+        width: 100% !important;
+        min-height: 49px !important;
+        gap: 2px !important;
+        padding: 8px 14px !important;
+        background: transparent !important;
+        color: inherit !important;
+        border: 0 !important;
+        border-radius: 8px !important;
+        font: inherit !important;
+        text-align: left !important;
+        cursor: pointer !important;
+      }
+      [${LEGACY_GPT55_MENU_ATTR}="true"]:hover,
+      [${LEGACY_GPT55_MENU_ATTR}="true"]:focus-visible {
+        background: var(--surface-hover, rgba(127, 127, 127, 0.10)) !important;
+      }
+      [${LEGACY_GPT55_MENU_ATTR}="true"] .bravefox-legacy-gpt55-caption {
+        color: var(--text-tertiary, #888) !important;
+        font-size: 11px !important;
+        line-height: 15px !important;
+      }
+    `;
+    (document.head || document.documentElement).appendChild(style);
+  }
+
+  function restoreLegacyGpt55ModelMenu() {
+    if (!LEGACY_GPT55_MENU_ENABLED) return;
+    // Never touch unrelated settings, archived chats, or the Android upload menu.
+    if (!(/^(?:\/|\/c\/[^/]+\/?)$/.test(location.pathname))) return;
+
+    const menuSelector = [
+      '[role="menu"]', '[role="listbox"]',
+      '[data-radix-menu-content]', '[data-slot*="menu-content"]'
+    ].join(', ');
+    const itemSelector = '[role="menuitem"], [role="menuitemradio"], [role="option"], [role="radio"], button';
+
+    for (const menu of document.querySelectorAll(menuSelector)) {
+      if (!(menu instanceof Element) || !isElementActuallyVisible(menu)) continue;
+      if (menu.closest('[data-bravefox-owned-control="true"]')) continue;
+      const menuText = normalizeText(menu.textContent);
+      if (menuText.length > 850 || !menuText.includes('gpt-')) continue;
+
+      const nativeRows = Array.from(menu.querySelectorAll(itemSelector)).filter(row => {
+        if (!(row instanceof Element) || row.hasAttribute(LEGACY_GPT55_MENU_ATTR)) return false;
+        // Use the outer native menu item, never a nested button inside it.
+        if (row.parentElement?.closest(itemSelector)) return false;
+        if (!isElementActuallyVisible(row)) return false;
+        return Boolean(legacyGpt55MenuModelKind(row.textContent));
+      });
+      const nativeKinds = new Set(nativeRows.map(row => legacyGpt55MenuModelKind(row.textContent)));
+      // Require both *real* contemporary model choices, not a sidebar, attachment
+      // popup or an arbitrary menu whose text happens to mention GPT-5.5.
+      if (!nativeKinds.has('6') || !nativeKinds.has('5.6')) continue;
+      if (nativeKinds.has('5.5') || menu.querySelector(`[${LEGACY_GPT55_MENU_ATTR}="true"]`)) continue;
+
+      const previous = nativeRows.filter(row => legacyGpt55MenuModelKind(row.textContent) === '5.6').pop();
+      if (!previous?.parentElement) continue;
+      const tag = previous.tagName.toLowerCase();
+      if (tag !== 'button' && tag !== 'div') continue;
+
+      ensureLegacyGpt55MenuStyle();
+      const row = document.createElement(tag);
+      if (tag === 'button') row.type = 'button';
+      // Keep the native menu's typography/layout class without cloning any
+      // React bindings, selected-state attributes, or active-model checkmarks.
+      row.className = previous.className;
+      row.setAttribute('role', 'menuitem');
+      row.setAttribute('tabindex', '0');
+      row.setAttribute(LEGACY_GPT55_MENU_ATTR, 'true');
+      row.setAttribute('aria-label', 'GPT-5.5 Uce, experimental in-chat model request');
+      row.title = 'Try GPT-5.5 in this conversation. ChatGPT may refuse the retired model.';
+      const title = document.createElement('span');
+      title.textContent = 'GPT-5.5 Uce';
+      const caption = document.createElement('span');
+      caption.className = 'bravefox-legacy-gpt55-caption';
+      caption.textContent = 'Legacy · Same chat';
+      row.append(title, caption);
+
+      let switchingLegacyModel = false;
+      const requestLegacyModelInCurrentChat = event => {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        if (switchingLegacyModel) return;
+
+        // Keep the same conversation ID, tab, and any unrelated URL options.
+        // A full navigation lets ChatGPT's router see the model parameter; it
+        // does not fake its React model state or alter outgoing API requests.
+        const url = new URL(location.href);
+        url.searchParams.set('model', LEGACY_GPT55_MODEL_PARAM);
+        if (url.href === location.href) return;
+
+        // Navigating will reload ChatGPT. Require confirmation when an unsent
+        // draft exists, rather than silently discarding the user's text.
+        const draft = braveFoxReliabilityComposerValue(braveFoxReliabilityComposer());
+        if (draft && !window.confirm('Trying GPT-5.5 Uce will reload this chat. Copy or save your unsent message first. Continue?')) return;
+
+        switchingLegacyModel = true;
+        window.location.assign(url.href);
+      };
+      row.addEventListener('click', requestLegacyModelInCurrentChat);
+      row.addEventListener('keydown', event => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        requestLegacyModelInCurrentChat(event);
+      });
+      previous.parentElement.insertBefore(row, previous.nextSibling);
+    }
+  }
+
+  function scheduleLegacyGpt55ModelMenuRestore() {
+    if (!LEGACY_GPT55_MENU_ENABLED || legacyGpt55MenuRestoreTimer) return;
+    legacyGpt55MenuRestoreTimer = window.setTimeout(() => {
+      legacyGpt55MenuRestoreTimer = 0;
+      restoreLegacyGpt55ModelMenu();
+    }, 0);
+  }
+
+  function installLegacyGpt55ModelMenuPreserver() {
+    if (!LEGACY_GPT55_MENU_ENABLED) return;
+    const possibleModelTrigger = target => {
+      if (!(target instanceof Element)) return false;
+      const button = target.closest('button[aria-haspopup="menu"], button[aria-haspopup="listbox"]');
+      if (!button) return false;
+      if (button.matches('.__composer-pill, [data-testid*="model" i]')) return true;
+      if (button.closest('form')) {
+        return /^(?:gpt[-\s]?\d|high|medium|extra high|instant|korkea|keskitaso)$/i.test(
+          normalizeText(button.textContent)
+        );
+      }
+      return false;
+    };
+    document.addEventListener('click', event => {
+      if (possibleModelTrigger(event.target)) scheduleLegacyGpt55ModelMenuRestore();
+    }, true);
+    document.addEventListener('keydown', event => {
+      if ((event.key === 'Enter' || event.key === ' ') && possibleModelTrigger(event.target)) {
+        scheduleLegacyGpt55ModelMenuRestore();
+      }
+    }, true);
+  }
+
   function getChatGptComposerModelSelector() {
     const preferred = Array.from(document.querySelectorAll('button.__composer-pill[aria-haspopup="menu"]'))
       .find(isElementActuallyVisible);
@@ -3886,16 +4117,26 @@
     return switchedToGpt55;
   }
 
+  function hideCustomChatGptBannerWithoutRemovingReactNodes(banner) {
+    if (!(banner instanceof Element)) return;
+    banner.setAttribute(CHATGPT_BANNER_PERMANENTLY_HIDDEN_ATTR, 'true');
+    hideElement(banner);
+  }
+
   async function hideCustomChatGptBannerForModelAndClose(banner, closeButton, modelSlug) {
     dismissCustomChatGptBannerCloseMenu();
     const slug = normalizeChatGptModelSlug(modelSlug) || getCurrentChatGptBannerModelSlug(banner);
+    // Remove the visible notice and its empty wrappers immediately on tap;
+    // storage can finish asynchronously without leaving a lingering gap.
+    hideCustomChatGptBannerWithoutRemovingReactNodes(banner);
     if (slug) {
       await ensureHiddenChatGptBannerPrefsLoaded();
       hiddenChatGptBannerModelSlugs.add(slug);
       await saveHiddenChatGptBannerPrefs();
     }
+    // Android retains the hidden React subtree, avoiding mid-commit removal.
+    if (IS_FIREFOX_ANDROID) return;
     clickNativeChatGptBannerClose(closeButton);
-    hideElement(banner);
     banner.remove();
   }
 
@@ -3958,6 +4199,18 @@
   }
 
   function getCurrentChatGptBannerModelSlug(banner) {
+    // The notification itself is the source of truth. Do NOT use a message's
+    // selected model (or the current chat URL) to name a different model's
+    // retirement notice, which would persist the wrong preference on mobile.
+    const bannerText = normalizeText(banner?.textContent || '');
+    if (bannerText.includes('gpt-5.5') || bannerText.includes('gpt 5.5') ||
+        bannerText.includes('5.5 thinking')) {
+      return CHATGPT_BANNER_GPT55_RETIREMENT_MODEL_SLUG;
+    }
+
+    const storedSlug = normalizeChatGptModelSlug(banner?.getAttribute?.('data-bravefox-banner-model-slug'));
+    if (storedSlug) return storedSlug;
+
     const candidates = [];
 
     try {
@@ -3986,12 +4239,23 @@
   }
 
   function shouldHideCustomChatGptBannerForModel(banner) {
-    // Compatibility fail-open: Firefox Android has shown timing-sensitive banner mounts.
-    // Keep notices visible there rather than deleting them before first paint. Native
-    // close still works; persisted BraveFox auto-hide remains enabled elsewhere.
-    if (IS_FIREFOX_ANDROID) return false;
+    // Android uses the same saved preference as desktop; the actual hide path
+    // below remains Android-safe and does not remove React-owned banner nodes.
     const modelSlug = getCurrentChatGptBannerModelSlug(banner);
     return Boolean(modelSlug && hiddenChatGptBannerModelSlugs.has(modelSlug));
+  }
+
+  function hidePreviouslyDismissedChatGptBanners(scope = document) {
+    if (!hiddenChatGptBannerPrefsLoaded || !hiddenChatGptBannerModelSlugs.size) return false;
+    // Read-only banner matching first: never rewrite partially mounted Android
+    // text or click native React buttons from this pre-paint path.
+    let hidden = false;
+    for (const banner of collectCustomizableChatGptBanners(scope)) {
+      if (!shouldHideCustomChatGptBannerForModel(banner)) continue;
+      hideCustomChatGptBannerWithoutRemovingReactNodes(banner);
+      hidden = true;
+    }
+    return hidden;
   }
 
   function getExactReasoningControl(target = null, allowGlobalFallback = true) {
@@ -5340,6 +5604,13 @@
 
           if (mutation.type === 'characterData') {
             const parent = mutation.target?.parentElement;
+            // Android sometimes fills an initially empty notice in separate React
+            // commits. React text mutations must also be checked before paint.
+            if (IS_FIREFOX_ANDROID && parent instanceof Element &&
+                hiddenChatGptBannerModelSlugs.size &&
+                getMatchingChatGptBannerRule(parent.closest('aside, [role="alert"], [role="status"], [data-testid*="banner"], [data-testid*="notice"]')?.textContent || parent.textContent)) {
+              hidePreviouslyDismissedChatGptBanners(parent);
+            }
             if (parent instanceof Element && parent.closest(CHATGPT_CONVERSATION_LOAD_ERROR_SELECTOR)) {
               customizeConversationLoadError(parent);
             }
@@ -5441,6 +5712,9 @@
               node.querySelector?.('[role="dialog"], [role="menu"], [role="listbox"], [data-state="open"]')
             ) {
               window.setTimeout(() => enforceThinkingEffortVisualPopup(node, false), 0);
+              // An existing observer already watches portal-mounted native menus.
+              // Restrict our follow-up to those openings, not every chat mutation.
+              scheduleLegacyGpt55ModelMenuRestore();
             }
 
             const relevantDeleteAccountUi = mayContainDeleteAccountSettingsUi(node);
@@ -5481,10 +5755,14 @@
 
             if (relevantBanner) {
               if (IS_FIREFOX_ANDROID) {
-                window.setTimeout(() => {
-                  if (node.isConnected) replaceCustomizableChatGptBannerText(node);
-                  else replaceCustomizableChatGptBannerText(document);
-                }, 48);
+                // Saved-hidden banners cannot wait for the normal 48 ms mobile
+                // customization delay: that delay is visible as a one-frame flash.
+                if (!hidePreviouslyDismissedChatGptBanners(node)) {
+                  window.setTimeout(() => {
+                    if (node.isConnected) replaceCustomizableChatGptBannerText(node);
+                    else replaceCustomizableChatGptBannerText(document);
+                  }, 48);
+                }
               } else {
                 replaceCustomizableChatGptBannerText(node);
               }
@@ -8419,7 +8697,7 @@
       const textLength = String(node.textContent || '').trim().length;
       if (textLength > 5000) break;
 
-      if (node.matches(structuralSelector) || node.querySelector('button')) best = node;
+      if (!best && (node.matches(structuralSelector) || node.querySelector('button'))) best = node;
     }
 
     return best;
@@ -8490,9 +8768,11 @@
       const nativeCloseButton = findChatGptBannerCloseButton(banner);
 
       if (hiddenChatGptBannerPrefsLoaded && shouldHideCustomChatGptBannerForModel(banner)) {
-        if (nativeCloseButton) clickNativeChatGptBannerClose(nativeCloseButton);
-        hideElement(banner);
-        banner.remove();
+        hideCustomChatGptBannerWithoutRemovingReactNodes(banner);
+        if (!IS_FIREFOX_ANDROID) {
+          if (nativeCloseButton) clickNativeChatGptBannerClose(nativeCloseButton);
+          banner.remove();
+        }
         continue;
       }
 
