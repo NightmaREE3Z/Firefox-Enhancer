@@ -263,16 +263,33 @@
   let sidebarRecentsStageReleased = false;
   let sidebarStageFailOpenTimer = 0;
 
-  // Preserve a *UI entry* for the retired GPT-5.5 model in the native composer
-  // model menu. The experiment only opens the old ChatGPT model URL in a new tab;
-  // the server is still authoritative and may silently reject the requested model.
-  // Disable here to remove this compatibility experiment without touching the
-  // normal ChatGPT picker or any of the Firefox Android attachment-menu fixes.
+  // Label the real ChatGPT GPT-5.5 model item "GPT-5.5 Uce" through CSS.
+  // Keep its native event listeners: no synthetic clicks, URLs or reloads.
+  // Availability and the reasoning setting remain controlled by ChatGPT.
   const LEGACY_GPT55_MENU_ENABLED = true;
-  const LEGACY_GPT55_MODEL_PARAM = 'gpt-5-5-thinking';
-  const LEGACY_GPT55_MENU_ATTR = 'data-bravefox-legacy-gpt55-menu-entry';
+  // These are presentation-only markers applied to the *actual* native item.
+  // No BraveFox-owned interactive element is inserted into React's model menu.
+  const LEGACY_GPT55_MENU_ATTR = 'data-bravefox-gpt55-native-alias';
+  const LEGACY_GPT55_TITLE_ATTR = 'data-bravefox-gpt55-native-title';
+  const LEGACY_GPT55_CAPTION_ATTR = 'data-bravefox-gpt55-native-caption';
   const LEGACY_GPT55_STYLE_ID = 'bravefox-legacy-gpt55-menu-style';
-  let legacyGpt55MenuRestoreTimer = 0;
+  const LEGACY_GPT55_MODEL_MENU_SELECTOR = [
+    '[role="menu"]', '[role="listbox"]',
+    '[data-radix-menu-content]', '[data-slot*="menu-content"]',
+    '[data-slot*="popover-content"]'
+  ].join(', ');
+  let legacyGpt55MenuRestoreQueued = false;
+  let legacyGpt55MenuOpeningRetries = [];
+
+  // Known identifiers observed in the Chrome saved-page snapshot. These are
+  // metadata *labels*, not a list of selectable/authorized models. In particular,
+  // Luna/Sol/Terra and the GPT-5.5 Mini identifiers appeared in internal feature
+  // configuration, not as visible composer options.
+  const CHATGPT_ARCHIVE_KNOWN_EXACT_MODEL_SLUGS = new Set([
+    'gpt-5-5-thinking', 'gpt-5-5-pro', 'gpt-5-5-mini', 'gpt-5-5-instant',
+    'gpt-5.5', 'gpt-5-6-pro', 'gpt-5.6-luna', 'gpt-5.6-sol',
+    'gpt-5.6-terra', 'gpt-6-luna', 'gpt-6.1-sol', 'gpt-6-astra'
+  ]);
 
   const MODELS_TO_REMOVE = new Set([
     'gpt-5 instant',
@@ -1542,7 +1559,7 @@
   installNavigationGuards();
   installInteractionGuards();
   // Re-use the existing low-overhead popup observer instead of polling ChatGPT.
-  // A native GPT-5.5 entry is never replaced while ChatGPT still provides one.
+  // Native GPT-5.5 rows are left intact, including when both entries coexist.
   installLegacyGpt55ModelMenuPreserver();
   installThinkingEffortEdgeLock();
   installEscapeHatchObserver();
@@ -3534,9 +3551,6 @@
       // Preserve the original trusted click from ChatGPT's portal-mounted
       // attachment menu through to Firefox/Android's native picker.
       if (isFirefoxAndroidNativeAttachmentInteraction(event.target)) return;
-      // A compatibility link is not a native model change. Do not record it as
-      // GPT-5.5 selection in conversation metadata before server confirmation.
-      if (event.target instanceof Element && event.target.closest(`[${LEGACY_GPT55_MENU_ATTR}]`)) return;
 
       if (event.isTrusted) {
         captureConversationModelChoiceFromEvent(event);
@@ -3865,13 +3879,11 @@
     return null;
   }
 
-  // === GPT-5.5 menu preservation experiment ===================================
-  // Re-create one menu row only after ChatGPT stops offering it natively. The
-  // legacy URL parameter is an experimental same-tab request, not a guarantee
-  // that ChatGPT will accept a model unavailable to this account.
+  // === GPT-5.5 native picker alias =============================================
+  // Use the native element itself; do not fake or intercept its click behavior.
   function legacyGpt55MenuModelKind(label) {
     const text = normalizeText(label);
-    if (/^gpt[-\s]?5[.\s-]?5(?:\b|$)/.test(text)) return '5.5';
+    if (/^gpt[-\s]?5[.\s-]?5(?![.\d])/.test(text)) return '5.5';
     if (/^gpt[-\s]?5[.\s-]?6(?:\b|$)/.test(text)) return '5.6';
     if (/^gpt[-\s]?6(?:\b|$)/.test(text)) return '6';
     return '';
@@ -3881,33 +3893,20 @@
     if (document.getElementById(LEGACY_GPT55_STYLE_ID)) return;
     const style = document.createElement('style');
     style.id = LEGACY_GPT55_STYLE_ID;
+    // Append the name to the real native text using CSS generated content.
+    // The native React element and its event handlers remain entirely intact.
     style.textContent = `
-      [${LEGACY_GPT55_MENU_ATTR}="true"] {
-        box-sizing: border-box !important;
-        display: flex !important;
-        flex-direction: column !important;
-        align-items: flex-start !important;
-        justify-content: center !important;
-        width: 100% !important;
-        min-height: 49px !important;
-        gap: 2px !important;
-        padding: 8px 14px !important;
-        background: transparent !important;
-        color: inherit !important;
-        border: 0 !important;
-        border-radius: 8px !important;
-        font: inherit !important;
-        text-align: left !important;
-        cursor: pointer !important;
+      [${LEGACY_GPT55_TITLE_ATTR}="true"]::after {
+        content: " Uce";
+        display: inline;
+        font: inherit;
+        letter-spacing: inherit;
+        color: inherit;
+        white-space: pre;
+        pointer-events: none;
       }
-      [${LEGACY_GPT55_MENU_ATTR}="true"]:hover,
-      [${LEGACY_GPT55_MENU_ATTR}="true"]:focus-visible {
-        background: var(--surface-hover, rgba(127, 127, 127, 0.10)) !important;
-      }
-      [${LEGACY_GPT55_MENU_ATTR}="true"] .bravefox-legacy-gpt55-caption {
-        color: var(--text-tertiary, #888) !important;
-        font-size: 11px !important;
-        line-height: 15px !important;
+      [${LEGACY_GPT55_CAPTION_ATTR}="true"] {
+        display: none !important;
       }
     `;
     (document.head || document.documentElement).appendChild(style);
@@ -3915,94 +3914,81 @@
 
   function restoreLegacyGpt55ModelMenu() {
     if (!LEGACY_GPT55_MENU_ENABLED) return;
-    // Never touch unrelated settings, archived chats, or the Android upload menu.
     if (!(/^(?:\/|\/c\/[^/]+\/?)$/.test(location.pathname))) return;
 
-    const menuSelector = [
-      '[role="menu"]', '[role="listbox"]',
-      '[data-radix-menu-content]', '[data-slot*="menu-content"]'
-    ].join(', ');
     const itemSelector = '[role="menuitem"], [role="menuitemradio"], [role="option"], [role="radio"], button';
-
-    for (const menu of document.querySelectorAll(menuSelector)) {
+    for (const menu of document.querySelectorAll(LEGACY_GPT55_MODEL_MENU_SELECTOR)) {
       if (!(menu instanceof Element) || !isElementActuallyVisible(menu)) continue;
       if (menu.closest('[data-bravefox-owned-control="true"]')) continue;
+      // React sometimes reuses the *same* DOM item for a different model.
+      // Clear stale presentation markers before determining the current row.
+      // This changes attributes only, never ChatGPT's React-owned nodes.
+      for (const decorated of menu.querySelectorAll(
+        `[${LEGACY_GPT55_MENU_ATTR}], [${LEGACY_GPT55_TITLE_ATTR}], [${LEGACY_GPT55_CAPTION_ATTR}]`
+      )) {
+        decorated.removeAttribute(LEGACY_GPT55_MENU_ATTR);
+        decorated.removeAttribute(LEGACY_GPT55_TITLE_ATTR);
+        decorated.removeAttribute(LEGACY_GPT55_CAPTION_ATTR);
+      }
       const menuText = normalizeText(menu.textContent);
-      if (menuText.length > 850 || !menuText.includes('gpt-')) continue;
+      if (menuText.length > 2500 || !/gpt[-\s]?[56]/.test(menuText)) continue;
 
       const nativeRows = Array.from(menu.querySelectorAll(itemSelector)).filter(row => {
-        if (!(row instanceof Element) || row.hasAttribute(LEGACY_GPT55_MENU_ATTR)) return false;
-        // Use the outer native menu item, never a nested button inside it.
-        if (row.parentElement?.closest(itemSelector)) return false;
+        if (!(row instanceof Element) || row.parentElement?.closest(itemSelector)) return false;
         if (!isElementActuallyVisible(row)) return false;
         return Boolean(legacyGpt55MenuModelKind(row.textContent));
       });
-      const nativeKinds = new Set(nativeRows.map(row => legacyGpt55MenuModelKind(row.textContent)));
-      // Require both *real* contemporary model choices, not a sidebar, attachment
-      // popup or an arbitrary menu whose text happens to mention GPT-5.5.
-      if (!nativeKinds.has('6') || !nativeKinds.has('5.6')) continue;
-      if (nativeKinds.has('5.5') || menu.querySelector(`[${LEGACY_GPT55_MENU_ATTR}="true"]`)) continue;
+      const nativeOption = nativeRows.find(row => legacyGpt55MenuModelKind(row.textContent) === '5.5');
+      // If OpenAI withdraws the native item, BraveFox must not invent a
+      // selectable replacement or risk damaging the other model controls.
+      if (!(nativeOption instanceof Element)) continue;
 
-      const previous = nativeRows.filter(row => legacyGpt55MenuModelKind(row.textContent) === '5.6').pop();
-      if (!previous?.parentElement) continue;
-      const tag = previous.tagName.toLowerCase();
-      if (tag !== 'button' && tag !== 'div') continue;
-
+      let title = null;
+      const walker = document.createTreeWalker(nativeOption, NodeFilter.SHOW_TEXT);
+      while (walker.nextNode()) {
+        if (legacyGpt55MenuModelKind(walker.currentNode.textContent) !== '5.5') continue;
+        title = walker.currentNode.parentElement;
+        break;
+      }
+      if (!(title instanceof Element)) continue;
       ensureLegacyGpt55MenuStyle();
-      const row = document.createElement(tag);
-      if (tag === 'button') row.type = 'button';
-      // Keep the native menu's typography/layout class without cloning any
-      // React bindings, selected-state attributes, or active-model checkmarks.
-      row.className = previous.className;
-      row.setAttribute('role', 'menuitem');
-      row.setAttribute('tabindex', '0');
-      row.setAttribute(LEGACY_GPT55_MENU_ATTR, 'true');
-      row.setAttribute('aria-label', 'GPT-5.5 Uce, experimental in-chat model request');
-      row.title = 'Try GPT-5.5 in this conversation. ChatGPT may refuse the retired model.';
-      const title = document.createElement('span');
-      title.textContent = 'GPT-5.5 Uce';
-      const caption = document.createElement('span');
-      caption.className = 'bravefox-legacy-gpt55-caption';
-      caption.textContent = 'Legacy · Same chat';
-      row.append(title, caption);
+      nativeOption.setAttribute(LEGACY_GPT55_MENU_ATTR, 'true');
+      title.setAttribute(LEGACY_GPT55_TITLE_ATTR, 'true');
 
-      let switchingLegacyModel = false;
-      const requestLegacyModelInCurrentChat = event => {
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-        if (switchingLegacyModel) return;
-
-        // Keep the same conversation ID, tab, and any unrelated URL options.
-        // A full navigation lets ChatGPT's router see the model parameter; it
-        // does not fake its React model state or alter outgoing API requests.
-        const url = new URL(location.href);
-        url.searchParams.set('model', LEGACY_GPT55_MODEL_PARAM);
-        if (url.href === location.href) return;
-
-        // Navigating will reload ChatGPT. Require confirmation when an unsent
-        // draft exists, rather than silently discarding the user's text.
-        const draft = braveFoxReliabilityComposerValue(braveFoxReliabilityComposer());
-        if (draft && !window.confirm('Trying GPT-5.5 Uce will reload this chat. Copy or save your unsent message first. Continue?')) return;
-
-        switchingLegacyModel = true;
-        window.location.assign(url.href);
-      };
-      row.addEventListener('click', requestLegacyModelInCurrentChat);
-      row.addEventListener('keydown', event => {
-        if (event.key !== 'Enter' && event.key !== ' ') return;
-        requestLegacyModelInCurrentChat(event);
-      });
-      previous.parentElement.insertBefore(row, previous.nextSibling);
+      // The native retirement notice makes this row taller than GPT-6/5.6.
+      // Hide only its *caption*, never a parent containing the clickable item.
+      const captionWalker = document.createTreeWalker(nativeOption, NodeFilter.SHOW_TEXT);
+      while (captionWalker.nextNode()) {
+        const nodeText = normalizeText(captionWalker.currentNode.textContent);
+        if (!/(?:leaving on|retires? on|poistuu käytöstä|poistuu kaytosta|retir(?:ed|ing)|lopetetaan)/.test(nodeText)) continue;
+        const caption = captionWalker.currentNode.parentElement;
+        if (caption instanceof Element && caption !== nativeOption &&
+            caption !== title && !caption.contains(title)) {
+          caption.setAttribute(LEGACY_GPT55_CAPTION_ATTR, 'true');
+        }
+      }
     }
   }
 
   function scheduleLegacyGpt55ModelMenuRestore() {
-    if (!LEGACY_GPT55_MENU_ENABLED || legacyGpt55MenuRestoreTimer) return;
-    legacyGpt55MenuRestoreTimer = window.setTimeout(() => {
-      legacyGpt55MenuRestoreTimer = 0;
+    if (!LEGACY_GPT55_MENU_ENABLED || legacyGpt55MenuRestoreQueued) return;
+    // A microtask runs after React's current DOM commit but before the next paint.
+    // The existing popup observer repairs the alias after native menu redraws.
+    legacyGpt55MenuRestoreQueued = true;
+    queueMicrotask(() => {
+      legacyGpt55MenuRestoreQueued = false;
       restoreLegacyGpt55ModelMenu();
-    }, 0);
+    });
+  }
+
+  function scheduleLegacyGpt55ModelMenuOpeningPasses() {
+    scheduleLegacyGpt55ModelMenuRestore();
+    for (const timer of legacyGpt55MenuOpeningRetries) clearTimeout(timer);
+    // Catch delayed mounts, opening animations, and async model-list hydration.
+    // These are bounded one-shot checks, never background polling.
+    legacyGpt55MenuOpeningRetries = [55, 160, 400].map(delay =>
+      window.setTimeout(scheduleLegacyGpt55ModelMenuRestore, delay)
+    );
   }
 
   function installLegacyGpt55ModelMenuPreserver() {
@@ -4020,11 +4006,11 @@
       return false;
     };
     document.addEventListener('click', event => {
-      if (possibleModelTrigger(event.target)) scheduleLegacyGpt55ModelMenuRestore();
+      if (possibleModelTrigger(event.target)) scheduleLegacyGpt55ModelMenuOpeningPasses();
     }, true);
     document.addEventListener('keydown', event => {
       if ((event.key === 'Enter' || event.key === ' ') && possibleModelTrigger(event.target)) {
-        scheduleLegacyGpt55ModelMenuRestore();
+        scheduleLegacyGpt55ModelMenuOpeningPasses();
       }
     }, true);
   }
@@ -5602,8 +5588,23 @@
             continue;
           }
 
+          // The native picker can hydrate or replace individual rows after it opens.
+          // Observe those changes using the existing popup observer, including when
+          // React reuses or re-mounts its own model rows.
+          if (
+            LEGACY_GPT55_MENU_ENABLED && mutation.type === 'childList' &&
+            mutation.target instanceof Element &&
+            mutation.target.closest(LEGACY_GPT55_MODEL_MENU_SELECTOR)
+          ) {
+            scheduleLegacyGpt55ModelMenuRestore();
+          }
+
           if (mutation.type === 'characterData') {
             const parent = mutation.target?.parentElement;
+            if (LEGACY_GPT55_MENU_ENABLED && parent instanceof Element &&
+                parent.closest(LEGACY_GPT55_MODEL_MENU_SELECTOR)) {
+              scheduleLegacyGpt55ModelMenuRestore();
+            }
             // Android sometimes fills an initially empty notice in separate React
             // commits. React text mutations must also be checked before paint.
             if (IS_FIREFOX_ANDROID && parent instanceof Element &&
@@ -9473,14 +9474,22 @@
     const known = new Map([
       ['gpt-5-5-thinking', '5.5 Thinking'],
       ['gpt-5-5-pro', '5.5 Pro'],
+      ['gpt-5-5-mini', '5.5 Mini'],
+      ['gpt-5-5-instant', '5.5 Instant'],
       ['gpt-5-5', '5.5'],
+      ['gpt-5.5', '5.5'],
       ['gpt-5-6-thinking', '5.6 Thinking'],
       ['gpt-5-6-pro', '5.6 Pro'],
       ['gpt-5-6-luna', '5.6 Luna'],
       ['gpt-5-6-sol', '5.6 Sol'],
+      ['gpt-5.6-luna', '5.6 Luna'],
+      ['gpt-5.6-sol', '5.6 Sol'],
+      ['gpt-5.6-terra', '5.6 Terra'],
       ['gpt-5-6', '5.6'],
       ['gpt-6-astra-wm', '6 Astra Work'],
       ['gpt-6-astra', '6 Astra'],
+      ['gpt-6-luna', '6 Luna'],
+      ['gpt-6.1-sol', '6.1 Sol'],
       ['gpt-6-pro', '6 Pro'],
       ['gpt-6', '6']
     ]);
@@ -9570,6 +9579,7 @@
         selector.getAttribute('aria-valuetext') || '',
         selector.getAttribute('aria-label') || '',
         selector.getAttribute('title') || '',
+        selector.getAttribute('data-selected-reasoning-effort') || '',
         selector.getAttribute('data-thinking-effort') || '',
         selector.getAttribute('data-reasoning-effort') || '',
         selector.textContent || ''
@@ -9608,6 +9618,12 @@
   function inferConversationModelSlugFromText(value, effort = '') {
     const text = normalizeText(value).replace(/_/g, ' ');
     if (!text) return '';
+
+    // Preserve exact identifiers from the Chrome snapshot before inferring a
+    // family from a human-readable composer label. Otherwise gpt-6-luna would
+    // collapse to gpt-6, and gpt-5-5-mini to gpt-5-5-thinking.
+    const exactSlug = normalizeChatGptModelSlug(value);
+    if (CHATGPT_ARCHIVE_KNOWN_EXACT_MODEL_SLUGS.has(exactSlug)) return exactSlug;
 
     const normalizedEffort = normalizeConversationReasoningEffort(effort);
     const thinkingSelected = ['medium', 'high', 'extra-high'].includes(normalizedEffort);
