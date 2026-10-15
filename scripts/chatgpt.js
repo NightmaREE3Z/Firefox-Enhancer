@@ -594,6 +594,35 @@
   const CHAT_ARCHIVE_DOWNLOAD_DOCK_ID = 'bravefox-chat-archive-download-dock';
   const CHAT_ARCHIVE_DOWNLOAD_DOCK_STYLE_ID = 'bravefox-chat-archive-download-dock-style';
 
+  // === Native ChatGPT announcement filtering ===================================
+  // Suppress the ChatGPT promotional/banner component by default. Keep real
+  // deprecation/retirement announcements, including BraveFox's customized ones.
+  // No native dismiss clicks, network interception, or saved-visibility state:
+  // new promotional banners are suppressed just as reliably as existing ones.
+  const CHATGPT_PROMOTIONAL_BANNER_SUPPRESSION_ENABLED = true;
+  const CHATGPT_PROMOTIONAL_BANNER_ROOT_CLASS = 'bravefox-hide-promotional-chatgpt-banners';
+  const CHATGPT_NATIVE_BANNER_ALLOWED_ATTR = 'data-bravefox-native-banner-deprecation';
+  // Desktop uses hashed "surface-/dismiss-" markup, while Firefox Android may
+  // still render the old "tracking-announcement-body" or data-testid banners.
+  // Match announcement-specific wrappers only, never arbitrary closeable alerts,
+  // asides, chat messages, attachment panels or account warnings.
+  const CHATGPT_NATIVE_BANNER_SELECTOR = [
+    'aside:has(> div[class*="dismiss-"] > button[aria-label*="banner" i])',
+    'aside.relative.isolate.flex.w-full.overflow-hidden.bg-surface:has(.tracking-announcement-body)',
+    ':is(aside, section, div)[data-testid*="banner" i]:has(button[aria-label*="dismiss" i], button[aria-label*="close" i], button[aria-label*="sulje" i], button[data-testid="close-button"])',
+    ':is(aside, section, div)[data-testid*="announcement" i]:has(button[aria-label*="dismiss" i], button[aria-label*="close" i], button[aria-label*="sulje" i], button[data-testid="close-button"])',
+    ':is(aside, section, div)[data-testid*="upsell" i]:has(button[aria-label*="dismiss" i], button[aria-label*="close" i], button[aria-label*="sulje" i], button[data-testid="close-button"])'
+  ].join(', ');
+  const CHATGPT_DEPRECATION_NOTICE_TERMS = [
+    'retir', 'deprecat', 'discontinu', 'sunset', 'leaving on',
+    'no longer available', 'will no longer be available',
+    'poistuu käytöstä', 'poistuu kaytosta',
+    'poistetaan käytöstä', 'poistetaan kaytosta',
+    'käytöstä poist', 'kaytosta poist',
+    'ei enää saatavilla', 'ei enaa saatavilla',
+    'lopetetaan', 'lakkautetaan', 'vanhentuu'
+  ];
+
   const CHATGPT_BANNER_HIDE_KEY = 'bravefoxChatGptHiddenModelNotices_v1';
   const CHATGPT_BANNER_PREFS_LOADING_CLASS = 'bravefox-chatgpt-banner-prefs-loading';
   const CHATGPT_BANNER_PERMANENTLY_HIDDEN_ATTR = 'data-bravefox-banner-permanently-hidden';
@@ -1545,6 +1574,12 @@
   // real Library button mounts; the Recent gate opens when the real Projects section mounts.
   document.documentElement.classList.add(SIDEBAR_TOP_WAIT_CLASS, SIDEBAR_RECENTS_WAIT_CLASS);
 
+  // Arm native promotional-banner CSS before ChatGPT's first paint. Deprecation
+  // notices are whitelisted by the existing pre-paint DOM observer below.
+  if (CHATGPT_PROMOTIONAL_BANNER_SUPPRESSION_ENABLED) {
+    document.documentElement.classList.add(CHATGPT_PROMOTIONAL_BANNER_ROOT_CLASS);
+  }
+
   // Until extension-local saved notices are loaded, keep Android announcement banners
   // from painting once and then vanishing. Only closeable announcement surfaces are
   // guarded; chat turns, the sidebar and attachment controls are left alone.
@@ -1640,6 +1675,23 @@
       }
 
       .${HIDDEN_CLASS} {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+
+      /* ChatGPT's own top-level announcement/banner component. Hide promotional
+       * notices before paint and collapse their layout wrapper. A recognized
+       * deprecation notice gets a marker from the existing pre-paint observer.
+       * The selectors are structural rather than generated hashed class names.
+       * Do not suppress unrelated errors, account warnings or chat messages. */
+      html.${CHATGPT_PROMOTIONAL_BANNER_ROOT_CLASS}
+      :is(${CHATGPT_NATIVE_BANNER_SELECTOR}):not([${CHATGPT_NATIVE_BANNER_ALLOWED_ATTR}="true"]),
+      html.${CHATGPT_PROMOTIONAL_BANNER_ROOT_CLASS}
+      div[class*="container-"]:has(> aside > div[class*="dismiss-"] > button[aria-label*="banner" i]):not(:has(> aside[${CHATGPT_NATIVE_BANNER_ALLOWED_ATTR}="true"])),
+      html.${CHATGPT_PROMOTIONAL_BANNER_ROOT_CLASS}
+      div.flex.w-full.flex-col:has(> aside.relative.isolate.flex.w-full.overflow-hidden.bg-surface:only-child):not(:has(> aside[${CHATGPT_NATIVE_BANNER_ALLOWED_ATTR}="true"])) {
         display: none !important;
         visibility: hidden !important;
         opacity: 0 !important;
@@ -5601,6 +5653,12 @@
 
           if (mutation.type === 'characterData') {
             const parent = mutation.target?.parentElement;
+            // React sometimes fills an announcement title/body after mounting
+            // the shell. This also covers old Firefox Android banner wrappers.
+            if (CHATGPT_PROMOTIONAL_BANNER_SUPPRESSION_ENABLED && parent instanceof Element &&
+                parent.closest('aside, [data-testid*="banner" i], [data-testid*="announcement" i], [data-testid*="upsell" i]')) {
+              reconcileNativeChatGptAnnouncementFilter(parent);
+            }
             if (LEGACY_GPT55_MENU_ENABLED && parent instanceof Element &&
                 parent.closest(LEGACY_GPT55_MODEL_MENU_SELECTOR)) {
               scheduleLegacyGpt55ModelMenuRestore();
@@ -5624,6 +5682,14 @@
             continue;
           }
 
+          // React can reuse a legacy announcement shell after removing its
+          // previous contents; clear a stale deprecation allow-marker immediately.
+          if (CHATGPT_PROMOTIONAL_BANNER_SUPPRESSION_ENABLED && mutation.removedNodes.length &&
+              mutation.target instanceof Element &&
+              mutation.target.closest('aside, [data-testid*="banner" i], [data-testid*="announcement" i], [data-testid*="upsell" i]')) {
+            reconcileNativeChatGptAnnouncementFilter(mutation.target);
+          }
+
           for (const addedNode of mutation.addedNodes) {
             const node = addedNode instanceof Element ? addedNode : addedNode.parentElement;
             if (!(node instanceof Element)) continue;
@@ -5634,6 +5700,17 @@
               isFirefoxAndroidAttachmentMenuRoot(node) ||
               isFirefoxAndroidNativeAttachmentMenuControl(node)
             )) continue;
+
+            // This existing observer runs before paint. It is the only live
+            // policy hook required; do not add a page-wide timer or observer.
+            // The old Android announcement layout has no "banner" aria-label.
+            if (
+              CHATGPT_PROMOTIONAL_BANNER_SUPPRESSION_ENABLED && (
+                node.closest('aside, [data-testid*="banner" i], [data-testid*="announcement" i], [data-testid*="upsell" i]') ||
+                node.matches('aside, [data-testid*="banner" i], [data-testid*="announcement" i], [data-testid*="upsell" i]') ||
+                node.querySelector('button[aria-label*="banner" i], .tracking-announcement-body, [data-testid*="banner" i], [data-testid*="announcement" i], [data-testid*="upsell" i]')
+              )
+            ) reconcileNativeChatGptAnnouncementFilter(node);
 
             if (
               node.matches(CHATGPT_CONVERSATION_LOAD_ERROR_SELECTOR) ||
@@ -8758,6 +8835,48 @@
       return collectCustomizableChatGptBanners(scope).length > 0;
     } catch {
       return false;
+    }
+  }
+
+  function isNativeChatGptDeprecationNotice(banner) {
+    if (!(banner instanceof Element)) return false;
+    const text = normalizeText(banner.textContent);
+    if (!text) return false;
+
+    // Also recognize the existing custom retirement notice after BraveFox has
+    // replaced its native text. React can re-render that customized text later.
+    const customizedRetirement = CHATGPT_BANNER_TEXT_REPLACEMENTS.some(rule =>
+      rule?.enabled && String(rule.replacement || '').trim() &&
+      text.includes(normalizeText(rule.replacement))
+    );
+    return customizedRetirement ||
+      Boolean(getMatchingChatGptBannerRule(text)) ||
+      includesAny(text, CHATGPT_DEPRECATION_NOTICE_TERMS);
+  }
+
+  function reconcileNativeChatGptAnnouncementFilter(scope = document) {
+    if (!CHATGPT_PROMOTIONAL_BANNER_SUPPRESSION_ENABLED || !scope) return;
+
+    const candidates = new Set();
+    if (scope instanceof Element) {
+      if (scope.matches(CHATGPT_NATIVE_BANNER_SELECTOR)) candidates.add(scope);
+      const parentBanner = scope.closest(CHATGPT_NATIVE_BANNER_SELECTOR);
+      if (parentBanner) candidates.add(parentBanner);
+    }
+    if (typeof scope.querySelectorAll === 'function') {
+      for (const banner of scope.querySelectorAll(CHATGPT_NATIVE_BANNER_SELECTOR)) {
+        candidates.add(banner);
+      }
+    }
+
+    for (const banner of candidates) {
+      // Do not detach React nodes or synthesize dismiss clicks: the CSS owns
+      // visibility, while this flag only whitelists actual deprecations.
+      if (isNativeChatGptDeprecationNotice(banner)) {
+        banner.setAttribute(CHATGPT_NATIVE_BANNER_ALLOWED_ATTR, 'true');
+      } else {
+        banner.removeAttribute(CHATGPT_NATIVE_BANNER_ALLOWED_ATTR);
+      }
     }
   }
 
@@ -15170,6 +15289,7 @@
     customizeConversationLoadError(scope);
     customizeHistoryLoadError(scope);
     replaceCustomizableHomeHeadline(scope);
+    reconcileNativeChatGptAnnouncementFilter(scope);
     replaceCustomizableChatGptBannerText(scope);
     replaceFixedAssistantNoticeText(scope);
     polishSidebarNavigation();
