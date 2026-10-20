@@ -1,18 +1,27 @@
 // ==UserScript==
 // @name         Content hiding and filtering
-// @version      2026-10-07
+// @version      2026-10-20
 // @description  Filter out stuff on the internet (Targeted Enforcer)
 // @match        *://xvideos.com/*
 // @match        *://*.xvideos.com/*
 // @match        *://redtube.com/*
 // @match        *://*.redtube.com/*
+// @match        *://redgifs.com/*
+// @match        *://*.redgifs.com/*
 // @match        *://redtube.net/*
 // @match        *://*.redtube.net/*
 // @match        *://redtube.com.br/*
 // @match        *://*.redtube.com.br/*
+// @match        *://pornhub.com/*
+// @match        *://*.pornhub.com/*
+// @match        *://youporn.com/*
+// @match        *://*.youporn.com/*
+// @match        *://thumbzilla.com/*
+// @match        *://*.thumbzilla.com/*
 // @match        *://tenor.com/*
 // @match        *://*.tenor.com/*
 // @grant        none
+// @run-at       document-start
 // ==/UserScript==
 
 (function () {
@@ -20,10 +29,12 @@
 
 
     // === SITE ROUTING ===
-    // filtering.js has three deliberately isolated jobs:
+    // filtering.js keeps site handlers deliberately isolated:
     //   1) full XVideos filtering;
     //   2) sitewide no-glimpse RedTube video, category and directory-card filtering; and
-    //   3) a tiny Tenor search-submit guard.
+    //   3) a tiny Tenor search-submit guard; and
+    //   4) targeted, no-glimpse RedGifs card/tag/profile filtering; and
+    //   5) per-site Pornhub, YouPorn and Thumbzilla card/menu filtering.
     // It must remain completely dormant everywhere else, even when an extension manifest from an
     // older build still injects the file broadly.
     const BRAVEFOX_FILTERING_HOST = String(window.location.hostname || '')
@@ -33,6 +44,14 @@
         BRAVEFOX_FILTERING_HOST.endsWith('.xvideos.com');
     const BRAVEFOX_IS_TENOR = BRAVEFOX_FILTERING_HOST === 'tenor.com' ||
         BRAVEFOX_FILTERING_HOST.endsWith('.tenor.com');
+    const BRAVEFOX_IS_REDGIFS = BRAVEFOX_FILTERING_HOST === 'redgifs.com' ||
+        BRAVEFOX_FILTERING_HOST.endsWith('.redgifs.com');
+    const BRAVEFOX_IS_PORNHUB = BRAVEFOX_FILTERING_HOST === 'pornhub.com' ||
+        BRAVEFOX_FILTERING_HOST.endsWith('.pornhub.com');
+    const BRAVEFOX_IS_YOUPORN = BRAVEFOX_FILTERING_HOST === 'youporn.com' ||
+        BRAVEFOX_FILTERING_HOST.endsWith('.youporn.com');
+    const BRAVEFOX_IS_THUMBZILLA = BRAVEFOX_FILTERING_HOST === 'thumbzilla.com' ||
+        BRAVEFOX_FILTERING_HOST.endsWith('.thumbzilla.com');
     const BRAVEFOX_IS_REDTUBE =
         BRAVEFOX_FILTERING_HOST === 'redtube.com' ||
         BRAVEFOX_FILTERING_HOST.endsWith('.redtube.com') ||
@@ -41,7 +60,9 @@
         BRAVEFOX_FILTERING_HOST === 'redtube.com.br' ||
         BRAVEFOX_FILTERING_HOST.endsWith('.redtube.com.br');
 
-    if (!BRAVEFOX_IS_XVIDEOS && !BRAVEFOX_IS_TENOR && !BRAVEFOX_IS_REDTUBE) return;
+    if (!BRAVEFOX_IS_XVIDEOS && !BRAVEFOX_IS_TENOR && !BRAVEFOX_IS_REDTUBE &&
+        !BRAVEFOX_IS_REDGIFS && !BRAVEFOX_IS_PORNHUB && !BRAVEFOX_IS_YOUPORN &&
+        !BRAVEFOX_IS_THUMBZILLA) return;
 
     // === FOCUS MASTER REMOTE TERMS ===
     // Keep this remote layer semantically aligned with Focus Master's blockedTerms.csv handling:
@@ -1557,6 +1578,1118 @@
         }, true);
 
         console.log('BraveFox RedTube filtering enabled.');
+    }
+
+    // === REDGIFS FILTERING ===
+    // RedGifs is a React SPA. Keep this isolated from the three existing site handlers.
+    // Metadata/card candidates remain invisible until both blocklist sources have had an
+    // opportunity to load and the individual candidate has been checked.
+    function installBraveFoxRedGifsFilter() {
+        if (window.__braveFoxRedGifsFilteringInstalled) return;
+        window.__braveFoxRedGifsFilteringInstalled = true;
+
+        const REDGIFS_STATE_ATTR = 'data-bravefox-redgifs-filter-state';
+        const REDGIFS_UI_STATE_ATTR = 'data-bravefox-redgifs-ui-state';
+        const REDGIFS_REVISION = 'redgifs-sitewide-v2';
+        const REDGIFS_CARD_SELECTOR = [
+            'div.tileItem',
+            'div.searchCard',
+            'div.GifPreview-MetaInfo',
+            'p.description',
+            'button.tagButton'
+        ].join(', ');
+        const REDGIFS_UI_SELECTOR = 'button.aTab, button[data-rg-tab="true"]';
+        const REDGIFS_BURGER_ITEM_SELECTOR = 'li.burgerMenuItem';
+        const REDGIFS_BURGER_HIDDEN_ATTR = 'data-bravefox-redgifs-burger-hidden';
+        const REDGIFS_STATIC_REGEXES = createStaticBlockedRegexWords();
+        const REDGIFS_WRESTLER_EXCLUSIONS = new Set([
+            'melina', 'melina-perez', 'aj-lee', 'aj', 'becky-lynch', 'becky', 'katarina', 'jojo'
+        ]);
+        const redGifsTextCache = new WeakMap();
+        const redGifsUiCache = new WeakMap();
+        const redGifsPendingRoots = new Set();
+        let redGifsDynamicWrestlerRegexes = [];
+        let redGifsWrestlersReady = false;
+        let redGifsFocusReady = false;
+        let redGifsObserver = null;
+        let redGifsDrainScheduled = false;
+        let redGifsDrainTimer = null;
+        let redGifsLastUrl = window.location.href;
+        let redGifsRedirecting = false;
+        let redGifsFilterGeneration = 0;
+        let redGifsRemoveStorageListener = null;
+
+        // Search/tag/creator widgets also render outside /users, /search and /explore.
+        // Keep the same single card scanner active on every RedGifs route.
+        const isRedGifsScanRoute = () => true;
+
+        const redGifsSourcesReady = () => redGifsFocusReady && redGifsWrestlersReady;
+
+        function redGifsContainsBlockedContent(value) {
+            const text = String(value || '');
+            if (!text) return false;
+            return REDGIFS_STATIC_REGEXES.some(regex => regexMatches(regex, text)) ||
+                   redGifsDynamicWrestlerRegexes.some(regex => regexMatches(regex, text));
+        }
+
+        function redGifsBuildWrestlerPatterns(urls) {
+            const patterns = [];
+            const seen = new Set();
+            for (const url of Array.isArray(urls) ? urls : []) {
+                try {
+                    const segments = String(url).split('/').filter(Boolean);
+                    const slug = decodeURIComponent(segments.pop() || '').toLowerCase().trim();
+                    if (!slug || REDGIFS_WRESTLER_EXCLUSIONS.has(slug)) continue;
+                    const parts = slug.split(/[-_\s]+/).filter(Boolean);
+                    const name = parts.join(' ');
+                    if (!name || seen.has(name)) continue;
+                    seen.add(name);
+                    patterns.push(new RegExp('\\b' + parts.map(part =>
+                        part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+                    ).join('[\\s_-]+') + '\\b', 'i'));
+                } catch (e) {}
+            }
+            return patterns;
+        }
+
+        function redGifsInstallWrestlerPatterns(urls) {
+            redGifsDynamicWrestlerRegexes = redGifsBuildWrestlerPatterns(urls);
+            redGifsWrestlersReady = true;
+            redGifsFilterGeneration++;
+            runRedGifsPass(true);
+        }
+
+        function redGifsLoadWrestlerPatterns() {
+            const done = result => redGifsInstallWrestlerPatterns(
+                result && Array.isArray(result.wrestling_women_urls) ? result.wrestling_women_urls : []
+            );
+            try {
+                if (typeof browser !== 'undefined' && browser.storage?.local) {
+                    Promise.resolve(browser.storage.local.get(['wrestling_women_urls']))
+                        .then(done, () => done({}));
+                    return;
+                }
+                if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+                    chrome.storage.local.get(['wrestling_women_urls'], result => {
+                        try {
+                            if (chrome.runtime?.lastError) { done({}); return; }
+                        } catch (e) {}
+                        done(result || {});
+                    });
+                    return;
+                }
+            } catch (e) {}
+            done({});
+        }
+
+        function redGifsInstallStorageListener() {
+            const onChange = (changes, areaName) => {
+                if (areaName && areaName !== 'local') return;
+                if (!changes || !Object.prototype.hasOwnProperty.call(changes, 'wrestling_women_urls')) return;
+                redGifsInstallWrestlerPatterns(changes.wrestling_women_urls?.newValue || []);
+            };
+            try {
+                if (typeof browser !== 'undefined' && browser.storage?.onChanged) {
+                    browser.storage.onChanged.addListener(onChange);
+                    redGifsRemoveStorageListener = () => browser.storage.onChanged.removeListener(onChange);
+                } else if (typeof chrome !== 'undefined' && chrome.storage?.onChanged) {
+                    chrome.storage.onChanged.addListener(onChange);
+                    redGifsRemoveStorageListener = () => chrome.storage.onChanged.removeListener(onChange);
+                }
+            } catch (e) {}
+        }
+
+        function injectRedGifsNoGlimpseCSS() {
+            if (!document.documentElement) return false;
+            document.documentElement.classList.add('bravefox-redgifs-filtering-active');
+            document.documentElement.classList.toggle('bravefox-redgifs-scanning-active', isRedGifsScanRoute());
+            if (document.getElementById('bravefox-redgifs-no-glimpse')) return true;
+
+            const style = document.createElement('style');
+            style.id = 'bravefox-redgifs-no-glimpse';
+            style.setAttribute('data-bravefox-style-revision', REDGIFS_REVISION);
+            style.textContent = `
+                /* These entries are individually scanned. Never show an unclassified card. */
+                html.bravefox-redgifs-scanning-active :is(
+                    div.tileItem, div.searchCard, div.GifPreview-MetaInfo,
+                    p.description, button.tagButton
+                ):not([${REDGIFS_STATE_ATTR}="clean"]) {
+                    visibility: hidden !important;
+                    pointer-events: none !important;
+                    transition: none !important;
+                    animation: none !important;
+                }
+                html.bravefox-redgifs-scanning-active [${REDGIFS_STATE_ATTR}="blocked"] {
+                    display: none !important;
+                    visibility: hidden !important;
+                    pointer-events: none !important;
+                    transition: none !important;
+                    animation: none !important;
+                }
+                /* Text-only navigation/promotional buttons are masked until inspected. */
+                html.bravefox-redgifs-filtering-active :is(button.aTab, button[data-rg-tab="true"]):not([${REDGIFS_UI_STATE_ATTR}="clean"]) { visibility: hidden !important; }
+                html.bravefox-redgifs-filtering-active :is(button.aTab, button[data-rg-tab="true"])[${REDGIFS_UI_STATE_ATTR}="blocked"] { display: none !important; }
+                html.bravefox-redgifs-filtering-active button[${REDGIFS_UI_STATE_ATTR}="blocked"] {
+                    display: none !important;
+                }
+                /* Remove named promotions from the outset, without waiting for a text check. */
+                html.bravefox-redgifs-filtering-active .OnlyFansCreatorsSidebar,
+                html.bravefox-redgifs-filtering-active .adSearchLink,
+                html.bravefox-redgifs-filtering-active a[href="/niches"],
+                html.bravefox-redgifs-filtering-active a[href^="/niches/"],
+                html.bravefox-redgifs-filtering-active a[href^="/niches?"] {
+                    display: none !important;
+                }
+                html.bravefox-redgifs-filtering-active .swiper-slide:has(
+                    .socialItem a:is([href*="onlyfans.com" i], [href*="fansly.com" i], [href*="getmysocial.com" i])
+                ) {
+                    display: none !important;
+                }
+                /* Sitewide hamburger menu cleanup. Hide the complete row, not its label.
+                   URL rules take effect before React has finished rendering the menu;
+                   the state attribute catches renamed/rotating advertising URLs. */
+                html.bravefox-redgifs-filtering-active li.burgerMenuItem:has(> a.menuItem[href*="rgcams.com" i]),
+                html.bravefox-redgifs-filtering-active li.burgerMenuItem:has(> a.menuItem[href*="creative=ai_porn" i]),
+                html.bravefox-redgifs-filtering-active li.burgerMenuItem:has(> a.menuItem[href*="aivanta76.com" i]),
+                html.bravefox-redgifs-filtering-active li.burgerMenuItem:has(> a.menuItem[href="/app"]),
+                html.bravefox-redgifs-filtering-active li.burgerMenuItem:has(> a.menuItem[href^="/app?"]),
+                html.bravefox-redgifs-filtering-active li.burgerMenuItem[${REDGIFS_BURGER_HIDDEN_ATTR}="true"],
+                html.bravefox-redgifs-filtering-active a[aria-label="Link to Discord account"],
+                html.bravefox-redgifs-filtering-active a[aria-label="Link to X account"] {
+                    display: none !important;
+                    visibility: hidden !important;
+                    pointer-events: none !important;
+                }
+            `;
+            (document.head || document.documentElement).appendChild(style);
+            return true;
+        }
+
+        function redGifsReadableLinkSlug(link) {
+            if (!link?.getAttribute('href')) return '';
+            try {
+                const url = new URL(link.getAttribute('href'), window.location.origin);
+                if (url.origin !== window.location.origin) return '';
+                const parts = url.pathname.split('/').filter(Boolean);
+                // /watch slugs are generated IDs, not descriptions.
+                if (!['users', 'gifs', 'niches'].includes(parts[0]) || parts.length < 2) return '';
+                return decodeURIComponent(parts[parts.length - 1]).replace(/[-_+]+/g, ' ');
+            } catch (e) { return ''; }
+        }
+
+        function getRedGifsSearchText(element) {
+            const values = [];
+            const push = value => {
+                const text = String(value || '').replace(/\s+/g, ' ').trim();
+                if (text && !values.includes(text)) values.push(text);
+            };
+
+            if (element.matches('div.tileItem')) {
+                push(element.querySelector('.tileTitle')?.textContent);
+                element.querySelectorAll('img[alt], .clickArea[aria-label], a[title], h4[title]')
+                    .forEach(node => {
+                        push(node.getAttribute('alt'));
+                        push(node.getAttribute('aria-label'));
+                        push(node.getAttribute('title'));
+                    });
+                element.querySelectorAll('a[href]').forEach(link => push(redGifsReadableLinkSlug(link)));
+            } else if (element.matches('div.searchCard')) {
+                element.querySelectorAll('.tagName, .creatorName, .userName, .title')
+                    .forEach(node => {
+                        // A tag label's leading # is punctuation, not part of the actual tag name.
+                        // The shared /#/ filter must not wipe out every ordinary hashtag tile.
+                        const label = node.matches('.tagName')
+                            ? node.textContent.replace(/^\s*#\s*/, '') : node.textContent;
+                        push(label);
+                    });
+                element.querySelectorAll('a[href]').forEach(link => {
+                    const label = String(link.getAttribute('aria-label') || '').replace(/^\s*#\s*/, '');
+                    push(label);
+                    push(link.getAttribute('title'));
+                    push(redGifsReadableLinkSlug(link));
+                });
+            } else if (element.matches('div.GifPreview-MetaInfo')) {
+                element.querySelectorAll('.descriptionText, .userName, .metaInfo [title], .userAvatar[aria-label]')
+                    .forEach(node => {
+                        if (node.matches('.descriptionText, .userName')) push(node.textContent);
+                        push(node.getAttribute('title'));
+                        push(node.getAttribute('aria-label'));
+                    });
+                element.querySelectorAll('a[href^="/users/"]').forEach(link =>
+                    push(redGifsReadableLinkSlug(link)));
+            } else if (element.matches('p.description')) {
+                push(element.querySelector('.descriptionText')?.textContent || element.textContent);
+            } else if (element.matches('button.tagButton')) {
+                push(element.querySelector('.text')?.textContent || element.textContent);
+                push(element.getAttribute('aria-label'));
+                push(element.getAttribute('title'));
+            }
+            return values.join(' ').trim();
+        }
+
+        function filterRedGifsCandidate(element, force = false) {
+            if (!element?.isConnected || !element.matches(REDGIFS_CARD_SELECTOR)) return;
+            if (!redGifsSourcesReady() || !isRedGifsScanRoute()) return;
+            const text = getRedGifsSearchText(element);
+            // A placeholder without actual metadata must not be marked safe prematurely.
+            if (!text) {
+                element.removeAttribute(REDGIFS_STATE_ATTR);
+                redGifsTextCache.delete(element);
+                return;
+            }
+            const cache = redGifsTextCache.get(element);
+            if (!force && cache?.text === text && cache.generation === redGifsFilterGeneration &&
+                element.getAttribute(REDGIFS_STATE_ATTR) === cache.state) return;
+            const state = redGifsContainsBlockedContent(text) ? 'blocked' : 'clean';
+            redGifsTextCache.set(element, { text, state, generation: redGifsFilterGeneration });
+            element.setAttribute(REDGIFS_STATE_ATTR, state);
+            if (state === 'blocked') element.setAttribute('aria-hidden', 'true');
+            else element.removeAttribute('aria-hidden');
+        }
+
+        function filterRedGifsUiButton(button) {
+            if (!button?.isConnected || !button.matches(REDGIFS_UI_SELECTOR)) return;
+            const text = String(button.textContent || '').replace(/\s+/g, ' ').trim();
+            if (!text) { button.removeAttribute(REDGIFS_UI_STATE_ATTR); return; }
+            if (redGifsUiCache.get(button) === text && button.hasAttribute(REDGIFS_UI_STATE_ATTR)) return;
+            redGifsUiCache.set(button, text);
+            const blocked = (button.matches('button.aTab') && /^AI\s*Porn$/i.test(text)) ||
+                (button.matches('button[data-rg-tab="true"]') && /^Niches$/i.test(text));
+            button.setAttribute(REDGIFS_UI_STATE_ATTR, blocked ? 'blocked' : 'clean');
+            if (blocked) button.setAttribute('aria-hidden', 'true');
+            else button.removeAttribute('aria-hidden');
+        }
+
+        function checkRedGifsSearchRoute() {
+            if (!redGifsSourcesReady() || redGifsRedirecting ||
+                !/^\/search(?:\/|$)/i.test(window.location.pathname || '')) return;
+            try {
+                const url = new URL(window.location.href);
+                const query = ['query', 'q', 'search'].map(key => url.searchParams.get(key))
+                    .find(value => value && value.trim());
+                if (!query || !redGifsContainsBlockedContent(query)) return;
+                redGifsRedirecting = true;
+                window.location.replace(window.location.origin + '/');
+            } catch (e) { redGifsRedirecting = false; }
+        }
+
+        // RedGifs' global search is React-controlled and can navigate without a form submit.
+        // Catch submissions/suggestions at capture phase, before the site receives the event.
+        // The static list applies immediately; remote terms and wrestler names apply once loaded.
+        function redGifsBlockSearchAction(event) {
+            const target = event.target?.nodeType === 1 ? event.target : event.target?.parentElement;
+            if (!target) return;
+            const globalSearch = target.closest('.globalSearch');
+            if (!globalSearch) return;
+            const input = globalSearch.querySelector('#global-search-input, input.searchInputField');
+            if (!input || !redGifsContainsBlockedContent(input.value)) return;
+
+            if (event.type === 'keydown') {
+                if (event.key !== 'Enter' || target !== input) return;
+            } else if (event.type === 'click') {
+                // Do not trap typing, clearing or closing the input. Only actual search actions.
+                if (!target.closest('.searchIcon, .searchTab, .searchCard, ' +
+                    '.moreResultsLink, .searchResultsView a[href], button[type="submit"]')) return;
+            } else if (event.type === 'submit') {
+                if (target.tagName !== 'FORM' || !target.contains(input)) return;
+            } else return;
+
+            try { event.preventDefault(); } catch (e) {}
+            try { event.stopImmediatePropagation(); } catch (e) {}
+            try { event.stopPropagation(); } catch (e) {}
+            if (redGifsRedirecting) return;
+            redGifsRedirecting = true;
+            try { window.location.replace(window.location.origin + '/'); }
+            catch (e) { window.location.href = window.location.origin + '/'; }
+        }
+
+        // RedGifs mounts the burger drawer lazily and re-renders it when navigating.
+        // The early CSS handles known URLs; this text fallback handles campaign URL rotation.
+        function filterRedGifsBurgerMenuItem(item) {
+            if (!item?.matches?.(REDGIFS_BURGER_ITEM_SELECTOR)) return;
+            const link = item.querySelector(':scope > a.menuItem');
+            if (!link) return;
+            const labelNode = link.querySelector('span[class*="_Label_"]');
+            const label = String(labelNode?.textContent || link.textContent || '')
+                .replace(/\s+/g, ' ').trim().toLocaleLowerCase('en-US');
+            const shouldHide = label === 'redgifs cams' || label === 'ai porn' ||
+                label === 'redgifs app';
+            if (shouldHide && item.getAttribute(REDGIFS_BURGER_HIDDEN_ATTR) !== 'true')
+                item.setAttribute(REDGIFS_BURGER_HIDDEN_ATTR, 'true');
+            else if (!shouldHide && item.hasAttribute(REDGIFS_BURGER_HIDDEN_ATTR))
+                item.removeAttribute(REDGIFS_BURGER_HIDDEN_ATTR);
+        }
+
+        function scanRedGifsRoot(node, force = false) {
+            const element = node?.nodeType === 1 ? node : node?.parentElement;
+            if (!element) return;
+            const candidates = new Set(), uiButtons = new Set();
+            if (element.matches(REDGIFS_BURGER_ITEM_SELECTOR))
+                filterRedGifsBurgerMenuItem(element);
+            element.querySelectorAll?.(REDGIFS_BURGER_ITEM_SELECTOR)
+                .forEach(filterRedGifsBurgerMenuItem);
+            let ancestor = element;
+            for (let depth = 0; ancestor && depth < 12; depth++, ancestor = ancestor.parentElement) {
+                if (ancestor.matches(REDGIFS_BURGER_ITEM_SELECTOR)) filterRedGifsBurgerMenuItem(ancestor);
+                if (ancestor.matches(REDGIFS_CARD_SELECTOR)) candidates.add(ancestor);
+                if (ancestor.matches(REDGIFS_UI_SELECTOR)) uiButtons.add(ancestor);
+            }
+            if (element.querySelectorAll) {
+                if (isRedGifsScanRoute()) element.querySelectorAll(REDGIFS_CARD_SELECTOR)
+                    .forEach(candidate => candidates.add(candidate));
+                element.querySelectorAll(REDGIFS_UI_SELECTOR).forEach(button => uiButtons.add(button));
+            }
+            candidates.forEach(candidate => filterRedGifsCandidate(candidate, force));
+            uiButtons.forEach(filterRedGifsUiButton);
+        }
+
+        function runRedGifsPass(force = false) {
+            if (!injectRedGifsNoGlimpseCSS()) return;
+            document.querySelectorAll(REDGIFS_BURGER_ITEM_SELECTOR)
+                .forEach(filterRedGifsBurgerMenuItem);
+            if (!redGifsSourcesReady() || !isRedGifsScanRoute()) return;
+            checkRedGifsSearchRoute();
+            document.querySelectorAll(REDGIFS_CARD_SELECTOR).forEach(candidate =>
+                filterRedGifsCandidate(candidate, force));
+        }
+
+        function redGifsDrainMutations() {
+            redGifsDrainScheduled = false;
+            redGifsDrainTimer = null;
+            let processed = 0;
+            for (const root of redGifsPendingRoots) {
+                redGifsPendingRoots.delete(root);
+                if (root.isConnected || root === document.documentElement) scanRedGifsRoot(root);
+                if (++processed >= 35) break;
+            }
+            if (redGifsPendingRoots.size) {
+                redGifsDrainScheduled = true;
+                redGifsDrainTimer = setTimeout(redGifsDrainMutations, 16);
+            }
+        }
+
+        function installRedGifsObserver() {
+            if (!document.documentElement) { setTimeout(installRedGifsObserver, 10); return; }
+            injectRedGifsNoGlimpseCSS();
+            if (redGifsObserver) return;
+            redGifsObserver = new MutationObserver(records => {
+                for (const record of records) {
+                    if (record.type === 'childList') {
+                        record.addedNodes.forEach(node => {
+                            if (node.nodeType === 1) redGifsPendingRoots.add(node);
+                            else if (node.parentElement) redGifsPendingRoots.add(node.parentElement);
+                        });
+                        if (record.removedNodes.length && record.target.nodeType === 1)
+                            redGifsPendingRoots.add(record.target);
+                    } else {
+                        const root = record.target.nodeType === 1
+                            ? record.target : record.target.parentElement;
+                        if (root) redGifsPendingRoots.add(root);
+                    }
+                }
+                if (redGifsPendingRoots.size && !redGifsDrainScheduled) {
+                    redGifsDrainScheduled = true;
+                    queueMicrotask(redGifsDrainMutations);
+                }
+            });
+            redGifsObserver.observe(document.documentElement, {
+                subtree: true,
+                childList: true,
+                characterData: true,
+                attributes: true,
+                attributeFilter: ['alt', 'aria-label', 'title', 'href', 'data-feed-item-id']
+            });
+            runRedGifsPass();
+        }
+
+        function redGifsRouteChanged() {
+            if (redGifsLastUrl === window.location.href) return;
+            redGifsLastUrl = window.location.href;
+            redGifsRedirecting = false;
+            runRedGifsPass(true);
+        }
+
+        function installRedGifsHistoryHooks() {
+            ['pushState', 'replaceState'].forEach(method => {
+                try {
+                    const original = history[method];
+                    if (typeof original !== 'function') return;
+                    history[method] = function() {
+                        const result = original.apply(this, arguments);
+                        queueMicrotask(redGifsRouteChanged);
+                        return result;
+                    };
+                } catch (e) {}
+            });
+            window.addEventListener('popstate', redGifsRouteChanged, true);
+            window.addEventListener('hashchange', redGifsRouteChanged, true);
+            window.addEventListener('pageshow', () => {
+                redGifsRouteChanged();
+                installRedGifsObserver();
+                runRedGifsPass();
+            }, true);
+            // Fallback for routers that do not call the page-world History API wrapper.
+            window.addEventListener('focus', redGifsRouteChanged, true);
+        }
+
+        const initialFocusRequest = focusMasterBlockedTermsFetchInFlight;
+        Promise.resolve(initialFocusRequest).finally(() => {
+            redGifsFocusReady = true;
+            redGifsFilterGeneration++;
+            runRedGifsPass(true);
+        });
+        // Network requests and storage APIs can hang. After a bounded wait, use the local
+        // regexes and re-check any already revealed results if the remote list arrives later.
+        setTimeout(() => {
+            if (!redGifsFocusReady) {
+                redGifsFocusReady = true;
+                redGifsFilterGeneration++;
+                runRedGifsPass(true);
+            }
+            if (!redGifsWrestlersReady) redGifsInstallWrestlerPatterns([]);
+        }, 7000);
+        redGifsLoadWrestlerPatterns();
+        redGifsInstallStorageListener();
+        ['submit', 'keydown', 'click'].forEach(type =>
+            document.addEventListener(type, redGifsBlockSearchAction, true));
+        window.addEventListener(FOCUS_MASTER_BLOCKED_TERMS_UPDATED_EVENT, () => {
+            redGifsFilterGeneration++;
+            runRedGifsPass(true);
+        }, true);
+        installRedGifsObserver();
+        installRedGifsHistoryHooks();
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => runRedGifsPass(), { once: true });
+        }
+        window.addEventListener('pagehide', event => {
+            if (event.persisted) return;
+            if (redGifsObserver) redGifsObserver.disconnect();
+            redGifsObserver = null;
+            if (redGifsDrainTimer !== null) clearTimeout(redGifsDrainTimer);
+            redGifsPendingRoots.clear();
+            if (redGifsRemoveStorageListener) {
+                try { redGifsRemoveStorageListener(); } catch (e) {}
+                redGifsRemoveStorageListener = null;
+            }
+        }, true);
+        console.log('BraveFox RedGifs filtering enabled.');
+    }
+
+    // === PORNHUB / YOUPORN / THUMBZILLA ===
+    // These sites share the Focus Master/static blocklist but NOT their card markup.
+    // Keep their scanners isolated from the older XVideos/RedTube/RedGifs handlers.
+    function installBraveFoxYpnFilter() {
+        if (window.__braveFoxYpnFilterInstalled) return;
+        window.__braveFoxYpnFilterInstalled = true;
+
+        const site = BRAVEFOX_IS_PORNHUB ? 'pornhub' :
+            BRAVEFOX_IS_YOUPORN ? 'youporn' : 'thumbzilla';
+        const stateAttr = 'data-bravefox-ypn-state';
+        const revision = 'ypn-sitewide-v1';
+        const regexes = createStaticBlockedRegexWords();
+        const exclusions = new Set([
+            'melina', 'melina-perez', 'aj-lee', 'aj', 'becky-lynch', 'becky', 'katarina', 'jojo'
+        ]);
+        const videoParts = site === 'pornhub' ? [
+            'li.pcVideoListItem',
+            'li.videoblock[data-video-id]',
+            'li.videoBox[data-video-id]',
+            'div.videoBox[data-video-id]'
+        ] : [
+            'article.video-box',
+            'article.js_video-box'
+        ];
+        const categoryParts = site === 'pornhub' ? [
+            'li.catPic', 'li.categoryLi', 'a.categoryBox'
+        ] : [
+            'a.categoryBox', 'a.top-trending-cat.categoryBox'
+        ];
+        const performerParts = site === 'pornhub' ? [
+            'li.modelLi.performerCard', 'li.pornstarLi.performerCard',
+            'li.performerCard', 'li.modelCard', 'li.pornstarCard'
+        ] : [
+            'a.performer-link',
+            'li.performer-wrapper:not(a.performer-link > li.performer-wrapper)',
+            'a.pornstar-link:has(.performer-name)'
+        ];
+        const extraParts = site === 'pornhub' ? [
+            // Secondary discovery listings: photos, GIFs, playlists and channels.
+            'li.gifVideoBlock', 'li.gifLi', 'li.photoAlbumListItem',
+            'li.albumLi', 'li.albumItem', 'li.playlistItem',
+            'li.channelLi', 'li.channelCard', 'li.channelListItem',
+            'li:has(> a[href^="/gif/"]):has(video, img)',
+            'li:has(> a[href^="/album/"]):has(img)',
+            'li:has(> a[href^="/channels/"]):has(img)',
+            'a.videosNavigation.menuLink',
+            'a.js-menuAnalytics[href^="/video?c="]',
+            'a.searchItem[href*="search="]',
+            'a[href^="/tags/"]'
+        ] : [
+            'li[role="none"]:has(> .menu_elem > a.menu_elem_text)',
+            'a.bubble-porntag', 'a[href^="/porntags/"]',
+            'a.channel-link:has(img)', 'li.channel-wrapper',
+            'a.collection-link:has(img)', 'li.collection-wrapper',
+            'li:has(> a[href^="/channel/"]):has(img)',
+            'li:has(> a[href^="/collection/"]):has(img)',
+            'li:has(> .card-wrapper > a.card-link[href^="/channel/"])',
+            'li:has(> .card-wrapper > a.card-link[href^="/channels/"])'
+        ];
+        const cardParts = [...new Set([
+            ...videoParts, ...categoryParts, ...performerParts, ...extraParts
+        ])];
+        const cardSelector = cardParts.join(', ');
+        const videoSelector = videoParts.join(', ');
+        const categorySelector = categoryParts.join(', ');
+        const performerSelector = performerParts.join(', ');
+        const textCache = new WeakMap();
+        const pendingRoots = new Set();
+        let wrestlerRegexes = [];
+        let wrestlersReady = false;
+        let remoteReady = false;
+        let revisionNumber = 0;
+        let observer = null;
+        let draining = false;
+        let lastUrl = window.location.href;
+        let redirecting = false;
+        let removeStorageListener = null;
+
+        function containsBlocked(value) {
+            const text = String(value || '');
+            return Boolean(text) && (
+                regexes.some(regex => regexMatches(regex, text)) ||
+                wrestlerRegexes.some(regex => regexMatches(regex, text))
+            );
+        }
+
+        function buildWrestlerRegexes(urls) {
+            const seen = new Set();
+            const output = [];
+            for (const url of Array.isArray(urls) ? urls : []) {
+                try {
+                    const slug = decodeURIComponent(String(url).split('/').filter(Boolean).pop() || '')
+                        .toLowerCase().trim();
+                    if (!slug || exclusions.has(slug)) continue;
+                    const parts = slug.split(/[-_\s]+/).filter(Boolean);
+                    const name = parts.join(' ');
+                    if (!name || seen.has(name)) continue;
+                    seen.add(name);
+                    const escaped = parts.map(part => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+                    output.push(new RegExp('\\b' + escaped.join('[\\s_-]+') + '\\b', 'i'));
+                } catch (e) {}
+            }
+            return output;
+        }
+
+        function useWrestlerUrls(urls) {
+            wrestlerRegexes = buildWrestlerRegexes(urls);
+            wrestlersReady = true;
+            revisionNumber++;
+            runPass(true);
+        }
+
+        function loadWrestlers() {
+            const done = result => useWrestlerUrls(
+                Array.isArray(result?.wrestling_women_urls) ? result.wrestling_women_urls : []
+            );
+            try {
+                if (typeof browser !== 'undefined' && browser.storage?.local) {
+                    Promise.resolve(browser.storage.local.get(['wrestling_women_urls']))
+                        .then(done, () => done({}));
+                    return;
+                }
+                if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+                    chrome.storage.local.get(['wrestling_women_urls'], result => {
+                        try { if (chrome.runtime?.lastError) return done({}); } catch (e) {}
+                        done(result || {});
+                    });
+                    return;
+                }
+            } catch (e) {}
+            done({});
+        }
+
+        function listenForWrestlerChanges() {
+            const onChange = (changes, area) => {
+                if (area && area !== 'local') return;
+                if (!Object.prototype.hasOwnProperty.call(changes || {}, 'wrestling_women_urls')) return;
+                useWrestlerUrls(changes.wrestling_women_urls?.newValue || []);
+            };
+            try {
+                const storage = typeof browser !== 'undefined' && browser.storage?.onChanged
+                    ? browser.storage : typeof chrome !== 'undefined' && chrome.storage?.onChanged
+                        ? chrome.storage : null;
+                if (storage) {
+                    storage.onChanged.addListener(onChange);
+                    removeStorageListener = () => storage.onChanged.removeListener(onChange);
+                }
+            } catch (e) {}
+        }
+
+        function installNoGlimpseCSS() {
+            if (!document.documentElement) return false;
+            document.documentElement.classList.add('bravefox-ypn-active');
+            // The recently-watched shelf is a homepage-only module. Keep it available on
+            // dedicated watch-history routes and undo the shield on client-side navigation.
+            if (site === 'thumbzilla') {
+                document.documentElement.classList.toggle(
+                    'bravefox-ypn-thumbzilla-home', (window.location.pathname || '/') === '/'
+                );
+            }
+            if (site === 'pornhub') {
+                const route = window.location.pathname || '/';
+                document.documentElement.classList.toggle(
+                    'bravefox-ypn-pornhub-home', route === '/'
+                );
+                // The /categories page starts with a separate recommendation shelf.
+                // Remove ONLY that shelf; retain the All Porn Categories grid below.
+                document.documentElement.classList.toggle(
+                    'bravefox-ypn-pornhub-categories', /^\/categories\/?$/i.test(route)
+                );
+            }
+            if (document.getElementById('bravefox-ypn-css')) return true;
+            const style = document.createElement('style');
+            style.id = 'bravefox-ypn-css';
+            style.setAttribute('data-bravefox-revision', revision);
+            const maskedCards = cardParts.map(part =>
+                `html.bravefox-ypn-active ${part}:not([${stateAttr}="clean"])`).join(',\n');
+            style.textContent = `
+                /* New and rehydrated tiles are hidden until their own metadata is classified. */
+                ${maskedCards} {
+                    visibility: hidden !important;
+                    pointer-events: none !important;
+                    transition: none !important;
+                    animation: none !important;
+                }
+                html.bravefox-ypn-active [${stateAttr}="blocked"] {
+                    display: none !important;
+                    visibility: hidden !important;
+                    pointer-events: none !important;
+                }
+                ${site === 'pornhub' ? `
+                /* Premium-only teaser cards are not playable on the free site.
+                   Collapse their entire tile immediately, including newly rendered cards. */
+                html.bravefox-ypn-active li.pcVideoListItem:has(.marker-overlays i.premiumIcon),
+                html.bravefox-ypn-active li.videoblock[data-video-id]:has(.marker-overlays i.premiumIcon),
+                html.bravefox-ypn-active li.videoBox[data-video-id]:has(.marker-overlays i.premiumIcon),
+                html.bravefox-ypn-active div.videoBox[data-video-id]:has(.marker-overlays i.premiumIcon) {
+                    display: none !important;
+                    visibility: hidden !important;
+                    pointer-events: none !important;
+                }
+                /* Stop mouse-driven mega-menus; top-level navigation links still click normally. */
+                #menuItem2 > .wideDropdown, #menuItem3 > .wideDropdown,
+                #menuItem5 > .wideDropdown, #menuItem7 > .wideDropdown,
+                #menuItem8 > .wideDropdown { display: none !important; }
+                #orientationMenu .subMenuTrigger,
+                #orientationMenu .userMenuDropdownArrow { display: none !important; }
+                #orientationMenu { pointer-events: none !important; cursor: default !important; }
+                .orientationMenuWrap .wrapOrientationSubMenu { display: none !important; }
+                #welcome { display: none !important; }
+                /* Hide only the recommendation header and its immediately following shelf.
+                   The All Porn Categories directory may also use #categoriesListingWrapper,
+                   so NEVER target that ID by itself, or hide the shared .nf-videos parent.
+                   The Most Popular heading includes the flag icon in the captured markup. */
+                html.bravefox-ypn-pornhub-home .nf-videos > .categoriesWrap:has(h1.pornCategories > i.roundFlagIcon),
+                html.bravefox-ypn-pornhub-categories .nf-videos > .categoriesWrap:has(h1.pornCategories > i.roundFlagIcon),
+                html.bravefox-ypn-pornhub-home .nf-videos > .categoriesWrap:has(h1.pornCategories > i.roundFlagIcon) + #categoriesListingWrapper,
+                html.bravefox-ypn-pornhub-categories .nf-videos > .categoriesWrap:has(h1.pornCategories > i.roundFlagIcon) + #categoriesListingWrapper,
+                .sectionWrapper.topTrendingPornstars,
+                .feedSideBar,
+                .orientationFilters,
+                .sectionWrapper:has(> .sectionTitle.trendingPillsTitle),
+                .section_bar_sidebar:has(> .section_title.segments),
+                .sidebar_wrapper:has(> ul.segmentsList),
+                .feedSideBar > .tjFeed,
+                .feedSideBar > section:has(> ul.userWidgetWrapperGrid),
+                .feedSideBar > section:has(> ul.photosAlbumsListing),
+                .feedSideBar > section:has(> #playlistSideSuggestions),
+                .sectionWrapper.topTrendingPornstars > div:has(> div > ins.adsbytrafficjunky),
+                .sectionWrapper.topTrendingPornstars > div:has(> div > div > ins.adsbytrafficjunky),
+                .adsRemoveButtonWrapper,
+                ins.adsbytrafficjunky { display: none !important; }
+                ` : `
+                /* Paid header tabs are advertisements, not useful navigation. */
+                li.menu-item.js_paidTab.topLinkTab { display: none !important; }
+                ${site === 'youporn' ? `
+                #category-menu > .category-dropdown,
+                #category-menu > .js-dropdown { display: none !important; }
+                #erotica-menu { display: none !important; }
+                /* YouPorn's empty native ad tiles: hide the entire grid item, not just the ad. */
+                div.video-box:has(> ins.adsbytrafficjunky),
+                div.video-box:has(ins.adsbytrafficjunky),
+                ins.adsbytrafficjunky { display: none !important; }
+                /* Suppress the complete tag carousel and announcement before first paint. */
+                .videoTags.plw_test_video_carousel,
+                #announcement-bar { display: none !important; }
+                ` : `
+                .upgradeButtonContainer { display: none !important; }
+                /* No-glimpse: remove Thumbzilla's whole "Watch It Again" homepage shelf,
+                   both the heading and the thumbnails, without affecting watch history. */
+                html.bravefox-ypn-thumbzilla-home .title-bar.watchItAgain_title,
+                html.bravefox-ypn-thumbzilla-home #recently_watched {
+                    display: none !important;
+                }
+                /* Keep the Categories link functional, not its hover-only dropdown. */
+                #category-menu > .category-dropdown,
+                #category-menu > .js-dropdown { display: none !important; }
+                /* Collapse native ad slots and the surrounding empty layout columns. */
+                div.video-box:has(ins.adsbytrafficjunky),
+                .e8-column:has(ins.adsbytrafficjunky),
+                .top-right-ad:has(ins.adsbytrafficjunky),
+                div:has(> ins.adsbytrafficjunky),
+                ins.adsbytrafficjunky { display: none !important; }
+                /* Channel directory suggestion cards from the supplied sample. */
+                li:has(> .card-wrapper > a.card-link[href^="/channel/"]),
+                li:has(> .card-wrapper > a.card-link[href^="/channels/"]),
+                /* Remove the entire suggestion carousel, including arrows and leftover whitespace. */
+                .videoTags:has(.bubble-porntag),
+                .tm_categoriesWrapper:has(.bubble-porntag),
+                .js_categoriesWrapper:has(.bubble-porntag) { display: none !important; }
+                `}
+                `}
+            `;
+            (document.head || document.documentElement).appendChild(style);
+            return true;
+        }
+
+        function readableLinkName(link) {
+            if (!link?.getAttribute('href')) return '';
+            try {
+                const url = new URL(link.getAttribute('href'), location.origin);
+                if (url.hostname !== window.location.hostname) return '';
+                const parts = url.pathname.split('/').filter(Boolean);
+                if (parts.length < 2 || !/^(?:pornstar|model|channel|channels|amateur|user|users|category|categories|porntags|tags|playlist|playlists|collections)$/i.test(parts[0])) return '';
+                return decodeURIComponent(parts[parts.length - 1]).replace(/[-_+]+/g, ' ');
+            } catch (e) { return ''; }
+        }
+
+        function candidateText(element) {
+            const values = [];
+            const push = value => {
+                const text = String(value || '').replace(/\s+/g, ' ').trim();
+                if (text && !values.includes(text)) values.push(text);
+            };
+            const isVideo = element.matches(videoSelector);
+            const isCategory = element.matches(categorySelector);
+            const isPerformer = element.matches(performerSelector);
+            if (isVideo) {
+                // Prevent revealing incomplete cards that have only an uploader ID/name.
+                // The visible title or preview alt/title must be ready first.
+                const titles = element.querySelectorAll(
+                    '.video-title-text, .tm_video_title, .vidTitleWrapper .title, ' +
+                    '.thumbnail-info .title, a.thumbnailTitle, .videoPreviewBg[data-title], ' +
+                    '.thumb-image-container img[alt], .phimage img[alt]'
+                );
+                titles.forEach(node => {
+                    push(node.textContent);
+                    push(node.getAttribute('alt'));
+                    push(node.getAttribute('title'));
+                    push(node.getAttribute('data-title'));
+                });
+                push(element.getAttribute('aria-label'));
+                if (!values.length) return '';
+                push(element.getAttribute('data-uploader-name'));
+                element.querySelectorAll(
+                    '.author-title-text, .channel-performer, .performers-list a, ' +
+                    '.videoUploaderBlock .usernameWrap, .usernameWrapper a, ' +
+                    '.thumbnail-info-wrapper .usernameWrap, .videoUploaderBlock .usernameWrapper'
+                ).forEach(node => push(node.textContent));
+            } else if (isCategory) {
+                push(element.querySelector('.categoryTitle, .tm_category_title, strong')?.textContent);
+                push(element.querySelector('img[alt]')?.getAttribute('alt'));
+                element.querySelectorAll('a[href]').forEach(link => push(readableLinkName(link)));
+                if (element.matches('a[href]')) push(readableLinkName(element));
+            } else if (isPerformer) {
+                push(element.querySelector(
+                    '.performerCardName, .performer-name, .tm_pornstar_name, .modelName, .pornStarName'
+                )?.textContent);
+                push(element.querySelector('img[alt]')?.getAttribute('alt'));
+                if (element.matches('a[href]')) push(readableLinkName(element));
+                element.querySelectorAll('a[href]').forEach(link => push(readableLinkName(link)));
+            } else {
+                // Only small, explicitly selected discovery items. Do not examine
+                // video URLs, scripts, CDN filenames, hidden mega-menu contents or whole pages.
+                push(element.querySelector('.title, .title-album, .menu_elem_text, .tagName, .name')?.textContent);
+                push(element.querySelector('img[alt]')?.getAttribute('alt'));
+                if (element.matches('a')) {
+                    push(element.textContent);
+                    push(element.getAttribute('title'));
+                    push(readableLinkName(element));
+                } else {
+                    element.querySelectorAll('a[href]').forEach(link => {
+                        push(link.textContent);
+                        push(link.getAttribute('title'));
+                        push(readableLinkName(link));
+                    });
+                }
+            }
+            return values.join(' ').trim();
+        }
+
+        function classify(element, force = false) {
+            if (!element?.isConnected || !element.matches(cardSelector)) return;
+            if (!remoteReady || !wrestlersReady) return;
+            const text = candidateText(element);
+            const hasAiCreatorBadge = site === 'pornhub' &&
+                Boolean(element.querySelector('.ph-icon-ai'));
+            const hasPremiumVideoBadge = site === 'pornhub' && element.matches(videoSelector) &&
+                Boolean(element.querySelector('.marker-overlays i.premiumIcon'));
+            const previous = textCache.get(element);
+            if (!force && previous?.revision === revisionNumber &&
+                previous.text === text && previous.ai === hasAiCreatorBadge &&
+                previous.premium === hasPremiumVideoBadge) return;
+            textCache.set(element, { text, ai: hasAiCreatorBadge,
+                premium: hasPremiumVideoBadge, revision: revisionNumber });
+            const state = hasAiCreatorBadge || hasPremiumVideoBadge ||
+                (text && containsBlocked(text)) ? 'blocked' : text ? 'clean' : 'pending';
+            if (element.getAttribute(stateAttr) !== state) element.setAttribute(stateAttr, state);
+        }
+
+        function scan(root, force = false) {
+            if (!root) return;
+            const element = root.nodeType === 1 ? root : root.parentElement;
+            if (!element) return;
+            const enclosingCard = element.closest(cardSelector);
+            if (enclosingCard) classify(enclosingCard, force);
+            if (element.matches(cardSelector)) classify(element, force);
+            element.querySelectorAll(cardSelector).forEach(candidate => classify(candidate, force));
+        }
+
+        function blockedSearchQuery() {
+            try {
+                const url = new URL(window.location.href);
+                const isSearch = site === 'pornhub' ?
+                    /(?:^|\/)(?:search|gifs|albums)(?:\/|$)/i.test(url.pathname) :
+                    /^\/search(?:\/|$)/i.test(url.pathname);
+                if (!isSearch) return '';
+                for (const key of ['search', 'query', 'q', 'k']) {
+                    const candidate = url.searchParams.get(key);
+                    if (candidate) return candidate;
+                }
+            } catch (e) {}
+            return '';
+        }
+
+        function blockedDirectorySlug() {
+            const match = (window.location.pathname || '').match(
+                /^\/(?:pornstar|model|category|channel|amateur|user|porntags|tags)\/([^/]+)\/?$/i
+            );
+            if (!match) return '';
+            try { return decodeURIComponent(match[1]).replace(/[-_+]+/g, ' '); }
+            catch (e) { return match[1].replace(/[-_+]+/g, ' '); }
+        }
+
+        function blockedWatchTitle() {
+            const path = window.location.pathname || '';
+            const isWatchRoute = site === 'pornhub' ?
+                /^\/view_video\.php$/i.test(path) : /^\/watch\/[^/]+/i.test(path);
+            if (!isWatchRoute) return '';
+            const title = document.querySelector(
+                'h1.videoTitle, h1.video-title, h1.title, #videoTitle, ' +
+                '.videoTitle h1, .video-title h1'
+            );
+            const metadata = document.querySelector('meta[property="og:title"]');
+            return [title?.textContent || '', metadata?.getAttribute('content') || '']
+                .filter(Boolean).join(' ');
+        }
+
+        function redirectBlockedRoute() {
+            if (!remoteReady || !wrestlersReady || redirecting) return;
+            if (!containsBlocked(blockedSearchQuery()) &&
+                !containsBlocked(blockedDirectorySlug()) &&
+                !containsBlocked(blockedWatchTitle())) return;
+            redirecting = true;
+            try { window.stop(); } catch (e) {}
+            try { window.location.replace(window.location.origin + '/'); }
+            catch (e) { window.location.href = window.location.origin + '/'; }
+        }
+
+        function runPass(force = false) {
+            installNoGlimpseCSS();
+            if (!remoteReady || !wrestlersReady) return;
+            redirectBlockedRoute();
+            if (site === 'pornhub') {
+                const orientation = document.getElementById('orientationMenu');
+                if (orientation) {
+                    if (orientation.getAttribute('aria-disabled') !== 'true')
+                        orientation.setAttribute('aria-disabled', 'true');
+                    if (orientation.getAttribute('tabindex') !== '-1')
+                        orientation.setAttribute('tabindex', '-1');
+                }
+            }
+            if (document.documentElement) scan(document.documentElement, force);
+        }
+
+        function installMenuBehavior() {
+            const hoverMenu = site === 'pornhub'
+                ? '#menuItem2, #menuItem3, #menuItem5, #menuItem7, #menuItem8'
+                : (site === 'youporn' || site === 'thumbzilla') ? '#category-menu' : '';
+            const hoverTypes = ['mouseover', 'mouseenter', 'pointerover', 'pointerenter'];
+            if (hoverMenu) hoverTypes.forEach(type => document.addEventListener(type, event => {
+                const menu = event.target?.closest?.(hoverMenu);
+                if (!menu) return;
+                event.stopImmediatePropagation();
+                event.stopPropagation();
+            }, true));
+            if (site === 'pornhub') {
+                const suppressOrientation = event => {
+                    if (!event.target?.closest?.('.orientationMenuWrap')) return;
+                    if (event.cancelable) event.preventDefault();
+                    event.stopImmediatePropagation();
+                    event.stopPropagation();
+                };
+                ['pointerdown', 'mousedown', 'touchstart', 'click', 'keydown', 'mouseover', 'mouseenter', 'pointerover', 'pointerenter']
+                    .forEach(type => document.addEventListener(type, suppressOrientation, true));
+                const disableOrientationFocus = () => {
+                    const item = document.getElementById('orientationMenu');
+                    if (item) { item.setAttribute('aria-disabled', 'true'); item.setAttribute('tabindex', '-1'); }
+                };
+                document.addEventListener('DOMContentLoaded', disableOrientationFocus, { once: true });
+                disableOrientationFocus();
+            }
+        }
+
+        function drainMutations() {
+            draining = false;
+            const roots = [...pendingRoots];
+            pendingRoots.clear();
+            if (roots.length > 70) { runPass(); return; }
+            for (const root of roots) scan(root);
+            // Watch-page titles can arrive after the initial HTML response.
+            redirectBlockedRoute();
+        }
+
+        function observe() {
+            if (!document.documentElement) { setTimeout(observe, 10); return; }
+            installNoGlimpseCSS();
+            if (observer) return;
+            observer = new MutationObserver(records => {
+                for (const record of records) {
+                    if (record.type === 'childList') {
+                        record.addedNodes.forEach(node => {
+                            if (node.nodeType === 1) pendingRoots.add(node);
+                            else if (node.parentElement) pendingRoots.add(node.parentElement);
+                        });
+                        if (record.removedNodes.length && record.target.nodeType === 1)
+                            pendingRoots.add(record.target);
+                    } else {
+                        const element = record.target.nodeType === 1
+                            ? record.target : record.target.parentElement;
+                        if (element) pendingRoots.add(element);
+                    }
+                }
+                if (!draining && pendingRoots.size) {
+                    draining = true;
+                    queueMicrotask(drainMutations);
+                }
+            });
+            observer.observe(document.documentElement, {
+                childList: true, subtree: true, characterData: true, attributes: true,
+                attributeFilter: ['aria-label', 'alt', 'title', 'data-title',
+                    'data-uploader-name', 'href', 'data-video-id', 'class', 'content']
+            });
+            runPass();
+        }
+
+        function onRouteChange() {
+            if (lastUrl === window.location.href) return;
+            lastUrl = window.location.href;
+            redirecting = false;
+            runPass(true);
+        }
+
+        function installHistoryHooks() {
+            ['pushState', 'replaceState'].forEach(method => {
+                try {
+                    const original = history[method];
+                    if (typeof original !== 'function') return;
+                    history[method] = function() {
+                        const result = original.apply(this, arguments);
+                        queueMicrotask(onRouteChange);
+                        return result;
+                    };
+                } catch (e) {}
+            });
+            window.addEventListener('popstate', onRouteChange, true);
+            window.addEventListener('hashchange', onRouteChange, true);
+            window.addEventListener('pageshow', () => {
+                onRouteChange();
+                observe();
+                runPass();
+            }, true);
+        }
+
+        document.addEventListener('submit', event => {
+            const form = event.target;
+            if (!form?.matches?.('form')) return;
+            const input = form.querySelector('input[name="search"], input[name="query"], input[name="q"], input[name="k"]');
+            if (!input || !/search/i.test(form.getAttribute('action') || '') &&
+                !input.matches('input[type="search"]')) return;
+            if (!containsBlocked(input.value)) return;
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            try { window.location.replace(window.location.origin + '/'); } catch (e) {}
+        }, true);
+
+        // A few search widgets submit through JavaScript instead of firing a form submit.
+        document.addEventListener('keydown', event => {
+            if (event.key !== 'Enter') return;
+            const input = event.target;
+            if (!input?.matches?.('input[name="search"], input[name="query"], input[name="q"], input[name="k"]')) return;
+            if (!input.closest('form') && !input.matches('input[type="search"]')) return;
+            if (!containsBlocked(input.value)) return;
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            try { window.location.replace(window.location.origin + '/'); } catch (e) {}
+        }, true);
+
+        const initialRemoteRequest = focusMasterBlockedTermsFetchInFlight;
+        Promise.resolve(initialRemoteRequest).finally(() => {
+            remoteReady = true;
+            revisionNumber++;
+            runPass(true);
+        });
+        // Remote terms remain an enhancement, not a permanent blank-page dependency.
+        setTimeout(() => {
+            if (!remoteReady) {
+                remoteReady = true;
+                revisionNumber++;
+                runPass(true);
+            }
+            if (!wrestlersReady) useWrestlerUrls([]);
+        }, 5500);
+        loadWrestlers();
+        listenForWrestlerChanges();
+        window.addEventListener(FOCUS_MASTER_BLOCKED_TERMS_UPDATED_EVENT, () => {
+            revisionNumber++;
+            runPass(true);
+        }, true);
+        installMenuBehavior();
+        observe();
+        installHistoryHooks();
+        if (document.readyState === 'loading')
+            document.addEventListener('DOMContentLoaded', () => runPass(), { once: true });
+        window.addEventListener('pagehide', event => {
+            if (event.persisted) return;
+            if (observer) observer.disconnect();
+            observer = null;
+            pendingRoots.clear();
+            if (removeStorageListener) {
+                try { removeStorageListener(); } catch (e) {}
+                removeStorageListener = null;
+            }
+        }, true);
+        console.log(`BraveFox ${site} filtering enabled.`);
+    }
+
+    if (BRAVEFOX_IS_PORNHUB || BRAVEFOX_IS_YOUPORN || BRAVEFOX_IS_THUMBZILLA) {
+        installBraveFoxYpnFilter();
+        return;
+    }
+
+    if (BRAVEFOX_IS_REDGIFS) {
+        installBraveFoxRedGifsFilter();
+        return;
     }
 
     if (BRAVEFOX_IS_TENOR) {

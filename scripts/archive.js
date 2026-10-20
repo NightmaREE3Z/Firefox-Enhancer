@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CleanArchives
-// @version      2026-10-01
+// @version      2026-10-20
 // @description  Redirects specific archive pages (and xcancel.com search) to the appropriate front page when banned terms are detected.
 // @match        *://web.archive.org/*
 // @match        *://archive.org/*
@@ -565,7 +565,7 @@
         /virtu mac/i, /virtua mac/i, /virtual machi/i, /ma7ic/i, /0r9g4/i, /0r1q4/i, /0r1qa/i, /0rlg4h/i, /or1g@h/i, /orrga/i, /orrgaa/i, /orgaa/i, /0rg4/i, /org4/i, /org4/i, /orgy/i, /orgi/i, 
 	/org@/i, /0rg@/i, /0rgi/i, /0rga5m/i, /origas/i, /0riga/i, /0r1g4/i, /0rlg4/i, /orlg4/i, /0rlg@/i, /orlg@/i, /origa/i, /or1ga/i, /orig4/i, /0r1g4/i, /0rlga/i, /orlg4/i, /0rlg4/i, /0rlg@/i, 
 	/orlg@/i, /0rrg4/i, /orrg4/i, /or1g@/i, /0r1g@/i, /0r1ga/i, /0r!g@/i, /0r!g4/i, /0rig@/i, /0rig4/i, /0r9ga/i, /reveals/i, /reveali/i, /revealing/i, /reveale/i, /booba/i, /hehiai/i, /hiheai/i,
-	/Serrano/i, /Zerrano/i,
+	/Serrano/i, /Zerrano/i, /view ig/i, /view insta/i, /view stori/i, /view story/i, /tiktok story/i, /tiktok stori/i, /download stor/i, /stor downl/i,
 
 
     // Symbols and emojis (Nuclear)

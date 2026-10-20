@@ -1,7 +1,7 @@
 (function () {
     'use strict';
 
-    // google.js of BraveFox Enhancer v29.3.7 Hybrid
+    // google.js of BraveFox Enhancer v29.5.0 Hybrid
 
     function isGoogleMapsOrEarthUrl(value = window.location.href) {
         try {
@@ -1128,7 +1128,7 @@
 	/OpensHerLegs/i, /SpreadLeg/i, /SpreadHerLeg/i, /cunnn/i, /strips/i, /SpreadsLeg/i, /SpreadsHerLeg/i, /HerThig/i, /HerLeg/i, /HerThic/i, /SheThig/i, /SheLeg/i, /SheThic/i, /HerLeg/i, /HerThic/i, 
 	/LegShe/i, /LegsShe/i, /Thicc/i, /ThickShe/i, /fondl/i, /bdsm/i, /censor/i, /reveals all/i, /reveali/i, /revealing/i, /stripp/i, /strips/i, /stripz/i, /stripi/i, /striper/i, /stripes/i, /striped/i, 
 	/shetakeoff/i, /takeoffher/i, /takesoffher/i, /shetakesoff/i, /takingoff/i, /tookoffher/i, /shetookoff/i, /baring/i, /bares/i, /artintel/i, /Zendaya/i, /AIZuck/i, /Stratu/i, /Kairi/i, /artintel/i, 
-	/RemovingAI/i, /bjob/i, /StaphMc/i, /machinelearning/i, /sweee/i, 
+	/RemovingAI/i, /bjob/i, /StaphMc/i, /machinelearning/i, /sweee/i,
 	 
 
 
@@ -1205,6 +1205,10 @@
 	/(?:poista|poisto|poistaminen|poistamis)[ -]?(?:vaatteet|vaatteiden)/i,
 	/see[- ]?through/i,
 	/vaat.*pois/i,
+	/\b(?:tiktok|tik[\s._-]?tok)\b/i,
+	/^(?=[\s\S]*\b(?:instagram|insta|ig|snapchat|snap)\b)(?=[\s\S]*\b(?:story|stories|tarina(?:n|t|a)?|tarinoita)\b)(?=[\s\S]*\b(?:view(?:er|ing)?|watch(?:er|ing)?|download(?:er|ing)?|sav(?:e|er|ing)|anonymous(?:ly)?|katso(?:a)?|lataa|tallenn(?:a|us))\b)/i,
+	/(?:stories?(?:ig|insta)|(?:ig|insta)(?:story|stories)(?:viewer|saver|downloader)?|(?:anon|anonymous)(?:story|stories)(?:viewer|saver)?|(?:story|stories)(?:viewer|saver|downloader))/i,
+
     
 ];
 
@@ -1464,17 +1468,24 @@
 
 
 
-    // === BraveFox central URL policy client ========================================
-    // background.js owns the canonical allow/block lists. Finite rules are mirrored as a
-    // tiny snapshot; the potentially huge fetched hosts files stay in the service worker
-    // and are queried in batches/cached locally instead of becoming thousands of regexes.
+    // === BraveFox portable local URL policy client =================================
+    // A small finite-rule snapshot still comes from the platform background, but Google
+    // result hosts are classified IN THIS CONTENT SCRIPT against local extension storage.
+    // Chromium uses hostsChunk_N; Firefox PC and Fenix use Focus Master's source-tier
+    // chunks. The background classify bridge remains only as a fail-closed recovery
+    // fallback if the persistent hosts data is unavailable or incomplete.
     const GJ_CENTRAL_POLICY_SNAPSHOT_TYPE = 'BRAVEFOX_GET_CENTRAL_URL_POLICY_SNAPSHOT';
     const GJ_CENTRAL_POLICY_CLASSIFY_TYPE = 'BRAVEFOX_CLASSIFY_CENTRAL_URLS';
     let GJ_centralPolicySnapshot = {
         allowedHosts: [],
         allowedPathRules: [],
         blockedSites: [],
-        blockedTLDs: []
+        blockedTLDs: [],
+        staticBlockedSites: [],
+        blockedLinks: [],
+        blockedPaths: [],
+        bundledHostOverlay: [],
+        bundledOverlayComplete: true
     };
     const GJ_centralPolicyVerdictCache = new Map();
     const GJ_centralPolicyPending = new Set();
@@ -1488,6 +1499,306 @@
     let GJ_centralPolicySnapshotRetryTimer = null;
     let GJ_centralPolicySnapshotRetryCount = 0;
     let GJ_centralPolicySnapshotRetryRevalidate = false;
+    // Retain an explicit hosts revision across overlapping snapshot requests.
+    // A later timestamp-only refresh must never cancel a real revalidation.
+    let GJ_centralPolicySnapshotPendingRevalidation = false;
+
+
+    // One unchanged implementation on Chrome, Firefox desktop and Firefox Android.
+    // Keep compact sorted arrays (binary search) instead of constructing a 300k+ Set
+    // per Google tab, which matters especially on Fenix.
+    const GJ_LOCAL_FIREFOX_SOURCES = [
+        { id: 'BraveFoxHosts', tier: 'hard' },
+        { id: 'StevenBlack', tier: 'supplemental' },
+        { id: 'legacyFox', tier: 'hard' }
+    ];
+    let GJ_localHosts = { mode: 'loading', platform: '', chrome: [], hard: [], supplemental: [] };
+    let GJ_localHostsRequest = 0;
+    let GJ_localHostsRefreshTimer = null;
+    let GJ_localFirefoxChunksDirty = false;
+    let GJ_localHostsLastError = '';
+
+    function GJ_localStorageGet(keys) {
+        const browserStore = globalThis.browser?.storage?.local;
+        if (browserStore?.get) return Promise.resolve().then(() => browserStore.get(keys));
+        const chromeStore = globalThis.chrome?.storage?.local;
+        if (!chromeStore?.get) return Promise.reject(new Error('missing-local-storage'));
+        return new Promise((resolve, reject) => {
+            try {
+                chromeStore.get(keys, value => {
+                    const error = globalThis.chrome?.runtime?.lastError;
+                    if (error) reject(new Error(error.message || 'storage-error'));
+                    else resolve(value || {});
+                });
+            } catch (error) { reject(error); }
+        });
+    }
+
+    function GJ_localSortedHosts(values) {
+        // Preserve exact host entries. Each source already normalizes and deduplicates
+        // its feed; normalize defensively for malformed or older stored generations.
+        for (let i = 0; i < values.length; i++) {
+            values[i] = String(values[i] || '').trim().toLowerCase().replace(/^\.+|\.+$/g, '');
+        }
+        values.sort();
+        let write = 0;
+        for (let i = 0; i < values.length; i++) {
+            if (values[i] && (!write || values[i] !== values[write - 1])) values[write++] = values[i];
+        }
+        values.length = write;
+        return values;
+    }
+
+    function GJ_localBinaryHas(values, wanted) {
+        let low = 0, high = values.length - 1;
+        while (low <= high) {
+            const middle = (low + high) >>> 1;
+            if (values[middle] === wanted) return true;
+            if (values[middle] < wanted) low = middle + 1;
+            else high = middle - 1;
+        }
+        return false;
+    }
+
+    function GJ_localFindHost(host, values) {
+        let candidate = String(host || '').trim().toLowerCase().replace(/\.$/, '');
+        while (candidate.includes('.')) {
+            if (GJ_localBinaryHas(values, candidate)) return candidate;
+            candidate = candidate.slice(candidate.indexOf('.') + 1);
+        }
+        return '';
+    }
+
+    function GJ_localArraysEqual(a, b) {
+        if (a.length !== b.length) return false;
+        for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+        return true;
+    }
+
+    async function GJ_readChromeLocalHosts() {
+        const meta = await GJ_localStorageGet(['hostsChunks', 'hostsTotal']);
+        const count = Number(meta.hostsChunks);
+        if (!Number.isSafeInteger(count) || count < 1 || count > 1000 ||
+            !Number.isSafeInteger(meta.hostsTotal) || meta.hostsTotal < 1) {
+            throw new Error('chrome-hosts-metadata-unavailable');
+        }
+        const keys = Array.from({ length: count }, (_, index) => `hostsChunk_${index}`);
+        const chunks = await GJ_localStorageGet(keys);
+        const hosts = [];
+        for (const key of keys) {
+            if (!Array.isArray(chunks[key])) throw new Error(`missing-${key}`);
+            hosts.push(...chunks[key]);
+        }
+        if (hosts.length !== meta.hostsTotal) throw new Error('chrome-hosts-count-mismatch');
+        return { mode: 'local', platform: 'chrome', chrome: GJ_localSortedHosts(hosts), hard: [], supplemental: [] };
+    }
+
+    async function GJ_readFirefoxLocalHosts() {
+        const metaKeys = GJ_LOCAL_FIREFOX_SOURCES.map(source =>
+            `bfb:hosts-source-meta:v2:${source.id}`);
+        const metadata = await GJ_localStorageGet(metaKeys);
+        const hard = [], supplemental = [];
+        for (const source of GJ_LOCAL_FIREFOX_SOURCES) {
+            const key = `bfb:hosts-source-meta:v2:${source.id}`;
+            const meta = metadata[key];
+            if (!meta || meta.schema !== 2 || meta.tier !== source.tier ||
+                !Number.isSafeInteger(meta.chunks) || meta.chunks < 0 || meta.chunks > 200 ||
+                !Number.isSafeInteger(meta.count) || meta.count < 0) {
+                throw new Error(`firefox-${source.id}-metadata-unavailable`);
+            }
+            const keys = Array.from({ length: meta.chunks }, (_, index) =>
+                `bfb:hosts-source-chunk:v2:${source.id}:${index}`);
+            let sourceCount = 0;
+            // Small batches avoid a gigantic structured-clone message on Fenix.
+            for (let offset = 0; offset < keys.length; offset += 8) {
+                const batch = keys.slice(offset, offset + 8);
+                const data = await GJ_localStorageGet(batch);
+                for (const chunkKey of batch) {
+                    if (!Array.isArray(data[chunkKey])) throw new Error(`missing-${chunkKey}`);
+                    const chunk = data[chunkKey];
+                    sourceCount += chunk.length;
+                    if (source.tier === 'hard') hard.push(...chunk);
+                    else supplemental.push(...chunk);
+                }
+            }
+            if (sourceCount !== meta.count) throw new Error(`firefox-${source.id}-count-mismatch`);
+        }
+        if (!hard.length) throw new Error('firefox-hard-hosts-unavailable');
+        return {
+            mode: 'local', platform: 'firefox', chrome: [],
+            hard: GJ_localSortedHosts(hard),
+            supplemental: GJ_localSortedHosts(supplemental)
+        };
+    }
+
+    function GJ_holdCentralGateForHostRevision() {
+        // A real hosts update can turn a previously clean URL into a blocked URL.
+        // Hold approved shells synchronously while the new persistent snapshot loads.
+        // Identical writes never reach this path, so they cannot cause flicker.
+        if (GJ_localHosts.mode === 'loading') return;
+        GJ_localHosts.mode = 'loading';
+        GJ_centralPolicyGeneration++;
+        GJ_centralPolicyVerdictCache.clear();
+        GJ_centralPolicyInFlight.clear();
+        GJ_onCentralPolicyUpdated(true);
+    }
+
+    function GJ_scheduleLocalHostsRefresh(delay = 0) {
+        if (GJ_localHostsRefreshTimer !== null) clearTimeout(GJ_localHostsRefreshTimer);
+        GJ_localHostsRefreshTimer = window.setTimeout(() => {
+            GJ_localHostsRefreshTimer = null;
+            void GJ_loadLocalHosts();
+        }, delay);
+    }
+
+    async function GJ_loadLocalHosts() {
+        const request = ++GJ_localHostsRequest;
+        const firstLoad = GJ_localHosts.mode === 'loading';
+        try {
+            const next = isFirefox ? await GJ_readFirefoxLocalHosts() : await GJ_readChromeLocalHosts();
+            if (request !== GJ_localHostsRequest) return;
+            const changed = !firstLoad && (GJ_localHosts.mode !== 'local' ||
+                GJ_localHosts.platform !== next.platform ||
+                !GJ_localArraysEqual(GJ_localHosts.chrome, next.chrome) ||
+                !GJ_localArraysEqual(GJ_localHosts.hard, next.hard) ||
+                !GJ_localArraysEqual(GJ_localHosts.supplemental, next.supplemental));
+            GJ_localHosts = next;
+            GJ_localHostsLastError = '';
+            if (changed) {
+                GJ_centralPolicyGeneration++;
+                GJ_centralPolicyVerdictCache.clear();
+                GJ_centralPolicyInFlight.clear();
+                GJ_onCentralPolicyUpdated(true);
+            } else {
+                // Same effective hosts set: don't revoke existing approvals.
+                GJ_onCentralPolicyUpdated();
+            }
+            if (GJ_centralPolicyPending.size) GJ_queueCentralPolicyFlush();
+        } catch (error) {
+            if (request !== GJ_localHostsRequest) return;
+            GJ_localHostsLastError = String(error?.message || error);
+            // Never treat missing/corrupt hosts data as an empty allowlist.
+            // The background bridge is a last-resort safety fallback only.
+            if (firstLoad) GJ_localHosts.mode = 'bridge';
+            if (GJ_centralPolicyPending.size) GJ_queueCentralPolicyFlush();
+        }
+    }
+
+    // Firefox's Focus Master matchLink and scoped-path semantics, mirrored only
+    // for the finite link/path rules needed by local Google URL classification.
+    function GJ_localStructuredRule(rawValue) {
+        const raw = String(rawValue || '').trim();
+        if (!raw || raw.includes('*')) return null;
+        try {
+            const parsed = new URL(/^[a-z][a-z\d+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`);
+            if (!/^https?:$/.test(parsed.protocol)) return null;
+            return {
+                host: GJ_normalizeCentralPolicyHost(parsed.hostname),
+                pathname: (parsed.pathname || '/').toLowerCase().replace(/\/{2,}/g, '/').replace(/\/$/, '') || '/',
+                query: Array.from(parsed.searchParams.entries()).map(([key, value]) =>
+                    [key.toLowerCase(), value.normalize('NFKC').trim().toLowerCase()])
+            };
+        } catch (e) { return null; }
+    }
+
+    function GJ_localHasScopedPathRule(url, rules) {
+        const host = GJ_normalizeCentralPolicyHost(url.hostname);
+        let scoped = false;
+        for (const value of rules || []) {
+            const rule = GJ_localStructuredRule(value);
+            if (!rule || !(host === rule.host || host.endsWith(`.${rule.host}`))) continue;
+            if (rule.pathname === '/' && !rule.query.length) return false;
+            scoped = true;
+        }
+        return scoped;
+    }
+
+    function GJ_localLinkRuleMatch(url, rules) {
+        const host = GJ_normalizeCentralPolicyHost(url.hostname);
+        const path = (url.pathname || '/').toLowerCase().replace(/\/{2,}/g, '/').replace(/\/$/, '') || '/';
+        const query = url.search.toLowerCase();
+        for (const value of rules || []) {
+            const raw = String(value || '').trim();
+            if (!raw) continue;
+            if (raw.includes('*')) {
+                const pattern = raw.replace(/^https?:\/\//i, '').replace(/^www\./i, '')
+                    .replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+                try {
+                    if (new RegExp(`^${pattern}(?:$|[/?#].*)`, 'i')
+                        .test(host + (path === '/' ? '' : path) + query)) return true;
+                } catch (e) {}
+                continue;
+            }
+            const rule = GJ_localStructuredRule(raw);
+            if (!rule || !(host === rule.host || host.endsWith(`.${rule.host}`))) continue;
+            if (rule.pathname !== '/' && path !== rule.pathname && !path.startsWith(`${rule.pathname}/`)) continue;
+            if (rule.query.some(([key, value]) => {
+                const values = Array.from(url.searchParams.entries())
+                    .filter(([rawKey]) => rawKey.toLowerCase() === key)
+                    .map(([, v]) => v.normalize('NFKC').trim().toLowerCase());
+                return !values.length || (value && !values.includes(value));
+            })) continue;
+            return true;
+        }
+        return false;
+    }
+
+    function GJ_localClassifyURL(href) {
+        if (GJ_localHosts.mode !== 'local' || !GJ_centralPolicySnapshotLoaded) return '';
+        let parsed;
+        try { parsed = new URL(href); } catch (e) { return 'none'; }
+        // The fetched hosts feeds do not strip www.: an exact www-only deny
+        // must not be accidentally lost during local classification.
+        const rawHost = String(parsed.hostname || '').toLowerCase().replace(/\.$/, '');
+        const host = GJ_normalizeCentralPolicyHost(parsed.hostname);
+        const snapshot = GJ_centralPolicySnapshot;
+        if (GJ_localHosts.platform === 'firefox') {
+            // Unlike Chrome, Firefox's hard-host floor outranks Trusted Sites.
+            if ((snapshot.staticBlockedSites || []).some(rule => rule && href.includes(String(rule)))) return 'block';
+            if (GJ_localFindHost(rawHost, GJ_localHosts.hard)) return 'block';
+            // A finite trusted exemption precedes the supplemental hosts layer.
+            const allowedHosts = snapshot.allowedHosts || [];
+            if (allowedHosts.some(value => {
+                const domain = GJ_normalizeCentralPolicyHost(value);
+                return domain && (host === domain || host.endsWith(`.${domain}`));
+            })) return 'allow';
+            const pathname = parsed.pathname || '/';
+            for (const rule of snapshot.allowedPathRules || []) {
+                const domain = GJ_normalizeCentralPolicyHost(rule?.host);
+                const prefix = String(rule?.pathPrefix || '/').replace(/\/{2,}/g, '/').replace(/\/$/, '') || '/';
+                if (host === domain && (pathname === prefix || pathname.startsWith(`${prefix}/`))) return 'allow';
+            }
+            const tldBlocked = (snapshot.blockedTLDs || []).some(value => {
+                let tld = String(value || '').trim().toLowerCase().replace(/^\.+/, '');
+                if (!tld) return false;
+                try {
+                    const punycode = new URL(`https://bravefox-test.${tld}/`).hostname;
+                    if (punycode.startsWith('bravefox-test.')) tld = punycode.slice(14);
+                } catch (e) {}
+                return host === tld || host.endsWith(`.${tld}`);
+            });
+            if (tldBlocked || GJ_localLinkRuleMatch(parsed, snapshot.blockedLinks) ||
+                GJ_localLinkRuleMatch(parsed, snapshot.blockedPaths)) return 'block';
+            if (!GJ_localHasScopedPathRule(parsed, snapshot.blockedPaths) &&
+                GJ_localFindHost(rawHost, GJ_localHosts.supplemental)) return 'block';
+            return 'none';
+        }
+        // Chrome's high-priority complete exclusions intentionally outrank hosts.
+        const finite = GJ_centralPolicySnapshotVerdict(href);
+        if (finite === 'allow' || finite === 'block') return finite;
+        return GJ_localFindHost(rawHost, GJ_localHosts.chrome) ||
+            GJ_localFindHost(rawHost, snapshot.bundledHostOverlay || []) ? 'block' : 'none';
+    }
+
+    try {
+        window.GoogleJS = window.GoogleJS || {};
+        window.GoogleJS.getLocalHostsDebug = () => ({
+            mode: GJ_localHosts.mode, platform: GJ_localHosts.platform,
+            chromeHosts: GJ_localHosts.chrome.length, hardHosts: GJ_localHosts.hard.length,
+            supplementalHosts: GJ_localHosts.supplemental.length,
+            lastError: GJ_localHostsLastError, generation: GJ_centralPolicyGeneration
+        });
+    } catch (e) {}
 
     function GJ_centralPolicyRuntime() {
         try {
@@ -1680,14 +1991,18 @@
     function GJ_centralPolicyCachedVerdict(value) {
         const href = GJ_normalizeCentralPolicyURL(value);
         if (!href) return '';
-
-        const snapshotVerdict = GJ_centralPolicySnapshotVerdict(href);
-        if (snapshotVerdict) return snapshotVerdict;
-
         if (GJ_centralPolicyVerdictCache.has(href)) {
             return GJ_centralPolicyVerdictCache.get(href) || '';
         }
-
+        if (GJ_localHosts.mode === 'local' && GJ_centralPolicySnapshotLoaded &&
+            GJ_centralPolicySnapshot.bundledOverlayComplete !== false) {
+            const action = GJ_localClassifyURL(href);
+            if (action) {
+                GJ_centralPolicyVerdictCache.set(href, action);
+                return action;
+            }
+        }
+        // Neither incomplete local data nor a missing finite policy grants approval.
         GJ_queueCentralPolicyURL(href);
         return '';
     }
@@ -1711,6 +2026,28 @@
     function GJ_flushCentralPolicyURLs() {
         GJ_centralPolicyFlushTimer = 0;
         if (!GJ_centralPolicyPending.size) return;
+        // No per-result background messages when the local hosts snapshot is ready.
+        // Wait for both independent data sources rather than declaring missing data clean.
+        if (!GJ_centralPolicySnapshotLoaded || GJ_localHosts.mode === 'loading') return;
+        if (GJ_localHosts.mode === 'local' &&
+            GJ_centralPolicySnapshot.bundledOverlayComplete !== false) {
+            const urls = Array.from(GJ_centralPolicyPending).slice(0, 192);
+            let changed = false;
+            for (const url of urls) {
+                GJ_centralPolicyPending.delete(url);
+                const action = GJ_localClassifyURL(url);
+                if (!action) {
+                    GJ_centralPolicyPending.add(url);
+                    continue;
+                }
+                const previous = GJ_centralPolicyVerdictCache.get(url);
+                GJ_centralPolicyVerdictCache.set(url, action);
+                if (previous !== action) changed = true;
+            }
+            if (changed) GJ_onCentralPolicyUpdated();
+            if (GJ_centralPolicyPending.size) GJ_queueCentralPolicyFlush();
+            return;
+        }
 
         const urls = Array.from(GJ_centralPolicyPending).slice(0, 192);
         const generation = GJ_centralPolicyGeneration;
@@ -1788,11 +2125,17 @@
             allowedPathRules: snapshot.allowedPathRules.map(rule =>
                 JSON.stringify([String(rule?.host || ''), String(rule?.pathPrefix || '')])).sort(),
             blockedSites: sorted(snapshot.blockedSites),
-            blockedTLDs: sorted(snapshot.blockedTLDs)
+            blockedTLDs: sorted(snapshot.blockedTLDs),
+            staticBlockedSites: sorted(snapshot.staticBlockedSites || []),
+            blockedLinks: sorted(snapshot.blockedLinks || []),
+            blockedPaths: sorted(snapshot.blockedPaths || []),
+            bundledHostOverlay: sorted(snapshot.bundledHostOverlay || []),
+            bundledOverlayComplete: snapshot.bundledOverlayComplete !== false
         });
     }
 
     function GJ_loadCentralPolicySnapshot(revalidateFetchedHosts = false) {
+        if (revalidateFetchedHosts) GJ_centralPolicySnapshotPendingRevalidation = true;
         const request = ++GJ_centralPolicySnapshotRequest;
         GJ_sendCentralPolicyMessage({ type: GJ_CENTRAL_POLICY_SNAPSHOT_TYPE }).then(response => {
             if (request !== GJ_centralPolicySnapshotRequest) return;
@@ -1814,13 +2157,23 @@
                 GJ_centralPolicySnapshotRetryTimer = null;
             }
             GJ_centralPolicySnapshotRetryCount = 0;
-            revalidateFetchedHosts ||= GJ_centralPolicySnapshotRetryRevalidate;
+            // A forced refresh can be superseded by a later non-forced snapshot call.
+            // Apply it only after a valid response, regardless of which call finishes.
+            revalidateFetchedHosts ||= GJ_centralPolicySnapshotRetryRevalidate ||
+                GJ_centralPolicySnapshotPendingRevalidation;
             GJ_centralPolicySnapshotRetryRevalidate = false;
+            GJ_centralPolicySnapshotPendingRevalidation = false;
             const nextSnapshot = {
                 allowedHosts: Array.isArray(response.snapshot.allowedHosts) ? response.snapshot.allowedHosts.slice() : [],
                 allowedPathRules: Array.isArray(response.snapshot.allowedPathRules) ? response.snapshot.allowedPathRules.map(rule => ({ ...rule })) : [],
                 blockedSites: Array.isArray(response.snapshot.blockedSites) ? response.snapshot.blockedSites.slice() : [],
-                blockedTLDs: Array.isArray(response.snapshot.blockedTLDs) ? response.snapshot.blockedTLDs.slice() : []
+                blockedTLDs: Array.isArray(response.snapshot.blockedTLDs) ? response.snapshot.blockedTLDs.slice() : [],
+                staticBlockedSites: Array.isArray(response.snapshot.staticBlockedSites) ? response.snapshot.staticBlockedSites.slice() : [],
+                blockedLinks: Array.isArray(response.snapshot.blockedLinks) ? response.snapshot.blockedLinks.slice() : [],
+                blockedPaths: Array.isArray(response.snapshot.blockedPaths) ? response.snapshot.blockedPaths.slice() : [],
+                bundledHostOverlay: Array.isArray(response.snapshot.bundledHostOverlay) ?
+                    GJ_localSortedHosts(response.snapshot.bundledHostOverlay.slice()) : [],
+                bundledOverlayComplete: response.snapshot.bundledOverlayComplete !== false
             };
             const fingerprint = GJ_centralPolicySnapshotKey(nextSnapshot);
             const firstSnapshot = !GJ_centralPolicySnapshotLoaded;
@@ -1833,7 +2186,7 @@
             // classified. Never discard those verdicts simply because it arrived.
             // Later unchanged snapshots likewise need no destructive refresh. A real
             // hosts-file update (which is not represented in the finite snapshot) DOES.
-            if (finitePolicyChanged || revalidateFetchedHosts) {
+            if (finitePolicyChanged || (revalidateFetchedHosts && GJ_localHosts.mode === 'bridge')) {
                 GJ_centralPolicyGeneration++;
                 GJ_centralPolicyVerdictCache.clear();
                 GJ_centralPolicyPending.clear();
@@ -1842,15 +2195,20 @@
             } else if (firstSnapshot) {
                 GJ_onCentralPolicyUpdated();
             }
+            if (GJ_centralPolicyPending.size) GJ_queueCentralPolicyFlush();
         }).catch(() => {});
     }
 
     GJ_loadCentralPolicySnapshot();
+    void GJ_loadLocalHosts();
     // Hosts refresh notifications are not synonymous with a changed blocklist.
     // Chrome writes lastUpdate and all hostsChunk_N values even when a download
     // produces precisely the same hosts. Invalidating *every* approved Google
     // result for that no-op makes the entire results area flash while URLs are
     // classified again. Compare the stored policy payload before invalidating.
+    // Metadata timestamps are hints to re-fetch the finite snapshot, NOT proof that
+    // the large fetched-hosts dataset changed. Actual host chunks, counts, or an
+    // opaque/semantic revision still force authoritative fail-closed revalidation.
     const googleCentralHostStorageEvents = [];
     let googleCentralLastExplicitHostRevisionAt = 0;
     function GJ_recordHostStorageEvent(action, changes) {
@@ -1859,7 +2217,8 @@
             action,
             keys: Object.keys(changes || {}).filter(key =>
                 key === 'lastUpdate' || key === 'hostsChunks' || key === 'hostsTotal' ||
-                key === 'bfb:hosts-meta:v1' || key.startsWith('hostsChunk_')).slice(0, 24),
+                key === 'bfb:hosts-meta:v1' || key === 'bfb:local-dataset' ||
+                key.startsWith('bfb:hosts-source-') || key.startsWith('hostsChunk_')).slice(0, 24),
             generation: GJ_centralPolicyGeneration
         });
         if (googleCentralHostStorageEvents.length > 30) googleCentralHostStorageEvents.shift();
@@ -1868,16 +2227,60 @@
         if (before === after) return false;
         if (Array.isArray(before) && Array.isArray(after)) {
             if (before.length !== after.length) return true;
+            let exactlyEqual = true;
             for (let index = 0; index < before.length; index++) {
-                if (before[index] !== after[index]) return true;
+                if (before[index] !== after[index]) { exactlyEqual = false; break; }
             }
+            if (exactlyEqual) return false;
+            // Hosts chunk reordering alone does not change its blocking policy.
+            // Comparing sets avoids unnecessary approvals resets on reordered writes.
+            const beforeSet = new Set(before);
+            if (beforeSet.size !== new Set(after).size) return true;
+            for (const value of after) if (!beforeSet.has(value)) return true;
             return false;
         }
-        // Metadata objects may carry timestamps; treat changes conservatively.
+        // Exact payload comparison for hosts chunks and counts: never discard an
+        // actual blocking-list change, including changes of equal string length.
         if (before && after && typeof before === 'object' && typeof after === 'object') {
             return JSON.stringify(before) !== JSON.stringify(after);
         }
         return true;
+    }
+
+    function GJ_hostMetaPolicyFingerprint(value) {
+        // Strip only known clock/bookkeeping fields. Retain all unknown keys,
+        // nested dataset fields, revisions and checksums: any change to one of
+        // those still invalidates the authoritative fetched-hosts verdict cache.
+        const clockKeys = new Set([
+            'lastupdate', 'lastupdated', 'lastupdatedat', 'updatedat',
+            'lastchecked', 'lastcheckedat', 'checkedat', 'lastcheck',
+            'lastfetch', 'lastfetched', 'lastfetchedat', 'fetchedat',
+            'lastrefresh', 'lastrefreshed', 'lastrefreshedat', 'refreshedat',
+            'lastsync', 'lastsynced', 'lastsyncedat', 'syncedat',
+            'lastattempt', 'lastattemptat', 'timestamp', 'lasttimestamp'
+        ]);
+        const normalize = (input, depth = 0) => {
+            if (depth > 12) return input;
+            if (Array.isArray(input)) return input.map(item => normalize(item, depth + 1));
+            if (!input || typeof input !== 'object') return input;
+            const output = {};
+            for (const key of Object.keys(input).sort()) {
+                if (clockKeys.has(key.toLowerCase())) continue;
+                output[key] = normalize(input[key], depth + 1);
+            }
+            return output;
+        };
+        return JSON.stringify(normalize(value ?? {}));
+    }
+
+    function GJ_isClockOnlyLegacyHostUpdate(value) {
+        if (value instanceof Date) return Number.isFinite(value.getTime());
+        if (typeof value === 'number') return Number.isFinite(value) && value >= 1000000000;
+        if (typeof value !== 'string') return false;
+        const text = value.trim();
+        if (/^\d{10,16}$/.test(text)) return true;
+        return /^\d{4}-\d{2}-\d{2}[T\s]/.test(text) &&
+            Number.isFinite(Date.parse(text));
     }
     try {
         window.GoogleJS = window.GoogleJS || {};
@@ -1890,13 +2293,39 @@
             if (areaName !== 'local' || !changes) return;
 
             const hostChunkKeys = Object.keys(changes).filter(key => /^hostsChunk_\d+$/.test(key));
+            const firefoxSourceChunks = Object.keys(changes).filter(key =>
+                key.startsWith('bfb:hosts-source-chunk:v2:'));
+            const firefoxSourceMeta = Object.keys(changes).filter(key =>
+                key.startsWith('bfb:hosts-source-meta:v2:'));
+            const firefoxChunksChanged = firefoxSourceChunks.some(key =>
+                GJ_hostsStorageValuesDiffer(changes[key]?.oldValue, changes[key]?.newValue));
+            if (firefoxChunksChanged) {
+                GJ_localFirefoxChunksDirty = true;
+                GJ_holdCentralGateForHostRevision();
+            }
+            const firefoxCountChanged = firefoxSourceMeta.some(key =>
+                changes[key]?.oldValue?.count !== changes[key]?.newValue?.count ||
+                changes[key]?.oldValue?.chunks !== changes[key]?.newValue?.chunks);
+            if (firefoxSourceMeta.length && (GJ_localFirefoxChunksDirty || firefoxCountChanged)) {
+                if (firefoxCountChanged) GJ_holdCentralGateForHostRevision();
+                GJ_localFirefoxChunksDirty = false;
+                GJ_recordHostStorageEvent('firefox-source-revision-local', changes);
+                GJ_scheduleLocalHostsRefresh(25);
+            } else if (firefoxSourceMeta.length) {
+                GJ_recordHostStorageEvent('firefox-identical-source-no-revalidation', changes);
+            }
+            if (changes['bfb:local-dataset']) {
+                GJ_recordHostStorageEvent('finite-dataset-refresh', changes);
+                GJ_loadCentralPolicySnapshot(false);
+            }
+
             const contentChanged = hostChunkKeys.some(key =>
                 GJ_hostsStorageValuesDiffer(changes[key]?.oldValue, changes[key]?.newValue));
             const countsChanged = ['hostsChunks', 'hostsTotal'].some(key =>
                 changes[key] && GJ_hostsStorageValuesDiffer(changes[key].oldValue, changes[key].newValue));
             const focusMasterChanged = Boolean(changes['bfb:hosts-meta:v1'] &&
-                GJ_hostsStorageValuesDiffer(changes['bfb:hosts-meta:v1'].oldValue,
-                    changes['bfb:hosts-meta:v1'].newValue));
+                GJ_hostMetaPolicyFingerprint(changes['bfb:hosts-meta:v1'].oldValue) !==
+                GJ_hostMetaPolicyFingerprint(changes['bfb:hosts-meta:v1'].newValue));
             const hasContentPayload = hostChunkKeys.length > 0 ||
                 Boolean(changes.hostsChunks || changes.hostsTotal);
 
@@ -1905,27 +2334,44 @@
                 GJ_recordHostStorageEvent('policy-changed-revalidate', changes);
                 // Real dataset revisions must remain fail-closed, including updates
                 // that leave the finite policy snapshot unchanged.
-                GJ_loadCentralPolicySnapshot(true);
+                // Local host reload compares complete sorted sets; identical data
+                // must not invalidate previously approved results.
+                if (contentChanged || countsChanged) {
+                    GJ_holdCentralGateForHostRevision();
+                    GJ_scheduleLocalHostsRefresh(0);
+                    // The background can stop using the emergency overlay once
+                    // the committed chunks catch up with its in-memory policy.
+                    GJ_loadCentralPolicySnapshot(false);
+                }
+                if (focusMasterChanged) GJ_loadCentralPolicySnapshot(false);
                 return;
             }
             if (hasContentPayload) {
                 GJ_recordHostStorageEvent('identical-hosts-no-revalidation', changes);
                 return;
             }
-            if (changes.lastUpdate) {
-                // Firefox mirrors Focus Master revision events into the legacy
-                // lastUpdate key. The original revision was handled just above;
-                // do not invalidate all visible cards a second time.
+            if (changes['bfb:hosts-meta:v1'] && !changes.lastUpdate) {
+                GJ_recordHostStorageEvent('metadata-only-no-revalidation', changes);
+                return;
+            }
+            if (changes.lastUpdate && GJ_hostsStorageValuesDiffer(
+                changes.lastUpdate.oldValue, changes.lastUpdate.newValue)) {
                 if (Date.now() - googleCentralLastExplicitHostRevisionAt < 2000) {
                     GJ_recordHostStorageEvent('duplicate-legacy-signal-ignored', changes);
                     return;
                 }
-                // A standalone legacy update could represent a real hosts change:
-                // retain the old fail-closed behavior instead of silently trusting it.
-                if (GJ_hostsStorageValuesDiffer(changes.lastUpdate.oldValue,
-                    changes.lastUpdate.newValue)) {
-                    GJ_recordHostStorageEvent('legacy-update-revalidate', changes);
-                    GJ_loadCentralPolicySnapshot(true);
+                if (GJ_isClockOnlyLegacyHostUpdate(changes.lastUpdate.newValue)) {
+                    // Timestamp-only event: ask for the authoritative finite rules.
+                    // A changed snapshot still invalidates approvals, but unchanged
+                    // host payloads do not force an unnecessary global reclassification.
+                    GJ_recordHostStorageEvent('legacy-clock-snapshot-only', changes);
+                    GJ_loadCentralPolicySnapshot(false);
+                } else {
+                    // Opaque legacy revision IDs are meaningful even when the
+                    // storage event has no accompanying hostsChunk_N payload.
+                    GJ_recordHostStorageEvent('legacy-revision-revalidate', changes);
+                    GJ_loadCentralPolicySnapshot(GJ_localHosts.mode === 'bridge');
+                    GJ_scheduleLocalHostsRefresh(0);
                 }
             }
         });
@@ -5243,6 +5689,10 @@ function swapSearchTabs() {
     let googleCentralGateScanQueued = false;
     let googleCentralGateNeedsLocalPass = false;
     const googleCentralGateApprovedSignals = new WeakMap();
+    // Google's hydration can replace the outer result shell without replacing its
+    // title anchor. Remember the *same verified approval* against that anchor as
+    // well, so a harmless wrapper change does not blank an already cleared card.
+    const googleCentralGateApprovedLinks = new WeakMap();
 
     function ensureGoogleCentralPolicyGateStyle() {
         if (document.getElementById(GOOGLEJS_CENTRAL_GATE_STYLE_ID)) return;
@@ -5291,17 +5741,10 @@ function swapSearchTabs() {
         let pending = false;
 
         for (const candidate of candidates) {
-            const snapshotVerdict = GJ_centralPolicySnapshotVerdict(candidate);
-            if (snapshotVerdict === 'block') return 'blocked';
-            if (snapshotVerdict === 'allow') continue;
-
-            if (GJ_centralPolicyVerdictCache.has(candidate)) {
-                if (GJ_centralPolicyVerdictCache.get(candidate) === 'block') return 'blocked';
-                continue;
-            }
-
+            const verdict = GJ_centralPolicyCachedVerdict(candidate);
+            if (verdict === 'block') return 'blocked';
+            if (verdict === 'allow' || verdict === 'none') continue;
             pending = true;
-            GJ_queueCentralPolicyURL(candidate);
         }
 
         return pending ? 'pending' : 'ready';
@@ -5323,9 +5766,42 @@ function swapSearchTabs() {
         }
     }
 
+    // A single, visibility-independent candidate source for EVERY web-result central
+    // check.  The previous blockResults() supplied innerText-derived policy text,
+    // while the early observer used textContent.  Since innerText changes when our
+    // CSS gate hides a card, those paths could alternately enqueue new URLs and
+    // turn a verified card back into pending without any DOM, policy or URL change.
+    // Keep the trusted opaque-/goto publisher URL used by the existing local policy.
+    // Do not walk/join text nodes: that broader scan caused all-result blanking.
+    function getGoogleWebResultCentralPolicyText(result, link) {
+        const signal = getGoogleWebResultRenderedSignal(result, link);
+        const publisherURL = getGoogleWebResultTrustedPublisherPolicyURL(result, link);
+        return publisherURL ? signal + ' ' + publisherURL : signal;
+    }
+
+    function getGoogleWebResultCentralPolicyCandidateKey(result, link) {
+        const url = link?.href && !link.href.startsWith('data:') ? link.href : '';
+        return JSON.stringify(getGoogleResultCentralPolicyCandidates(
+            url, getGoogleWebResultCentralPolicyText(result, link)).sort());
+    }
+
     function getGoogleCentralPolicyGateResultSignature(result, link) {
         const url = link?.href && !link.href.startsWith('data:') ? link.href : '';
         return JSON.stringify([url, getGoogleWebResultRenderedSignal(result, link)]);
+    }
+
+    function rememberGoogleCentralPolicyGateApproval(result, link, url, signature) {
+        const approval = {
+            link,
+            url,
+            signature,
+            candidateKey: getGoogleWebResultCentralPolicyCandidateKey(result, link),
+            accountScope: braveFoxIsTapioAccount,
+            policyGeneration: GJ_centralPolicyGeneration,
+            result
+        };
+        googleCentralGateApprovedSignals.set(result, approval);
+        if (link) googleCentralGateApprovedLinks.set(link, approval);
     }
 
     function isGoogleCentralPolicyGateResultApproved(result, link) {
@@ -5334,7 +5810,8 @@ function swapSearchTabs() {
             approved.url === (link?.href || '') &&
             approved.accountScope === braveFoxIsTapioAccount &&
             approved.policyGeneration === GJ_centralPolicyGeneration &&
-            approved.signature === getGoogleCentralPolicyGateResultSignature(result, link));
+            approved.signature === getGoogleCentralPolicyGateResultSignature(result, link) &&
+            approved.candidateKey === getGoogleWebResultCentralPolicyCandidateKey(result, link));
     }
 
     // Google can use an opaque /goto?url=CAES... link with no target hostname.
@@ -5425,31 +5902,34 @@ function swapSearchTabs() {
         // Recheck those changes synchronously, BEFORE returning it to a hidden state.
         // A new card, changed primary URL, changed account, or changed policy generation
         // must instead follow the ordinary fail-closed pending/blocked route.
-        const previous = googleCentralGateApprovedSignals.get(result);
-        if (!previous || !result?.isConnected || previous.link !== link ||
+        const currentUrl = link?.href || '';
+        const sameShellApproval = googleCentralGateApprovedSignals.get(result);
+        const linkApproval = googleCentralGateApprovedLinks.get(link);
+        const previous = sameShellApproval?.link === link ? sameShellApproval : linkApproval;
+        if (!previous || !result?.isConnected || !link || !result.contains(link) ||
+            previous.link !== link || previous.url !== currentUrl ||
             previous.accountScope !== braveFoxIsTapioAccount ||
             previous.policyGeneration !== GJ_centralPolicyGeneration) return false;
 
         const signature = getGoogleCentralPolicyGateResultSignature(result, link);
-        const currentUrl = link?.href || '';
-        if (previous.signature === signature && previous.url === currentUrl) return true;
+        // Only an identical *result shell* may take the cheap unchanged-signature path.
+        // An anchor transferred into a new wrapper must pass both policies again,
+        // since the new wrapper could contain newly added blocked snippet content.
+        const candidateKey = getGoogleWebResultCentralPolicyCandidateKey(result, link);
+        if (previous.result === result && previous.signature === signature &&
+            previous.candidateKey === candidateKey) return true;
 
         // Revalidate BOTH policies before retaining ready. A changed destination
         // must be independently classified: pending and blocked URLs NEVER inherit
         // clearance from the old href, even on a previously approved result.
         const text = getGoogleWebResultPolicyText(result, link);
-        if (getGoogleResultCentralPolicyGateState(currentUrl, text) !== 'ready' ||
+        if (getGoogleResultCentralPolicyGateState(currentUrl,
+            getGoogleWebResultCentralPolicyText(result, link)) !== 'ready' ||
             decideResultPolicy(currentUrl, text, false, false).action === POLICY_ACTION.HIDE) {
             return false;
         }
 
-        googleCentralGateApprovedSignals.set(result, {
-            link,
-            url: currentUrl,
-            signature,
-            accountScope: braveFoxIsTapioAccount,
-            policyGeneration: GJ_centralPolicyGeneration
-        });
+        rememberGoogleCentralPolicyGateApproval(result, link, currentUrl, signature);
         result.setAttribute('data-gj-cache', text.length + ':' + currentUrl);
         return true;
     }
@@ -5483,14 +5963,118 @@ function swapSearchTabs() {
         return shells;
     }
 
-    function setGoogleCentralPolicyGateShellState(result, link, state) {
+    // === GOOGLE RESULT GATE DIAGNOSTICS (OBSERVATION ONLY) ========================
+    // Record one incident per state-setting call, not one row for every nested shell.
+    // Do not change any visibility, approval, queue or blocking decisions here.
+    const googleGateDiagnosticHistory = [];
+    let googleGateDiagnosticSerial = 0;
+
+    function describeGoogleGateDiagnosticNode(node) {
+        try {
+            if (!node) return '';
+            if (node.nodeType !== 1) return node.nodeType === 3 ? '#text' : `#node-${node.nodeType}`;
+            const tag = String(node.tagName || 'element').toLowerCase();
+            const id = node.id ? `#${String(node.id).slice(0, 45)}` : '';
+            const classes = Array.from(node.classList || []).slice(0, 5)
+                .map(value => String(value).slice(0, 35)).join('.');
+            return `${tag}${id}${classes ? '.' + classes : ''}`.slice(0, 220);
+        } catch (e) { return '[unavailable]'; }
+    }
+
+    function describeGoogleGateMutation(mutation, origin = '') {
+        try {
+            if (!mutation) return null;
+            return {
+                type: String(mutation.type || ''),
+                attribute: String(mutation.attributeName || ''),
+                target: describeGoogleGateDiagnosticNode(mutation.target),
+                origin: String(origin || ''),
+                addedCount: mutation.addedNodes?.length || 0,
+                removedCount: mutation.removedNodes?.length || 0,
+                added: Array.from(mutation.addedNodes || []).slice(0, 3)
+                    .map(describeGoogleGateDiagnosticNode),
+                removed: Array.from(mutation.removedNodes || []).slice(0, 3)
+                    .map(describeGoogleGateDiagnosticNode)
+            };
+        } catch (e) { return { type: 'unavailable' }; }
+    }
+
+    function rememberGoogleGateDiagnostic(result, link, affectedShells, context) {
+        try {
+            if (!affectedShells.length) return;
+            const currentUrl = String(link?.href || '');
+            const directApproval = googleCentralGateApprovedSignals.get(result);
+            const anchorApproval = link ? googleCentralGateApprovedLinks.get(link) : null;
+            const approval = directApproval?.link === link ? directApproval : anchorApproval;
+            const currentSignature = approval ? getGoogleCentralPolicyGateResultSignature(result, link) : '';
+            const rawTitle = link?.querySelector?.('h3')?.textContent ||
+                link?.closest?.('h3')?.textContent || result?.querySelector?.('h3')?.textContent || '';
+            const latestVerdict = currentUrl ? GJ_centralPolicyVerdictCache.get(GJ_normalizeCentralPolicyURL(currentUrl)) : undefined;
+            const stack = String(new Error().stack || '').split('\n').slice(2, 10)
+                .map(line => line.trim()).join(' | ').slice(0, 1600);
+            const entry = {
+                id: ++googleGateDiagnosticSerial,
+                at: new Date().toISOString(),
+                pageStart: new URLSearchParams(location.search).get('start') || '0',
+                title: String(rawTitle).trim().slice(0, 160),
+                source: String(context?.source || 'unspecified'),
+                centralState: String(context?.centralState || 'not-evaluated-here'),
+                approvedByFastCheck: context?.approvedByFastCheck ?? null,
+                approvedByRecheck: context?.approvedByRecheck ?? null,
+                result: describeGoogleGateDiagnosticNode(result),
+                url: currentUrl.slice(0, 350),
+                approvalExists: Boolean(approval),
+                sameResultNode: approval ? approval.result === result : null,
+                sameLinkNode: approval ? approval.link === link : null,
+                urlChanged: approval ? approval.url !== currentUrl : null,
+                textOrSignatureChanged: approval ? approval.signature !== currentSignature : null,
+                centralCandidatesChanged: approval ? approval.candidateKey !==
+                    getGoogleWebResultCentralPolicyCandidateKey(result, link) : null,
+                policyGenerationChanged: approval ? approval.policyGeneration !== GJ_centralPolicyGeneration : null,
+                accountScopeChanged: approval ? approval.accountScope !== braveFoxIsTapioAccount : null,
+                approvedGeneration: approval?.policyGeneration ?? null,
+                currentGeneration: GJ_centralPolicyGeneration,
+                cachedPrimaryVerdict: latestVerdict === undefined ? 'not-cached' : latestVerdict,
+                queuedCentralURLs: GJ_centralPolicyPending.size,
+                inFlightCentralURLs: GJ_centralPolicyInFlight.size,
+                resultConnected: Boolean(result?.isConnected),
+                mutation: context?.mutation || null,
+                shellCount: affectedShells.length,
+                shells: affectedShells.map(describeGoogleGateDiagnosticNode),
+                stack
+            };
+            googleGateDiagnosticHistory.push(entry);
+            if (googleGateDiagnosticHistory.length > 160) googleGateDiagnosticHistory.shift();
+        } catch (e) {} // Diagnostics must never interrupt enforcement.
+    }
+
+    try {
+        window.GoogleJS = window.GoogleJS || {};
+        window.GoogleJS.getGateDiagnosticHistory = () => googleGateDiagnosticHistory.map(entry => ({
+            ...entry,
+            shells: entry.shells.slice(),
+            mutation: entry.mutation ? {
+                ...entry.mutation,
+                added: (entry.mutation.added || []).slice(),
+                removed: (entry.mutation.removed || []).slice()
+            } : null
+        }));
+        window.GoogleJS.clearGateDiagnosticHistory = () => { googleGateDiagnosticHistory.length = 0; };
+    } catch (e) {}
+
+    function setGoogleCentralPolicyGateShellState(result, link, state, diagnosticContext = null) {
         const normalizedState = state === 'ready' ? 'ready' : state === 'blocked' ? 'blocked' : 'pending';
         const shells = getGoogleCentralPolicyGateShellFamily(result, link);
+        const newlyPendingShells = [];
         shells.forEach(shell => {
             try {
-                if (shell.getAttribute(GOOGLEJS_CENTRAL_GATE_ATTR) !== normalizedState) {
+                const previousState = shell.getAttribute(GOOGLEJS_CENTRAL_GATE_ATTR);
+                if (previousState !== normalizedState) {
+                    if (previousState === 'ready' && normalizedState === 'pending') {
+                        newlyPendingShells.push(shell);
+                    }
                     if (shell === result || shell.matches?.(GOOGLEJS_CENTRAL_GATE_SHELL_SELECTOR)) {
-                        rememberGoogleWebGateTransition(shell, shell.getAttribute(GOOGLEJS_CENTRAL_GATE_ATTR), normalizedState);
+                        rememberGoogleWebGateTransition(shell, previousState, normalizedState);
                     }
                     shell.setAttribute(GOOGLEJS_CENTRAL_GATE_ATTR, normalizedState);
                 }
@@ -5501,14 +6085,20 @@ function swapSearchTabs() {
                 }
             } catch (e) {}
         });
+        // Only allocate an expensive diagnostic when an approved wrapper ACTUALLY resets.
+        if (newlyPendingShells.length) {
+            rememberGoogleGateDiagnostic(result, link, newlyPendingShells, diagnosticContext);
+        }
     }
 
-    function syncGoogleWebResultCentralPolicyGate(result, link, suppliedText = '') {
+    function syncGoogleWebResultCentralPolicyGate(result, link, suppliedText = '', diagnosticSource = 'central-gate-sync') {
         try {
             if (!result || !result.isConnected || !link) return 'ready';
             const resultUrl = link.href && !link.href.startsWith('data:') ? link.href : '';
-            const resultText = suppliedText || getGoogleWebResultRenderedSignal(result, link);
-            const state = getGoogleResultCentralPolicyGateState(resultUrl, resultText);
+            // suppliedText is intentionally ignored for CENTRAL classification.
+            // blockResults() keeps using it for its unchanged local policy rules.
+            const state = getGoogleResultCentralPolicyGateState(resultUrl,
+                getGoogleWebResultCentralPolicyText(result, link));
 
             // Set the state on every single-result shell in the ancestor family. The document-start
             // CSS can match more than one nested Google wrapper, so approving only one wrapper can
@@ -5517,9 +6107,22 @@ function swapSearchTabs() {
             // blockResults() has also checked its local nuclear/URL/text policy.
             const stillApproved = isGoogleCentralPolicyGateResultApproved(result, link) ||
                 (state === 'ready' && keepApprovedGoogleWebResultVisibleIfStillSafe(result, link));
-            const visibleState = state === 'ready' && !stillApproved ? 'pending' : state;
-            setGoogleCentralPolicyGateShellState(result, link, visibleState);
-            return state;
+            // The exact same URL candidates were already checked for this approval.
+            // A temporary cache miss must not hide an unchanged cleared card.
+            // An explicit block still wins, and changed candidates/account/policy
+            // cannot use the old approval. New cards stay gated until local checks.
+            const visibleState = state === 'blocked' ? 'blocked' :
+                stillApproved ? 'ready' : 'pending';
+            setGoogleCentralPolicyGateShellState(result, link, visibleState, {
+                source: diagnosticSource,
+                centralState: state,
+                approvedByRecheck: stillApproved
+            });
+            // Preserve the original contract: a new card whose central hosts
+            // are ready must return 'ready' for blockResults() to run its LOCAL
+            // policy and approve it. Only an already-approved temporary cache
+            // miss may be treated as ready without a fresh central reply.
+            return state === 'pending' && stillApproved ? 'ready' : state;
         } catch (e) {
             return 'ready';
         }
@@ -5545,13 +6148,40 @@ function swapSearchTabs() {
         } catch (e) {}
     }
 
+    function releaseSharedGoogleGateShellsForMutation(node) {
+        // A formerly single-result wrapper can become a bucket of several cards.
+        // Release just that *shared ancestor* synchronously, before paint; each
+        // actual result below it still receives its own independent policy gate.
+        // This also handles class-only hydration changes, which the old observer
+        // did not watch even though the document-start CSS uses class selectors.
+        let released = false;
+        try {
+            let element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
+            const boundary = element?.closest?.('#search, #rso, #res');
+            if (!boundary) return false;
+            let depth = 0;
+            while (element && element !== boundary && depth++ < 18) {
+                if (element.matches?.(GOOGLEJS_CENTRAL_GATE_SHELL_SELECTOR) &&
+                    (countResultHeadingsWithin(element) > 1 || countPrimaryResultLinksWithin(element) > 1)) {
+                    if (element.getAttribute(GOOGLEJS_CENTRAL_GATE_ATTR) !== 'ready') {
+                        element.setAttribute(GOOGLEJS_CENTRAL_GATE_ATTR, 'ready');
+                        released = true;
+                    }
+                    if (element.hasAttribute('aria-hidden')) element.removeAttribute('aria-hidden');
+                }
+                element = element.parentElement;
+            }
+        } catch (e) {}
+        return released;
+    }
+
     function gateGoogleOrganicResultsImmediately() {
         ensureGoogleCentralPolicyGateStyle();
         let needsLocalApproval = false;
         try {
             releaseSharedGoogleCentralPolicyGateShells();
             collectGoogleWebResultCards().forEach((link, result) => {
-                const state = syncGoogleWebResultCentralPolicyGate(result, link);
+                const state = syncGoogleWebResultCentralPolicyGate(result, link, '', 'central-gate-microtask-scan');
                 if (state === 'ready' && !isGoogleCentralPolicyGateResultApproved(result, link)) {
                     needsLocalApproval = true;
                 }
@@ -5579,7 +6209,7 @@ function swapSearchTabs() {
         });
     }
 
-    function preGateGoogleCentralPolicyMutationNode(node) {
+    function preGateGoogleCentralPolicyMutationNode(node, mutation = null, mutationOrigin = '') {
         let needsLocalPass = false;
         try {
             const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
@@ -5611,17 +6241,27 @@ function swapSearchTabs() {
             }
 
             links.forEach(link => {
-                const result = findGoogleWebResultContainer(link);
+                // Use the same normalized one-result card as blockResults().
+                // The former findGoogleWebResultContainer() call was undefined,
+                // so the observer silently skipped every affected mutation.
+                const result = getGoogleWebResultCard(link);
                 if (!result) return;
                 // Unchanged, approved cards never lose their ready state merely because
                 // Google updates some unrelated wrapper around the result.
-                if (isGoogleCentralPolicyGateResultApproved(result, link) ||
-                    keepApprovedGoogleWebResultVisibleIfStillSafe(result, link)) {
+                const approvedByFastCheck = isGoogleCentralPolicyGateResultApproved(result, link);
+                const approvedByRecheck = approvedByFastCheck ||
+                    keepApprovedGoogleWebResultVisibleIfStillSafe(result, link);
+                if (approvedByRecheck) {
                     setGoogleCentralPolicyGateShellState(result, link, 'ready');
                 } else {
                     // A changed URL/text or new card must pass BOTH central and local
                     // policy before its pending state is allowed to clear.
-                    setGoogleCentralPolicyGateShellState(result, link, 'pending');
+                    setGoogleCentralPolicyGateShellState(result, link, 'pending', {
+                        source: 'early-gate-mutation',
+                        approvedByFastCheck,
+                        approvedByRecheck,
+                        mutation: describeGoogleGateMutation(mutation, mutationOrigin)
+                    });
                     needsLocalPass = true;
                 }
             });
@@ -5634,15 +6274,21 @@ function swapSearchTabs() {
         ensureGoogleCentralPolicyGateStyle();
         try {
             googleCentralGateObserver = new MutationObserver(mutations => {
-                // MutationObserver callbacks run before rendering. Strip any stale `ready` state from
-                // recycled/new result shells synchronously in this callback, then do the heavier
-                // classification in one queued microtask. This closes the SPA/recycled-node flash gap.
+                // MutationObserver callbacks run before rendering. Resolve a wrapper
+                // that has become shared BEFORE touching its individual cards, so its
+                // stale pending/blocked CSS never hides the approved siblings.
                 let needsLocalPass = false;
                 for (const mutation of mutations) {
-                    if (preGateGoogleCentralPolicyMutationNode(mutation.target)) needsLocalPass = true;
+                    // Our search-tab classes live outside results. Ignore those;
+                    // class changes *inside* search matter because the early gate
+                    // stylesheet matches Google's mutable result class names.
+                    if (mutation.type === 'attributes' && mutation.attributeName === 'class' &&
+                        !mutation.target?.closest?.('#search, #rso, #res')) continue;
+                    if (releaseSharedGoogleGateShellsForMutation(mutation.target)) needsLocalPass = true;
+                    if (preGateGoogleCentralPolicyMutationNode(mutation.target, mutation, 'mutation-target')) needsLocalPass = true;
                     if (mutation.type === 'attributes') continue;
                     mutation.addedNodes?.forEach(node => {
-                        if (preGateGoogleCentralPolicyMutationNode(node)) needsLocalPass = true;
+                        if (preGateGoogleCentralPolicyMutationNode(node, mutation, 'added-node')) needsLocalPass = true;
                     });
                 }
                 if (needsLocalPass) {
@@ -5655,7 +6301,7 @@ function swapSearchTabs() {
                 subtree: true,
                 characterData: true,
                 attributes: true,
-                attributeFilter: ['href']
+                attributeFilter: ['href', 'class']
             });
             queueGoogleCentralGateScan();
         } catch (e) {}
@@ -6023,7 +6669,7 @@ function swapSearchTabs() {
                     const resultText = getGoogleWebResultPolicyText(result, link);
 
                     const resultUrl = link && link.href && !link.href.startsWith('data:') ? link.href : '';
-                    const centralGateState = syncGoogleWebResultCentralPolicyGate(result, link, resultText);
+                    const centralGateState = syncGoogleWebResultCentralPolicyGate(result, link, resultText, 'blockResults-central-check');
                     const cacheKey = resultText.length + ':' + resultUrl;
                     if (centralGateState === 'ready' &&
                         isGoogleCentralPolicyGateResultApproved(result, link) &&
@@ -6039,7 +6685,10 @@ function swapSearchTabs() {
                         googleCentralGateApprovedSignals.delete(result);
                         result.removeAttribute('data-gj-cache');
                         result.setAttribute('data-googlejs-organic-card', '1');
-                        setGoogleCentralPolicyGateShellState(result, link, 'pending');
+                        setGoogleCentralPolicyGateShellState(result, link, 'pending', {
+                            source: 'blockResults-account-exception-wait',
+                            centralState: centralGateState
+                        });
                         return;
                     }
                     if (decision.action === POLICY_ACTION.HIDE) {
@@ -6067,13 +6716,8 @@ function swapSearchTabs() {
                         result.setAttribute('data-googlejs-organic-card', '1');
                     } else {
                         googleWebResultAudit.keptCards++;
-                        googleCentralGateApprovedSignals.set(result, {
-                            link,
-                            url: resultUrl,
-                            signature: getGoogleCentralPolicyGateResultSignature(result, link),
-                            accountScope: braveFoxIsTapioAccount,
-                            policyGeneration: GJ_centralPolicyGeneration
-                        });
+                        rememberGoogleCentralPolicyGateApproval(result, link, resultUrl,
+                            getGoogleCentralPolicyGateResultSignature(result, link));
                         setGoogleCentralPolicyGateShellState(result, link, 'ready');
                         result.setAttribute('data-gj-cache', cacheKey);
                         result.setAttribute('data-googlejs-organic-card', '1');
@@ -6346,8 +6990,10 @@ function swapSearchTabs() {
         for (const [result, link] of cards) {
             if (!result.isConnected) continue;
             const url = link.href && !link.href.startsWith('data:') ? link.href : '';
-            const centralState = getGoogleResultCentralPolicyGateState(url, getGoogleWebResultRenderedSignal(result, link));
-            const approved = centralState === 'ready' && isGoogleCentralPolicyGateResultApproved(result, link);
+            const centralState = getGoogleResultCentralPolicyGateState(url,
+                getGoogleWebResultCentralPolicyText(result, link));
+            const approved = centralState !== 'blocked' &&
+                isGoogleCentralPolicyGateResultApproved(result, link);
             const shells = getGoogleCentralPolicyGateShellFamily(result, link);
             if (approved && [...shells].every(shell => shell.getAttribute(GOOGLEJS_CENTRAL_GATE_ATTR) === 'ready')) {
                 continue;
@@ -6357,7 +7003,11 @@ function swapSearchTabs() {
             // permanently white after the initial local filters, account scope, and central
             // snapshot have finished. Keep this specific unapproved card hidden instead.
             // This never approves it: the ordinary callback still decides remove vs. ready.
-            setGoogleCentralPolicyGateShellState(result, link, 'pending');
+            setGoogleCentralPolicyGateShellState(result, link, 'pending', {
+                source: 'overlay-result-release-check',
+                centralState,
+                approvedByFastCheck: approved
+            });
             if (!shells.size || getComputedStyle(result).visibility !== 'hidden') return false;
         }
         return true;

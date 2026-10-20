@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "BraveFox Enhancer",
-  "version": "29.4.4",
+  "version": "29.5.0",
   "description": "Unified for Firefox PC and Android personal use, for more peaceful Interwebs experience",
   "background": {
     "scripts": [
@@ -353,6 +353,38 @@
     },
     {
       "matches": [
+        "https://www.facebook.com/*",
+        "https://m.facebook.com/*"
+      ],
+      "js": [
+        "scripts/fbpassiveworld.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://www.facebook.com/*",
+        "https://m.facebook.com/*",
+        "https://www.facebook.com/messages*",
+        "https://www.facebook.com/notifications*",
+        "https://meta.ai/*"
+      ],
+      "js": [
+        "scripts/facebook.js"
+      ],
+      "run_at": "document_start",
+      "exclude_matches": [
+        "*://twitch.tv/*",
+        "*://*.twitch.tv/*",
+        "*://elisa.fi/*",
+        "*://maps.google.com/*",
+        "*://google.com/maps/*"
+      ]
+    },
+    {
+      "matches": [
+        "https://instagram.com/*",
         "https://www.instagram.com/*"
       ],
       "js": [
@@ -363,6 +395,7 @@
     },
     {
       "matches": [
+        "https://instagram.com/*",
         "https://www.instagram.com/*",
         "https://www.threads.net/*"
       ],

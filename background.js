@@ -502,6 +502,11 @@ async function getBraveFoxCentralUrlPolicySnapshot() {
       ? trusted.pathRules.map(rule => ({ ...rule }))
       : [],
     blockedSites: finiteBlockedSites,
+    // Additional finite-rule fields let the portable Google content script preserve
+    // hard-static and scoped Focus Master semantics without per-URL background RPCs.
+    staticBlockedSites: blockedSites.slice(),
+    blockedLinks: Array.isArray(dataset?.links) ? dataset.links.slice() : [],
+    blockedPaths: Array.isArray(dataset?.paths) ? dataset.paths.slice() : [],
     blockedTLDs: Array.isArray(dataset?.tlds) ? dataset.tlds.slice() : [],
     fetchedHostsCount: Number(hostStatus?.count || 0),
     hardFetchedHostsCount: Number(hostStatus?.hardCount || 0),

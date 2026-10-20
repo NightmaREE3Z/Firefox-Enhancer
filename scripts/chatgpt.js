@@ -263,32 +263,11 @@
   let sidebarRecentsStageReleased = false;
   let sidebarStageFailOpenTimer = 0;
 
-  // Label the real ChatGPT GPT-5.5 model item "GPT-5.5 Uce" through CSS.
-  // Keep its native event listeners: no synthetic clicks, URLs or reloads.
-  // Availability and the reasoning setting remain controlled by ChatGPT.
-  const LEGACY_GPT55_MENU_ENABLED = true;
-  // These are presentation-only markers applied to the *actual* native item.
-  // No BraveFox-owned interactive element is inserted into React's model menu.
-  const LEGACY_GPT55_MENU_ATTR = 'data-bravefox-gpt55-native-alias';
-  const LEGACY_GPT55_TITLE_ATTR = 'data-bravefox-gpt55-native-title';
-  const LEGACY_GPT55_CAPTION_ATTR = 'data-bravefox-gpt55-native-caption';
-  const LEGACY_GPT55_STYLE_ID = 'bravefox-legacy-gpt55-menu-style';
-  const LEGACY_GPT55_MODEL_MENU_SELECTOR = [
-    '[role="menu"]', '[role="listbox"]',
-    '[data-radix-menu-content]', '[data-slot*="menu-content"]',
-    '[data-slot*="popover-content"]'
-  ].join(', ');
-  let legacyGpt55MenuRestoreQueued = false;
-  let legacyGpt55MenuOpeningRetries = [];
-
-  // Known identifiers observed in the Chrome saved-page snapshot. These are
-  // metadata *labels*, not a list of selectable/authorized models. In particular,
-  // Luna/Sol/Terra and the GPT-5.5 Mini identifiers appeared in internal feature
-  // configuration, not as visible composer options.
+  // Preserve exact model identifiers for non-retired model-family metadata.
+  // These are metadata labels, not selectable or authorized model choices.
   const CHATGPT_ARCHIVE_KNOWN_EXACT_MODEL_SLUGS = new Set([
-    'gpt-5-5-thinking', 'gpt-5-5-pro', 'gpt-5-5-mini', 'gpt-5-5-instant',
-    'gpt-5.5', 'gpt-5-6-pro', 'gpt-5.6-luna', 'gpt-5.6-sol',
-    'gpt-5.6-terra', 'gpt-6-luna', 'gpt-6.1-sol', 'gpt-6-astra'
+    'gpt-5-6-pro', 'gpt-5.6-luna', 'gpt-5.6-sol',
+    'gpt-5.6-terra', 'gpt-6-luna', 'gpt-6-sol', 'gpt-6.1-sol', 'gpt-6-astra'
   ]);
 
   const MODELS_TO_REMOVE = new Set([
@@ -343,24 +322,9 @@
   // Edit `replacement` for the banner message and `buttonReplacement` for its primary
   // action button. `matchAll` + `matchAny` identify the native banner without relying
   // on brittle Tailwind class names; `buttonMatchAny` covers localized button labels.
-  const CHATGPT_BANNER_TEXT_REPLACEMENTS = [
-    {
-      enabled: true,
-      matchModelAny: ['5.5 thinking', 'gpt-5.5', 'gpt 5.5'],
-      matchAny: [
-        'poistuu käytöstä',
-        'poistuu kaytosta',
-        'will be retired',
-        'is retiring',
-        'retires',
-        'retired',
-        'discontinued'
-      ],
-      replacement: `Hei kaikki! Poistamme ihmisten suosimat mallit täältä ja ihmettelemme miksi tilaajia lähtee. Seuraavaksi vuorossa on GPT-5.5 14. Lokakuuta! Hän liittynee GPT-4o ja GPT-5.1 seuraksi laboratorioomme.`,
-      buttonMatchAny: ['kokeile', 'try'],
-      buttonReplacement: `Ok Altman`
-    }
-  ];
+  // Optional native banner-text overrides; empty when no custom notices are configured.
+  const CHATGPT_BANNER_TEXT_REPLACEMENTS = [];
+
   // === Fixed assistant notice text ==============================================
   // Edit `replacementHtml` below to permanently rewrite the matching grey assistant
   // notice. Text, link labels and href values are all controlled here in chatgpt.js.
@@ -489,6 +453,8 @@
     enabled: true,
     userLabel: null,
     fallbackUserLabel: 'User',
+    // Used only until ChatGPT exposes the Personalization nickname.
+    preferredNameFallback: 'NightmaREE3Z',
     assistantLabel: 'ChatGPT',
     showAssistantModel: true,
     showAssistantReasoningLevel: true,
@@ -626,9 +592,6 @@
   const CHATGPT_BANNER_HIDE_KEY = 'bravefoxChatGptHiddenModelNotices_v1';
   const CHATGPT_BANNER_PREFS_LOADING_CLASS = 'bravefox-chatgpt-banner-prefs-loading';
   const CHATGPT_BANNER_PERMANENTLY_HIDDEN_ATTR = 'data-bravefox-banner-permanently-hidden';
-  // Persist the notice's own model identity, not the latest model mentioned in
-  // conversation history. React may render a GPT-5.5 notice in a GPT-6 chat.
-  const CHATGPT_BANNER_GPT55_RETIREMENT_MODEL_SLUG = 'gpt-5-5-thinking';
   const CHATGPT_BANNER_CLOSE_MENU_ID = 'bravefox-chatgpt-banner-close-menu';
   const CHATGPT_BANNER_CLOSE_MENU_OPEN_ATTR = 'data-bravefox-banner-close-menu-open';
   const CHATGPT_BANNER_MENU_TRIGGER_ATTR = 'data-bravefox-banner-menu-trigger';
@@ -811,6 +774,16 @@
   let conversationUserDisplayName = '';
   let conversationUserDisplayNamePromise = null;
   let conversationUserDisplayNameFetchedAt = 0;
+  let conversationPersonalizationNickname = '';
+  let conversationNicknameLastProbeAt = 0;
+  let conversationNicknameRequest = null;
+  let conversationGenerationWasActive = false;
+  let conversationGenerationWatchTimer = 0;
+  let conversationGenerationTrackedTurn = null;
+  let conversationGenerationTrackedSurface = null;
+  let conversationGenerationTrackedRoute = '';
+  let conversationGenerationStartedAt = 0;
+  let conversationPreviousAssistantSurfaceAtSend = null;
   let conversationAccessToken = '';
   let conversationAccessTokenPromise = null;
   let conversationAccessTokenRetryAt = 0;
@@ -1593,9 +1566,6 @@
   void synchronizeRoute();
   installNavigationGuards();
   installInteractionGuards();
-  // Re-use the existing low-overhead popup observer instead of polling ChatGPT.
-  // Native GPT-5.5 rows are left intact, including when both entries coexist.
-  installLegacyGpt55ModelMenuPreserver();
   installThinkingEffortEdgeLock();
   installEscapeHatchObserver();
   scheduleConversationSelectionFastRefresh();
@@ -3415,6 +3385,10 @@
     }
 
     if (!sending) return;
+    const priorAssistantSurfaces = document.querySelectorAll(
+      '[data-markdown-text-style="assistant-message"], .bravefox-assistant-message-surface'
+    );
+    conversationPreviousAssistantSurfaceAtSend = priorAssistantSurfaces[priorAssistantSurfaces.length - 1] || null;
     conversationPendingUserSentAt = Date.now();
     conversationPendingAssistantStartedAt = 0;
     conversationPendingModelSlug = '';
@@ -3913,160 +3887,6 @@
     return !style || (style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity || 1) > 0);
   }
 
-  function getVisibleChatGptModelMenuChoices() {
-    const selectors = '[role="menuitem"], [role="menuitemradio"], [role="option"], [role="radio"], button';
-    return Array.from(document.querySelectorAll(selectors)).filter(element => {
-      if (!isElementActuallyVisible(element)) return false;
-      if (element.closest(`[data-bravefox-banner-text-customized="true"]`)) return false;
-      const text = normalizeText(element.textContent);
-      return Boolean(text && text.length <= 180);
-    });
-  }
-
-  function findVisibleChatGptModelChoice(predicate) {
-    for (const element of getVisibleChatGptModelMenuChoices()) {
-      const text = normalizeText(element.textContent);
-      if (predicate(text, element)) return element;
-    }
-    return null;
-  }
-
-  // === GPT-5.5 native picker alias =============================================
-  // Use the native element itself; do not fake or intercept its click behavior.
-  function legacyGpt55MenuModelKind(label) {
-    const text = normalizeText(label);
-    if (/^gpt[-\s]?5[.\s-]?5(?![.\d])/.test(text)) return '5.5';
-    if (/^gpt[-\s]?5[.\s-]?6(?:\b|$)/.test(text)) return '5.6';
-    if (/^gpt[-\s]?6(?:\b|$)/.test(text)) return '6';
-    return '';
-  }
-
-  function ensureLegacyGpt55MenuStyle() {
-    if (document.getElementById(LEGACY_GPT55_STYLE_ID)) return;
-    const style = document.createElement('style');
-    style.id = LEGACY_GPT55_STYLE_ID;
-    // Append the name to the real native text using CSS generated content.
-    // The native React element and its event handlers remain entirely intact.
-    style.textContent = `
-      [${LEGACY_GPT55_TITLE_ATTR}="true"]::after {
-        content: " Uce";
-        display: inline;
-        font: inherit;
-        letter-spacing: inherit;
-        color: inherit;
-        white-space: pre;
-        pointer-events: none;
-      }
-      [${LEGACY_GPT55_CAPTION_ATTR}="true"] {
-        display: none !important;
-      }
-    `;
-    (document.head || document.documentElement).appendChild(style);
-  }
-
-  function restoreLegacyGpt55ModelMenu() {
-    if (!LEGACY_GPT55_MENU_ENABLED) return;
-    if (!(/^(?:\/|\/c\/[^/]+\/?)$/.test(location.pathname))) return;
-
-    const itemSelector = '[role="menuitem"], [role="menuitemradio"], [role="option"], [role="radio"], button';
-    for (const menu of document.querySelectorAll(LEGACY_GPT55_MODEL_MENU_SELECTOR)) {
-      if (!(menu instanceof Element) || !isElementActuallyVisible(menu)) continue;
-      if (menu.closest('[data-bravefox-owned-control="true"]')) continue;
-      // React sometimes reuses the *same* DOM item for a different model.
-      // Clear stale presentation markers before determining the current row.
-      // This changes attributes only, never ChatGPT's React-owned nodes.
-      for (const decorated of menu.querySelectorAll(
-        `[${LEGACY_GPT55_MENU_ATTR}], [${LEGACY_GPT55_TITLE_ATTR}], [${LEGACY_GPT55_CAPTION_ATTR}]`
-      )) {
-        decorated.removeAttribute(LEGACY_GPT55_MENU_ATTR);
-        decorated.removeAttribute(LEGACY_GPT55_TITLE_ATTR);
-        decorated.removeAttribute(LEGACY_GPT55_CAPTION_ATTR);
-      }
-      const menuText = normalizeText(menu.textContent);
-      if (menuText.length > 2500 || !/gpt[-\s]?[56]/.test(menuText)) continue;
-
-      const nativeRows = Array.from(menu.querySelectorAll(itemSelector)).filter(row => {
-        if (!(row instanceof Element) || row.parentElement?.closest(itemSelector)) return false;
-        if (!isElementActuallyVisible(row)) return false;
-        return Boolean(legacyGpt55MenuModelKind(row.textContent));
-      });
-      const nativeOption = nativeRows.find(row => legacyGpt55MenuModelKind(row.textContent) === '5.5');
-      // If OpenAI withdraws the native item, BraveFox must not invent a
-      // selectable replacement or risk damaging the other model controls.
-      if (!(nativeOption instanceof Element)) continue;
-
-      let title = null;
-      const walker = document.createTreeWalker(nativeOption, NodeFilter.SHOW_TEXT);
-      while (walker.nextNode()) {
-        if (legacyGpt55MenuModelKind(walker.currentNode.textContent) !== '5.5') continue;
-        title = walker.currentNode.parentElement;
-        break;
-      }
-      if (!(title instanceof Element)) continue;
-      ensureLegacyGpt55MenuStyle();
-      nativeOption.setAttribute(LEGACY_GPT55_MENU_ATTR, 'true');
-      title.setAttribute(LEGACY_GPT55_TITLE_ATTR, 'true');
-
-      // The native retirement notice makes this row taller than GPT-6/5.6.
-      // Hide only its *caption*, never a parent containing the clickable item.
-      const captionWalker = document.createTreeWalker(nativeOption, NodeFilter.SHOW_TEXT);
-      while (captionWalker.nextNode()) {
-        const nodeText = normalizeText(captionWalker.currentNode.textContent);
-        if (!/(?:leaving on|retires? on|poistuu käytöstä|poistuu kaytosta|retir(?:ed|ing)|lopetetaan)/.test(nodeText)) continue;
-        const caption = captionWalker.currentNode.parentElement;
-        if (caption instanceof Element && caption !== nativeOption &&
-            caption !== title && !caption.contains(title)) {
-          caption.setAttribute(LEGACY_GPT55_CAPTION_ATTR, 'true');
-        }
-      }
-    }
-  }
-
-  function scheduleLegacyGpt55ModelMenuRestore() {
-    if (!LEGACY_GPT55_MENU_ENABLED || legacyGpt55MenuRestoreQueued) return;
-    // A microtask runs after React's current DOM commit but before the next paint.
-    // The existing popup observer repairs the alias after native menu redraws.
-    legacyGpt55MenuRestoreQueued = true;
-    queueMicrotask(() => {
-      legacyGpt55MenuRestoreQueued = false;
-      restoreLegacyGpt55ModelMenu();
-    });
-  }
-
-  function scheduleLegacyGpt55ModelMenuOpeningPasses() {
-    scheduleLegacyGpt55ModelMenuRestore();
-    for (const timer of legacyGpt55MenuOpeningRetries) clearTimeout(timer);
-    // Catch delayed mounts, opening animations, and async model-list hydration.
-    // These are bounded one-shot checks, never background polling.
-    legacyGpt55MenuOpeningRetries = [55, 160, 400].map(delay =>
-      window.setTimeout(scheduleLegacyGpt55ModelMenuRestore, delay)
-    );
-  }
-
-  function installLegacyGpt55ModelMenuPreserver() {
-    if (!LEGACY_GPT55_MENU_ENABLED) return;
-    const possibleModelTrigger = target => {
-      if (!(target instanceof Element)) return false;
-      const button = target.closest('button[aria-haspopup="menu"], button[aria-haspopup="listbox"]');
-      if (!button) return false;
-      if (button.matches('.__composer-pill, [data-testid*="model" i]')) return true;
-      if (button.closest('form')) {
-        return /^(?:gpt[-\s]?\d|high|medium|extra high|instant|korkea|keskitaso)$/i.test(
-          normalizeText(button.textContent)
-        );
-      }
-      return false;
-    };
-    document.addEventListener('click', event => {
-      if (possibleModelTrigger(event.target)) scheduleLegacyGpt55ModelMenuOpeningPasses();
-    }, true);
-    document.addEventListener('keydown', event => {
-      if ((event.key === 'Enter' || event.key === ' ') && possibleModelTrigger(event.target)) {
-        scheduleLegacyGpt55ModelMenuOpeningPasses();
-      }
-    }, true);
-  }
-
   function getChatGptComposerModelSelector() {
     const preferred = Array.from(document.querySelectorAll('button.__composer-pill[aria-haspopup="menu"]'))
       .find(isElementActuallyVisible);
@@ -4078,81 +3898,6 @@
       const text = normalizeText(button.textContent);
       return /\b\d+(?:\.\d+)?\b/.test(text) && !text.includes('attach') && !text.includes('liitä');
     }) || null;
-  }
-
-  function waitForChatGptUiChoice(predicate, timeoutMs = 1600) {
-    return new Promise(resolve => {
-      const startedAt = Date.now();
-      const poll = () => {
-        const found = findVisibleChatGptModelChoice(predicate);
-        if (found || Date.now() - startedAt >= timeoutMs) {
-          resolve(found || null);
-          return;
-        }
-        window.setTimeout(poll, 60);
-      };
-      poll();
-    });
-  }
-
-  async function switchChatGptComposerToGpt55Medium(banner, closeButton) {
-    const selector = getChatGptComposerModelSelector();
-    if (!(selector instanceof HTMLButtonElement)) return false;
-
-    const current = normalizeText(selector.textContent);
-    const alreadyGpt55 = current.includes('5.5');
-    const alreadyMedium = THINKING_EFFORT_MEDIUM_LABELS.has(current) ||
-      Array.from(THINKING_EFFORT_MEDIUM_LABELS).some(label => current.includes(label));
-
-    if (alreadyGpt55 && alreadyMedium) {
-      clickNativeChatGptBannerClose(closeButton);
-      return true;
-    }
-
-    try { selector.click(); } catch { return false; }
-
-    if (!alreadyGpt55) {
-      const gpt55Choice = await waitForChatGptUiChoice(text => {
-        if (!text.includes('5.5')) return false;
-        if (text.includes('5.6') || text.includes('5.4') || text.includes('5.1')) return false;
-        return true;
-      });
-
-      if (!(gpt55Choice instanceof Element)) return false;
-      try { gpt55Choice.click(); } catch { return false; }
-      await new Promise(resolve => window.setTimeout(resolve, 120));
-    }
-
-    let refreshedSelector = getChatGptComposerModelSelector();
-    if (refreshedSelector instanceof HTMLButtonElement) {
-      const refreshedText = normalizeText(refreshedSelector.textContent);
-      if (refreshedText.includes('5.5') && Array.from(THINKING_EFFORT_MEDIUM_LABELS).some(label => refreshedText.includes(label))) {
-        clickNativeChatGptBannerClose(closeButton);
-        return true;
-      }
-
-      if (refreshedText.includes('5.5')) {
-        try { refreshedSelector.click(); } catch {}
-      }
-    }
-
-    const mediumChoice = await waitForChatGptUiChoice(text => {
-      return THINKING_EFFORT_MEDIUM_LABELS.has(text) ||
-        Array.from(THINKING_EFFORT_MEDIUM_LABELS).some(label => text === label || text.endsWith(` ${label}`));
-    }, 1200);
-
-    if (mediumChoice instanceof Element) {
-      try { mediumChoice.click(); } catch {}
-      await new Promise(resolve => window.setTimeout(resolve, 80));
-    }
-
-    refreshedSelector = getChatGptComposerModelSelector();
-    const finalText = normalizeText(refreshedSelector?.textContent || '');
-    const switchedToGpt55 = finalText.includes('5.5');
-    const switchedToMedium = Array.from(THINKING_EFFORT_MEDIUM_LABELS).some(label => finalText.includes(label));
-
-    if (switchedToGpt55 && switchedToMedium) clickNativeChatGptBannerClose(closeButton);
-    return switchedToGpt55;
   }
 
   function hideCustomChatGptBannerWithoutRemovingReactNodes(banner) {
@@ -4240,12 +3985,6 @@
     // The notification itself is the source of truth. Do NOT use a message's
     // selected model (or the current chat URL) to name a different model's
     // retirement notice, which would persist the wrong preference on mobile.
-    const bannerText = normalizeText(banner?.textContent || '');
-    if (bannerText.includes('gpt-5.5') || bannerText.includes('gpt 5.5') ||
-        bannerText.includes('5.5 thinking')) {
-      return CHATGPT_BANNER_GPT55_RETIREMENT_MODEL_SLUG;
-    }
-
     const storedSlug = normalizeChatGptModelSlug(banner?.getAttribute?.('data-bravefox-banner-model-slug'));
     if (storedSlug) return storedSlug;
 
@@ -4261,12 +4000,6 @@
     try {
       const url = new URL(location.href);
       candidates.push(url.searchParams.get('model'));
-    } catch {}
-
-    try {
-      const text = normalizeText(banner?.textContent || '');
-      if (text.includes('5.5') && text.includes('thinking')) candidates.push('gpt-5-5-thinking');
-      if (text.includes('5.5')) candidates.push('gpt-5-5-thinking');
     } catch {}
 
     for (const candidate of candidates) {
@@ -5640,17 +5373,6 @@
             continue;
           }
 
-          // The native picker can hydrate or replace individual rows after it opens.
-          // Observe those changes using the existing popup observer, including when
-          // React reuses or re-mounts its own model rows.
-          if (
-            LEGACY_GPT55_MENU_ENABLED && mutation.type === 'childList' &&
-            mutation.target instanceof Element &&
-            mutation.target.closest(LEGACY_GPT55_MODEL_MENU_SELECTOR)
-          ) {
-            scheduleLegacyGpt55ModelMenuRestore();
-          }
-
           if (mutation.type === 'characterData') {
             const parent = mutation.target?.parentElement;
             // React sometimes fills an announcement title/body after mounting
@@ -5658,10 +5380,6 @@
             if (CHATGPT_PROMOTIONAL_BANNER_SUPPRESSION_ENABLED && parent instanceof Element &&
                 parent.closest('aside, [data-testid*="banner" i], [data-testid*="announcement" i], [data-testid*="upsell" i]')) {
               reconcileNativeChatGptAnnouncementFilter(parent);
-            }
-            if (LEGACY_GPT55_MENU_ENABLED && parent instanceof Element &&
-                parent.closest(LEGACY_GPT55_MODEL_MENU_SELECTOR)) {
-              scheduleLegacyGpt55ModelMenuRestore();
             }
             // Android sometimes fills an initially empty notice in separate React
             // commits. React text mutations must also be checked before paint.
@@ -5790,9 +5508,6 @@
               node.querySelector?.('[role="dialog"], [role="menu"], [role="listbox"], [data-state="open"]')
             ) {
               window.setTimeout(() => enforceThinkingEffortVisualPopup(node, false), 0);
-              // An existing observer already watches portal-mounted native menus.
-              // Restrict our follow-up to those openings, not every chat mutation.
-              scheduleLegacyGpt55ModelMenuRestore();
             }
 
             const relevantDeleteAccountUi = mayContainDeleteAccountSettingsUi(node);
@@ -9430,6 +9145,58 @@
     return '';
   }
 
+  // The ChatGPT account/session name can differ from the nickname in Personalization.
+  // Only read explicit nickname fields or clearly labeled lines from the user's own
+  // custom-instructions data; don't infer identity from free-form biographical prose.
+  function extractConversationPersonalizationNickname(payload) {
+    if (!payload || typeof payload !== 'object') return '';
+    const candidates = [
+      payload.nickname, payload.preferred_name, payload.preferredName,
+      payload?.user?.nickname, payload?.user?.preferred_name,
+      payload?.user_profile?.nickname, payload?.user_profile?.preferred_name,
+      payload?.personalization?.nickname, payload?.personalization?.preferred_name,
+      payload?.settings?.nickname, payload?.settings?.preferred_name
+    ];
+    for (const value of candidates) {
+      const candidate = normalizeConversationUserDisplayName(value);
+      if (candidate) return candidate;
+    }
+
+    const about = typeof payload.about_user_message === 'string' ? payload.about_user_message : '';
+    const match = about.match(/(?:^|\n)\s*(?:preferred name|nickname|what should chatgpt call you|kutsumanimi|lempinimi)\s*:\s*([^\r\n]{1,80})/i);
+    return match ? normalizeConversationUserDisplayName(match[1]) : '';
+  }
+
+  async function resolveConversationPersonalizationNickname(force = false) {
+    const now = Date.now();
+    if (!force && now - conversationNicknameLastProbeAt < 5 * 60 * 1000) {
+      return conversationPersonalizationNickname;
+    }
+    if (conversationNicknameRequest) return conversationNicknameRequest;
+    conversationNicknameLastProbeAt = now;
+
+    conversationNicknameRequest = (async () => {
+      try {
+        const token = conversationAccessToken || await resolveConversationAccessToken();
+        const response = await braveFoxReliabilityFetch(`${location.origin}/backend-api/user_system_messages`, {
+          method: 'GET', credentials: 'include', cache: 'no-store',
+          headers: token
+            ? { Accept: 'application/json', Authorization: `Bearer ${token}` }
+            : { Accept: 'application/json' }
+        });
+        if (!response.ok) return '';
+        const nickname = extractConversationPersonalizationNickname(await response.json());
+        if (nickname && conversationPersonalizationNickname !== nickname) {
+          conversationPersonalizationNickname = nickname;
+          // Reuse existing metadata rows; do not create additional headers.
+          scheduleGeneralUiScan(false);
+        }
+        return nickname;
+      } catch { return ''; }
+    })().finally(() => { conversationNicknameRequest = null; });
+    return conversationNicknameRequest;
+  }
+
   function restoreConversationUserDisplayNameFromSharedCache() {
     try {
       const raw = localStorage.getItem(MESSAGE_USER_NAME_SHARED_CACHE_KEY);
@@ -9504,6 +9271,8 @@
       CHATGPT_MESSAGE_METADATA_CUSTOMIZATION.userLabel
     );
     if (configured) return configured;
+    if (conversationPersonalizationNickname) return conversationPersonalizationNickname;
+    // Nickname refresh is handled by the metadata renderer's rate-limited lookup.
 
     if (
       !force &&
@@ -9591,12 +9360,6 @@
     if (!slug) return '';
 
     const known = new Map([
-      ['gpt-5-5-thinking', '5.5 Thinking'],
-      ['gpt-5-5-pro', '5.5 Pro'],
-      ['gpt-5-5-mini', '5.5 Mini'],
-      ['gpt-5-5-instant', '5.5 Instant'],
-      ['gpt-5-5', '5.5'],
-      ['gpt-5.5', '5.5'],
       ['gpt-5-6-thinking', '5.6 Thinking'],
       ['gpt-5-6-pro', '5.6 Pro'],
       ['gpt-5-6-luna', '5.6 Luna'],
@@ -9608,6 +9371,7 @@
       ['gpt-6-astra-wm', '6 Astra Work'],
       ['gpt-6-astra', '6 Astra'],
       ['gpt-6-luna', '6 Luna'],
+      ['gpt-6-sol', '6 Sol'],
       ['gpt-6.1-sol', '6.1 Sol'],
       ['gpt-6-pro', '6 Pro'],
       ['gpt-6', '6']
@@ -9739,33 +9503,29 @@
     if (!text) return '';
 
     // Preserve exact identifiers from the Chrome snapshot before inferring a
-    // family from a human-readable composer label. Otherwise gpt-6-luna would
-    // collapse to gpt-6, and gpt-5-5-mini to gpt-5-5-thinking.
+    // family from a human-readable composer label (for example gpt-6-luna).
     const exactSlug = normalizeChatGptModelSlug(value);
     if (CHATGPT_ARCHIVE_KNOWN_EXACT_MODEL_SLUGS.has(exactSlug)) return exactSlug;
 
     const normalizedEffort = normalizeConversationReasoningEffort(effort);
     const thinkingSelected = ['medium', 'high', 'extra-high'].includes(normalizedEffort);
 
-    if (/\bgpt[- ]?6\b|\b6\s+astra\b/.test(text)) {
+    if (/\bgpt[- ]?6\b|\b6\s+(?:astra|sol|luna)\b/.test(text)) {
       if (text.includes('pro')) return 'gpt-6-pro';
       if (text.includes('astra')) return text.includes('work') ? 'gpt-6-astra-wm' : 'gpt-6-astra';
+      if (text.includes('sol')) return 'gpt-6-sol';
+      if (text.includes('luna')) return 'gpt-6-luna';
       return 'gpt-6';
     }
 
     if (/\b5[.\s-]?6\b/.test(text)) {
       if (text.includes('pro')) return 'gpt-5-6-pro';
-      if (text.includes('instant') || text.includes('välitön') || text.includes('valiton') || text.includes('luna')) {
-        return 'gpt-5-6-luna';
-      }
       if (text.includes('sol')) return 'gpt-5-6-sol';
+      if (text.includes('luna')) return 'gpt-5-6-luna';
       if (text.includes('thinking') || thinkingSelected) return 'gpt-5-6-thinking';
+      // "Instant" does not by itself identify Sol vs. Luna. The display label
+      // uses the user's standard Sol alias only when the current effort is Instant.
       return 'gpt-5-6';
-    }
-
-    if (/\b5[.\s-]?5\b/.test(text)) {
-      if (text.includes('pro')) return 'gpt-5-5-pro';
-      return 'gpt-5-5-thinking';
     }
 
     return '';
@@ -9929,9 +9689,77 @@
     return changed;
   }
 
+  // One timestamp slot per response: during generation it shows the observed
+  // start, then the very same slot becomes the observed completion time. Older
+  // messages keep their native/API time; no fabricated historical finish times.
+  function synchronizeConversationLiveTimestamp() {
+    const active = isConversationGenerationActive();
+    if (active) {
+      if (!conversationGenerationWasActive) {
+        conversationGenerationStartedAt = conversationPendingAssistantStartedAt || Date.now();
+        conversationGenerationTrackedTurn = null;
+        conversationGenerationTrackedSurface = null;
+        conversationGenerationTrackedRoute = getConversationSelectionRouteKey();
+      }
+      conversationGenerationWasActive = true;
+      if (!conversationPendingAssistantStartedAt) conversationPendingAssistantStartedAt = conversationGenerationStartedAt;
+
+      const surfaces = document.querySelectorAll(
+        '[data-markdown-text-style="assistant-message"], .bravefox-assistant-message-surface'
+      );
+      const surface = surfaces[surfaces.length - 1];
+      if (surface instanceof HTMLElement && surface !== conversationPreviousAssistantSurfaceAtSend) {
+        const turn = getConversationTurnRoot(surface, surface, 'assistant');
+        if (turn instanceof Element && isSurfaceInLatestConversationTurn(turn, 'assistant', surface)) {
+          conversationGenerationTrackedTurn = turn;
+          conversationGenerationTrackedSurface = surface;
+          const source = getConversationSurfaceTimestampSource(turn, 'assistant', surface);
+          if (!source || source === 'observed' || source === 'live-start') {
+            setConversationSurfaceTimestamp(turn, 'assistant', surface,
+              getMessageTimestampFromDate(conversationGenerationStartedAt), 'live-start');
+          }
+        }
+      }
+
+      if (!conversationGenerationWatchTimer) {
+        conversationGenerationWatchTimer = window.setTimeout(() => {
+          conversationGenerationWatchTimer = 0;
+          synchronizeConversationLiveTimestamp();
+        }, 350);
+      }
+      return;
+    }
+
+    if (!conversationGenerationWasActive) return;
+    conversationGenerationWasActive = false;
+    if (conversationGenerationWatchTimer) {
+      clearTimeout(conversationGenerationWatchTimer);
+      conversationGenerationWatchTimer = 0;
+    }
+    const turn = conversationGenerationTrackedTurn;
+    const trackedSurface = conversationGenerationTrackedSurface;
+    const sameRoute = conversationGenerationTrackedRoute === getConversationSelectionRouteKey();
+    conversationGenerationTrackedTurn = null;
+    conversationGenerationTrackedSurface = null;
+    conversationGenerationStartedAt = 0;
+    conversationGenerationTrackedRoute = '';
+    conversationPreviousAssistantSurfaceAtSend = null;
+    // If a tab was suspended or a conversation changed, the actual finish time
+    // cannot be measured accurately. Leave the earlier timestamp untouched.
+    if (document.hidden || !sameRoute || !turn?.isConnected || !trackedSurface) return;
+    // React can swap the final response node immediately as generation finishes.
+    const surfaces = collectConversationSurfacesInTurn(turn, 'assistant');
+    const surface = trackedSurface.isConnected ? trackedSurface : surfaces[surfaces.length - 1];
+    if (!(surface instanceof HTMLElement) || !surface.isConnected) return;
+    setConversationSurfaceTimestamp(turn, 'assistant', surface,
+      getMessageTimestampFromDate(Date.now()), 'live-finished');
+    refreshConversationMetadataHeadersForTurn(turn, 'assistant');
+  }
+
   function refreshLatestConversationMetadataImmediately() {
     if (!CHATGPT_MESSAGE_METADATA_CUSTOMIZATION.enabled) return;
     recoverConversationSendSnapshotFromActiveGeneration();
+    synchronizeConversationLiveTimestamp();
 
     const selectors = [
       ['user', '[data-user-message-bubble="true"], .bravefox-user-message-surface'],
@@ -10106,11 +9934,50 @@
     const modelLabel = formatConversationModelLabel(modelSlug);
     if (!modelLabel) return '';
 
+    // BraveFox's on-screen GPT-5.6 / GPT-6 aliases: Thinking uses "T" plus the
+    // actual effort; Instant uses Sol by convention, or Luna if the selected model
+    // explicitly identifies Luna. The plain model slug alone does not prove which
+    // backend is serving the request. Pro/Astra and archival labels are unchanged.
+    const standardModelMatch = normalizedModelSlug.match(/^gpt-(5[.-]6|6)(?:-(thinking|instant|sol|luna))?$/);
+    if (standardModelMatch) {
+      const standardVersion = standardModelMatch[1].replace('-', '.');
+      const standardTier = standardModelMatch[2] || '';
+      if (effort === 'medium' || effort === 'high') {
+        const level = CHATGPT_MESSAGE_METADATA_CUSTOMIZATION.showAssistantReasoningLevel
+          ? formatConversationReasoningEffort(effort) : '';
+        return `${standardVersion}T${level ? ` ${level}` : ''}`;
+      }
+      if (effort === 'instant' || (!effort && ['sol', 'luna', 'instant'].includes(standardTier))) {
+        const tier = standardTier === 'luna' ? 'Luna' : 'Sol';
+        return `${standardVersion} ${tier}`;
+      }
+      // Unknown effort must not be mislabeled as Medium, High or Instant.
+      if (!effort) return standardTier === 'thinking' ? `${standardVersion}T` : standardVersion;
+    }
+
+    // Compact *on-screen* model labels only; archive/export names stay unchanged.
+    // A Thinking response is 6T High / 5.6T Medium, while an Instant response
+    // is just 6 / 5.6. Do not assume Thinking when effort is unavailable.
+    const family = normalizedModelSlug.match(/^gpt-(\d+)(?:[.-](\d+))?(?:-|$)/);
+    const simpleFamily = family && !/(?:^|-)(?:pro|astra|sol|terra|mini)(?:-|$)/.test(normalizedModelSlug);
+    const version = family ? family[1] + (family[2] ? `.${family[2]}` : '') : '';
+    const slugSaysThinking = /(?:^|-)thinking(?:-|$)/.test(normalizedModelSlug);
+    const thinking = slugSaysThinking || ['medium', 'high', 'extra-high'].includes(effort);
+    if (simpleFamily && thinking) {
+      const level = CHATGPT_MESSAGE_METADATA_CUSTOMIZATION.showAssistantReasoningLevel
+        ? formatConversationReasoningEffort(effort) : '';
+      return `${version}T${level ? ` ${level}` : ''}`;
+    }
+    if (simpleFamily && (effort === 'instant' ||
+        /(?:^|-)(?:instant|luna)(?:-|$)/.test(normalizedModelSlug) ||
+        (!effort && !slugSaysThinking))) {
+      return version;
+    }
+
+    // Keep special tiers (Pro/Astra/etc.) and unknown model families readable.
     if (!CHATGPT_MESSAGE_METADATA_CUSTOMIZATION.showAssistantReasoningLevel) return modelLabel;
     const effortLabel = formatConversationReasoningEffort(effort);
     if (!effortLabel) return modelLabel;
-
-    // Slugs such as gpt-5-5-pro already name a tier. Do not render "Pro Pro".
     if (normalizeText(modelLabel).split(/\s+/).includes(normalizeText(effortLabel))) return modelLabel;
     return `${modelLabel} ${effortLabel}`;
   }
@@ -10121,6 +9988,11 @@
         CHATGPT_MESSAGE_METADATA_CUSTOMIZATION.userLabel
       );
       if (configured) return configured;
+      if (conversationPersonalizationNickname) return conversationPersonalizationNickname;
+      const preferredFallback = normalizeConversationUserDisplayName(
+        CHATGPT_MESSAGE_METADATA_CUSTOMIZATION.preferredNameFallback
+      );
+      if (preferredFallback) return preferredFallback;
       if (conversationUserDisplayName) return conversationUserDisplayName;
       return String(CHATGPT_MESSAGE_METADATA_CUSTOMIZATION.fallbackUserLabel || 'User').trim();
     }
@@ -10129,7 +10001,9 @@
       const base = String(CHATGPT_MESSAGE_METADATA_CUSTOMIZATION.assistantLabel || '').trim();
       if (!base) return '';
       const details = getConversationAssistantDetailLabel(turnRoot, surface);
-      return details ? `${base} (${details})` : base;
+      // Plain Instant/unknown-effort families read "ChatGPT 5.6"; Thinking
+      // and named tiers retain the familiar "ChatGPT (6T High)" style.
+      return details ? (/^\d+(?:\.\d+)?$/.test(details) ? `${base} ${details}` : `${base} (${details})`) : base;
     }
     return '';
   }
@@ -13861,6 +13735,7 @@
   function resetConversationSelectionState() {
     conversationPendingUserSentAt = 0;
     conversationPendingAssistantStartedAt = 0;
+    conversationPreviousAssistantSurfaceAtSend = null;
     conversationPendingModelSlug = '';
     conversationPendingReasoningEffort = '';
     conversationLastSelectedModelSlug = '';
@@ -14512,8 +14387,10 @@
 
     const previous = surface.getAttribute(MESSAGE_TIMESTAMP_ATTR) || '';
     const previousSource = surface.getAttribute(MESSAGE_TIMESTAMP_SOURCE_ATTR) || '';
-    const authoritative = source !== 'observed';
-    if (previous && previousSource && previousSource !== 'observed' && !authoritative) return false;
+    const authoritative = source !== 'observed' && source !== 'live-start';
+    if (previousSource === 'live-finished' && source !== 'live-finished') return false;
+    if (previousSource === 'live-start' && !['live-start', 'live-finished'].includes(source)) return false;
+    if (previous && previousSource && !['observed', 'live-start'].includes(previousSource) && !authoritative) return false;
     if (previous === formatted && previousSource === source) return false;
 
     surface.setAttribute(MESSAGE_TIMESTAMP_ATTR, formatted);
@@ -14572,6 +14449,21 @@
       ? surface
       : collectConversationSurfacesInTurn(turnRoot, role)[0];
     if (!(liveSurface instanceof HTMLElement)) return null;
+
+    // One metadata row per message turn, even if ChatGPT exposes multiple nested
+    // surfaces (reasoning and answer, or a user bubble inside its role wrapper).
+    // The last rendered content surface owns the row; no earlier wrapper may
+    // manufacture an additional header above the same message.
+    const surfaces = collectConversationSurfacesInTurn(turnRoot, role);
+    const finalSurface = surfaces[surfaces.length - 1];
+    if (finalSurface && finalSurface !== liveSurface) {
+      const previous = liveSurface.previousElementSibling;
+      if (previous?.getAttribute?.(MESSAGE_META_ATTR) === 'true') previous.remove();
+      return null;
+    }
+    for (const old of turnRoot.querySelectorAll(`[${MESSAGE_META_ATTR}="true"][${MESSAGE_META_ROLE_ATTR}="${role}"]`)) {
+      if (old.nextElementSibling !== liveSurface) old.remove();
+    }
 
     const senderLabel = getConfiguredConversationSenderLabel(role, turnRoot, liveSurface);
     if (!senderLabel) return null;
@@ -14635,12 +14527,18 @@
 
     const resolvedTimestamp = timestamp || getConversationSurfaceTimestamp(turnRoot, role, liveSurface);
     const separator = String(CHATGPT_MESSAGE_METADATA_CUSTOMIZATION.separator ?? ' - ');
+    // The same one-row header still updates from observed start to completion,
+    // but the time is the only changing text (no separate typing-status label).
     const finalText = resolvedTimestamp ? `${senderLabel}${separator}${resolvedTimestamp}` : senderLabel;
     if (textTarget.textContent !== finalText) textTarget.textContent = finalText;
 
     syncConversationMetadataGeometry(header, liveSurface, role);
     if (role === 'user' && !normalizeConversationUserDisplayName(CHATGPT_MESSAGE_METADATA_CUSTOMIZATION.userLabel)) {
-      void resolveConversationUserDisplayName(false);
+      void resolveConversationPersonalizationNickname(false);
+      // A configured nickname fallback makes the legacy account-name lookup unnecessary.
+      if (!normalizeConversationUserDisplayName(CHATGPT_MESSAGE_METADATA_CUSTOMIZATION.preferredNameFallback)) {
+        void resolveConversationUserDisplayName(false);
+      }
     }
 
     return header;
@@ -14672,8 +14570,10 @@
 
     const previous = turnRoot.getAttribute(MESSAGE_TIMESTAMP_ATTR) || '';
     const previousSource = turnRoot.getAttribute(MESSAGE_TIMESTAMP_SOURCE_ATTR) || '';
-    const authoritative = source !== 'observed';
-    if (previous && previousSource && previousSource !== 'observed' && !authoritative) return false;
+    const authoritative = source !== 'observed' && source !== 'live-start';
+    if (previousSource === 'live-finished' && source !== 'live-finished') return false;
+    if (previousSource === 'live-start' && !['live-start', 'live-finished'].includes(source)) return false;
+    if (previous && previousSource && !['observed', 'live-start'].includes(previousSource) && !authoritative) return false;
 
     turnRoot.setAttribute(MESSAGE_TIMESTAMP_ATTR, formatted);
     turnRoot.setAttribute(MESSAGE_TIMESTAMP_SOURCE_ATTR, source);
@@ -14910,7 +14810,7 @@
 
     if (role === 'assistant') {
       if (!conversationPendingUserSentAt || now - conversationPendingUserSentAt > 180000) return '';
-      return getMessageTimestampFromDate(now);
+      return getMessageTimestampFromDate(conversationPendingAssistantStartedAt || now);
     }
     return '';
   }
