@@ -1,6 +1,7 @@
 // ==UserScript==
 // @name         YTClean
-// @date     	 2026-10-01
+// @version	 29.5.5
+// @date     	 2026-10-22
 // @description  Enhances my YouTube experience by blocking trackers and hiding garbage, such as shorts.
 // @match        https://*.youtube.com/*
 // @grant        none
@@ -21,6 +22,63 @@
                 ytd-statement-banner-renderer:has(a[href^="/premium"]),
                 ytd-rich-section-renderer:has(ytd-statement-banner-renderer a[href^="/premium"]),
                 ytd-item-section-renderer:has(ytd-statement-banner-renderer a[href^="/premium"]) {
+                    display: none !important;
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                    height: 0 !important;
+                    min-height: 0 !important;
+                    max-height: 0 !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    overflow: hidden !important;
+                    content-visibility: hidden !important;
+                }
+
+                /* Home-only promotional brand shelves and YouTube Playables. Collapse the
+                   entire rich-grid SECTION, including its header and layout spacing, before
+                   paint. A brand-video shelf is a specialized promotion component, not the
+                   standard video recommendation grid. */
+                ytd-browse[page-subtype="home"] ytd-rich-section-renderer:has(ytd-brand-video-shelf-renderer),
+                ytd-browse[page-subtype="home"] ytd-rich-section-renderer:has(ytd-rich-shelf-renderer a[href^="/playables"]),
+                ytd-browse[page-subtype="home"] ytd-rich-section-renderer:has(ytd-rich-shelf-renderer ytd-mini-game-card-view-model),
+                ytd-browse[page-subtype="home"] ytd-rich-section-renderer:has(ytd-rich-shelf-renderer mini-game-card-view-model),
+                ytd-browse[page-subtype="home"] ytd-rich-section-renderer[data-ytclean-home-promo-shelf] {
+                    display: none !important;
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                    height: 0 !important;
+                    min-height: 0 !important;
+                    max-height: 0 !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    overflow: hidden !important;
+                    content-visibility: hidden !important;
+                }
+
+                /* Members-only / members-first card badges: no-glimpse collapse, before JS scanning.
+                   Restrict :has() to actual video cards so 'Join' UI, channel headers, and
+                   normal video text never accidentally disappear. Older and 2026 badge variants. */
+                :is(ytd-video-renderer, ytd-grid-video-renderer, ytd-rich-item-renderer,
+                    ytd-compact-video-renderer, ytd-compact-autoplay-renderer,
+                    ytd-playlist-video-renderer, ytd-playlist-panel-video-renderer,
+                    yt-lockup-view-model, ytm-lockup-view-model,
+                    .ytLockupViewModelHost, .ytLockupViewModelWrapper):has(
+                    :is(.ytBadgeShapeMembership, .yt-badge-shape--membership,
+                        .badge-style-type-members-only,
+                        [ytBadgeShapeText="Members only" i],
+                        [ytBadgeShapeText="Members first" i],
+                        [ytBadgeShapeText="Vain jäsenille" i],
+                        [ytBadgeShapeText="Jäsenille ensin" i],
+                        [ytBadgeShapeText="Ensin jäsenille" i],
+                        yt-badge-view-model [aria-label="Members only" i],
+                        yt-badge-view-model [aria-label="Members first" i],
+                        yt-badge-view-model [aria-label="Vain jäsenille" i],
+                        yt-badge-view-model [aria-label="Jäsenille ensin" i],
+                        svg path[d^="M6 .5a5.5 5.5"]
+                    )
+                ) {
                     display: none !important;
                     visibility: hidden !important;
                     opacity: 0 !important;
@@ -1032,10 +1090,35 @@
         } catch (e) {}
     }
 
+    // Hide only Home promotional shelves. Leave unrelated rich shelves, normal video
+    // recommendations and every other YouTube route untouched. If Polymer recycles a
+    // previously hidden section for normal videos, remove our marker immediately.
+    function hideYTHomePromotionalShelves() {
+        try {
+            if (location.pathname !== '/') return;
+            const home = document.querySelector('ytd-browse[page-subtype="home"]');
+            if (!home) return;
+            home.querySelectorAll('ytd-rich-section-renderer').forEach(section => {
+                try {
+                    const brandPromo = !!section.querySelector('ytd-brand-video-shelf-renderer');
+                    const playables = !!section.querySelector([
+                        'ytd-rich-shelf-renderer a[href^="/playables"]',
+                        'ytd-rich-shelf-renderer ytd-mini-game-card-view-model',
+                        'ytd-rich-shelf-renderer mini-game-card-view-model'
+                    ].join(', '));
+                    const reason = brandPromo ? 'brand-promotion' : (playables ? 'playables' : '');
+                    if (reason) section.setAttribute('data-ytclean-home-promo-shelf', reason);
+                    else section.removeAttribute('data-ytclean-home-promo-shelf');
+                } catch (e) {}
+            });
+        } catch (e) {}
+    }
+
     function hideYouTubeNudgesAndShortsChips() {
         hideRecommendationNudges();
         hideSearchShortsChips();
         hideYouTubePremiumStatementBanners();
+        hideYTHomePromotionalShelves();
     }
 
     let __ytSearchScanTimeout = null;
@@ -1274,6 +1357,75 @@
         }
     }
 
+    // Membership metadata has changed repeatedly between YouTube's Polymer and lockup UIs.
+    // Only actual membership BADGES count; an ordinary title/description mentioning
+    // "members only" must not cause a false block.
+    const ytMemberBadgeNodes = [
+        '.ytBadgeShapeMembership',
+        '.yt-badge-shape--membership',
+        '.badge-style-type-members-only',
+        '[ytBadgeShapeText]',
+        '.yt-badge-shape__text',
+        '.badge-shape-wiz__text',
+        'yt-badge-view-model',
+        'ytd-badge-supported-renderer',
+        'badge-shape',
+        '.ytBadgeShapeIcon'
+    ].join(', ');
+
+    const ytMembersOnlyLabelPattern = /^(?:members?\s*(?:only|first)|vain\s+j[aä]senille|j[aä]senille\s+ensin|ensin\s+j[aä]senille)$/i;
+
+    function getYTMemberCardRoot(target) {
+        try {
+            if (!target) return target;
+            // In the Home/channel grids YouTube may nest a modern lockup inside a rich item.
+            // Collapse that complete ONE-video item to prevent a residual grid gap.
+            return target.closest?.([
+                'ytd-rich-item-renderer',
+                'ytd-video-renderer',
+                'ytd-grid-video-renderer',
+                'ytd-compact-video-renderer',
+                'ytd-compact-autoplay-renderer',
+                'ytd-playlist-video-renderer',
+                'ytd-playlist-panel-video-renderer',
+                'ytm-rich-item-renderer',
+                'ytm-video-renderer',
+                'ytm-compact-video-renderer'
+            ].join(', ')) || target;
+        } catch (e) {
+            return target;
+        }
+    }
+
+    function hasYTMembersOnlyBadge(target) {
+        try {
+            if (!target || isYTProtectedTextZone(target)) return false;
+            if (target.matches?.('.ytBadgeShapeMembership, .yt-badge-shape--membership, .badge-style-type-members-only')) return true;
+            if (target.querySelector?.('.ytBadgeShapeMembership, .yt-badge-shape--membership, .badge-style-type-members-only')) return true;
+            // Membership icon path fallback for the badge variants with no readable text.
+            if (target.querySelector?.('svg path[d^="M6 .5a5.5 5.5"]')) return true;
+
+            const badges = target.querySelectorAll?.(ytMemberBadgeNodes) || [];
+            for (const badge of badges) {
+                if (badge.matches?.('.ytBadgeShapeMembership, .yt-badge-shape--membership, .badge-style-type-members-only')) return true;
+                const raw = [
+                    badge.getAttribute?.('ytBadgeShapeText'),
+                    badge.getAttribute?.('aria-label'),
+                    badge.getAttribute?.('title'),
+                    badge.getAttribute?.('data-tooltip-text'),
+                    badge.textContent
+                ];
+                for (const label of raw) {
+                    const normalized = String(label || '').replace(/[\u200B-\u200D\uFEFF]/g, '').replace(/\s+/g, ' ').trim();
+                    if (ytMembersOnlyLabelPattern.test(normalized)) return true;
+                }
+            }
+            return false;
+        } catch (e) {
+            return false;
+        }
+    }
+
     function getYTSearchCardFamilyRoot(target) {
         try {
             if (!target || !target.closest || !isYTSearchResultsPage()) return target;
@@ -1420,9 +1572,19 @@
             const seen = new WeakSet();
 
             elements.forEach(el => {
-                const target = getVideoCardHideTarget(el);
+                const initialTarget = getVideoCardHideTarget(el);
+                const target = getYTMemberCardRoot(initialTarget);
                 if (!target || seen.has(target)) return;
                 seen.add(target);
+
+                // A members-only badge is a card-level exclusion, even for an otherwise safe
+                // channel. Always test it BEFORE previously approved card state or text bans.
+                // Full-card hiding avoids Home/channel grid gaps and includes watch suggestions.
+                if (hasYTMembersOnlyBadge(target)) {
+                    collapseBannedVideoCard(target);
+                    hiddenCount++;
+                    return;
+                }
 
                 const combinedText = getVideoCardSignal(target);
                 if (!combinedText) return;
@@ -1552,6 +1714,14 @@
             const observer = trackObserver(new MutationObserver((mutations) => {
                 const changedCards = new Set();
                 mutations.forEach((mutation) => {
+                    if (mutation.type === 'characterData' || mutation.type === 'attributes') {
+                        const changedElement = mutation.target.nodeType === 1 ? mutation.target : mutation.target.parentElement;
+                        if (changedElement && !isYTProtectedTextZone(changedElement) &&
+                            changedElement.closest?.(ytMemberBadgeNodes)) {
+                            collectVideoCardCandidatesFromNode(changedElement).forEach(card => changedCards.add(card));
+                        }
+                        return;
+                    }
                     if (mutation.addedNodes.length > 0) {
                         mutation.addedNodes.forEach((node) => {
                             if (node.nodeType === 1) { 
@@ -1587,6 +1757,23 @@
                             }
                         });
                     }
+                    // A recycled video card can lose its membership badge. Restore the card
+                    // as soon as the old badge is removed, not on the periodic full scan.
+                    if (mutation.removedNodes?.length > 0) {
+                        mutation.removedNodes.forEach(node => {
+                            try {
+                                const removedBadge = node.nodeType === 1 && (
+                                    node.matches?.(ytMemberBadgeNodes) ||
+                                    node.querySelector?.(ytMemberBadgeNodes)
+                                );
+                                const removedLabel = node.nodeType === 3 &&
+                                    ytMembersOnlyLabelPattern.test(String(node.textContent || '').replace(/\s+/g, ' ').trim());
+                                if (removedBadge || removedLabel) {
+                                    collectVideoCardCandidatesFromNode(mutation.target).forEach(card => changedCards.add(card));
+                                }
+                            } catch (e) {}
+                        });
+                    }
                 });
                 hideYouTubeNudgesAndShortsChips();
                 removeShortsOnPage();
@@ -1602,7 +1789,11 @@
             if (document.body) {
                 observer.observe(document.body, {
                     childList: true,
-                    subtree: true
+                    subtree: true,
+                    characterData: true,
+                    attributes: true,
+                    // Avoid watching every CSS class/inline-style change across YouTube.
+                    attributeFilter: ['ytbadgeshapetext', 'ytBadgeShapeText', 'aria-label', 'title']
                 });
                 devLog('Popup/suggestion observer started');
             }

@@ -1,7 +1,7 @@
 (function () {
     'use strict';
 
-    // google.js of BraveFox Enhancer v29.5.0 Hybrid
+    // google.js of BraveFox Enhancer v29.5.5
 
     function isGoogleMapsOrEarthUrl(value = window.location.href) {
         try {
@@ -1128,7 +1128,7 @@
 	/OpensHerLegs/i, /SpreadLeg/i, /SpreadHerLeg/i, /cunnn/i, /strips/i, /SpreadsLeg/i, /SpreadsHerLeg/i, /HerThig/i, /HerLeg/i, /HerThic/i, /SheThig/i, /SheLeg/i, /SheThic/i, /HerLeg/i, /HerThic/i, 
 	/LegShe/i, /LegsShe/i, /Thicc/i, /ThickShe/i, /fondl/i, /bdsm/i, /censor/i, /reveals all/i, /reveali/i, /revealing/i, /stripp/i, /strips/i, /stripz/i, /stripi/i, /striper/i, /stripes/i, /striped/i, 
 	/shetakeoff/i, /takeoffher/i, /takesoffher/i, /shetakesoff/i, /takingoff/i, /tookoffher/i, /shetookoff/i, /baring/i, /bares/i, /artintel/i, /Zendaya/i, /AIZuck/i, /Stratu/i, /Kairi/i, /artintel/i, 
-	/RemovingAI/i, /bjob/i, /StaphMc/i, /machinelearning/i, /sweee/i,
+	/RemovingAI/i, /bjob/i, /StaphMc/i, /machinelearning/i, /sweee/i, /AI Fake/i, /F4k3/i, /Fak3/i, /F4ke/i, /Mondomonger/i, /Mondo monger/i,
 	 
 
 
@@ -1383,7 +1383,7 @@
 	/WiFi 5/i, /WiFi 6/i, /Wi-Fi 6/i, /WiFi 6E/i, /Wi-Fi 6E/i, /WiFi 7/i, /Wi-Fi 7/i, /RJ45/i, /2\.5GbE/i, /5GbE/i, /10GbE/i, /DHCP/i, /NAT/i, /charg/i, /IP address/i, /IPv4/i, /IPv6/i, /AV1/i, /H\.264/i, /H\.265/i, /HEVC/i,
 	/USB-C/i, /USB Type-C/i, /Thunderbolt/i, /DisplayPort Cable/i, /DP cable/i, /Windows/i, /Linux/i, /Ubuntu/i, /Debian/i, /Fedora/i, /macOS/i, /iOS/i, /ChromeOS/i, /Steam/i, /Epic Games/i, /GOG/i, /Battle\.net/i, /Discord/i, 
 	/Snapdragon/i, /Exynos/i, /Dimensity/i, /Qualcomm/i, /ChatGPT/i, /GPT-4o/i, /GPT-5.1/i, /GPT-5.4/i, /GPT-5.5/i, /GPT-5.6/i, /GPT-5.6 SOL/i, /Sonnet/i, /black friday/i, /SmackDown/i, /search/i, /GPT-5.4/i, /GPT-5.5/i, 
-	/GitHub CoPilot/i, /github/i, /hub/i, /git/i, /artifact/i,
+	/archive/i, /machine/i, /GitHub CoPilot/i, /github/i, /hub/i, /git/i, /artifact/i,
 
 
     	// English Medical Terms
@@ -1946,11 +1946,57 @@
         try {
             // Covers Google's breadcrumb/display form too (for example runway.com or
             // app.runwayml.com) when the scheme is omitted from rendered text.
-            const bareHosts = input.match(/\b(?:www\.)?(?:[a-z0-9](?:[a-z0-9-]{0,62})\.)+[a-z]{2,63}\b/gi) || [];
-            bareHosts.forEach(host => add(`https://${host}`));
+            const bareHostPattern = /\b(?:www\.)?(?:[a-z0-9](?:[a-z0-9-]{0,62})\.)+[a-z]{2,63}\b/gi;
+            for (const match of input.matchAll(bareHostPattern)) {
+                const host = match[0];
+                const trailingText = input.slice(match.index + host.length);
+                // Google's result shells can contain inline JavaScript in textContent.
+                // Date.now(), performance.now(), etc. are callable properties, not
+                // publisher domains. Fully qualified http(s) URLs are still collected
+                // by the separate explicit-URL scan above, and actual link hrefs remain
+                // subject to every normal URL, host and blocked-TLD rule.
+                if (/^\s*\(/.test(trailingText)) continue;
+                add(`https://${host}`);
+            }
         } catch (e) {}
 
         return Array.from(found);
+    }
+
+    // Keep the finite background.js blockedSites rules hostname-aware. Search-result
+    // URLs must never be blocked just because their query/markup mentions a blocked
+    // publisher; real path and query exclusions remain effective.
+    let GJ_centralBlockedSiteRules = [];
+    function GJ_parseCentralBlockedSiteRule(entry) {
+        const text = String(entry || '').trim();
+        if (!text) return null;
+        if (text.startsWith('?')) {
+            try { return { kind: 'query', params: [...new URLSearchParams(text.slice(1))] }; }
+            catch (e) { return null; }
+        }
+        const isPathOnly = !/^[a-z0-9-]+(?:\.[a-z0-9-]+)+/i.test(text) ||
+            /^[^/?]+\.html?(?:[/?]|$)/i.test(text);
+        try {
+            const parsed = new URL(`https://${isPathOnly ? 'bravefox.invalid/' : ''}${text.replace(/^\//, '')}`);
+            return {
+                kind: isPathOnly ? 'path' : 'host',
+                host: isPathOnly ? '' : parsed.hostname.toLowerCase(),
+                path: parsed.pathname.replace(/\/{2,}/g, '/'),
+                params: [...parsed.searchParams]
+            };
+        } catch (e) { return null; }
+    }
+
+    function GJ_matchesCentralBlockedSiteRule(parsed, rule) {
+        if (rule.kind === 'query') {
+            return rule.params.every(([key, value]) => parsed.searchParams.getAll(key).includes(value));
+        }
+        const host = parsed.hostname.toLowerCase().replace(/\.$/, '');
+        if (rule.kind === 'host' && !(host === rule.host || host.endsWith(`.${rule.host}`))) return false;
+        const pathname = parsed.pathname.replace(/\/{2,}/g, '/');
+        const path = rule.path === '/' ? '/' : rule.path.replace(/\/$/, '');
+        if (path !== '/' && !(pathname === path || pathname.startsWith(`${path}/`))) return false;
+        return rule.params.every(([key, value]) => parsed.searchParams.getAll(key).includes(value));
     }
 
     function GJ_centralPolicySnapshotVerdict(value) {
@@ -1975,8 +2021,8 @@
                 if (host === ruleHost && (pathname === prefix || pathname.startsWith(`${prefix}/`))) return 'allow';
             }
 
-            for (const fragment of GJ_centralPolicySnapshot.blockedSites || []) {
-                if (fragment && href.includes(String(fragment))) return 'block';
+            for (const rule of GJ_centralBlockedSiteRules) {
+                if (GJ_matchesCentralBlockedSiteRule(parsed, rule)) return 'block';
             }
 
             const lowerHost = host.toLowerCase();
@@ -2179,6 +2225,8 @@
             const firstSnapshot = !GJ_centralPolicySnapshotLoaded;
             const finitePolicyChanged = !firstSnapshot && fingerprint !== GJ_centralPolicySnapshotFingerprint;
             GJ_centralPolicySnapshot = nextSnapshot;
+            GJ_centralBlockedSiteRules = nextSnapshot.blockedSites
+                .map(GJ_parseCentralBlockedSiteRule).filter(Boolean);
             GJ_centralPolicySnapshotFingerprint = fingerprint;
             GJ_centralPolicySnapshotLoaded = true;
 
@@ -2377,56 +2425,54 @@
         });
     } catch (e) {}
 
-    // Result URL allowances are anchored regexes. Anchoring the scheme and host
-    // prevents lookalike URLs such as youtube.com.example.org from being allowed.
-    // Specific blocked result/image patterns still take priority over these rules.
+    // Result URL allowances use plain domains or domain/path prefixes, without protocols or www.
+    // A normal domain matches itself and www.; *.domain matches that domain plus all subdomains.
+    // A /path suffix limits the exception to that path and its children. The actual URL hostname
+    // is parsed first, so lookalike hosts and URLs nested in another site's query cannot match.
+    // Nuclear, hard URL, image, central-hosts, and priority denies still take precedence.
     const allowedResultURLs = [
-        /^https?:\/\/(?:[a-z0-9-]+\.)*archive\.org(?:[\/:?#]|$)/i,
-        /^https?:\/\/(?:www\.)?iltalehti\.fi(?:[\/:?#]|$)/i,
-        /^https?:\/\/(?:www\.)?is\.fi(?:[\/:?#]|$)/i,
-        /^https?:\/\/(?:www\.|m\.)?youtube\.com(?:[\/:?#]|$)/i,
-        /^https?:\/\/(?:[a-z]{2,3}\.)?wikipedia\.org(?:[\/:?#]|$)/i,
-        /^https?:\/\/(?:www\.)?netflix\.com(?:[\/:?#]|$)/i,
-        /^https?:\/\/(?:oldschool\.)?runescape\.wiki(?:[\/:?#]|$)/i,
-        /^https?:\/\/runescape\.wiki(?:[\/:?#]|$)/i,
-        /^https?:\/\/github\.com\/paintdotnet(?:[\/?#]|$)/i,
-        /^https?:\/\/(?:www\.)?getpaint\.net(?:[\/:?#]|$)/i,
-        /^https?:\/\/(?:oldschool\.)?runescape\.com(?:[\/:?#]|$)/i,
-        /^https?:\/\/(?:status\.)?openai\.com(?:[\/:?#]|$)/i,
-        /^https?:\/\/(?:www|old|new)\.reddit\.com(?:[\/:?#]|$)/i,
-        /^https?:\/\/(?:www\.)?spotify\.com(?:[\/:?#]|$)/i,
-        /^https?:\/\/(?:www\.)?thesmackdownhotel\.com(?:[\/:?#]|$)/i,
-        /^https?:\/\/(?:fi\.)?wikipedia\.org(?:[\/:?#]|$)/i,
-        /^https?:\/\/(?:en\.)?wikipedia\.org(?:[\/:?#]|$)/i,
-        /^https?:\/\/(?:fi\.)?wiktionary\.org(?:[\/:?#]|$)/i,
-        /^https?:\/\/(?:en\.)?wiktionary\.org(?:[\/:?#]|$)/i,
-        /^https?:\/\/(?:www\.)?wwe\.com(?:[\/:?#]|$)/i,
-        /^https?:\/\/(?:www\.)?amd\.com(?:[\/:?#]|$)/i,
-        /^https?:\/\/(?:www\.)?nvidia\.com(?:[\/:?#]|$)/i,
-        /^https?:\/\/(?:www\.)?intel\.com(?:[\/:?#]|$)/i,
-        /^https?:\/\/(?:www\.)?techpowerup\.com(?:[\/:?#]|$)/i,
-        /^https?:\/\/(?:www\.)?guru3d\.com(?:[\/:?#]|$)/i,
-        /^https?:\/\/(?:www\.)?is\.fi(?:[\/:?#]|$)/i,
-        /^https?:\/\/(?:www\.)?iltalehti\.fi(?:[\/:?#]|$)/i,
-        /^https?:\/\/(?:www\.)?chatgpt\.com(?:[\/:?#]|$)/i,
-        /^https?:\/\/(?:www\.)?openai\.com(?:[\/:?#]|$)/i,
-        /^https?:\/\/github\.com\/copilot(?:[\/?#]|$)/i,
-        /^https?:\/\/gemini\.google\.com(?:[\/:?#]|$)/i,
-        /^https?:\/\/(?:www\.)?jimms\.fi(?:[\/:?#]|$)/i,
-        /^https?:\/\/(?:www\.)?verkkokauppa\.com(?:[\/:?#]|$)/i,
-        /^https?:\/\/(?:www\.)?motonet\.fi(?:[\/:?#]|$)/i,
-        /^https?:\/\/(?:www\.)?datatronic\.fi(?:[\/:?#]|$)/i,
-        /^https?:\/\/(?:www\.)?multitronic\.fi(?:[\/:?#]|$)/i,
-        /^https?:\/\/(?:www\.)?proshop\.fi(?:[\/:?#]|$)/i,
-        /^https?:\/\/(?:www\.)?tori\.fi(?:[\/:?#]|$)/i,
-        /^https?:\/\/(?:www\.)?huuto\.net(?:[\/:?#]|$)/i,
-        /^https?:\/\/(?:www\.)?motonet\.fi(?:[\/:?#]|$)/i,
-        /^https?:\/\/(?:www\.)?hintaopas\.fi(?:[\/:?#]|$)/i,
-        /^https?:\/\/(?:www\.)?yliopistonapteekki\.fi(?:[\/:?#]|$)/i,
-        /^https?:\/\/(?:www\.)?findidfb\.com(?:[\/:?#]|$)/i,
-        /^https?:\/\/(?:www\.)?lookup-id\.com(?:[\/:?#]|$)/i,
-        /^https?:\/\/(?:www\.)?wiktionary\.org(?:[\/:?#]|$)/i,
-        /^https?:\/\/(?:www\.)?terve\.fi(?:[\/:?#]|$)/i,
+        '*.archive.org',
+        'iltalehti.fi',
+        'is.fi',
+        'youtube.com',
+        'm.youtube.com',
+        '*.wikipedia.org',
+        'netflix.com',
+        'runescape.wiki',
+        'oldschool.runescape.wiki',
+        'github.com/paintdotnet',
+        'getpaint.net',
+        'runescape.com',
+        'oldschool.runescape.com',
+        'openai.com',
+        'status.openai.com',
+        'reddit.com',
+        'old.reddit.com',
+        'new.reddit.com',
+        'spotify.com',
+        'thesmackdownhotel.com',
+        '*.wiktionary.org',
+        'wwe.com',
+        'amd.com',
+        'nvidia.com',
+        'intel.com',
+        'techpowerup.com',
+        'guru3d.com',
+        'chatgpt.com',
+        'github.com/copilot',
+        'jimms.fi',
+        'verkkokauppa.com',
+        'motonet.fi',
+        'datatronic.fi',
+        'multitronic.fi',
+        'proshop.fi',
+        'tori.fi',
+        'huuto.net',
+        'hintaopas.fi',
+        'yliopistonapteekki.fi',
+        'findidfb.com',
+        'lookup-id.com',
+        'terve.fi',
     ];
 
     // Precise deny paths on otherwise allowed hosts. Keep this list anchored and
@@ -2435,7 +2481,7 @@
     const priorityBlockedResultURLPatterns = [
         // Strongly identified blocked hosts outrank generic URL allowances on every account.
         /^https?:\/\/(?:[a-z0-9-]+\.)*tiktok\.com(?:[\/:?#]|$)/i,
-        /^https?:\/\/(?:www|old|new)\.reddit\.com\/r\/(?:comfyui|stablediffusion|machinelearning|grok)(?:[\/?#]|$)/i,
+        /^https?:\/\/(?:(?:www|old|new)\.)?reddit\.com\/r\/(?:comfyui|stablediffusion|machinelearning|grok)(?:[\/?#]|$)/i,
     ];
 
     const blockedResultURLPatterns = [
@@ -4322,21 +4368,41 @@
     dedupeRegexArray(resultHideTerms);
     dedupeRegexArray(redirectHideLite);
     dedupeRegexArray(searchAllowTerms);
-    dedupeRegexArray(allowedResultURLs);
+    // Domain/path allowances are strings; the regex deduper would delete every entry.
+    const allowedResultURLRules = Array.from(new Set(allowedResultURLs.map(entry =>
+        String(entry || '').trim().toLowerCase()
+    ).filter(Boolean))).map(entry => {
+        const allSubdomains = entry.startsWith('*.');
+        const bare = allSubdomains ? entry.slice(2) : entry;
+        const slashIndex = bare.indexOf('/');
+        const host = (slashIndex < 0 ? bare : bare.slice(0, slashIndex)).replace(/\.$/, '');
+        const pathPrefix = slashIndex < 0 ? '' : bare.slice(slashIndex).replace(/\/+$/, '');
+        if (!/^[a-z0-9-]+(?:\.[a-z0-9-]+)+$/.test(host)) return null;
+        return { host, pathPrefix, allSubdomains };
+    }).filter(Boolean);
     dedupeRegexArray(priorityBlockedResultURLPatterns);
     dedupeRegexArray(blockedResultURLPatterns);
     dedupeRegexArray(blockedImageURLPatterns);
 
     // --- Helpers ---
-    // Result-only URL allow checker. Every rule is anchored at the real URL's
-    // scheme/host, so an allowed name in a query string or lookalike host cannot win.
+    // Compare the URL's parsed hostname and path, never arbitrary substrings of its href.
+    // This accepts http/https and www automatically; only *.domain entries allow all subdomains.
     function isResultURLAllowed(url) {
         if (!url) return false;
         try {
             const parsed = new URL(String(url), window.location.origin);
             if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
             if (GJ_centralPolicyCachedVerdict(parsed.href) === 'allow') return true;
-            return Boolean(testRegexList(allowedResultURLs, parsed.href));
+
+            const hostname = parsed.hostname.toLowerCase().replace(/\.$/, '');
+            const pathname = parsed.pathname.toLowerCase();
+            return allowedResultURLRules.some(rule => {
+                const matchedHost = hostname === rule.host || hostname === `www.${rule.host}` ||
+                    (rule.allSubdomains && hostname.endsWith(`.${rule.host}`));
+                if (!matchedHost) return false;
+                return !rule.pathPrefix || pathname === rule.pathPrefix ||
+                    pathname.startsWith(`${rule.pathPrefix}/`);
+            });
         } catch (e) {
             return false;
         }
@@ -4613,10 +4679,29 @@
     //         -> normal allowed URL -> generic blocked result URL -> none
     // Image:  same as Result, with hard image URL denies and a final generic WebP fallback.
 
+    // Google sometimes sends organic-result links through /goto?url=CAES... opaque tokens.
+    // Those tokens are routing data, not a publisher URL or readable page content.
+    // Strip ONLY that opaque parameter from policy candidates, never from navigation.
+    // Actual http(s) destinations and non-Google URLs keep all their original fields.
+    function getPolicyURLWithoutOpaqueGoogleGoto(value) {
+        const raw = String(value || '').trim();
+        if (!raw) return raw;
+        try {
+            const parsed = new URL(raw, window.location.origin);
+            const googleHost = /^(?:[a-z0-9-]+\.)*google\.(?:[a-z]{2,3}|[a-z]{2,3}\.[a-z]{2})$/i;
+            if (!googleHost.test(parsed.hostname) || parsed.pathname !== '/goto') return raw;
+            const payload = parsed.searchParams.get('url') || '';
+            if (!/^CAES[A-Za-z0-9_-]{20,}={0,2}$/.test(payload)) return raw;
+            return parsed.origin + parsed.pathname;
+        } catch (e) {
+            return raw;
+        }
+    }
+
     function getResultURLCandidates(url) {
         const candidates = [];
         const add = (value) => {
-            const raw = String(value || '').trim();
+            const raw = getPolicyURLWithoutOpaqueGoogleGoto(value);
             if (!raw) return;
             candidates.push(raw);
             try {
@@ -4632,11 +4717,46 @@
             // destination. An arbitrary site cannot whitelist itself by putting an
             // allowed URL in a ?url= parameter.
             if (/^(?:[a-z0-9-]+\.)*google\.[a-z.]+$/i.test(parsed.hostname)) {
-                ['q', 'url', 'imgurl', 'imgrefurl'].forEach(name => add(parsed.searchParams.get(name) || ''));
+                const opaqueGoto = parsed.pathname === '/goto' &&
+                    getPolicyURLWithoutOpaqueGoogleGoto(parsed.href) === parsed.origin + parsed.pathname;
+                ['q', 'url', 'imgurl', 'imgrefurl'].forEach(name => {
+                    // The CAES token must not leak back into broad URL/text regex matching.
+                    if (opaqueGoto && name === 'url') return;
+                    add(parsed.searchParams.get(name) || '');
+                });
             }
         } catch (e) {}
 
         return Array.from(new Set(candidates));
+    }
+
+    // Google /goto?url=CAES... parameters are opaque routing tokens, not readable content.
+    // Do not interpret their random letters as AI/Nuclear keywords. Keep the original
+    // candidates for all real URL, TLD and central-hosts checks below.
+    function getResultSemanticSafetySignal(url, text, candidates) {
+        let opaqueGotoPayload = '';
+        try {
+            const parsed = new URL(String(url || ''), window.location.origin);
+            if (/^(?:[a-z0-9-]+\.)*google\.[a-z.]+$/i.test(parsed.hostname) &&
+                parsed.pathname === '/goto') {
+                const payload = parsed.searchParams.get('url') || '';
+                if (payload && !/^https?:\/\//i.test(payload)) opaqueGotoPayload = payload;
+            }
+        } catch (e) {}
+
+        if (!opaqueGotoPayload) return `${text || ''} ${candidates.join(' ')}`.trim();
+        const readableCandidates = candidates.filter(candidate => {
+            const raw = String(candidate || '');
+            if (raw === opaqueGotoPayload) return false;
+            try {
+                const parsed = new URL(raw, window.location.origin);
+                if (/^(?:[a-z0-9-]+\.)*google\.[a-z.]+$/i.test(parsed.hostname) &&
+                    parsed.pathname === '/goto' &&
+                    parsed.searchParams.get('url') === opaqueGotoPayload) return false;
+            } catch (e) {}
+            return true;
+        });
+        return `${text || ''} ${readableCandidates.join(' ')}`.trim();
     }
 
     function decideQueryPolicy(text, includeRedirectHideLite = true) {
@@ -4689,13 +4809,14 @@
         const urlSignal = candidates.join(' ');
         const signal = `${text || ''} ${urlSignal}`.trim();
 
-        const nuclearHit = containsNuclearTerms(signal);
+        const semanticSafetySignal = getResultSemanticSafetySignal(url, text, candidates);
+        const nuclearHit = containsNuclearTerms(semanticSafetySignal);
         if (nuclearHit) {
             return makePolicyDecision(POLICY_ACTION.HIDE, isImage ? 'image' : 'result', 'nuclearRegex', nuclearHit, signal);
         }
 
         // AI is Nuclear in result/image context too; no account or URL allow may rescue it.
-        const aiHit = containsAiBoundary(signal);
+        const aiHit = containsAiBoundary(semanticSafetySignal);
         if (aiHit) {
             return makePolicyDecision(POLICY_ACTION.HIDE, isImage ? 'image' : 'result', 'nuclear-ai-boundary', aiHit, signal);
         }
@@ -4910,6 +5031,64 @@
                 decision: withTapioState(true, () => decideResultPolicy('https://youtube.com.example.org/watch?v=123', 'ordinary result', false)),
                 expectedAction: POLICY_ACTION.NONE,
                 expectedReason: 'no-match'
+            },
+            {
+                name: 'bare archive domain allows a Wayback HTTPS subdomain',
+                decision: withTapioState(false, () => decideResultPolicy('https://web.archive.org/web/20240101/https://example.com/', 'Wayback Machine', false)),
+                expectedAction: POLICY_ACTION.ALLOW,
+                expectedReason: 'allowedResultURLs'
+            },
+            {
+                name: 'archive allowlist also accepts HTTP and alternate archive subdomains',
+                decision: withTapioState(false, () => decideResultPolicy('http://wayback.archive.org/web/20240101/', 'Wayback Machine', false)),
+                expectedAction: POLICY_ACTION.ALLOW,
+                expectedReason: 'allowedResultURLs'
+            },
+            {
+                name: 'opaque Google Wayback redirect is checked without its CAES token',
+                decision: withTapioState(false, () => decideResultPolicy(
+                    'https://www.google.com/goto?url=CAESaAHrOzAVINX6-lHFYgVzotiuCX4_QqwZMaFq2OlQG-tHOeqaI3TZHcnce3zpIQHBm0iQ08lF_648ofB34wTT-QZ44zOD4Dq0oZz_Rp_v4fgteXr9V4GdH8xhLwINYTMd4PUKsPinju5q',
+                    'Wayback Machine http://wayback.archive.org', false)),
+                expectedAction: POLICY_ACTION.ALLOW,
+                expectedReason: 'allowedResultURLs'
+            },
+            {
+                name: 'normal Google redirect with a readable blocked URL is still blocked',
+                decision: withTapioState(false, () => decideResultPolicy(
+                    'https://www.google.com/goto?url=https%3A%2F%2Ftiktok.com%2Fvideo%2F123',
+                    'TikTok video', false)),
+                expectedAction: POLICY_ACTION.HIDE,
+                expectedReason: 'priority-blocked-result-url'
+            },
+            {
+                name: 'plain chatgpt.com entry allows www and scheme variants',
+                decision: withTapioState(false, () => decideResultPolicy('https://www.chatgpt.com/c/example', 'ordinary result', false)),
+                expectedAction: POLICY_ACTION.ALLOW,
+                expectedReason: 'allowedResultURLs'
+            },
+            {
+                name: 'plain domain entry rejects lookalike host',
+                decision: withTapioState(false, () => decideResultPolicy('https://chatgpt.com.example.org/c/example', 'ordinary result', false)),
+                expectedAction: POLICY_ACTION.NONE,
+                expectedReason: 'no-match'
+            },
+            {
+                name: 'path allowance permits only the GitHub paintdotnet repository',
+                decision: withTapioState(false, () => decideResultPolicy('https://github.com/paintdotnet/readme', 'ordinary result', false)),
+                expectedAction: POLICY_ACTION.ALLOW,
+                expectedReason: 'allowedResultURLs'
+            },
+            {
+                name: 'path allowance excludes a similarly named GitHub repository',
+                decision: withTapioState(false, () => decideResultPolicy('https://github.com/paintdotnet-bad/readme', 'ordinary result', false)),
+                expectedAction: POLICY_ACTION.NONE,
+                expectedReason: 'no-match'
+            },
+            {
+                name: 'priority Reddit exclusion overrides plain domain allowance',
+                decision: withTapioState(true, () => decideResultPolicy('https://reddit.com/r/comfyui', 'ordinary result', false)),
+                expectedAction: POLICY_ACTION.HIDE,
+                expectedReason: 'priority-blocked-result-url'
             },
             {
                 name: 'ordinary allowed URL stays allowed outside Tapio mode',
@@ -5610,9 +5789,89 @@ function swapSearchTabs() {
         }
     }
 
+    // Google sometimes serves an opaque /goto token while publishing a complete destination
+    // URL inside the organic result's own <cite>. Restore normal direct links only when the
+    // displayed address is COMPLETE. Never reconstruct a clipped breadcrumb or turn an
+    // arbitrary deep result into a homepage link.
+    function getGoogleWebResultDirectDestination(link) {
+        try {
+            if (!isGoogleWebPrimaryResultLink(link)) return '';
+            const current = new URL(link.href);
+            if (!/^(?:[a-z0-9-]+\.)*google\.(?:[a-z]{2,3}|[a-z]{2,3}\.[a-z]{2})$/i.test(current.hostname) ||
+                current.pathname !== '/goto') return '';
+
+            // Modern /goto?url=CAES... values are opaque, not base64-encoded addresses.
+            // When Google actually includes a plain URL, use that as the authoritative target.
+            const supplied = current.searchParams.get('url') || '';
+            let candidate = /^https?:\/\//i.test(supplied) ? supplied : '';
+
+            if (!candidate) {
+                const cite = link.querySelector('.CA5RN cite[role="text"], cite[role="text"]');
+                if (!cite) return '';
+                const printed = String(cite.textContent || '').trim();
+                // Breadcrumbs and ellipses indicate the full path is not known.
+                if (!printed || /[›…]|\.\.\.|\s/.test(printed)) return '';
+                if (/^https?:\/\//i.test(printed)) candidate = printed;
+                else if (/^(?:[a-z0-9-]+\.)+[a-z]{2,63}(?:\/[\w%+~.-]*)?\/?$/i.test(printed)) {
+                    candidate = 'https://' + printed;
+                } else return '';
+            }
+
+            const target = new URL(candidate);
+            if (!['http:', 'https:'].includes(target.protocol) ||
+                target.username || target.password ||
+                !target.hostname ||
+                target.hostname === current.hostname && target.pathname === '/goto') return '';
+            return target.href;
+        } catch (e) { return ''; }
+    }
+
+    function restoreGoogleWebResultDirectLink(link) {
+        const original = getGoogleWebResultDirectDestination(link);
+        if (!original) {
+            // Google can recycle an anchor for a new result. Never keep a stale override.
+            if (link?.getAttribute?.('data-googlejs-direct-destination') &&
+                link.href !== link.getAttribute('data-googlejs-direct-destination')) {
+                link.removeAttribute('data-googlejs-direct-destination');
+            }
+            return false;
+        }
+        try {
+            link.setAttribute('href', original);
+            link.setAttribute('data-googlejs-direct-destination', original);
+            // No Google click-tracking ping for a recovered direct result link.
+            link.removeAttribute('ping');
+
+            if (link.getAttribute('data-googlejs-direct-handler') !== '1') {
+                link.setAttribute('data-googlejs-direct-handler', '1');
+                for (const eventType of ['click', 'auxclick', 'mousedown']) {
+                    link.addEventListener(eventType, event => {
+                        const stored = link.getAttribute('data-googlejs-direct-destination');
+                        if (!stored) return;
+                        if (link.href !== stored) {
+                            // Never resurrect an old target if Google repurposed this card.
+                            const refreshed = getGoogleWebResultDirectDestination(link);
+                            if (!refreshed) {
+                                link.removeAttribute('data-googlejs-direct-destination');
+                                return;
+                            }
+                            link.setAttribute('href', refreshed);
+                            link.setAttribute('data-googlejs-direct-destination', refreshed);
+                        }
+                        // Document-level safety listeners still receive the event during
+                        // capture. Prevent only subsequent Google delegated click handling.
+                        if (eventType !== 'mousedown') event.stopPropagation();
+                    }, true);
+                }
+            }
+            return true;
+        } catch (e) { return false; }
+    }
+
     function getGoogleWebResultCard(link) {
         try {
             if (!isGoogleWebPrimaryResultLink(link)) return null;
+            restoreGoogleWebResultDirectLink(link);
             const boundary = link.closest('#search, #rso, #res');
             if (!boundary) return null;
 
@@ -5733,7 +5992,12 @@ function swapSearchTabs() {
             GJ_extractCentralPolicyURLsFromText(decodeRepeatedly(String(text || '')))
                 .forEach(candidate => candidates.push(candidate));
         } catch (e) {}
-        return Array.from(new Set(candidates.map(GJ_normalizeCentralPolicyURL).filter(Boolean)));
+        // Use the same canonical Google /goto wrapper as the local URL-policy engine.
+        // This prevents opaque CAES tokens from triggering central blockedSites/links
+        // substring rules, without exempting the publisher's visible destination URL.
+        return Array.from(new Set(candidates.map(candidate =>
+            GJ_normalizeCentralPolicyURL(getPolicyURLWithoutOpaqueGoogleGoto(candidate))
+        ).filter(Boolean)));
     }
 
     function getGoogleResultCentralPolicyGateState(url, text) {
@@ -5750,13 +6014,39 @@ function swapSearchTabs() {
         return pending ? 'pending' : 'ready';
     }
 
+    // Google sometimes injects inline telemetry/script payloads inside an organic result
+    // shell. textContent includes those scripts, even while the no-glimpse gate hides
+    // the result. Exclude executable/embedded markup before URL and keyword scanning:
+    // a Google Ads conversion URL is not the result's publisher URL.
+    //
+    // Keep this visibility-independent. innerText can collapse while the result is
+    // hidden by BraveFox, which previously made pending/ready signatures unstable.
+    // Fast path avoids cloning normal result cards that have no embedded payloads.
+    function getGoogleWebResultContentText(result) {
+        if (!result) return '';
+        try {
+            const nonContentSelector = 'script, style, noscript, template, svg, iframe, object';
+            if (result.matches?.(nonContentSelector)) return '';
+            if (!result.querySelector?.(nonContentSelector)) {
+                return String(result.textContent || '');
+            }
+
+            const safeCopy = result.cloneNode(true);
+            safeCopy.querySelectorAll(nonContentSelector).forEach(node => node.remove());
+            return String(safeCopy.textContent || '');
+        } catch (e) {
+            // Never fall back to the contaminated full textContent on failure.
+            return '';
+        }
+    }
+
     function getGoogleWebResultRenderedSignal(result, link) {
         try {
             const heading = link && (link.querySelector('h3') || link.closest('h3'));
             const titleText = String((heading && (heading.textContent || heading.innerText)) ||
                 (link && (link.textContent || link.innerText)) || '');
             const linkTitle = String((link && link.getAttribute('title')) || '');
-            return [result?.textContent || result?.innerText || '', titleText, linkTitle]
+            return [getGoogleWebResultContentText(result), titleText, linkTitle]
                 .join(' ')
                 .replace(/\s+/g, ' ')
                 .trim()
@@ -5771,8 +6061,8 @@ function swapSearchTabs() {
     // while the early observer used textContent.  Since innerText changes when our
     // CSS gate hides a card, those paths could alternately enqueue new URLs and
     // turn a verified card back into pending without any DOM, policy or URL change.
-    // Keep the trusted opaque-/goto publisher URL used by the existing local policy.
-    // Do not walk/join text nodes: that broader scan caused all-result blanking.
+    // Keep the trusted publisher URL for links that still use opaque /goto wrappers.
+    // Strip embedded non-content markup without walking/joining live text nodes.
     function getGoogleWebResultCentralPolicyText(result, link) {
         const signal = getGoogleWebResultRenderedSignal(result, link);
         const publisherURL = getGoogleWebResultTrustedPublisherPolicyURL(result, link);
@@ -5890,7 +6180,7 @@ function swapSearchTabs() {
             (link && (link.innerText || link.textContent)) || '');
         const linkTitle = String((link && link.getAttribute('title')) || '');
         const publisherPolicyURL = getGoogleWebResultTrustedPublisherPolicyURL(result, link);
-        return [result.innerText || result.textContent || '', titleText, linkTitle, publisherPolicyURL]
+        return [getGoogleWebResultContentText(result), titleText, linkTitle, publisherPolicyURL]
             .join(' ')
             .replace(/\s+/g, ' ')
             .trim()
@@ -6706,7 +6996,12 @@ function swapSearchTabs() {
                     } else if (centralGateState === 'blocked') {
                         // Never let a new hard central denial fall through to the ready branch.
                         googleWebResultAudit.hiddenCards++;
-                        rememberGoogleWebResultRemoval(titleText, resultUrl, 'central-gate-block', '');
+                        // Preserve the actual denied URL in diagnostics. A Google /goto wrapper
+                        // and the displayed publisher URL can have different central verdicts.
+                        const blockedCentralCandidate = getGoogleResultCentralPolicyCandidates(
+                            resultUrl, getGoogleWebResultCentralPolicyText(result, link)
+                        ).find(candidate => GJ_centralPolicyCachedVerdict(candidate) === 'block') || '';
+                        rememberGoogleWebResultRemoval(titleText, resultUrl, 'central-gate-block', blockedCentralCandidate);
                         removeGoogleWebResultCardCompletely(result);
                     } else if (centralGateState === 'pending') {
                         // Local policy found nothing wrong, but the authoritative hosts verdict has

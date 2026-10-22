@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name         CleanArchives
-// @version      2026-10-20
+// @name         CleanArchives v29.5.5
+// @version      2026-10-21
 // @description  Redirects specific archive pages (and xcancel.com search) to the appropriate front page when banned terms are detected.
 // @match        *://web.archive.org/*
 // @match        *://archive.org/*
@@ -404,7 +404,7 @@
         "Bella", "sex", "facetune", "face tune", "tuning face", "face tuning", "facetuning", "tuningface", "biscuit ass", "Chyna", "Gina Adams", "bikini", "Kristen Stewart", "biscuit backside", "Sydney Sweeney", "Britt Baker",
         "Deepseek", "shag", "shagged", "fake", "cloth", "Blis", "LGBTQ", "pant", "fat fetish", "Object", "adultcontent", "F4NS", "Carmella", "Adams WWE", "nsfw", "18+", "18 plus", "porn", "penetration", "filmora",
         "xxx", "nudifying", "nudity", "Jaida Parker", "F4N5", "undressing", "undressifying", "generative", "undressify", "Goddess", "Perry WWE", "Toni Storm", "FAN5", "Harley", "Cameron", "Merlio", "Hayter", "Ripley",
-        "Rhea Ripley", "Microsoft Edge", "askfm", "ask fm", "CJ WWE", "queer", "Pride", "prostitute", "escort", "fetish", "v1ds", "m4ny", "v1d5", "erotic", "LGBT", "Gina WWE", "blowjob", "Sportskeeda", "whoring",
+        "Rhea Ripley", "Microsoft Edge", "askfm", "ask fm", "CJ WWE", "queer", "Pride", "prostitute", "balbum", "escort", "fetish", "v1ds", "m4ny", "v1d5", "erotic", "LGBT", "Gina WWE", "blowjob", "Sportskeeda", "whoring",
         "AI Tool", "aitool", "vagina", "genital", "booty", "nudyi", "Nudying", "Nudeying", "derriere", "busty", "slut", "whore", "camgirl", "cumslut", "fury foot", "fury feet", "DeepSeek AI", "fansly", "patreon",
         "manyvids", "chaturbate", "myfreecams", "Samsung Internet", "Policy template", "Templates", "Policies", "onlifans", "camsoda", "stripchat", "bongacams", "livejasmin", "Shirai", "Io Sky", "Sky WWE", "Sky Wrestling",
         "Sky wrestle", "foot fury", "feet fury", "Bleis", "WWE woman", "WWE women", "amateur", "5 feet of fury", "five feet of fury", "Velvet Sky", "onl1", "celeb", "0nl1", "Diipfeikki", "Lana Perry", "Vince Russo", "Russo",
@@ -419,7 +419,7 @@
         "Jacy Jayne", "Gigi Dolin", "Tatum WWE", "dress", "Fallon Henley", "Kelani Jordan", "explicit", "AEW", "justforfans", "Katana Chance", "Mercedes", "Gambling", "Renee Young", "anaaliseksi", "Sasha", "Wendy Choo", "f*ckwit",
         "Paxley", "horizonMW", "cam4", "biscuit rear", "d3ep", "Britt", "Mariah", "puzzy", "editing app", "linq", "pussy", "tushy", "Roxanne", "Blies", "CJ Lana", "Statlander", "f*cking", "f*cked", "f*cks", "f*ckup", "f**kery", "f*ckface", 
         "*uck", "f*ck", "fu*k", "fuc*", "f***", "f**k", "**ck", "fuc*k", "f*cked", "f*cker", "f**ked", "f**king", "fu**", "f**", "f****", "f*c*", "*cked", "b*tch", "b**ch", "b****", "b*itch", "*itch", "b*stard", "b**tard", 
-        "f*cktard", "f*cker", "f*ckery", "sh*t", "sh*tty", "*hit", "s**t", "sh**", "sh*tfaced", "sh*tbag", "s*cker", "b*stardly", "b*st*rd", "b*st*rds", "b*lls", "c**t", "cu*t", "*unt", "c*nts", "c**ts", "cunt*", "tw*t",
+        "f*cktard", "f*cker", "f*ckery", "sh*t", "sh*tty", "*hit", "s**t", "sh**", "sh*tfaced", "sh*tbag", "bunkr", "s*cker", "b*stardly", "b*st*rd", "b*st*rds", "b*lls", "c**t", "cu*t", "*unt", "c*nts", "c**ts", "cunt*", "tw*t",
         "*lls", "b*llocks", "b*llsack", "a**", "a*shole", "*sshole", "as*hole", "assh*le", "as**hole", "a**hole", "a**wipe", "a*shat", "b*lls", "p*ssy", "c*nt", "d*ckbag", "d**kface", "sh*thead", "t*t", "*n**r", "d*ckhead", 
         "tw**t", "t*at", "t**t", "p*ss", "p***", "p*ssed", "t*rd", "rawdog", "rawdogging", "raw dogging", "raw dog", "d*ck", "d**k", "di*k", "a*s", "azz", "a*z", "az*", "***", "###", "@@", "#*", "*#", "@*", "*@", "#@", "@#", 
         "*n***r", "m*therf*cker", "m*therfucker", "*ss", "as****", "f*ckface", "f*cktard", "fukk", "fukc", "fu*c", "sheer", "face replace", "photorealistic swap", "synthetic face", "hyperreal", "hyper real", "reface", 
@@ -488,7 +488,7 @@
 	/image to image/i, /image 2 image/i, /model/i, /imagetoimage/i, /image2image/i, /girl/i, /woman/i, /women/i, /babe/i, /waifu/i, /wife/i, /spouse/i, /celeb/i, /celebrit/i, 
 	/#/i, /##/i,/boobs/i, /Comfy-UI/i, /ComfyAI/i, /Comfy-AI/i, /CoAi/i, /ComAi/i, /ComfAi/i, /ComfoAi/i, /ComforAi/i, /ComfortAi/i, /Midjourney/i, /LTheory/i, /LuTheory/i,
 	/Face Magic/i, /ex prompt/i, /example prompt/i, /prompt example/i, /toniwwe/i, /tonywwe/i, /fotor/i, /vercel/i, /venoi/i, /venic/i, /nsfw gen/i, /removebg/i, /remove bg/i,
-	/Shiri/i, /remov bg/i, /removal bg/i, /ia onl/i, /removebg/i, /removalbg/i, /rembg/i, /rem background/i, /removbg/i, /del background/i, /eras background/i, /erase background/i, 
+	/Shiri/i, /remov bg/i, /removal bg/i, /ia onl/i, /removebg/i, /removalbg/i, /bunkr/i, /rembg/i, /rem background/i, /removbg/i, /del background/i, /eras background/i,  
 	/erasing background/i, /butth/i, /buttc/i, /background eras/i, /background del/i, /background rem/i, /background off/i, /off background/i, /background out/i, /out background/i, 
 	/ladies/i, /lady/i, /buttc/i, /butt c/i, /butt h/i, /sugarla/i, /cunt/i, /butt s/i, /learn model/i, /mach model/i, /titten/i, /merg fac/i, /fac merg/i, /fac comb/i, /fac blend/i, 
 	/too merg/i, /merg too/i, /two fac/i, /two fac/i, /too fac/i, /too fac/i, /fac join/i, /join fac/i, /bg remov/i, /Trish/i, /Shir/i, /Stormwrestl/i, /Stormrassl/i, /Storm wrestl/i, 
@@ -513,8 +513,8 @@
 	/ComfortableAi/i, /Comf-Ai/i, /Comfo-Ai/i, /Comfor-Ai/i, /Comfort-Ai/i, /Comforta-Ai/i, /Comfortab-Ai/i, /Comfortabl-Ai/i, /Comfortable-Ai/i, /Runcomfy/i, /Run comfy/i, /Run-comfy/i, 
 	/Aut1111/i, /Becky/i, /Becki/i, /Rebecca/i, /Amber Heard/i, /without cloth/i, /without pant/i, /without tshirt/i, /without t-shirt/i, /without boxer/i, /b0x3r/i, /woman without/i, 
 	/women without/i, /girl without/i, /lady without/i, /ladies without/i, /girlfriend/i, /boyfriend/i, /girl friend/i, /boy friend/i, /bikini/i, /linger/i, /underwear/i, /under wear/i, 
-	/without dres/i, /Eliyna/i, /bik1/i, /Jazmyn/i, /Jaszmyn/i, /Jazsmyn/i, /Jazmin/i, /Dualipa/i, /Dua Lipa/i, /Dual Lipa/i, /Dual ipa/i, /chang pos/i, /selfie body/i, /belfie/i, /pos chang/i, 
-	/post chang/i, /change post/i, /change pose/i, /post change/i, /pose change/i, /pose change/i, /posture change/i, /Jasmin/i, /stefe/i, /postu edit/i, /pose edit/i, /edit postu/i,
+	/without dres/i, /Eliyna/i, /bik1/i, /Jazmyn/i, /Jaszmyn/i, /balbum/i, /Jazsmyn/i, /Jazmin/i, /Dualipa/i, /Dua Lipa/i, /Dual Lipa/i, /Dual ipa/i, /chang pos/i, /selfie body/i, /pos chang/i, 
+	/post chang/i, /change post/i, /change pose/i, /post change/i, /pose change/i, /pose change/i, /posture change/i, /Jasmin/i, /stefe/i, /postu edit/i, /pose edit/i, /edit postu/i, /belfie/i, 
 	/editor postu/i, /editor pose/i, /postu editor/i, /pose editor/i, /postu modi/i, /pose modi/i, /pic online/i, /pict online/i, /img body/i, /twerk/i, /phot onli/i, /fhot onli/i, /foto onli/i,
 	/body belfie/i, /full body/i, /pic body/i, /pict body/i, /body selfie/i, /phot body/i, /image body/i, /postu tweak/i, /pose tweak/i, /pose swap/i, /post swap/i, /body swap/i, /pose adjust/i, 
 	/post adjust/i, /body adjust/i, /stefa/i, /adjust pose/i, /adjust posture/i, /pose trans/i, /post trans/i, /pose morph/i, /post morph/i, /body morph/i, /body reshape/i, /shape body/i, /5yvä/i,
@@ -560,12 +560,13 @@
 	/virtuaali tietokone/i, /virtuaalitietokone/i, /hyper-v/i, /hyper v/i, /virtuaalimasiina/i, /virtuaali masiina/i, /virtuaalimasiini/i, /virtuaali masiini/i, /virtuaali workstation/i, /hihiai/i,
 	/virtual workstation/i, /virtualworkstation/i, /virtual workstation/i, /vrbox/i, /vibox/i, /virtuaaliworkstation/i, /hypervisor/i, /hyper visor/i, /hyperv/i, /vbox/i, /virbox/i, /heheai/i, 
 	/virtbox/i, /vir box/i, /virt box/i, /virtual box/i, /vi-machine/i, /vi machine/i, /virmachine/i,  /vir-machine/i, /virbox virtual/i, /virtbox virtual/i, /vibox virtual/i, /vbox virtual/i, 
-	/v-machine/i, /vmachine/i, /v machine/i, /vimachine/i, /vir machine/i, /virt machine/i, /ma71c/i, /virtmachine/i, /virt-machine/i, /virtumachine/i, /virtu-machine/i, /virtu machine/i,
+	/v-machine/i, /vmachine/i, /v machine/i, /vimachine/i, /vir machine/i, /virt machine/i, /ma71c/i, /virtmachine/i, /virt-machine/i, /virtumachine/i, /virtu-machine/i, /virtu machine/i, /orgi/i,
         /virtuamachine/i, /virtua-machine/i, /virtua machine/i, /vi mach/i, /vir mach/i, /virt mach/i, /virtu mach/i, /virtua mach/i, /virtual mach/i, /vi mac/i, /vir mac/i, /virt mac/i, /0riga/i,
-        /virtu mac/i, /virtua mac/i, /virtual machi/i, /ma7ic/i, /0r9g4/i, /0r1q4/i, /0r1qa/i, /0rlg4h/i, /or1g@h/i, /orrga/i, /orrgaa/i, /orgaa/i, /0rg4/i, /org4/i, /org4/i, /orgy/i, /orgi/i, 
+        /erase background/i, /virtu mac/i, /virtua mac/i, /virtual machi/i, /ma7ic/i, /0r9g4/i, /0r1q4/i, /0r1qa/i, /0rlg4h/i, /or1g@h/i, /orrga/i, /orrgaa/i, /orgaa/i, /0rg4/i, /org4/i, /org4/i, /orgy/i,  
 	/org@/i, /0rg@/i, /0rgi/i, /0rga5m/i, /origas/i, /0riga/i, /0r1g4/i, /0rlg4/i, /orlg4/i, /0rlg@/i, /orlg@/i, /origa/i, /or1ga/i, /orig4/i, /0r1g4/i, /0rlga/i, /orlg4/i, /0rlg4/i, /0rlg@/i, 
 	/orlg@/i, /0rrg4/i, /orrg4/i, /or1g@/i, /0r1g@/i, /0r1ga/i, /0r!g@/i, /0r!g4/i, /0rig@/i, /0rig4/i, /0r9ga/i, /reveals/i, /reveali/i, /revealing/i, /reveale/i, /booba/i, /hehiai/i, /hiheai/i,
-	/Serrano/i, /Zerrano/i, /view ig/i, /view insta/i, /view stori/i, /view story/i, /tiktok story/i, /tiktok stori/i, /download stor/i, /stor downl/i,
+	/Serrano/i, /Zerrano/i, /view ig/i, /view insta/i, /view stori/i, /view story/i, /tiktok story/i, /tiktok stori/i, /download stor/i, /stor downl/i, /AI Fake/i, /F4k3/i, /Fak3/i, /F4ke/i, 
+	/Mondomonger/i, /Mondo monger/i,
 
 
     // Symbols and emojis (Nuclear)

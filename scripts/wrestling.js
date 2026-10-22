@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name         Wrestling Filter
-// @date      	 2026-06-11
+// @name         Wrestling Filter v29.5.5
+// @date      	 2026-10-21
 // @description  So Pro, much wrestling, wow.
 // @match        https://*.thesmackdownhotel.com/*
 // @grant        none
@@ -27,25 +27,28 @@ console.log('[Wrestling Filter] chrome.storage.local available inside wrestling.
     const manualBans = [
         // Manual fallback aliases for names SDH roster/female slicing can miss or cache late.
         '/wrestlers/pj-vasa', '/wrestlers/lainey-reid', '/wrestlers/kellyanne', '/wrestlers/riho',
-	'/wrestlers/kellyanne-english', '/wrestlers/julia', '/wrestlers/nikita-naridian',  
+	'/wrestlers/kellyanne-english', '/wrestlers/julia', '/wrestlers/nikita-naridian', 'F4ke',  
 	'/wrestlers/thekla', '/wrestlers/dani-sekelsky', '/wrestlers/kelly-kelly', '/wrestlers/tori', 
-	'/wrestlers/alba-fyre', '/roster/wwe2k26/alundra-blayze', '/wrestlers/zelina-vega', 
-        '/wrestlers/rosita', '/wrestlers/lita', '/wrestlers/chyna', '/wrestlers/maryse', 
-        '/wrestlers/aksana', '/wrestlers/kaitlyn', '/wrestlers/layla', '/wrestlers/tamina', 
-        '/wrestlers/melina', '/wrestlers/jacqueline', '/wrestlers/odb', '/wrestlers/asya', 
-        '/wrestlers/debra', '/wrestlers/lana', '/wrestlers/sable', '/wrestlers/roxxi', 
-        '/wrestlers/carmella', '/wrestlers/raquel', '/wrestlers/kamille', '/wrestlers/maxine', 
-        '/wrestlers/cherry', '/wrestlers/sarita', '/wrestlers/shaniqua', '/wrestlers/francine', 
-        '/wrestlers/trinity', '/wrestlers/ivy-nile', '/wrestlers/aj-lee', '/wrestlers/mia-yim', 
-        '/wrestlers/gail-kim', '/wrestlers/eve-torres', '/wrestlers/dawn-marie', '/wrestlers/joy-giovanni', 
-        '/wrestlers/cora-jade', '/wrestlers/taya-valkyrie', '/wrestlers/brie-bella', '/wrestlers/su-yung'
+	'/wrestlers/alba-fyre', '/roster/wwe2k26/alundra-blayze', '/wrestlers/zelina-vega', 'Fak3',
+        '/wrestlers/rosita', '/wrestlers/lita', '/wrestlers/maryse', '/wrestlers/aksana', '/wrestlers/layla',
+	'/wrestlers/kaitlyn',  '/wrestlers/tamina', '/wrestlers/melina', '/wrestlers/jacqueline', 'gail kim',
+	'/wrestlers/asya', '/wrestlers/debra', '/wrestlers/lana', '/wrestlers/sable', '/wrestlers/roxxi', 
+        '/wrestlers/carmella', '/wrestlers/raquel', '/wrestlers/kamille', '/wrestlers/maxine', 'AI Fake', 
+        '/wrestlers/cherry', '/wrestlers/sarita', '/wrestlers/shaniqua', '/wrestlers/francine', 'F4k3',
+        '/wrestlers/trinity', '/wrestlers/ivy-nile', '/wrestlers/mia-yim', '/wrestlers/gail-kim', 
+	'/wrestlers/eve-torres', 'Mondo monger',  '/wrestlers/dawn-marie', '/wrestlers/joy-giovanni', 
+        'Mondomonger', '/wrestlers/cora-jade', '/wrestlers/taya-valkyrie', '/wrestlers/brie-bella', 
+	'/wrestlers/su-yung', '/wrestlers/Mondomonger', '/wrestlers/odb', 
     ];
 
     const doNotBroadcast = [
         '/wrestlers/melina', '/wrestlers/melina-perez', '/wrestlers/aj-lee',
         '/wrestlers/aj', '/wrestlers/becky-lynch', '/wrestlers/becky',
         '/wrestlers/katarina', 'wrestlers/katarina', 'katarina',
-	'/wrestlers/jojo', 'wrestlers/jojo', 'jojo',
+	'/wrestlers/jojo', 'wrestlers/jojo', 'jojo', 'sydney sweeney',
+	'kristen stewart', '/wrestlers/chyna', 'mandysacs', 'mandy rose',
+	'amanda desanta', 'lucia caminos', 'GTA VI', 'GTA V', 'GTA IV',
+	'gta 6', 'gta 5', 'gta 4', 'grand theft auto',
     ];
 
     let newlyDiscovered = [];

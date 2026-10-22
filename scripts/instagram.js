@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         IGCleaner v27.6.0-V6H
-// @version      2026-09-24
-// @date      	 2026-10-20
+// @name         IGCleaner
+// @version	 29.5.5
+// @date	 2026-10-22
 // @description  Trying to make my Instagram experience tolerable.
 // @match        *://www.instagram.com/*
 // @match        *://www.instagram.com/?next=%2F/*
@@ -13,6 +13,153 @@
 
 (function() {
 'use strict';
+
+// ===== Standalone blocked post redirect switch =====
+// 0 = collapse blocked photo/video/reel permalink in place (default).
+// 1 = redirect confirmed blocked standalone permalinks to the post author.
+// Viewing modals always close natively, regardless of this setting.
+const IG_BLOCKED_POST_REDIRECT = 0;
+
+// ===== Explore page redirect switch =====
+// 0 = allow /explore/ and screen individual media cards (default).
+// 1 = redirect /explore/ to Instagram Home, as in earlier versions.
+// Other account, post and private-profile redirects remain independent.
+const IG_EXPLORE_PAGE_REDIRECT = 0;
+
+// ===== V339: Explore becomes search-only (no feed, no discovery tabs) =====
+// 0 = keep the previous Explore grid and tabs (with existing post filtering).
+// 1 = prepaint-hide ONLY the captured Explore tabs and media grids; preserve
+//     native search form/results, sidebar and independent GraphQL Search drawer.
+const IG_EXPLORE_SEARCH_ONLY_V339 = 1;
+
+// ===== V335: native Search presentation (single Instagram document) =====
+// 0 = open Instagram's unmodified native Explore/Search page.
+// 1 = show that SAME native React search UI in a classic-style left drawer.
+// This necessarily uses Instagram's /explore/ route, but NEVER an iframe,
+// a second Instagram app instance, or the unreliable custom Search endpoint.
+const IG_NATIVE_SEARCH_PRESENTATION_V335 = 0;
+// Previous V334 iframe experiment is retired to prevent redirect loops.
+const IG_NATIVE_SEARCH_DRAWER_MODE_V334 = 0;
+
+const IG_NATIVE_SEARCH_INTENT_KEY_V335 = 'igcleaner-native-search-intent-v335';
+function ig2955NativeSearchIntentV335() {
+    try {
+        const value = JSON.parse(sessionStorage.getItem(IG_NATIVE_SEARCH_INTENT_KEY_V335) || 'null');
+        if (!value || !Number.isFinite(value.at) || Date.now() - value.at > 300000) {
+            sessionStorage.removeItem(IG_NATIVE_SEARCH_INTENT_KEY_V335);
+            return null;
+        }
+        return value;
+    } catch { return null; }
+}
+function ig2955NativeSearchActiveV335() {
+    return /^\/explore\/?$/i.test(location.pathname) && !!ig2955NativeSearchIntentV335();
+}
+function ig2955NativeSearchForgetV335() {
+    try { sessionStorage.removeItem(IG_NATIVE_SEARCH_INTENT_KEY_V335); } catch {}
+}
+function ig2955NativeSearchReturnV335() {
+    const record = ig2955NativeSearchIntentV335();
+    ig2955NativeSearchForgetV335();
+    const from = String(record?.from || '/');
+    const target = /^\/(?!\/)/.test(from) && !/^\/explore(?:\/|\?|$)/i.test(from) ? from : '/';
+    location.assign(target);
+}
+
+// ===== v29.5.5 V327: independent private-profile redirect switch =====
+// 0 = keep the private profile open and provide a Go Back / Takaisin button.
+// 1 = redirect recognized private profiles to Instagram Home, as before.
+// Neither setting changes explicitly blocked account/profile redirects.
+const IG_PRIVATE_ACCOUNT_REDIRECT = 0;
+
+// ===== v29.5.5: trusted friends (explicit identities; no mutual-follow guessing) =====
+// Only posts actually AUTHORED by these accounts bypass content filtering globally.
+// A blocked post shared by somebody else remains blocked outside a trusted DM.
+const IG_TRUSTED_FRIEND_ACCOUNTS = [
+    'tielaakariksi', 'torssone'
+];
+// These IDs identify DM conversations, NOT the owners of content shared in them.
+// Media opened inside these chats may show normally regardless of who authored it.
+const IG_TRUSTED_DM_THREADS = [
+    '116642506394793', '100739011330650',
+    '103071027761837', '17842001834335591'
+];
+const IG_TRUSTED_FRIEND_SET_V326 = new Set(IG_TRUSTED_FRIEND_ACCOUNTS.map(x => x.toLowerCase()));
+const IG_TRUSTED_DM_THREAD_SET_V326 = new Set(IG_TRUSTED_DM_THREADS);
+const IG_DM_CONTEXT_V326 = { lastPath: location.pathname, sourceThread: '', openedPost: '' };
+
+function ig2955SyncTrustedDMContextV326() {
+    try {
+        const path = location.pathname || '/';
+        const dm = path.match(/^\/direct\/t\/(\d+)\/?$/i);
+        const post = path.match(/^\/(?:[A-Za-z0-9._]+\/)?(?:p|reel|tv)\/([A-Za-z0-9_-]+)\/?$/i);
+        if (dm) {
+            // The exception only applies to exactly the four configured chats.
+            IG_DM_CONTEXT_V326.sourceThread = IG_TRUSTED_DM_THREAD_SET_V326.has(dm[1]) ? dm[1] : '';
+            IG_DM_CONTEXT_V326.openedPost = '';
+        } else if (path !== IG_DM_CONTEXT_V326.lastPath) {
+            const last = IG_DM_CONTEXT_V326.lastPath.match(/^\/direct\/t\/(\d+)\/?$/i);
+            if (last && IG_TRUSTED_DM_THREAD_SET_V326.has(last[1]) && post) {
+                IG_DM_CONTEXT_V326.sourceThread = last[1];
+                IG_DM_CONTEXT_V326.openedPost = post[1];
+            } else if (!post || post[1] !== IG_DM_CONTEXT_V326.openedPost) {
+                IG_DM_CONTEXT_V326.sourceThread = '';
+                IG_DM_CONTEXT_V326.openedPost = '';
+            }
+        }
+        IG_DM_CONTEXT_V326.lastPath = path;
+        return !!(dm && IG_TRUSTED_DM_THREAD_SET_V326.has(dm[1])) ||
+            // Only the one exact post opened directly from a configured DM is
+            // exempt. This also works if Instagram uses a full post viewer
+            // instead of a recognisable modal; navigating elsewhere clears it.
+            !!(post && IG_DM_CONTEXT_V326.openedPost === post[1] && IG_DM_CONTEXT_V326.sourceThread);
+    } catch { return false; }
+}
+function ig2955IsTrustedDMMediaV326() {
+    return ig2955SyncTrustedDMContextV326();
+}
+function ig2955TrustedAuthorFromPostV326(root) {
+    try {
+        const path = location.pathname.match(/^\/([a-z0-9._]+)\/(?:p|reel|tv)\/[A-Za-z0-9_-]+\/?$/i);
+        if (path && IG_TRUSTED_FRIEND_SET_V326.has(path[1].toLowerCase())) return true;
+        const caption = typeof ig2955FindPostCaptionV321 === 'function' ? ig2955FindPostCaptionV321(root) : null;
+        if (!caption) return false;
+        // First profile/avatar link in the *caption block*, not a tag or comment.
+        const anchors = caption.querySelectorAll('a[href]');
+        for (const anchor of anchors) {
+            const href = anchor.getAttribute('href') || '';
+            const match = href.match(/^\/([a-z0-9._]+)\/?$/i);
+            if (!match) continue;
+            if (anchor.querySelector('img[alt*="profiilikuva" i], img[alt*="profile" i]') ||
+                anchor.textContent.trim().toLowerCase() === match[1].toLowerCase()) {
+                return IG_TRUSTED_FRIEND_SET_V326.has(match[1].toLowerCase());
+            }
+        }
+    } catch {}
+    return false;
+}
+function ig2955TrustedHomeAuthorV326(article) {
+    try {
+        if (!article || article.tagName !== 'ARTICLE') return false;
+        const header = article.querySelector('header');
+        const scope = header || article;
+        const avatars = scope.querySelectorAll('a[href^="/"]:has(img[alt*="profiilikuva" i]), a[href^="/"]:has(img[alt*="profile" i])');
+        for (const link of avatars) {
+            const match = (link.getAttribute('href') || '').match(/^\/([a-z0-9._]+)\/?$/i);
+            if (match) return IG_TRUSTED_FRIEND_SET_V326.has(match[1].toLowerCase());
+        }
+        // Text-only author links are reliable inside a real header, NOT in
+        // the full article where a caption might merely mention a friend.
+        if (!header) return false;
+        for (const link of header.querySelectorAll('a[href^="/"]')) {
+            const match = (link.getAttribute('href') || '').match(/^\/([a-z0-9._]+)\/?$/i);
+            if (match && link.textContent.trim().toLowerCase() === match[1].toLowerCase())
+                return IG_TRUSTED_FRIEND_SET_V326.has(match[1].toLowerCase());
+        }
+    } catch {}
+    return false;
+}
+
 
     // ===== v43: route class for edit-profile no-glimpse CSS =====
     function isMetaManglerAccountEditPathV43() {
@@ -74,40 +221,20 @@
                     transition: none !important;
                 }
 
-                /* Explore / Tutki nav button: exact /explore/ and the icon/button label */
-                span.html-span:has(> div.x1n2onr6 > a._a6hd[href="/explore/"]),
-                span.html-span:has(> div.x1n2onr6 > a[role="link"][href="/explore/"]),
-                div.x1n2onr6:has(> a._a6hd[href="/explore/"]),
-                div.x1n2onr6:has(> a[role="link"][href="/explore/"]),
-                a._a6hd[href="/explore/"],
-                a[role="link"][href="/explore/"],
-                a[href="/explore/"],
-                a[href="/explore"],
-                div[role="button"][aria-label="Tutki"],
-                div[role="button"][aria-label="Explore"],
-                svg[aria-label="Tutki"],
-                svg[aria-label="Explore"] {
-                    display: none !important;
-                    visibility: hidden !important;
-                    opacity: 0 !important;
-                    pointer-events: none !important;
-                    width: 0 !important;
-                    min-width: 0 !important;
-                    max-width: 0 !important;
-                    height: 0 !important;
-                    min-height: 0 !important;
-                    max-height: 0 !important;
-                    margin: 0 !important;
-                    padding: 0 !important;
-                    overflow: hidden !important;
-                    position: absolute !important;
-                    left: -10000px !important;
-                    top: -10000px !important;
-                    transform: none !important;
-                    transition: none !important;
+                /* Search/Haku and Explore/Tutki remain usable in the left rail.
+                   Restore the real nav control, not the search-result listbox. */
+                html nav span.html-span:has(svg[aria-label="Search"]),
+                html nav span.html-span:has(svg[aria-label="Haku"]),
+                html nav span.html-span:has(svg[aria-label="Explore"]),
+                html nav span.html-span:has(svg[aria-label="Tutki"]),
+                html nav a:has(svg[aria-label="Search"]),
+                html nav a:has(svg[aria-label="Haku"]),
+                html nav [role="button"]:has(svg[aria-label="Search"]),
+                html nav [role="button"]:has(svg[aria-label="Haku"]) {
+                    visibility: visible !important;
+                    opacity: 1 !important;
+                    pointer-events: auto !important;
                 }
-
-
 
                 /* v43 accounts/edit no-glimpse: hide only the two red-boxed profile edit rows. */
                 html.metamangler-account-edit-v43 main div.x1yztbdb:has(input[role="switch"][aria-label="Tekoälysisällöntuottaja"]),
@@ -258,6 +385,218 @@
                     transition: none !important;
                 }
 
+                /* v29.5.5: story tiles, not the entire carousel, own paint readiness.
+                   The selector is installed at document-start so a new <li> stays
+                   invisible even before the tray watcher has attached. A proven-safe
+                   tile receives the marker synchronously during classification. */
+                html[data-bf-ig-home-feed-hybrid="1"] div[data-pagelet="story_tray"] > li:not([data-ig-story-cleared-v2955]) {
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                    transition: none !important;
+                    animation: none !important;
+                }
+
+                /* v29.5.5: independent non-Home surface collapse; do not touch the Home feed. */
+                [data-ig-caption-panel-collapsed-v322="1"],
+                [data-ig-grid-card-collapsed-v322="1"] {
+                    display: none !important;
+                    visibility: hidden !important;
+                    pointer-events: none !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    min-height: 0 !important;
+                    height: 0 !important;
+                }
+
+                /* v29.5.5 V324: post-page media remains invisible until its
+                   own verified caption decision. Never gate main, body, nav or
+                   related thumbnails as part of the standalone panel. */
+                html[data-ig-post-prepaint-v324="1"] main div[style*="--x-maxWidth"]:not([data-ig-post-cleared-v324="1"]):not([data-ig-caption-panel-collapsed-v322="1"]) {
+                    visibility: hidden !important;
+                    pointer-events: none !important;
+                    transition: none !important;
+                    animation: none !important;
+                }
+
+                /* Screen gallery cards by their OWN image alt text before
+                   allowing a card with a usable caption to paint. */
+                html[data-ig-grid-prepaint-v324="1"] main div.x1j53mea:has(> a[href*="/reel/"] img[alt]:not([alt=""])):not([data-ig-grid-reviewed-v324]),
+                html[data-ig-grid-prepaint-v324="1"] main div.x1j53mea:has(> a[href*="/p/"] img[alt]:not([alt=""])):not([data-ig-grid-reviewed-v324]),
+                html[data-ig-grid-prepaint-v324="1"] main div.x1j53mea:has(> a[href*="/tv/"] img[alt]:not([alt=""])):not([data-ig-grid-reviewed-v324]) {
+                    visibility: hidden !important;
+                    pointer-events: none !important;
+                    transition: none !important;
+                    animation: none !important;
+                }
+
+                /* V326: the complete "More posts from ..." panel is unwanted on
+                   DIRECT post URLs. Collapse the whole wrapper, not each card.
+                   The main media panel and profile grids are outside this selector. */
+                html[data-ig-post-prepaint-v324="1"] div.x24vp2c.x11njtxf:has(div._ac7v div.x1j53mea > a[href]),
+                html[data-ig-post-prepaint-v324="1"] div.x24vp2c.x11njtxf:has(div._ap3a._aacy a[href]) {
+                    display: none !important;
+                    visibility: hidden !important;
+                    height: 0 !important;
+                    min-height: 0 !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    overflow: hidden !important;
+                }
+
+                /* V329: No-glimpse private-profile recommendations. Apply before
+                   privacy text loads, on *profile routes only*. Both shapes are
+                   derived from the captured heading + sibling carousel markup.
+                   Public profiles with an actual post grid are released by JS. */
+                html[data-ig-profile-rec-prepaint-v329="1"] main div:has(> div.html-div.x1yztbdb h4.xpm28yp.x8viiok):has(> div[style*="--x-height: 230px"]),
+                html[data-ig-profile-rec-prepaint-v329="1"] main div:has(> div.html-div.x1yztbdb h4.xpm28yp.x8viiok):has(> div ul li) {
+                    display: none !important;
+                    visibility: hidden !important;
+                    pointer-events: none !important;
+                    height: 0 !important;
+                    min-height: 0 !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    overflow: hidden !important;
+                }
+
+                 /* V327: on a recognized private account, remove the complete
+                    suggested-people carousel instead of leaving empty slots. */
+                 html[data-ig-private-profile-v327="1"] main [data-ig-private-recommendations-v327="1"] {
+                     display: none !important;
+                     visibility: hidden !important;
+                     height: 0 !important;
+                     min-height: 0 !important;
+                     margin: 0 !important;
+                     padding: 0 !important;
+                     overflow: hidden !important;
+                 }
+                 /* Earlier CSS-only suppression for the exact heading +
+                    sibling carousel shape captured on private profiles. */
+                 html[data-ig-private-profile-v327="1"] main div:has(> div.html-div.x1yztbdb h4.xpm28yp.x8viiok):has(> div[style*="--x-height: 230px"]) {
+                     display: none !important;
+                 }
+
+                /* V328: Explore post cards never paint from alt text alone. Only an
+                   exact shortcode + full-caption decision clears the card.
+                   CSS is injected at document-start, before the scanner runs. */
+                html[data-ig-explore-prepaint-v328="1"] main div.xeuugli.x6ikm8r:has(> div[style*="--x-width"] > a[href^="/p/"] > div._aagu):not([data-ig-explore-cleared-v328="1"]),
+                html[data-ig-explore-prepaint-v328="1"] main div.xeuugli.x6ikm8r:has(> div[style*="--x-width"] > a[href^="/reel/"] > div._aagu):not([data-ig-explore-cleared-v328="1"]),
+                html[data-ig-explore-prepaint-v328="1"] main div.xeuugli.x6ikm8r:has(> div[style*="--x-width"] > a[href^="/tv/"] > div._aagu):not([data-ig-explore-cleared-v328="1"]),
+                html[data-ig-explore-prepaint-v328="1"] main div[style*="--x-width: 100%"]:has(> a[href^="/p/"] > div._aagu):not(:is([data-ig-explore-cleared-v328="1"], [data-ig-explore-cleared-v328="1"] *)),
+                html[data-ig-explore-prepaint-v328="1"] main div[style*="--x-width: 100%"]:has(> a[href^="/reel/"] > div._aagu):not(:is([data-ig-explore-cleared-v328="1"], [data-ig-explore-cleared-v328="1"] *)),
+                html[data-ig-explore-prepaint-v328="1"] main div[style*="--x-width: 100%"]:has(> a[href^="/tv/"] > div._aagu):not(:is([data-ig-explore-cleared-v328="1"], [data-ig-explore-cleared-v328="1"] *)) {
+                    visibility: hidden !important;
+                    pointer-events: none !important;
+                    transition: none !important;
+                }
+                html[data-ig-explore-prepaint-v328="1"] main [data-ig-explore-blocked-v328="1"] {
+                    display: none !important;
+                    visibility: hidden !important;
+                    pointer-events: none !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    min-height: 0 !important;
+                }
+
+                /* V332: Instagram Search is an overlay, NOT an /explore/-only route.
+                   Scope to the distinct outer account-result link + real avatar,
+                   never the Explore media grid, profile cards or navigation.
+                   CSS prehides BEFORE JS's route-independent row verification. */
+                /* V333: match the actual result row, NOT a possibly absent ul
+                   parent. Typed results can be portal-mounted in a different tree. */
+                div.xmzvs34:has(> a.x1qnrgzn.x1cek8b2[href^="/"]):not([data-ig-native-search-cleared-v331="1"]),
+                div.xmzvs34:has(> a.x1qnrgzn.x1cek8b2[href^="/"] img[alt*="profiilikuva" i]):not([data-ig-native-search-cleared-v331="1"]),
+                div.xmzvs34:has(> a.x1qnrgzn.x1cek8b2[href^="/"] img[alt*="profile picture" i]):not([data-ig-native-search-cleared-v331="1"]),
+                div.xmzvs34[data-ig-native-search-blocked-v331="1"]:has(> a.x1qnrgzn.x1cek8b2[href^="/"]) {
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                    transition: none !important;
+                    animation: none !important;
+                }
+                div.xmzvs34[data-ig-native-search-blocked-v331="1"]:has(> a.x1qnrgzn.x1cek8b2[href^="/"]) {
+                    display: none !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    min-height: 0 !important;
+                    height: 0 !important;
+                }
+
+                /* V335: classic-style presentation of Instagram's ACTUAL native
+                   Explore Search, in the same React document. No iframe,
+                   detached React elements or private API requests. */
+                html[data-ig-native-search-layout-v335="1"] body::after {
+                    content: "";
+                    position: fixed;
+                    left: 66px;
+                    right: 0;
+                    top: 0;
+                    bottom: 0;
+                    z-index: 2147482000;
+                    background: var(--ig-primary-background, #fff);
+                    pointer-events: auto;
+                }
+                html[data-ig-native-search-layout-v335="1"] div.x4k7w5x:has(input[aria-label="Hakusyöte"]),
+                html[data-ig-native-search-layout-v335="1"] div.x4k7w5x:has(input[aria-label="Search input"]),
+                html[data-ig-native-search-layout-v335="1"] div.x4k7w5x:has(input[placeholder="Search"]),
+                html[data-ig-native-search-layout-v335="1"] div.x4k7w5x:has(input[placeholder="Hae"]) {
+                    position: fixed !important;
+                    left: 66px !important;
+                    top: 0 !important;
+                    bottom: 0 !important;
+                    right: auto !important;
+                    width: min(425px, calc(100vw - 66px)) !important;
+                    max-width: none !important;
+                    min-width: 0 !important;
+                    height: 100dvh !important;
+                    max-height: 100dvh !important;
+                    margin: 0 !important;
+                    padding: 12px 10px 16px !important;
+                    overflow-y: auto !important;
+                    overflow-x: hidden !important;
+                    background: var(--ig-primary-background, #fff) !important;
+                    border-right: 1px solid var(--ig-separator, #ddd) !important;
+                    box-shadow: 3px 0 16px #0002 !important;
+                    z-index: 2147482100 !important;
+                    box-sizing: border-box !important;
+                }
+                html[data-ig-native-search-layout-v335="1"] #ig-native-search-back-v335 {
+                    position: fixed !important;
+                    left: min(449px, calc(100vw - 42px)) !important;
+                    top: 9px !important;
+                    z-index: 2147482300 !important;
+                    background: var(--ig-primary-background, #fff) !important;
+                    color: var(--ig-primary-text, #111) !important;
+                    border: 1px solid var(--ig-separator, #ddd) !important;
+                    border-radius: 50% !important;
+                    width: 30px !important;
+                    height: 30px !important;
+                    cursor: pointer !important;
+                    font-size: 23px !important;
+                    line-height: 26px !important;
+                }
+
+                /* V339: Search-only Explore. These exact wrappers come from the
+                   captured Explore grid and discovery tab markup. Do not hide
+                   main, the search input, account-result rows, or the sidebar. */
+                html[data-ig-explore-search-only-v339="1"] div.xvbhtw8.x1p5oq8j.x7wzq59,
+                html[data-ig-explore-search-only-v339="1"] main div.x15mokao.x1ga7v0g.x16uus16.xbiv7yw.x5o85r1.xeo4mu6,
+                /* V340: the outer media module is more stable than its changing
+                   feed-card classes. Match its exact grid-child structure so
+                   the entire wrapper disappears with no empty media shell. */
+                html[data-ig-explore-search-only-v339="1"] main div.x15mokao.x1ga7v0g.x16uus16.xbiv7yw:has(> div.xh8yej3 > div > div.x121lspk.xrvj5dj),
+                html[data-ig-explore-search-only-v339="1"] main div.x121lspk.xrvj5dj.xqketvx.x1ty9z65 {
+                    display: none !important;
+                    visibility: hidden !important;
+                    pointer-events: none !important;
+                    height: 0 !important;
+                    min-height: 0 !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    overflow: hidden !important;
+                }
+
                 /* Legacy Home-feed gate intentionally neutralized in V6E. The dedicated
                    coordinator below is the sole owner of Home-feed presentation. */
                 html.metamangler-feed-gate main article {
@@ -292,6 +631,52 @@
     }
     updateMetaManglerFeedGateClass();
     updateMetaManglerAccountEditClassV43();
+    ig2955UpdatePostPrepaintRouteV324();
+
+    function ig2955UpdatePostPrepaintRouteV324() {
+        try {
+            ig2955SyncTrustedDMContextV326();
+            const html = document.documentElement;
+            if (!html || location.hostname !== 'www.instagram.com') return;
+            // V332: Native Search rows can appear over ANY Instagram page.
+            // Their structural CSS no longer depends on this obsolete route flag.
+            html.removeAttribute('data-ig-native-search-prepaint-v331');
+            if (false && IG_NATIVE_SEARCH_PRESENTATION_V335 === 1 && ig2955NativeSearchActiveV335())
+                html.setAttribute('data-ig-native-search-layout-v335', '1');
+            else html.removeAttribute('data-ig-native-search-layout-v335');
+            const post = /^\/(?:[A-Za-z0-9._]+\/)?(?:p|reel|tv)\/[A-Za-z0-9_-]+\/?$/i.test(location.pathname);
+            // This marker is set before Explore cards can paint, also on SPA navigation.
+            if (ig2955ExploreRouteV328()) html.setAttribute('data-ig-explore-prepaint-v328', '1');
+            else html.removeAttribute('data-ig-explore-prepaint-v328');
+            // Set at document-start and again on every SPA route transition.
+            // This is only for the Explore feed: native search cards remain intact.
+            // V340: CSS checks for a literal value of "1", not mere presence.
+            // toggleAttribute() previously created an EMPTY value, so the
+            // prepaint hide silently failed even though the marker existed.
+            if (IG_EXPLORE_SEARCH_ONLY_V339 === 1 && IG_EXPLORE_PAGE_REDIRECT === 0 && ig2955ExploreRouteV328())
+                html.setAttribute('data-ig-explore-search-only-v339', '1');
+            else html.removeAttribute('data-ig-explore-search-only-v339');
+            // V329: Prehide the exact suggested-people carousel before Instagram
+            // hydrates the privacy notice. A positive public-post grid releases it.
+            const profileHandleV329 = ig2955PrivateProfileRouteV327();
+            if (!profileHandleV329) {
+                html.removeAttribute('data-ig-profile-rec-prepaint-v329');
+                html.removeAttribute('data-ig-profile-rec-public-v329');
+            } else if (html.getAttribute('data-ig-profile-rec-public-v329') === profileHandleV329) {
+                html.removeAttribute('data-ig-profile-rec-prepaint-v329');
+            } else {
+                html.setAttribute('data-ig-profile-rec-prepaint-v329', '1');
+            }
+            if (post) html.setAttribute('data-ig-post-prepaint-v324', '1');
+            else html.removeAttribute('data-ig-post-prepaint-v324');
+            // This gate is limited to profile grids and related cards on
+            // permalink routes, never Instagram Home or Stories.
+            const parts = (location.pathname || '').split('/').filter(Boolean);
+            const profile = parts.length === 1 && !new Set(['accounts','explore','reels','direct','stories','archive','ai','meta-ai']).has(parts[0].toLowerCase());
+            if (profile) html.setAttribute('data-ig-grid-prepaint-v324', '1');
+            else html.removeAttribute('data-ig-grid-prepaint-v324');
+        } catch {}
+    }
 
     // ===== Lightweight lifecycle/memory tracking =====
     const __timers = { intervals: new Set(), timeouts: new Set() };
@@ -361,6 +746,639 @@
         __eventCleanups.add(() => target.removeEventListener(type, handler, options));
     }
 
+
+    // ===== v29.5.5 V330: actual Search drawer, separate from Explore navigation =====
+    // Instagram occasionally sends the Search rail entry to /explore/. Intercept ONLY
+    // a deliberate rail Search/Haku activation and provide a same-page search UI.
+    // Search uses Instagram's existing same-origin authenticated results endpoint;
+    // no external service, Explore redirect, or global rewrite of Instagram links.
+    const IG_SEARCH_DRAWER_V330 = { host: null, shadow: null, input: null, results: null,
+        timer: null, abort: null, serial: 0, opened: 0, searches: 0, failures: 0,
+        blockedResults: 0, lastStatus: 'closed', openedURL: '', closeReasons: {},
+        avatarResults: 0, avatarFallbacks: 0, nativeFrame: null,
+        frameObserver: null, framePoll: null, frameDeadline: 0, nativeReady: 0,
+        nativeFallbacks: 0 };
+
+    function ig2955SearchRailControlV330(target) {
+        try {
+            if (location.hostname !== 'www.instagram.com' || !target?.closest) return null;
+            if (target.closest('#ig-search-drawer-v330, form, [role="search"]')) return null;
+
+            // V333: Instagram's compact rail is often a stack of DIVs rather
+            // than a semantic <nav>. The old closest('nav') gate missed clicks
+            // on its Search icon and Instagram routed them to /explore/.
+            // Find the exact labelled Search icon/entry before the router runs.
+            let entry = null;
+            let icon = target.closest('svg[aria-label="Search"], svg[aria-label="Haku"]');
+            // V338: Never climb into a SHARED sidebar container to find a
+            // sibling Search icon. Notifications/DMs previously matched that
+            // shared ancestor, so clicking them could reopen Search on top.
+            // Search text and its SVG normally live inside the same interactive
+            // rail entry; inspect that entry first and reject unrelated ones.
+            const interactive = target.closest('a[href], button, [role="button"], [role="link"]');
+            if (interactive) {
+                const scoped = interactive.querySelector('svg[aria-label="Search"], svg[aria-label="Haku"]');
+                if (!icon && !scoped) return null;
+                icon = icon || scoped;
+                entry = interactive;
+            }
+            if (!icon) {
+                let node = target;
+                for (let depth = 0; node && depth < 6; depth++, node = node.parentElement) {
+                    if (node.matches?.('nav, aside, [role="navigation"], main, body, html, header, form')) break;
+                    const icons = node.querySelectorAll?.('svg[aria-label]') || [];
+                    if (icons.length > 1) break; // never traverse a collection of rail controls
+                    const scoped = node.querySelector?.('svg[aria-label="Search"], svg[aria-label="Haku"]');
+                    if (scoped) { icon = scoped; break; }
+                }
+            }
+            if (!icon) return null;
+            // An Explore or search-submit button is never a left-rail Search.
+            if (target.closest('main, form, [role="dialog"], [role="search"]')) return null;
+            const rect = icon.getBoundingClientRect?.();
+            const rail = !!icon.closest('nav, aside, [role="navigation"]');
+            // Compact rail icons are at the left edge even when the wrapper
+            // lacks landmarks. Don't intercept the big Explore search bar.
+            const nearLeftRail = !!rect && rect.left >= 0 &&
+                rect.left < Math.min(260, Math.max(95, window.innerWidth * 0.15));
+            if (!rail && !nearLeftRail) return null;
+            let node = icon;
+            for (let depth = 0; node && depth < 8; depth++, node = node.parentElement) {
+                if (node.matches?.('main, body, html')) break;
+                if (node.matches?.('a[href], button, [role="button"], [role="link"], [tabindex="0"]')) {
+                    entry = node;
+                    break;
+                }
+            }
+            return entry || icon.parentElement;
+        } catch { return null; }
+    }
+
+    function ig2955CloseSearchDrawerV330(reason = 'manual') {
+        const state = IG_SEARCH_DRAWER_V330;
+        if (state.host?.isConnected) {
+            const label = typeof reason === 'string' ? reason : 'manual';
+            state.closeReasons[label] = (state.closeReasons[label] || 0) + 1;
+        }
+        if (state.timer !== null) { clearTimeout(state.timer); state.timer = null; }
+        if (state.framePoll !== null) { clearInterval(state.framePoll); state.framePoll = null; }
+        if (state.frameObserver) { try { state.frameObserver.disconnect(); } catch {} state.frameObserver = null; }
+        if (state.abort) { try { state.abort.abort(); } catch {} state.abort = null; }
+        state.serial++;
+        if (state.host) { try { state.host.remove(); } catch {} }
+        state.host = null; state.shadow = null; state.input = null; state.results = null;
+        state.openedURL = '';
+        state.nativeFrame = null;
+        state.lastStatus = 'closed';
+    }
+
+    function ig2955SearchElementV330(tag, className, content) {
+        const el = document.createElement(tag);
+        if (className) el.className = className;
+        if (content !== undefined) el.textContent = content;
+        return el;
+    }
+
+    function ig2955SearchResultBlockedV330(username, fullName) {
+        try {
+            if (instagramAccountsSet.has(String(username || '').toLowerCase())) return true;
+            const texts = [username, fullName].filter(Boolean);
+            // Same account-name filtering used by the native results scanner.
+            return typeof matchesBannedByText === 'function' && !!matchesBannedByText(texts);
+        } catch { return false; }
+    }
+
+    function ig2955RenderSearchResultsV330(data, query) {
+        const state = IG_SEARCH_DRAWER_V330;
+        if (!state.results) return;
+        const root = state.results;
+        root.replaceChildren();
+        const users = Array.isArray(data?.users) ? data.users : [];
+        const hashtags = Array.isArray(data?.hashtags) ? data.hashtags : [];
+        const results = [];
+        for (const entry of users.slice(0, 45)) {
+            const user = entry?.user || entry;
+            const username = String(user?.username || '').trim();
+            if (!/^[a-z0-9._]{1,30}$/i.test(username)) continue;
+            const fullName = String(user?.full_name || '').slice(0, 140);
+            if (ig2955SearchResultBlockedV330(username, fullName)) {
+                state.blockedResults++; continue;
+            }
+            const picture = String(user?.profile_pic_url || '').trim();
+            let avatar = '';
+            try {
+                const url = new URL(picture);
+                const host = url.hostname.toLowerCase();
+                if (url.protocol === 'https:' && (host === 'cdninstagram.com' ||
+                    host.endsWith('.cdninstagram.com') || host === 'fbcdn.net' ||
+                    host.endsWith('.fbcdn.net'))) avatar = url.href;
+            } catch {}
+            results.push({ href: '/' + username + '/', title: username,
+                subtitle: fullName, kind: 'account', avatar });
+        }
+        for (const entry of hashtags.slice(0, 15)) {
+            const name = String((entry?.hashtag || entry)?.name || '').replace(/^#/, '').trim();
+            if (!/^[\p{L}\p{N}_]{1,100}$/u.test(name)) continue;
+            if (typeof matchesBannedByText === 'function' && matchesBannedByText(['#' + name])) {
+                state.blockedResults++; continue;
+            }
+            results.push({ href: '/explore/tags/' + encodeURIComponent(name) + '/',
+                title: '#' + name, subtitle: 'Hashtag', kind: 'hashtag', avatar: '' });
+        }
+        if (!results.length) {
+            root.appendChild(ig2955SearchElementV330('p', 'empty', 'No matching results.'));
+            return;
+        }
+        for (const item of results) {
+            const link = ig2955SearchElementV330('a', 'result');
+            link.href = item.href;
+            // Search-result navigation originates INSIDE the Shadow drawer, so
+            // outside-click handlers cannot detect it. Close before navigation.
+            link.addEventListener('click', event => {
+                if (event.button === 0 && !event.ctrlKey && !event.metaKey &&
+                    !event.shiftKey && !event.altKey) ig2955CloseSearchDrawerV330('result-navigation');
+            });
+            const avatar = ig2955SearchElementV330('span', 'result-avatar');
+            if (item.avatar) {
+                const photo = ig2955SearchElementV330('img');
+                photo.src = item.avatar;
+                photo.alt = '';
+                photo.loading = 'lazy';
+                photo.decoding = 'async';
+                photo.addEventListener('error', () => {
+                    photo.remove();
+                    avatar.textContent = item.kind === 'hashtag' ? '#' : item.title[0].toUpperCase();
+                    state.avatarFallbacks++;
+                }, { once: true });
+                avatar.appendChild(photo);
+                state.avatarResults++;
+            } else avatar.textContent = item.kind === 'hashtag' ? '#' : item.title[0].toUpperCase();
+            link.appendChild(avatar);
+            const labels = ig2955SearchElementV330('span', 'result-labels');
+            labels.appendChild(ig2955SearchElementV330('span', 'result-title', item.title));
+            if (item.subtitle) labels.appendChild(ig2955SearchElementV330('span', 'result-sub', item.subtitle));
+            link.appendChild(labels);
+            root.appendChild(link);
+        }
+        state.lastStatus = 'results:' + results.length;
+    }
+
+    // ===== V337: real, same-session GraphQL Search bridge =====
+    // The 2026-10-22 HAR verifies PolarisSearchBoxRefetchableQuery on
+    // POST /api/graphql; retired GET search URLs return 404. The MAIN-world
+    // bridge reuses metadata from Instagram's OWN current-session requests.
+    // No captured HAR cookies, CSRF fields, session ids or user data go into
+    // this file, DOM messages, sessionStorage or logs.
+    const IG_SEARCH_GRAPHQL_V337 = { attempts: 0, successes: 0, failures: 0,
+        lastHTTPStatus: 0, lastSource: 'main-world-relay', lastError: 'none' };
+    const IG_SEARCH_PENDING_V337 = new Map();
+    let IG_SEARCH_SERIAL_V337 = 0;
+
+    onEvent(window, 'message', e => {
+        if (e.source !== window || e.origin !== location.origin ||
+            e.data?.__metamanglerType !== 'ig-search-graphql-result-v337') return;
+        const payload = e.data;
+        const pending = IG_SEARCH_PENDING_V337.get(payload.id);
+        if (!pending) return;
+        clearTimeout(pending.timer);
+        IG_SEARCH_PENDING_V337.delete(payload.id);
+        pending.resolve(payload);
+    });
+
+    function ig2955NormalizeSearchDataV336(value) {
+        const result = value?.data?.xdt_api__v1__fbsearch__topsearch_connection || value;
+        if (result?.users && Array.isArray(result.users)) return result;
+        return null;
+    }
+
+    function ig2955ShowSearchFailureV337(message) {
+        const state = IG_SEARCH_DRAWER_V330;
+        if (!state.results || !state.host?.isConnected) return;
+        state.results.replaceChildren(ig2955SearchElementV330('p','empty',
+            message || 'Instagram did not accept the search request.'));
+        const fallback = ig2955SearchElementV330('button','fallback',
+            'Open Instagram native Search');
+        fallback.type = 'button';
+        fallback.addEventListener('click', () => location.assign('/explore/'));
+        state.results.appendChild(fallback);
+    }
+
+    async function ig2955SearchRequestV330(query) {
+        const state = IG_SEARCH_DRAWER_V330;
+        if (!state.host?.isConnected || !state.results) return;
+        const serial = ++state.serial;
+        IG_SEARCH_GRAPHQL_V337.attempts++;
+        state.results.replaceChildren(ig2955SearchElementV330('p','empty', 'Searching…'));
+        const id = 'ig337-' + (++IG_SEARCH_SERIAL_V337) + '-' + Math.random().toString(36).slice(2);
+        const answer = new Promise(resolve => {
+            const timer = setTimeout(() => {
+                IG_SEARCH_PENDING_V337.delete(id);
+                resolve({ ok:false, status:0, error:'timeout' });
+            }, 8500);
+            IG_SEARCH_PENDING_V337.set(id, { resolve, timer });
+        });
+        window.postMessage({ __metamanglerType:'ig-search-graphql-request-v337',
+            id, query }, location.origin);
+        const response = await answer;
+        if (serial !== state.serial || !state.host?.isConnected ||
+            state.input?.value.trim() !== query) return;
+        IG_SEARCH_GRAPHQL_V337.lastHTTPStatus = Number(response.status) || 0;
+        if (response.ok) {
+            const normalized = ig2955NormalizeSearchDataV336(response.data);
+            if (normalized) {
+                ig2955RenderSearchResultsV330(normalized, query);
+                IG_SEARCH_GRAPHQL_V337.successes++;
+                state.lastStatus = 'native-graphql';
+                IG_SEARCH_GRAPHQL_V337.lastError = 'none';
+                return;
+            }
+        }
+        IG_SEARCH_GRAPHQL_V337.failures++;
+        state.failures++;
+        IG_SEARCH_GRAPHQL_V337.lastError = String(response.error || 'unexpected-response').slice(0,80);
+        state.lastStatus = 'graphql-' + IG_SEARCH_GRAPHQL_V337.lastError;
+        ig2955ShowSearchFailureV337(response.error === 'no-live-relay-template' ?
+            'Instagram has not yet initialized an authenticated search request. Try again after the page loads.' :
+            'Instagram Search could not be loaded (' + IG_SEARCH_GRAPHQL_V337.lastError + ').');
+    }
+
+    // V335: Search uses Instagram's native React tree, without creating a
+    // second frame/app. This retains authenticated Search and avoids the
+    // frame timeout -> /explore/ -> Home redirect loop from V334.
+    const IG_NATIVE_SEARCH_V335 = { launches: 0, ready: 0, focused: 0,
+        layoutFallbacks: 0, lastStatus: 'closed', focusTimer: null,
+        firstOpenAt: 0, lastFocusPath: '' };
+
+    function ig2955SyncNativeSearchPresentationV335() {
+        const state = IG_NATIVE_SEARCH_V335;
+        const active = ig2955NativeSearchActiveV335();
+        const styled = active && IG_NATIVE_SEARCH_PRESENTATION_V335 === 1;
+        const html = document.documentElement;
+        if (html) html.toggleAttribute('data-ig-native-search-layout-v335', styled);
+        const existingClose = document.getElementById('ig-native-search-back-v335');
+        if (!styled) {
+            if (existingClose) existingClose.remove();
+            if (state.focusTimer !== null) { clearTimeout(state.focusTimer); state.focusTimer = null; }
+            if (!active) { state.firstOpenAt = 0; state.lastFocusPath = ''; }
+            return;
+        }
+        if (!document.body) return;
+        if (!existingClose) {
+            const close = document.createElement('button');
+            close.id = 'ig-native-search-back-v335';
+            close.type = 'button';
+            close.setAttribute('aria-label', 'Close Search and go back');
+            close.textContent = '×';
+            close.addEventListener('click', ig2955NativeSearchReturnV335);
+            document.body.appendChild(close);
+        }
+        if (!state.firstOpenAt) state.firstOpenAt = performance.now();
+        const nativeInput = document.querySelector(
+            'div.x4k7w5x input[aria-label="Hakusyöte"], ' +
+            'div.x4k7w5x input[aria-label="Search input"], ' +
+            'div.x4k7w5x input[placeholder="Search"], ' +
+            'div.x4k7w5x input[placeholder="Hae"]');
+        if (nativeInput) {
+            if (state.lastFocusPath !== location.pathname) {
+                state.lastFocusPath = location.pathname;
+                try { nativeInput.focus({ preventScroll: true }); state.focused++; } catch {}
+            }
+            state.ready++;
+            state.lastStatus = 'native-ready';
+            IG_SEARCH_DRAWER_V330.lastStatus = 'native-ready';
+            if (state.focusTimer !== null) { clearTimeout(state.focusTimer); state.focusTimer = null; }
+        } else if (performance.now() - state.firstOpenAt > 6500) {
+            // If Instagram changes its DOM, show the stock Explore/Search
+            // page rather than hold a blank covering layer indefinitely.
+            ig2955NativeSearchForgetV335();
+            html.removeAttribute('data-ig-native-search-layout-v335');
+            document.getElementById('ig-native-search-back-v335')?.remove();
+            state.layoutFallbacks++;
+            state.lastStatus = 'native-layout-fallback';
+            IG_SEARCH_DRAWER_V330.lastStatus = state.lastStatus;
+        } else if (state.focusTimer === null) {
+            state.focusTimer = setTimeout(() => {
+                state.focusTimer = null;
+                ig2955SyncNativeSearchPresentationV335();
+            }, 140);
+        }
+    }
+
+    function ig2955OpenSearchDrawerV330(control) {
+        const state = IG_SEARCH_DRAWER_V330;
+        if (state.host?.isConnected) { ig2955CloseSearchDrawerV330('search-toggle'); return; }
+        if (!document.body) return;
+        const host = document.createElement('div');
+        host.id = 'ig-search-drawer-v330';
+        host.setAttribute('data-ig-search-drawer-v330', '1');
+        const nav = control?.closest('nav, [role="navigation"]');
+        const right = nav?.getBoundingClientRect?.().right || 72;
+        const left = Math.max(56, Math.min(250, Math.round(right)));
+        host.style.cssText = 'position:fixed;z-index:2147483600;top:0;left:' + left +
+            'px;height:100vh;width:min(380px,calc(100vw - ' + left +
+            'px));pointer-events:auto;';
+        const shadow = host.attachShadow({ mode: 'open' });
+        const stylesheet = document.createElement('style');
+        stylesheet.textContent = `
+            :host{display:block;font:14px system-ui,-apple-system,'Segoe UI',sans-serif;color:#171717}
+            .drawer{box-sizing:border-box;width:100%;height:100%;padding:26px 16px 14px;background:#fff;
+                box-shadow:3px 0 15px #0002;border-right:1px solid #dedede;display:flex;flex-direction:column}
+            .head{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px}
+            h2{font-size:22px;margin:0;font-weight:700} button{border:0;background:transparent;
+                color:inherit;cursor:pointer;font-size:24px;line-height:1;padding:8px}
+            input{box-sizing:border-box;width:100%;border:0;border-radius:8px;background:#efefef;
+                color:#171717;padding:12px;font:inherit;outline-offset:2px;margin-bottom:12px}
+            .results{overflow-y:auto;flex:1;min-height:0}
+            .result{display:flex;flex-direction:row;align-items:center;gap:12px;padding:9px;
+                border-radius:7px;color:inherit;text-decoration:none;overflow-wrap:anywhere}
+            .result:hover,.result:focus-visible{background:#efefef}
+            .result-avatar{box-sizing:border-box;display:flex;flex:0 0 42px;width:42px;height:42px;
+                border-radius:50%;align-items:center;justify-content:center;overflow:hidden;
+                background:#e8e8e8;color:#666;font-size:16px;font-weight:600}
+            .result-avatar img{width:100%;height:100%;object-fit:cover;display:block}
+            .result-labels{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+            .result-title{font-weight:650}.result-sub{font-size:12px;opacity:.68}
+            .empty{color:#777;text-align:center;margin:36px 8px}
+            @media(prefers-color-scheme:dark){:host{color:#f5f5f5}.drawer{background:#171717;
+                border-right-color:#333}input{background:#333;color:#fff}.result:hover,.result:focus-visible{background:#2e2e2e}}
+        `;
+        shadow.appendChild(stylesheet);
+        const panel = ig2955SearchElementV330('section', 'drawer');
+        panel.setAttribute('aria-label', 'Instagram Search');
+        const heading = ig2955SearchElementV330('div', 'head');
+        heading.appendChild(ig2955SearchElementV330('h2', '', 'Search'));
+        const close = ig2955SearchElementV330('button', '', '×');
+        close.type = 'button'; close.setAttribute('aria-label', 'Close search');
+        close.addEventListener('click', ig2955CloseSearchDrawerV330);
+        heading.appendChild(close); panel.appendChild(heading);
+        const input = ig2955SearchElementV330('input');
+        input.type = 'text'; input.setAttribute('aria-label', 'Hakusyöte');
+        input.placeholder = 'Hae'; input.autocomplete = 'off'; input.spellcheck = false;
+        panel.appendChild(input);
+        const results = ig2955SearchElementV330('div', 'results');
+        results.setAttribute('aria-live', 'polite');
+        results.appendChild(ig2955SearchElementV330('p', 'empty', 'Find accounts and hashtags.'));
+        panel.appendChild(results); shadow.appendChild(panel);
+        document.body.appendChild(host);
+        state.host = host; state.shadow = shadow; state.input = input; state.results = results;
+        state.openedURL = location.href;
+        state.opened++; state.lastStatus = 'open';
+        input.addEventListener('input', () => {
+            if (state.timer !== null) clearTimeout(state.timer);
+            if (state.abort) { try { state.abort.abort(); } catch {} state.abort = null; }
+            const query = input.value.trim();
+            if (!query) {
+                state.results.replaceChildren(ig2955SearchElementV330('p', 'empty', 'Find accounts and hashtags.'));
+                return;
+            }
+            state.timer = setTimeout(() => { state.timer = null; state.searches++;
+                ig2955SearchRequestV330(query); }, 260);
+        });
+        input.addEventListener('keydown', e => {
+            if (e.key === 'Escape') { e.preventDefault(); ig2955CloseSearchDrawerV330(); }
+        });
+        input.focus({ preventScroll: true });
+    }
+
+    onEvent(document, 'click', event => {
+        const control = ig2955SearchRailControlV330(event.target);
+        if (!control) return;
+        // Capture before Instagram's router sends the Search entry to Explore.
+        event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation?.();
+        ig2955OpenSearchDrawerV330(control);
+    }, true);
+
+    onEvent(document, 'keydown', event => {
+        if (event.key === 'Escape' && IG_SEARCH_DRAWER_V330.host) ig2955CloseSearchDrawerV330();
+    }, true);
+
+    function ig2955IsSearchDrawerEventV338(event) {
+        const host = IG_SEARCH_DRAWER_V330.host;
+        if (!host) return false;
+        try {
+            return !!event.composedPath?.().includes(host) ||
+                !!event.target?.closest?.('#ig-search-drawer-v330');
+        } catch { return false; }
+    }
+
+    function ig2955DismissSearchOnOutsideV338(event) {
+        if (!IG_SEARCH_DRAWER_V330.host?.isConnected) return;
+        if (ig2955IsSearchDrawerEventV338(event)) return;
+        if (ig2955SearchRailControlV330(event.target)) return;
+        ig2955CloseSearchDrawerV330('other-control');
+    }
+    // The pointer handler covers mouse/touch. Click additionally covers a
+    // keyboard-activated Notifications button and synthetic React navigation.
+    onEvent(document, 'pointerdown', ig2955DismissSearchOnOutsideV338, true);
+    onEvent(document, 'click', ig2955DismissSearchOnOutsideV338, true);
+    // Instagram can change routes through pushState without an outside click,
+    // especially when a result is selected or a panel redirects the SPA.
+    onEvent(window, 'locationchange', () => {
+        const state = IG_SEARCH_DRAWER_V330;
+        if (state.host?.isConnected && state.openedURL !== location.href)
+            ig2955CloseSearchDrawerV330('route-change');
+    }, false);
+
+    try { window.__IGCleanerSearchV330 = () => ({
+        drawerOpen: !!IG_SEARCH_DRAWER_V330.host?.isConnected,
+        opened: IG_SEARCH_DRAWER_V330.opened, searches: IG_SEARCH_DRAWER_V330.searches,
+        requestsFailed: IG_SEARCH_DRAWER_V330.failures,
+        blockedSearchResults: IG_SEARCH_DRAWER_V330.blockedResults,
+        lastStatus: IG_SEARCH_DRAWER_V330.lastStatus,
+        learnedTemplate: false,
+        learning: { ...IG_SEARCH_GRAPHQL_V337 },
+        requestType: 'PolarisSearchBoxRefetchableQuery',
+        pendingGraphQL: IG_SEARCH_PENDING_V337.size,
+        avatarResults: IG_SEARCH_DRAWER_V330.avatarResults,
+        avatarFallbacks: IG_SEARCH_DRAWER_V330.avatarFallbacks,
+        closeReasons: { ...IG_SEARCH_DRAWER_V330.closeReasons }
+    });
+    window.__IGCleanerSearchV337 = window.__IGCleanerSearchV330;
+    window.__IGCleanerSearchV338 = window.__IGCleanerSearchV330; } catch {}
+
+
+    // ===== V332: native Instagram Search (recent AND typed results, any route) =====
+    // The same native panel overlays /, /explore/, profiles and other pages.
+    // The outer row is ul.x1xmf6yo > div.xmzvs34; the custom V330 Shadow drawer
+    // remains independent. Never scan unrelated Home posts or profile grids.
+    const IG_NATIVE_SEARCH_V331 = { checked: 0, blocked: 0, released: 0,
+        pending: 0, quarantined: 0, recycled: 0, observer: null,
+        listObservers: new Map(), scheduled: false };
+    const IG_NATIVE_SEARCH_ROWS_V331 = new WeakMap();
+    const IG_NATIVE_SEARCH_GRACE_MS_V331 = 550;
+
+    function ig2955NativeSearchRouteV331() {
+        return location.hostname === 'www.instagram.com';
+    }
+
+    function ig2955NativeSearchInspectRowV331(row) {
+        try {
+            const outer = row.querySelector(':scope > a[href]');
+            if (!outer) return;
+            const nativeAccountRow = outer.matches('.x1qnrgzn.x1cek8b2') ||
+                !!outer.querySelector('img[alt*="profiilikuva" i], img[alt*="profile picture" i]');
+            if (!nativeAccountRow) return;
+            const href = outer.getAttribute('href') || '';
+            const profile = href.match(/^\/([A-Za-z0-9._]{1,30})\/?$/);
+            if (!profile) {
+                // Non-account results do not inherit an account ban.
+                row.removeAttribute('data-ig-native-search-blocked-v331');
+                row.setAttribute('data-ig-native-search-cleared-v331', '1');
+                return;
+            }
+            const username = profile[1].toLowerCase();
+            // The name wrapper excludes unrelated button labels and localized
+            // avatar alt/aria text ("profile picture", "Sulje", etc.).
+            const nameWrapper = outer.querySelector('div.x1dbijih');
+            const nameParts = nameWrapper ? Array.from(nameWrapper.querySelectorAll('span[dir="auto"]'))
+                .filter(el => !el.querySelector('span[dir="auto"]'))
+                .map(el => (el.textContent || '').trim()).filter(Boolean) : [];
+            const signature = username + '\u0000' + nameParts.join('\u0000');
+            let record = IG_NATIVE_SEARCH_ROWS_V331.get(row);
+            if (!record || record.username !== username) {
+                if (record) { IG_NATIVE_SEARCH_V331.recycled++; clearTimeout(record.timer); }
+                record = { username, signature: '', deadline: performance.now() + IG_NATIVE_SEARCH_GRACE_MS_V331, timer: null };
+                IG_NATIVE_SEARCH_ROWS_V331.set(row, record);
+                row.removeAttribute('data-ig-native-search-cleared-v331');
+                row.removeAttribute('data-ig-native-search-blocked-v331');
+                row.removeAttribute('data-ig-native-search-reviewed-v331');
+            }
+            if (record.signature === signature &&
+                (row.hasAttribute('data-ig-native-search-cleared-v331') || row.hasAttribute('data-ig-native-search-blocked-v331'))) return;
+
+            const bannedUsername = instagramAccountsSet.has(username) ||
+                ig2955SearchResultBlockedV330(username, '');
+            // Exact account bans can be determined before visible labels hydrate.
+            if (bannedUsername || (nameParts.length &&
+                ig2955SearchResultBlockedV330(username, nameParts.join(' ')))) {
+                record.signature = signature;
+                if (record.timer) { clearTimeout(record.timer); record.timer = null; }
+                row.removeAttribute('data-ig-native-search-cleared-v331');
+                row.setAttribute('data-ig-native-search-blocked-v331', '1');
+                row.setAttribute('data-ig-native-search-reviewed-v331', username);
+                IG_NATIVE_SEARCH_V331.checked++; IG_NATIVE_SEARCH_V331.blocked++;
+                return;
+            }
+            // Instagram often hydrates the username before the separate display
+            // name. One string is NOT enough to declare a result verified clean:
+            // a late display name could still contain a banned word.
+            if (nameParts.length < 2) {
+                row.removeAttribute('data-ig-native-search-cleared-v331');
+                IG_NATIVE_SEARCH_V331.pending++;
+                if (performance.now() >= record.deadline) {
+                    if (!row.hasAttribute('data-ig-native-search-blocked-v331')) {
+                        row.setAttribute('data-ig-native-search-blocked-v331', '1');
+                        IG_NATIVE_SEARCH_V331.quarantined++;
+                    }
+                } else if (!record.timer) {
+                    record.timer = setTimeout(() => {
+                        record.timer = null;
+                        if (row.isConnected) ig2955NativeSearchInspectRowV331(row);
+                    }, Math.max(0, record.deadline - performance.now()) + 5);
+                }
+                return;
+            }
+            // Both identity and native name text are available and clean.
+            // Recover any stale styles a legacy broad hider applied before a
+            // React node was recycled. Do not reset native inline layout styles:
+            // clean up ONLY nodes previously marked as hidden by that hider.
+            for (const node of [row, ...row.querySelectorAll('*')]) {
+                if (!hiddenElements.has(node) && !node.hasAttribute(IG_SEARCH_HIDDEN_ATTR)) continue;
+                for (const prop of ['display', 'visibility', 'opacity', 'height', 'width',
+                    'position', 'left', 'top', 'pointer-events']) node.style.removeProperty(prop);
+                node.removeAttribute(IG_SEARCH_HIDDEN_ATTR);
+                hiddenElements.delete(node);
+            }
+            record.signature = signature;
+            if (record.timer) { clearTimeout(record.timer); record.timer = null; }
+            row.removeAttribute('data-ig-native-search-blocked-v331');
+            row.setAttribute('data-ig-native-search-reviewed-v331', username);
+            row.setAttribute('data-ig-native-search-cleared-v331', '1');
+            IG_NATIVE_SEARCH_V331.checked++; IG_NATIVE_SEARCH_V331.released++;
+        } catch {}
+    }
+
+    // V333: search cards can be mounted without their old ul.x1xmf6yo
+    // parent. Discover them by the actual first-level profile-result anchor.
+    const IG_NATIVE_SEARCH_ROW_SELECTOR_V333 =
+        'div.xmzvs34 > a.x1qnrgzn.x1cek8b2[href^="/"]';
+
+    function ig2955ScanNativeSearchV331() {
+        if (!ig2955NativeSearchRouteV331()) return;
+        const state = IG_NATIVE_SEARCH_V331;
+        const anchors = document.querySelectorAll(IG_NATIVE_SEARCH_ROW_SELECTOR_V333);
+        const present = new Set();
+        for (const anchor of anchors) {
+            const row = anchor.parentElement;
+            if (!row || !row.classList.contains('xmzvs34')) continue;
+            present.add(row);
+            if (!state.listObservers.has(row)) {
+                // Observe only this short account card for name/username changes.
+                const observer = new MutationObserver(() => ig2955ScheduleNativeSearchV331());
+                observer.observe(row, { childList: true, subtree: true,
+                    characterData: true, attributes: true, attributeFilter: ['href'] });
+                state.listObservers.set(row, observer);
+            }
+            ig2955NativeSearchInspectRowV331(row);
+        }
+        for (const [row, observer] of state.listObservers) {
+            if (!row.isConnected || !present.has(row)) {
+                observer.disconnect(); state.listObservers.delete(row);
+            }
+        }
+    }
+
+    function ig2955ScheduleNativeSearchV331() {
+        if (IG_NATIVE_SEARCH_V331.scheduled) return;
+        IG_NATIVE_SEARCH_V331.scheduled = true;
+        queueMicrotask(() => {
+            IG_NATIVE_SEARCH_V331.scheduled = false;
+            ig2955ScanNativeSearchV331();
+        });
+    }
+
+    function ig2955NativeSearchMutationV331(mutation) {
+        if (mutation.type !== 'childList') return false;
+        const target = mutation.target?.nodeType === 1 ? mutation.target : mutation.target?.parentElement;
+        if (target?.closest?.('div.xmzvs34:has(> a.x1qnrgzn.x1cek8b2)')) return true;
+        for (const node of mutation.addedNodes || []) {
+            if (node.nodeType !== 1) continue;
+            if (node.matches?.('div.xmzvs34, a.x1qnrgzn.x1cek8b2') ||
+                node.querySelector?.(IG_NATIVE_SEARCH_ROW_SELECTOR_V333)) return true;
+        }
+        return false;
+    }
+
+    function ig2955EnsureNativeSearchObserverV331() {
+        try {
+            const state = IG_NATIVE_SEARCH_V331;
+            if (!ig2955NativeSearchRouteV331()) {
+                state.observer?.disconnect(); state.observer = null;
+                for (const obs of state.listObservers.values()) obs.disconnect();
+                state.listObservers.clear();
+                return;
+            }
+            if (!document.documentElement) return;
+            if (!state.observer) {
+                state.observer = trackObserver(new MutationObserver(mutations => {
+                    if (mutations.some(ig2955NativeSearchMutationV331)) ig2955ScheduleNativeSearchV331();
+                }));
+                state.observer.observe(document.documentElement, { childList: true, subtree: true });
+            }
+            ig2955ScanNativeSearchV331();
+        } catch {}
+    }
+
+    try { window.__IGCleanerNativeSearchV331 = () => ({
+        route: ig2955NativeSearchRouteV331(),
+        ...Object.fromEntries(Object.entries(IG_NATIVE_SEARCH_V331).filter(([k]) => k !== 'observer' && k !== 'listObservers')),
+        activeNativeLists: IG_NATIVE_SEARCH_V331.listObservers.size,
+        blockedNow: document.querySelectorAll('div.xmzvs34[data-ig-native-search-blocked-v331="1"]:has(> a.x1qnrgzn.x1cek8b2)').length,
+        clearedNow: document.querySelectorAll('div.xmzvs34[data-ig-native-search-cleared-v331="1"]:has(> a.x1qnrgzn.x1cek8b2)').length,
+        detectedRowsV333: document.querySelectorAll(IG_NATIVE_SEARCH_ROW_SELECTOR_V333).length
+    });
+    window.__IGCleanerNativeSearchV332 = window.__IGCleanerNativeSearchV331;
+    window.__IGCleanerNativeSearchV333 = window.__IGCleanerNativeSearchV331; } catch {}
 
     // ===== v44: homepage own-avatar story shortcut =====
     // Instagram changed the right-rail avatar to open the profile instead of the active story.
@@ -529,6 +1547,8 @@
         if (__cleanupRan) return;
         __cleanupRan = true;
         try {
+            ig2955CloseSearchDrawerV330();
+            if (IG_NATIVE_SEARCH_V335.focusTimer !== null) { clearTimeout(IG_NATIVE_SEARCH_V335.focusTimer); IG_NATIVE_SEARCH_V335.focusTimer = null; }
             stopIntervals();
             __timers.timeouts.forEach(id => { try { clearTimeout(id); } catch {} });
             __timers.timeouts.clear();
@@ -537,10 +1557,17 @@
             __idleIds.forEach(id => { try { cancelIdleCallback(id); } catch {} });
             __idleIds.clear();
             if (homeFeedScrollIdleTimer !== null) { try { clearTimeout(homeFeedScrollIdleTimer); } catch {} homeFeedScrollIdleTimer = null; }
+            try { for (const obs of IG_NATIVE_SEARCH_V331.listObservers.values()) obs.disconnect(); IG_NATIVE_SEARCH_V331.listObservers.clear(); } catch {}
             __observers.forEach(obs => { try { obs.disconnect(); } catch {} });
             __observers.clear();
+            __igStoryTrayArrivalObserverV2955 = null;
+            IG_EXPLORE_OBSERVER_V328?.disconnect();
+            IG_EXPLORE_ROOT_WAIT_V328?.disconnect();
             __eventCleanups.forEach(fn => { try { fn(); } catch {} });
             __eventCleanups.clear();
+            try { IG_NONHOME_SURFACE_OBSERVER_V324?.disconnect(); } catch {}
+            IG_NONHOME_SURFACE_OBSERVER_V324 = null;
+            IG_NONHOME_SURFACE_ROOT_V324 = null;
             try { __bfHomeFeedPrepaintObserver?.disconnect(); } catch {}
             try { __bfHomeFeedPrepaintRootWaitObserver?.disconnect(); } catch {}
             __bfHomeFeedPrepaintObserver = null;
@@ -599,8 +1626,8 @@ const keywordsToHide = [
 	/sexual/i, /Kairi's/i, /Kairii/i, /Sexxy/i, /Sexy/i, /Sexx/i, /@lovable.dev/i, /lovable.dev/i, /maisa/i, /gener/i, /Zerrano/i, /Stratt/i, /Rasikangas/i, /Serrano/i, /Malla/i,
 	/m1ska/i, /m1sk4/i, /Milli/i, /Niina/i, /Jasmin/i, /Saana/i, /Veera/i, /Saya Kamitani/i, /misk4/i, /misk3/i, /m1sk3/i, /m1ske/i, /m1mmuska/i, /misk33waaa/i, /vsco\.co/i,
 	/misk33wa/i, /misk3waa/i, /misk3waaa/i, /miskaawq9/i, /misk3wa/i, /Matilda/i, /Kamitani/i, /Minja/i, /Nikkita/i, /linktr\.ee/i, /misk33waa/i, /Myös Metalta/i, /mallikuva/i,
-	/Sinulle ehdotettua/i, /Sinulle ehdotettu/i, /Suggested for you/i,  /@lovable\.dev/i, /@lovable\.ai/i, /@lovable.ai/i, /lovable.ai/i, /lovable ai/i, /modeling/i,
-
+	/Sinulle ehdotettua/i, /Sinulle ehdotettu/i, /Suggested for you/i,  /@lovable\.dev/i, /@lovable\.ai/i, /@lovable.ai/i, /lovable.ai/i, /lovable ai/i, /modeling/i, /Kelani/i,
+	/Monroe/i, /Chantel/i, /Zaria/i, /Jaida/i,
 
 	// Regex Hashtags
 	/#perse/i, /#pylly/i, /#tissit/i, /#takapuoli/i, /#takamus/i, /#boobs/i, /#boobies/i, /#boobie/i, /#booty/i, /#butt/i, /#babe/i, /#bestie/i, /#aigen/i, /#aigenerated/i, 
@@ -617,7 +1644,7 @@ const keywordsToHide = [
 	/\bSex\b/i, /\bAlexis\b/i, /\bHomo\b/i, /\bGay\b/i, /\bDeep\b/i, /\bFake\b/i, /\bBrie\b/i, /\bGirls\b/i, /\bGirly\b/i, /\bGirlie\b/i, /\bGirl's\b/i, /\bTorres\b/i, 
 	/\bEve WWE\b/i, /\bManna\b/i, /\bNanna\b/i, /\bAava\b/i, /\bAva\b/i, /\bRaine\b/i, /\bGrok\b/i, /\bJensku\b/i, /\bSanna\b/i, /\bHanna\b/i, /\bHenna\b/i, /\bNiina\b/i, 
 	/\bSandra\b/i, /\bMilla\b/i, /\bMirka\b/i, /\bZoey\b/i, /\bViola\b/i, /\bMinka\b/i, /\bRoosa\b/i, /\bPeppi\b/i, /\bEveliina\b/i, /\bJimi\b/i, /\bJulle\b/i, /\bNox\b/i, 
-	/\bMenni\b/i, /\bGlna\b/i, /\bvsco\b/i, /\bElon\b/i, /\bMusk\b/i,  /\bAltman\b/i, /\bTara\b/i, /\bKairi\b/i,
+	/\bMenni\b/i, /\bGlna\b/i, /\bvsco\b/i, /\bElon\b/i, /\bMusk\b/i,  /\bAltman\b/i, /\bTara\b/i, /\bKairi\b/i, /\bIzzi\b/i,
 
 
 	// Boundaried Regex Hashtags
@@ -647,6 +1674,15 @@ function publishInstagramAllowedConfigToMainWorld() {
     } catch {}
 }
 
+function publishInstagramFriendConfigToMainWorldV326() {
+    try {
+        window.postMessage({
+            __metamanglerType: 'ig-friend-author-config-v326',
+            accounts: IG_TRUSTED_FRIEND_ACCOUNTS.slice()
+        }, location.origin);
+    } catch {}
+}
+
 function publishInstagramAccountConfigToMainWorld() {
     try {
         window.postMessage({
@@ -667,6 +1703,7 @@ window.addEventListener('message', (event) => {
             publishInstagramKeywordConfigToMainWorld();
             publishInstagramAllowedConfigToMainWorld();
             publishInstagramAccountConfigToMainWorld();
+            publishInstagramFriendConfigToMainWorldV326();
             return;
         }
         if (data.__metamanglerType === 'ig-feed-classifications' && Array.isArray(data.items)) {
@@ -682,6 +1719,7 @@ window.addEventListener('message', (event) => {
 publishInstagramKeywordConfigToMainWorld();
 publishInstagramAllowedConfigToMainWorld();
 publishInstagramAccountConfigToMainWorld();
+publishInstagramFriendConfigToMainWorldV326();
 try { window.postMessage({ __metamanglerType: 'ig-feed-classifier-ready' }, location.origin); } catch {}
 
 function resetKeywordRegexState(regex) {
@@ -690,16 +1728,79 @@ function resetKeywordRegexState(regex) {
     } catch {}
 }
 
+// ===== v29.5.5: shared Unicode-aware AI boundaries and exact compact hashtags =====
+// These helpers affect *matching*, not the user's stored/order-preserved regex list.
+// Literal two-word names (including SmackDownHotel slugs) recognize #ChelseaGreen,
+// but never arbitrarily ban #ChelseaGreenland or ordinary Finnish compounds.
+const __ig2955EffectiveRegexCache = new WeakMap();
+const __ig2955HashtagRegexCache = new WeakMap();
+
+function ig2955EffectiveRegex(regex) {
+    if (!(regex instanceof RegExp)) return regex;
+    if (__ig2955EffectiveRegexCache.has(regex)) return __ig2955EffectiveRegexCache.get(regex);
+    let source = regex.source;
+    const compact = source.replace(/\\-/g, '-');
+    if (compact === 'AI-') source = '(?<![\\p{L}\\p{N}])AI-';
+    else if (compact === '-\\AI' || compact === '-AI') source = '-AI(?![\\p{L}\\p{N}])';
+    else if (source === '\\bAI\\b') source = '(?<![\\p{L}\\p{N}])AI(?![\\p{L}\\p{N}])';
+    else if (source === '\\b#AI\\b') source = '(?<![\\p{L}\\p{N}_])#AI(?![\\p{L}\\p{N}_])';
+    else if (source.toLowerCase() === 'gener') {
+        source = '(?<![\\p{L}\\p{N}])(?:generat(?:e|ed|ing|ion|ions|ive|or|ors)|generoi(?:va|tu|da|nti)[\\p{L}]*)(?![\\p{L}\\p{N}])';
+    } else if (source.toLowerCase() === 'generative' || source.toLowerCase() === 'generated') {
+        source = '(?<![\\p{L}\\p{N}])' + source + '(?![\\p{L}\\p{N}])';
+    } else if (/^AI(?:[ -](?:generated|created|creative|create|model|art|edit|edited|suck)|blow|suck)$/i.test(compact)) {
+        source = '(?<![\\p{L}\\p{N}])' + source;
+    }
+    let result = regex;
+    if (source !== regex.source) {
+        try { result = new RegExp(source, regex.flags.includes('u') ? regex.flags : regex.flags + 'u'); }
+        catch { result = regex; }
+    }
+    __ig2955EffectiveRegexCache.set(regex, result);
+    return result;
+}
+
+function ig2955HashtagRegex(regex) {
+    if (!(regex instanceof RegExp)) return null;
+    if (__ig2955HashtagRegexCache.has(regex)) return __ig2955HashtagRegexCache.get(regex);
+    let result = null;
+    const literal = regex.source.replace(/\\([.\-])/g, '$1');
+    if (/^[\p{L}\p{N}]+(?:[ ._-][\p{L}\p{N}]+)+$/u.test(literal)) {
+        const parts = literal.split(/[ ._-]+/);
+        const compact = parts.join('');
+        if (compact.length >= 6) {
+            try {
+                // The separator is optional: #ChelseaGreen and #Chelsea_Green.
+                const body = parts.map(escapeRegexLiteral).join('[._-]?');
+                result = new RegExp('(?<![\\p{L}\\p{N}_])#' + body + '(?![\\p{L}\\p{N}_])', 'iu');
+            } catch {}
+        }
+    }
+    __ig2955HashtagRegexCache.set(regex, result);
+    return result;
+}
+
+function ig2955MatchRegexes(regex, text) {
+    const value = String(text || '');
+    const out = [ig2955EffectiveRegex(regex)];
+    if (value.includes('#')) {
+        const hashtag = ig2955HashtagRegex(regex);
+        if (hashtag) out.push(hashtag);
+    }
+    return out;
+}
+
 function keywordRegexMatches(regex, text) {
     try {
         if (!regex || typeof regex.test !== 'function') return false;
-        resetKeywordRegexState(regex);
-        const matched = regex.test(String(text || ''));
-        resetKeywordRegexState(regex);
-        return matched;
-    } catch {
-        return false;
-    }
+        for (const candidate of ig2955MatchRegexes(regex, text)) {
+            resetKeywordRegexState(candidate);
+            const matched = candidate.test(String(text || ''));
+            resetKeywordRegexState(candidate);
+            if (matched) return true;
+        }
+    } catch {}
+    return false;
 }
 
 function escapeRegexLiteral(value) {
@@ -761,7 +1862,43 @@ const instagramAccountsToHide = [
   'paigewwe', 'kayfabe_kayla', 'roxanne_perez', 'cora.jade', 'piia_barlund', 'lottapupu', 'giuliawrestler', 'starkz_wrestler', 'thedollhousewrestling', 'holidead', 'tessafblanchard', 'thealliebunny', 'taya_valkyrie',
   'thedemonbunny', 'rhearipley_wwe', 'rosemarythehive', 'siennawrestling', 'madisonrayne', 'kimber_lee90', 'kiera_hogan', 'diamantelax', 'realtenille', 'stephaniemcmahon', 'stephanie_buttermore', 'stephanie.vaquer', 
   'julianarasikannas', 'wiltsuboe', 'emiliaaq96', 'wwe_asuka', 'kairi_sane_wwe', 'wwe_mandyrose', 'stephaniesanzo', 'shaqwrestling', 'jadecargill', 'emimatsumoto', 'yukisakazaki', 'gina.adams', 'mizuki_wrestler',
-  'miskaawq9', 'misk33', 'misk33waaa', 'misk33waa', 'misk33wa', 'misk3waa', 'misk3waaa', 'misk3wa', 'misk4', 'misaaqw', 'lovable.dev', 'lovable', 'lovable.ai', 
+  'miskaawq9', 'misk33', 'misk33waaa', 'misk33waa', 'misk33wa', 'misk3waa', 'misk3waaa', 'misk3wa', 'misk4', 'misaaqw', 'lovable.dev', 'lovable', 'lovable.ai', 'izzi_wwe', 'chantelmonroe',
+
+  // v29.5.5 wrestling-account expansion: exact published handles only (no guessed variants).
+  'kelani_wwe', // NXT: handle specifically referenced in wwenxt caption.
+  // WWE / NXT / WWE alumni (published handle directories)
+  'brie', 'trishstratuscom', 'rondarousey', 'natalieevamarie', 'thebarbieblank', 'carleebrightwwe', 'corajadewwe',
+  'elaynablack', 'thefoxxyone', 'aliyahwwe', 'madusa_rocks', 'shadiabseiso', 'brandilauren_', 'beapriestley96',
+  'nikkitalyons',
+
+  // AEW / ROH (2026 published profiles)
+  'reneepaquette', 'realbrittbaker', 'annajay____', 'danni_ellexo', 'marinashafir', 'themeganbayne', 'miss_leilagrey',
+  'lena_kross', 'hailwindsor', 'itsmayaworldd', 'thehyan', 'tonistorm_', 'realrubysoho', 'lexynair',
+  'riho_gtmv',
+
+  // TNA Knockouts (2026 verified Instagram tags and published directory)
+  'xiabrookside', 'zoey_serrano', 'qosbaszler', 'the_gnomie', 'harleyhudsonx', 'doublexdiva', 'allieimpact',
+
+  // STARDOM / NJPW-affiliated women (published Japanese Instagram directory)
+  'stardom_azm', 'miyu_stardom', 'saya_iida_5_19', 'iwatanimayu', 'unapiiiiiii', 'kashima_saki_1', 'sayasayadesuyo',
+  'momokohgo', 'maisakurai914', 'syuri_official', '0221giulia', 'mina_shirakawa', 'stardom_starlightkid', 'aaamintan',
+  'waka_tsukiyama', 'toxic_thekla', 'stardom_natsuko', 'tam_nakano', 'natsumi_poi', '_hazuki_0929_', 'u_t_m_0914',
+  'stardom_hanan', '5_hmk_28', 'maika_0324', 'mirai_ss_', 'rina.kh8730', 'ruaka__stardom', 'ladyc_stardom',
+  'stardom_momo', 'hina.qq.007', 'k_o_nami',
+
+  // TJPW / Japanese independent women (published Instagram directories)
+  'tenmaino', 'araiyuki57', 'makifuckingitoh', '_marupon427', 'yuki_kamifuku', 'mahiro_tjpw', 'yuka_sakazaki_ayayayay',
+  'suzume_tjpw', 'nk147cm', 'juria_210', 'neco_tjpw_', 'uug_p_hikari', 'misao_tjp', 'pompompom327',
+  'mizupyon3', 'miyu.yamashita', 'raku_uugp', 'uug_p_miu', 'tsukina.umino', 'totochan326', 'tsukka0730official',
+  'hoshihamuko', 'kahoooo._.31', 'ohkayumi', 'nagisa_nozaki', 'kiyukizayami', 'co_ha_ku', 'mikikofutagami',
+  'manami.senjo', 'mika0610senjo', 'yurika1023_23', 'dashchisako', 'heidikatrinaa', 'chihero71', 'saki__akai',
+  'yoppy228', 'haruka_katou', 'yunamanase', 'yuuri_916', 'mayumi.ozaki.5203', 'kato_sonoko', 'tydachu',
+  'akari_wrestler', 'crea0518_purej',
+
+  // Additional published women wrestling accounts (historical directories)
+  'aerial_monroe', 'aja_perera', 'alexxiaanicole', 'alexleesekai', 'b000giebear', 'theeallieparker', 'allierecks',
+  'cjfitlv', 'germanwrestling', 'fit_winchester',
+
 ];
 
 publishInstagramAllowedConfigToMainWorld();
@@ -769,7 +1906,7 @@ publishInstagramAccountConfigToMainWorld();
 
     const instagramBannedPaths = [
         ...instagramAccountsToHide,
-        'instagram.com/explore',
+        ...(IG_EXPLORE_PAGE_REDIRECT === 1 && !ig2955NativeSearchActiveV335() ? ['instagram.com/explore'] : []),
         'instagram.com/reels',
         'instagram.com/accounts/blocked_accounts',
         'accounts/settings/v2/hidden_words',
@@ -1225,18 +2362,12 @@ function isElementProtected(element) {
     'div.x6bk1ks:nth-child(3) > div:nth-child(3)',
     '.x1xgvd2v > div:nth-child(2) > div:nth-child(4) > span:nth-child(1)',
     '.x1xgvd2v > div:nth-child(2) > div:nth-child(3) > span:nth-child(1) > a:nth-child(1) > div:nth-child(1)',
-    'nav svg[aria-label="Tutki"]',
-    '[role="navigation"] svg[aria-label="Tutki"]',
     'div[class^="x9f619 xjbqb8w x78zum5 x168nmei x13lgxp2 x5pf9jr xo71vjh"][style*="height: 250px;"]',
     'h4.x1lliihq.x1plvlek.xryxfnj.x1n2onr6.x1ji0vk5.x18bv5gf.x193iq5w.xeuugli.x1fj9vlw.x13faqbe.x1vvkbs.x1s928wv.xhkezso.x1gmr53x.x1cpjm7i.x1fgarty.x1943h6x.x1i0vuye.xvs91rp.x1s688f.x173jzuc.x10wh',
     'a.x1i10hfl.xjbqb8w.x1ejq31n.xd10rxx.x1sy0etr.x17r0tee.x972fbf.xcfux6l.x1qhh985.xm0m39n.x9f619.x1ypdohk.xt0psk2.xe8uvvx.xdj266r.x14z9mp.xat24cr.x1lziwak.xexx8yu.x4uap5.x18d9i69.xkhd6sd.x16tds',
     'span.x1lliihq.x1plvlek.xryxfnj.x1n2onr6.x1ji0vk5.x18bv5gf.x193iq5w.xeuugli.x1fj9vlw.x13faqbe.x1vvkbs.x1s928wv.xhkezso.x1gmr53x.x1cpjm7i.x1fgarty.x1943h6x.x1i0vuye.xvs91rp.x1s688f.x173jzuc.x10',
     'nav div[role="button"][tabindex][aria-label="Threads"]',
     '[role="navigation"] div[role="button"][tabindex][aria-label="Threads"]',
-    'nav div[role="button"][tabindex][aria-label="Tutki"]',
-    '[role="navigation"] div[role="button"][tabindex][aria-label="Tutki"]',
-    'nav div > span.html-span > div.x1n2onr6 > a.x1i10hfl._a6hd[href="/explore/"]',
-    '[role="navigation"] div > span.html-span > div.x1n2onr6 > a.x1i10hfl._a6hd[href="/explore/"]',
     'span[aria-describedby*="_R_bmt5bb9klrj5ipd5aq_"]',
     'span[aria-describedby*="_R_rmt5bb9klrj5ipd5aq_"]',
     'div.x1azxncr span[aria-describedby*="_R_bmt5bb9klrj5ipd5aq_"]',
@@ -1265,7 +2396,6 @@ function isElementProtected(element) {
     'nav div.x9f619.x3nfvp2:has(svg[aria-label*="Myös Metalta"])','[role="navigation"] div.x9f619.x3nfvp2:has(svg[aria-label*="Myös Metalta"])','div.x9f619.x3nfvp2.xr9ek0c:has(svg[aria-label*="Myös Metalta"])','div.x9f619.x3nfvp2:has(svg[aria-label*="Myös Metalta"])',
     'nav div.x9f619.x3nfvp2:has(svg[aria-label*="Also from Meta"])','[role="navigation"] div.x9f619.x3nfvp2:has(svg[aria-label*="Also from Meta"])','div.x9f619.x3nfvp2.xr9ek0c:has(svg[aria-label*="Also from Meta"])','div.x9f619.x3nfvp2:has(svg[aria-label*="Also from Meta"])',
     'svg[aria-label*="Myös Metalta"]','svg[aria-label*="Also from Meta"]',
-    '[role="navigation"] a[href^="/explore"]','nav[aria-label*="Primary"] a[href^="/explore"]','nav a[href="/explore/"]','nav a[href="/explore/?next=%2F"]','nav a[role="link"][href^="/explore"]',
     'section:has(> div > a._a6hd[href*="?next=%2F"])',
     'a._a6hd[href*="?next=%2F"] ~ div[style*="--x-height: 230px"]',
     'section:has(> div > a._a6hd[href*="?next=%2F"]) div[style*="--x-height: 230px"]',
@@ -1320,8 +2450,6 @@ function isElementProtected(element) {
         'button',
         'nav div[role="button"][tabindex][aria-label="Threads"]',
     '[role="navigation"] div[role="button"][tabindex][aria-label="Threads"]',
-        'nav div[role="button"][tabindex][aria-label="Tutki"]',
-    '[role="navigation"] div[role="button"][tabindex][aria-label="Tutki"]',
         'nav div[role="button"][tabindex][aria-label="Reels"]',
         'div[class*="x1nhvcw1"][class*="xqjyukv"][class*="xdt5ytf"]',
         'span[aria-describedby*="_R_bmt5bb9klrj5ipd5aq_"]',
@@ -1337,8 +2465,6 @@ function isElementProtected(element) {
         'nav div[role="button"][tabindex][aria-label="Reels"]',
         'nav div[role="button"][tabindex][aria-label="Threads"]',
     '[role="navigation"] div[role="button"][tabindex][aria-label="Threads"]',
-        'nav div[role="button"][tabindex][aria-label="Tutki"]',
-    '[role="navigation"] div[role="button"][tabindex][aria-label="Tutki"]',
         'nav div[role="button"][tabindex][aria-label="Myös Metalta"]',
         'nav div.x9f619.x3nfvp2:has(svg[aria-label*="Myös Metalta"])',
         '[role="navigation"] div.x9f619.x3nfvp2:has(svg[aria-label*="Myös Metalta"])',
@@ -1350,8 +2476,6 @@ function isElementProtected(element) {
         'a.x1i10hfl[href*="Myös Metalta"]',
         'nav a.x1i10hfl[href*="threads"]',
     '[role="navigation"] a.x1i10hfl[href*="threads"]',
-        'nav div > span.html-span > div.x1n2onr6 > a.x1i10hfl._a6hd[href="/explore/"]',
-    '[role="navigation"] div > span.html-span > div.x1n2onr6 > a.x1i10hfl._a6hd[href="/explore/"]',
         'nav div > span.html-span > div.x1n2onr6 > a.x1i10hfl._a6hd[href="/reels/"]',
         '[role="navigation"] div > span.html-span > div.x1n2onr6 > a.x1i10hfl._a6hd[href="/reels/"]',
         'a.x1i10hfl[href*="blocked"]',
@@ -1375,9 +2499,8 @@ function isElementProtected(element) {
     ];
 
     const selectorsToMonitorAndRedirect = [
-        'svg.x1lliihq.x1n2onr6.x5n08af[height="48"][width="48"][viewBox="0 0 96 96"]',
-        'svg[aria-label=""][height="48"][width="48"][viewBox="0 0 96 96"] circle[cx="48"][cy="48"][r="47"]',
-        'svg[viewBox="0 0 96 96"] path[d*="M60.931 70.001H35.065"]',
+        // V327: private profiles are now identified from their own notice text
+        // by ig2955HandlePrivateProfileV327, not the generic padlock SVG.
         // Empty profile (Ei vielä julkaisuja) selectors
         'svg[aria-label="Kamera"]',
         'svg[aria-label="Kamera"][viewBox="0 0 96 96"]',
@@ -1437,7 +2560,7 @@ function isElementProtected(element) {
         } catch { return false; }
     }
     function isPostOverlayOpen() {
-        return !!document.querySelector('div[role="dialog"] article, section[role="dialog"] article, div[aria-modal="true"] article, div[role="dialog"] [data-testid="post"]');
+        return !!document.querySelector('div[role="dialog"] article, section[role="dialog"] article, div[aria-modal="true"] article, div[role="dialog"] [data-testid="post"], [role="dialog"] li._a9zj._a9zl h1, [aria-modal="true"] li._a9zj._a9zl h1');
     }
     function updateOverlayState() {
         try {
@@ -1607,6 +2730,695 @@ function isElementProtected(element) {
         return null; 
     }
 
+    // ===== v29.5.5: exact caption checks for standalone posts and article-less viewers =====
+    // Instagram's newer post viewer wraps captions in <li class="_a9zj _a9zl">,
+    // not <article>. The post *author* can be clean while a blocked account is
+    // tagged in the caption (e.g. @kelani_wwe under a /wwenxt/ post).
+    try { window.__IGCleanerTrustedFriendsV326 = () => ({
+        trustedAccountCount: IG_TRUSTED_FRIEND_SET_V326.size,
+        trustedThreadCount: IG_TRUSTED_DM_THREAD_SET_V326.size,
+        dmExemptionActive: ig2955IsTrustedDMMediaV326(),
+        postBottomRemovalEnabled: isPermalinkView(),
+        currentPostTrustedAuthor: isPermalinkView() && ig2955TrustedAuthorFromPostV326(document.querySelector('main') || document)
+    }); } catch {}
+    const IG_CAPTION_SURFACE_STATE_V321 = {
+        scanned: 0, exactMentionBans: 0, keywordBans: 0,
+        permalinkBans: 0, modalBans: 0, overridesPriorApproval: 0,
+        articlelessModalsSeen: 0,
+        permalinkPanelsCollapsed: 0, modalPermalinkPriorityFixes: 0,
+        gridCardsCollapsed: 0, gridCardsRestored: 0,
+        gridCaptionMatches: 0, gridCachedRejections: 0,
+        prepaintPanelsCheckedV324: 0, prepaintPanelsReleasedV324: 0,
+        prepaintUnverifiedQuarantinedV324: 0, gridCardsPrepaintReviewedV324: 0,
+        postRedirectsV324: 0, postRedirectSkippedNoAuthorV324: 0,
+        postRedirectEnabledV324: IG_BLOCKED_POST_REDIRECT === 1,
+        gridFullCaptionsReceivedV325: 0, gridFullCaptionBlockedV325: 0,
+        gridFullCaptionReleasedV325: 0, gridMissingFullCaptionHeldV325: 0,
+        gridUnverifiedQuarantinedV325: 0, gridCaptionConflictsV325: 0,
+        gridLateVerifiedRestoredV325: 0, gridFullCaptionCacheSizeV325: 0
+    };
+    // ===== V325: exact-shortcode caption evidence for related media tiles =====
+    // Thumbnail alt is frequently only a *preview* (e.g. "DAME OVER!"). It
+    // cannot certify that the actual post caption is clean. The MAIN-world
+    // bridge passively reads captions from already-requested Instagram JSON.
+    // No extra requests, no response edits, and no comment-text inspection.
+    const IG_RELATED_CAPTION_GRACE_MS_V325 = 650;
+    const IG_RELATED_CAPTION_CACHE_LIMIT_V325 = 480;
+    const IG_RELATED_FULL_CAPTIONS_V325 = new Map();
+    const IG_RELATED_PENDING_TILES_V325 = new WeakMap();
+    let IG_RELATED_RECONCILE_QUEUED_V325 = false;
+
+    function ig2955RelatedCaptionReconcileV325() {
+        if (IG_RELATED_RECONCILE_QUEUED_V325) return;
+        IG_RELATED_RECONCILE_QUEUED_V325 = true;
+        queueMicrotask(() => {
+            IG_RELATED_RECONCILE_QUEUED_V325 = false;
+            if (ig2955GridScanRouteV322()) ig2955CollapseBannedGridCardsV322();
+            if (ig2955ExploreRouteV328()) ig2955ScanExploreCardsV328();
+        });
+    }
+
+    window.addEventListener('message', event => {
+        try {
+            if (event.source !== window || event.origin !== location.origin) return;
+            const data = event.data;
+            if (data?.__metamanglerType !== 'ig-related-full-caption-v325' || !Array.isArray(data.items)) return;
+            for (const item of data.items.slice(0, 48)) {
+                if (!item || !/^[A-Za-z0-9_-]{5,40}$/.test(String(item.id || ''))) continue;
+                if (typeof item.caption !== 'string' || !item.caption.trim() || item.caption.length > 12000) continue;
+                const id = item.id;
+                const username = String(item.username || '').toLowerCase();
+                if (username && !/^[a-z0-9._]{1,30}$/.test(username)) continue;
+                const prior = IG_RELATED_FULL_CAPTIONS_V325.get(id);
+                if (prior && (prior.caption !== item.caption ||
+                    (prior.username && username && prior.username !== username))) {
+                    if (!prior.conflict) IG_CAPTION_SURFACE_STATE_V321.gridCaptionConflictsV325++;
+                    prior.conflict = true;
+                    continue;
+                }
+                if (!prior) {
+                    IG_RELATED_FULL_CAPTIONS_V325.set(id, { caption: item.caption, username, conflict: false });
+                    IG_CAPTION_SURFACE_STATE_V321.gridFullCaptionsReceivedV325++;
+                } else if (!prior.username && username) {
+                    prior.username = username;
+                }
+            }
+            while (IG_RELATED_FULL_CAPTIONS_V325.size > IG_RELATED_CAPTION_CACHE_LIMIT_V325) {
+                IG_RELATED_FULL_CAPTIONS_V325.delete(IG_RELATED_FULL_CAPTIONS_V325.keys().next().value);
+            }
+            IG_CAPTION_SURFACE_STATE_V321.gridFullCaptionCacheSizeV325 = IG_RELATED_FULL_CAPTIONS_V325.size;
+            ig2955RelatedCaptionReconcileV325();
+        } catch {}
+    });
+
+    function ig2955RelatedCaptionVerdictV325(postID) {
+        try {
+            const entry = IG_RELATED_FULL_CAPTIONS_V325.get(postID);
+            if (!entry || entry.conflict || !entry.username) return 'unknown';
+            if (IG_TRUSTED_FRIEND_SET_V326.has(entry.username)) return 'clean';
+            if (instagramAccountsSet.has(entry.username) ||
+                extractHandlesFromText(entry.caption).some(h => instagramAccountsSet.has(h)) ||
+                keywordsToHide.some(rx => keywordRegexMatchesOutsideAllowedSpan(rx, entry.caption))) {
+                return 'blocked';
+            }
+            return 'clean';
+        } catch { return 'unknown'; }
+    }
+
+    // ===== V328: strict Explore cards, exact shortcode/full-caption evidence =====
+    const IG_EXPLORE_GRACE_MS_V328 = 850;
+    const IG_EXPLORE_STATE_V328 = {
+        matchedBlocked: 0, networkBlocked: 0, networkReleased: 0,
+        heldUnverified: 0, quarantined: 0, lateVerifiedRestored: 0,
+        identityResets: 0, cardsReviewed: 0
+    };
+    const IG_EXPLORE_PENDING_V328 = new WeakMap();
+    let IG_EXPLORE_OBSERVER_V328 = null;
+    let IG_EXPLORE_ROOT_V328 = null;
+    let IG_EXPLORE_ROOT_WAIT_V328 = null;
+    let IG_EXPLORE_SCAN_QUEUED_V328 = false;
+
+    function ig2955ExploreRouteV328() {
+        return location.hostname === 'www.instagram.com' && /^\/explore\/?$/i.test(location.pathname || '');
+    }
+
+    try { window.__IGCleanerExploreSearchOnlyV339 = () => ({
+        enabled: IG_EXPLORE_SEARCH_ONLY_V339 === 1,
+        exploreRoute: ig2955ExploreRouteV328(),
+        prepaintActive: document.documentElement?.hasAttribute('data-ig-explore-search-only-v339') || false,
+        hiddenDiscoveryTabSections: document.querySelectorAll('div.xvbhtw8.x1p5oq8j.x7wzq59').length,
+        hiddenMediaGridSections: document.querySelectorAll('div.x15mokao.x1ga7v0g.x16uus16.xbiv7yw.x5o85r1.xeo4mu6').length,
+        // V340: measure computed visibility rather than merely counting matching nodes.
+        visibleMediaGridSections: Array.from(document.querySelectorAll('main div.x15mokao.x1ga7v0g.x16uus16.xbiv7yw')).filter(node => node.querySelector('div.x121lspk.xrvj5dj') && getComputedStyle(node).display !== 'none').length,
+        markerValue: document.documentElement?.getAttribute('data-ig-explore-search-only-v339') ?? null,
+        nativeSearchInputs: document.querySelectorAll('input[aria-label="Hakusyöte"], input[aria-label="Search input"]').length
+    }); } catch {}
+
+    function ig2955ScheduleExploreScanV328() {
+        if (IG_EXPLORE_SCAN_QUEUED_V328) return;
+        IG_EXPLORE_SCAN_QUEUED_V328 = true;
+        queueMicrotask(() => {
+            IG_EXPLORE_SCAN_QUEUED_V328 = false;
+            if (ig2955ExploreRouteV328()) ig2955ScanExploreCardsV328();
+        });
+    }
+
+    function ig2955ExploreTileV328(anchor) {
+        const outer = anchor.closest('div.xeuugli.x6ikm8r');
+        if (outer && outer.querySelectorAll('a[href^="/p/"], a[href^="/reel/"], a[href^="/tv/"]').length === 1) return outer;
+        return anchor.parentElement || anchor;
+    }
+
+    function ig2955ScanExploreCardsV328(scope = document) {
+        try {
+            if (!ig2955ExploreRouteV328() || IG_EXPLORE_PAGE_REDIRECT === 1 || IG_EXPLORE_SEARCH_ONLY_V339 === 1 || !scope?.querySelectorAll) return 0;
+            const selector = 'a[href^="/p/"], a[href^="/reel/"], a[href^="/tv/"]';
+            const anchors = [];
+            if (scope.matches?.(selector)) anchors.push(scope);
+            scope.querySelectorAll(selector).forEach(a => anchors.push(a));
+            let changed = 0;
+            for (const anchor of anchors) {
+                if (!anchor.closest('main')) continue;
+                if (!anchor.querySelector('div._aagu img[alt], div._aagu video, div._aagu img')) continue;
+                const href = anchor.getAttribute('href') || '';
+                const match = href.match(/^\/(?:p|reel|tv)\/([A-Za-z0-9_-]{5,40})\/?(?:[?#].*)?$/i);
+                if (!match) continue;
+                const id = match[1];
+                const tile = ig2955ExploreTileV328(anchor);
+                if (!tile || tile.matches('main, body, html, article, nav')) continue;
+                let pending = IG_EXPLORE_PENDING_V328.get(tile);
+                if (!pending || pending.id !== id) {
+                    if (pending?.timer) clearTimeout(pending.timer);
+                    if (pending) IG_EXPLORE_STATE_V328.identityResets++;
+                    pending = { id, deadline: performance.now() + IG_EXPLORE_GRACE_MS_V328, timer: null };
+                    IG_EXPLORE_PENDING_V328.set(tile, pending);
+                    tile.removeAttribute('data-ig-explore-cleared-v328');
+                    tile.removeAttribute('data-ig-explore-blocked-v328');
+                    tile.removeAttribute('data-ig-explore-quarantined-v328');
+                }
+                // A thumbnail's alt can conclusively BAN a card, but never
+                // certify a clean full caption. Cached rejected IDs also win.
+                const altBan = ig2955GridThumbnailBanV322(anchor);
+                const oldBan = feedBannedPostIDs.has(id) || networkFeedRejectedPostIDs.has(id) || scannedPostsCache.get(id) === true;
+                const full = ig2955RelatedCaptionVerdictV325(id);
+                const blocked = !!altBan || oldBan || full === 'blocked';
+                const clean = !blocked && full === 'clean';
+                const quarantine = !blocked && !clean && performance.now() >= pending.deadline;
+                const allow = clean;
+                const previouslyCleared = tile.getAttribute('data-ig-explore-cleared-v328') === '1';
+                const previouslyBlocked = tile.getAttribute('data-ig-explore-blocked-v328') === '1';
+                const wasQuarantined = tile.getAttribute('data-ig-explore-quarantined-v328') === '1';
+                if (!blocked && !clean && !quarantine) {
+                    if (previouslyCleared) { tile.removeAttribute('data-ig-explore-cleared-v328'); changed++; }
+                    if (previouslyBlocked) { tile.removeAttribute('data-ig-explore-blocked-v328'); changed++; }
+                    if (!pending.timer) {
+                        IG_EXPLORE_STATE_V328.heldUnverified++;
+                        pending.timer = setTimeout(() => {
+                            pending.timer = null;
+                            if (tile.isConnected && IG_EXPLORE_PENDING_V328.get(tile) === pending) {
+                                ig2955ScanExploreCardsV328(tile);
+                            }
+                        }, IG_EXPLORE_GRACE_MS_V328 + 8);
+                    }
+                    continue;
+                }
+                if (pending.timer) { clearTimeout(pending.timer); pending.timer = null; }
+                if (blocked || quarantine) {
+                    tile.removeAttribute('data-ig-explore-cleared-v328');
+                    tile.setAttribute('data-ig-explore-blocked-v328', '1');
+                    if (quarantine) tile.setAttribute('data-ig-explore-quarantined-v328', '1');
+                    else tile.removeAttribute('data-ig-explore-quarantined-v328');
+                    if (!previouslyBlocked || (wasQuarantined && !quarantine)) {
+                        if (quarantine) IG_EXPLORE_STATE_V328.quarantined++;
+                        else if (altBan || oldBan) IG_EXPLORE_STATE_V328.matchedBlocked++;
+                        else IG_EXPLORE_STATE_V328.networkBlocked++;
+                        changed++;
+                    }
+                } else if (allow) {
+                    tile.removeAttribute('data-ig-explore-blocked-v328');
+                    tile.removeAttribute('data-ig-explore-quarantined-v328');
+                    tile.setAttribute('data-ig-explore-cleared-v328', '1');
+                    if (!previouslyCleared) {
+                        IG_EXPLORE_STATE_V328.networkReleased++;
+                        if (wasQuarantined) IG_EXPLORE_STATE_V328.lateVerifiedRestored++;
+                        changed++;
+                    }
+                }
+                IG_EXPLORE_STATE_V328.cardsReviewed++;
+            }
+            return changed;
+        } catch { return 0; }
+    }
+
+    function ig2955EnsureExploreObserverV328() {
+        try {
+            if (!ig2955ExploreRouteV328() || IG_EXPLORE_PAGE_REDIRECT === 1 || IG_EXPLORE_SEARCH_ONLY_V339 === 1) {
+                IG_EXPLORE_OBSERVER_V328?.disconnect(); IG_EXPLORE_ROOT_WAIT_V328?.disconnect();
+                IG_EXPLORE_OBSERVER_V328 = null; IG_EXPLORE_ROOT_WAIT_V328 = null;
+                IG_EXPLORE_ROOT_V328 = null;
+                return;
+            }
+            const main = document.querySelector('main');
+            if (!main) {
+                if (IG_EXPLORE_ROOT_WAIT_V328 || !document.documentElement) return;
+                IG_EXPLORE_ROOT_WAIT_V328 = trackObserver(new MutationObserver(() => {
+                    if (!document.querySelector('main')) return;
+                    IG_EXPLORE_ROOT_WAIT_V328?.disconnect(); IG_EXPLORE_ROOT_WAIT_V328 = null;
+                    ig2955EnsureExploreObserverV328();
+                }));
+                IG_EXPLORE_ROOT_WAIT_V328.observe(document.documentElement, { childList: true, subtree: true });
+                return;
+            }
+            IG_EXPLORE_ROOT_WAIT_V328?.disconnect(); IG_EXPLORE_ROOT_WAIT_V328 = null;
+            if (IG_EXPLORE_ROOT_V328 === main && IG_EXPLORE_OBSERVER_V328) return;
+            IG_EXPLORE_OBSERVER_V328?.disconnect();
+            IG_EXPLORE_ROOT_V328 = main;
+            IG_EXPLORE_OBSERVER_V328 = trackObserver(new MutationObserver(() => ig2955ScheduleExploreScanV328()));
+            IG_EXPLORE_OBSERVER_V328.observe(main, {
+                subtree: true, childList: true, characterData: false,
+                attributes: true, attributeFilter: ['alt', 'href']
+            });
+            ig2955ScanExploreCardsV328(main);
+        } catch {}
+    }
+
+    try { window.__IGCleanerExploreV328 = () => ({
+        route: ig2955ExploreRouteV328(), redirectEnabled: IG_EXPLORE_PAGE_REDIRECT === 1,
+        ...IG_EXPLORE_STATE_V328,
+        networkCaptionCache: IG_RELATED_FULL_CAPTIONS_V325.size,
+        cardsClearedNow: document.querySelectorAll('[data-ig-explore-cleared-v328="1"]').length,
+        cardsHiddenNow: document.querySelectorAll('[data-ig-explore-blocked-v328="1"]').length
+    }); } catch {}
+
+    const IG_ARTICLELESS_MODAL_COUNTED_V321 = new WeakSet();
+    const IG_MODAL_PERMALINK_COUNTED_V322 = new WeakSet();
+    try { window.__IGCleanerCaptionSurfaceV2955 = () => ({ ...IG_CAPTION_SURFACE_STATE_V321 }); } catch {}
+
+    function ig2955FindPostCaptionV321(root) {
+        try {
+            if (!root || !root.querySelector) return null;
+            // First and most reliable: the *caption* H1 in the new viewer,
+            // excluding the comments list and the video's UI text.
+            const modalCaption = root.querySelector('li._a9zj._a9zl h1, li._a9zj h1._ap3a');
+            if (modalCaption) return modalCaption;
+            // Standalone permalink, using the very marker already set by the
+            // legacy caption scanner. Do not scan a whole main/comments pane.
+            if (isPermalinkView()) {
+                const caption = root.querySelector('div[data-caption-scanned]');
+                if (caption) return caption;
+                const directCaption = root.querySelector('h1._ap3a._aaco, h1._ap3a, h1[dir="auto"]');
+                if (directCaption) return directCaption;
+            }
+        } catch {}
+        return null;
+    }
+
+    function ig2955CaptionBannedReasonV321(caption) {
+        if (!caption) return '';
+        try {
+            IG_CAPTION_SURFACE_STATE_V321.scanned++;
+            // A mention is an *exact profile identity*, never a substring in
+            // an unrelated URL or a name in the comments underneath the post.
+            const handles = extractHandlesFromText(caption.textContent || '');
+            if (handles.some(handle => instagramAccountsSet.has(handle))) {
+                IG_CAPTION_SURFACE_STATE_V321.exactMentionBans++;
+                return 'exact-mentioned-account';
+            }
+            for (const link of caption.querySelectorAll('a[href]')) {
+                let parsed;
+                try { parsed = new URL(link.getAttribute('href') || '', location.origin); } catch { continue; }
+                if (!['www.instagram.com', 'instagram.com'].includes(parsed.hostname)) continue;
+                const match = parsed.pathname.match(/^\/([A-Za-z0-9._]{1,30})\/?$/);
+                if (match && instagramAccountsSet.has(match[1].toLowerCase())) {
+                    IG_CAPTION_SURFACE_STATE_V321.exactMentionBans++;
+                    return 'exact-linked-account';
+                }
+            }
+            // The caption itself may live inside a <ul>, whose text the broad
+            // article walker intentionally skips to avoid comments. Check the
+            // caption's *own* text explicitly before the legacy fallback.
+            if (keywordsToHide.some(rx => keywordRegexMatchesOutsideAllowedSpan(rx, caption.textContent || '')) ||
+                articleHasBannedCaption(caption)) {
+                IG_CAPTION_SURFACE_STATE_V321.keywordBans++;
+                return 'caption-keyword';
+            }
+        } catch {}
+        return '';
+    }
+
+    function ig2955RememberCaptionBanV321(postID) {
+        if (!postID) return;
+        if (scannedPostsCache.get(postID) === false || feedApprovedPostIDs.has(postID) || approvedPostIDs.has(postID)) {
+            IG_CAPTION_SURFACE_STATE_V321.overridesPriorApproval++;
+        }
+        feedApprovedPostIDs.delete(postID);
+        approvedPostIDs.delete(postID);
+        networkFeedApprovedPostIDs.delete(postID);
+        networkFeedCaptionVerifiedPostIDs.delete(postID);
+        rememberSet(feedBannedPostIDs, postID);
+        rememberScannedPost(postID, true);
+        scheduleFeedDecisionCacheSave();
+    }
+
+    // ===== v29.5.5: hide post surfaces in place instead of redirecting =====
+    // Never hide an entire <main> or <body>: a permalink may contain other
+    // Instagram UI, the profile gallery, or recommended tiles below the post.
+    function ig2955PostPanelForCollapseV322(root) {
+        try {
+            if (!root || !root.querySelector) return null;
+            const caption = ig2955FindPostCaptionV321(root);
+            if (!caption) return null;
+            let node = caption;
+            for (let depth = 0; node && depth < 22; depth++, node = node.parentElement) {
+                if (node.nodeType !== 1 || node.matches('main, body, html, [role="dialog"], [aria-modal="true"]')) break;
+                const style = node.getAttribute('style') || '';
+                // Exact post geometry observed in the supplied permalink HTML.
+                if (style.includes('--x-maxWidth') && node.querySelector('video, img.x5yr21d, div._aagu img')) {
+                    return node;
+                }
+            }
+            // Narrow fallback for layouts where Instagram omitted the max-width
+            // variable: require real post media and a caption within the same
+            // bounded panel, never just an author avatar or a comment container.
+            node = caption.parentElement;
+            for (let depth = 0; node && depth < 15; depth++, node = node.parentElement) {
+                if (node.matches('main, body, html, [role="dialog"], [aria-modal="true"]')) break;
+                if (node.querySelector('video, div._aagu img, img.x5yr21d') &&
+                    node.querySelector('div[data-caption-scanned], h1._ap3a')) return node;
+            }
+        } catch {}
+        return null;
+    }
+
+    // ===== V324: route-bounded standalone post prepaint ownership =====
+    const IG_POST_PREPAINT_DEADLINE_V324 = 1600;
+    const IG_POST_CAPTION_STABLE_V324 = 160;
+    const IG_POST_PENDING_V324 = new WeakMap();
+
+    function ig2955PostPanelForPrepaintV324(root) {
+        try {
+            const panel = ig2955PostPanelForCollapseV322(root);
+            if (panel) return panel;
+            // Caption may not exist yet. Find the *narrow* media panel without
+            // mistaking another profile tile or a dialog for the standalone post.
+            const scope = root?.querySelector ? root : document;
+            const candidates = scope.querySelectorAll('div[style*="--x-maxWidth"]');
+            for (const candidate of candidates) {
+                if (candidate.closest('[role="dialog"], [aria-modal="true"]')) continue;
+                if (candidate.querySelector('video, div._aagu img, img.x5yr21d')) return candidate;
+            }
+            // A solitary permalink panel can be present before the media is.
+            // Still schedule its decision deadline instead of hiding it forever.
+            if (candidates.length === 1) return candidates[0];
+        } catch {}
+        return null;
+    }
+
+    function ig2955ApprovePostPanelV324(root, postID) {
+        try {
+            const panel = ig2955PostPanelForPrepaintV324(root);
+            if (!panel || panel.getAttribute('data-ig-caption-panel-collapsed-v322') === '1') return false;
+            if (!isPermalinkView() || isPostOverlayOpen()) return false;
+            if (ig2955TrustedAuthorFromPostV326(root)) {
+                const trustedPanel = ig2955PostPanelForPrepaintV324(root);
+                if (trustedPanel) trustedPanel.setAttribute('data-ig-post-cleared-v324', '1');
+                return true;
+            }
+            const currentID = (location.pathname.match(/\/(?:p|reel|tv)\/([A-Za-z0-9_-]+)/i) || [])[1] || '';
+            if (currentID !== (postID || '')) return false;
+            const caption = ig2955FindPostCaptionV321(panel);
+            if (!caption || !String(caption.textContent || '').trim()) return false;
+            if (ig2955CaptionBannedReasonV321(caption) ||
+                (postID && (feedBannedPostIDs.has(postID) || networkFeedRejectedPostIDs.has(postID) || scannedPostsCache.get(postID) === true))) {
+                ig2955HideBlockedPostSurfaceV321(root, postID, false);
+                return false;
+            }
+            const record = IG_POST_PENDING_V324.get(panel);
+            const fingerprint = String(caption.textContent || '').trim();
+            if (!record || record.id !== (postID || '') || record.fingerprint !== fingerprint) {
+                if (record) { record.fingerprint = fingerprint; record.lastChanged = performance.now(); }
+                return false;
+            }
+            if (performance.now() - record.lastChanged < IG_POST_CAPTION_STABLE_V324) return false;
+            // The legacy caption-expansion check, when present, must finish
+            // before we release this standalone media panel.
+            if (record.expansionRunning) return false;
+            if (panel.getAttribute('data-ig-post-cleared-v324') !== '1') {
+                panel.setAttribute('data-ig-post-cleared-v324', '1');
+                IG_CAPTION_SURFACE_STATE_V321.prepaintPanelsReleasedV324++;
+            }
+            return true;
+        } catch { return false; }
+    }
+
+    function ig2955StartPostPanelGateV324(root, postID) {
+        try {
+            if (!isPermalinkView() || isPostOverlayOpen() || ig2955IsTrustedDMMediaV326()) return;
+            if (ig2955TrustedAuthorFromPostV326(root)) {
+                const trustedPanel = ig2955PostPanelForPrepaintV324(root);
+                if (trustedPanel) trustedPanel.setAttribute('data-ig-post-cleared-v324', '1');
+                return;
+            }
+            const panel = ig2955PostPanelForPrepaintV324(root);
+            if (!panel) return;
+            const id = postID || '';
+            let record = IG_POST_PENDING_V324.get(panel);
+            if (record && record.id !== id) {
+                // Instagram can reuse an old media panel after SPA navigation.
+                clearTimeout(record.checkTimer);
+                clearTimeout(record.deadlineTimer);
+                record = null;
+                panel.removeAttribute('data-ig-post-cleared-v324');
+            }
+            if (!record) {
+                record = { id, fingerprint: '', lastChanged: performance.now(), expansionRunning: false,
+                    checkTimer: null, deadlineTimer: null };
+                IG_POST_PENDING_V324.set(panel, record);
+                IG_CAPTION_SURFACE_STATE_V321.prepaintPanelsCheckedV324++;
+                record.deadlineTimer = setTimeout(() => {
+                    try {
+                        if (IG_POST_PENDING_V324.get(panel) !== record ||
+                            !panel.isConnected || !isPermalinkView() || isPostOverlayOpen() ||
+                            (location.pathname.match(/\/(?:p|reel|tv)\/([A-Za-z0-9_-]+)/i) || [])[1] !== id) return;
+                        if (panel.hasAttribute('data-ig-caption-panel-collapsed-v322') ||
+                            panel.hasAttribute('data-ig-post-cleared-v324')) return;
+                        if (ig2955ApprovePostPanelV324(root, id)) return;
+                        // Strict no-glimpse fallback: unknown != proven banned.
+                        // Collapse only this panel, not all of <main>, and do not redirect.
+                        panel.setAttribute('data-ig-caption-panel-collapsed-v322', '1');
+                        panel.setAttribute('data-ig-caption-post-v322', id || 'unknown');
+                        IG_CAPTION_SURFACE_STATE_V321.prepaintUnverifiedQuarantinedV324++;
+                    } catch {}
+                }, IG_POST_PREPAINT_DEADLINE_V324);
+            }
+            const caption = ig2955FindPostCaptionV321(panel);
+            const text = String(caption?.textContent || '').trim();
+            if (text && text !== record.fingerprint) {
+                panel.removeAttribute('data-ig-post-cleared-v324');
+                record.fingerprint = text;
+                record.lastChanged = performance.now();
+                clearTimeout(record.checkTimer);
+                record.checkTimer = setTimeout(() => {
+                    if (IG_POST_PENDING_V324.get(panel) !== record || !panel.isConnected) return;
+                    scanPermalinkArticleAndAct();
+                }, IG_POST_CAPTION_STABLE_V324 + 12);
+            }
+            ig2955ApprovePostPanelV324(root, id);
+        } catch {}
+    }
+
+    function ig2955TryRedirectBlockedPostV324(root, panel) {
+        if (IG_BLOCKED_POST_REDIRECT !== 1 || !isPermalinkView() || isPostOverlayOpen()) return;
+        try {
+            // Try the author *inside this post's caption/panel* first, never a
+            // random unrelated link on the page or comment-author links.
+            const caption = ig2955FindPostCaptionV321(panel || root);
+            const authorLink = caption?.querySelector('a[href^="/"]:has(img[alt*="profiilikuva" i]), a[href^="/"]:has(img[alt*="profile" i])') ||
+                (panel || root)?.querySelector('a[href^="/"]:has(img[alt*="profiilikuva" i]), a[href^="/"]:has(img[alt*="profile" i])');
+            let username = '';
+            const href = authorLink?.getAttribute('href') || '';
+            const match = href.match(/^\/([A-Za-z0-9._]{1,30})\/?$/);
+            if (match) username = match[1];
+            if (!username) {
+                const urlMatch = location.pathname.match(/^\/([A-Za-z0-9._]{1,30})\/(?:p|reel|tv)\/[A-Za-z0-9_-]+\/?$/i);
+                if (urlMatch) username = urlMatch[1];
+            }
+            if (!username) { IG_CAPTION_SURFACE_STATE_V321.postRedirectSkippedNoAuthorV324++; return; }
+            IG_CAPTION_SURFACE_STATE_V321.postRedirectsV324++;
+            fastRedirect(location.origin + '/' + username + '/');
+        } catch {}
+    }
+
+    function ig2955HideBlockedPostSurfaceV321(root, postID, isModal) {
+        try {
+            ig2955RememberCaptionBanV321(postID);
+            if (isModal) {
+                if (root.getAttribute('data-ig-caption-banned-v321') === '1') return;
+                IG_CAPTION_SURFACE_STATE_V321.modalBans++;
+                root.setAttribute('data-ig-caption-banned-v321', '1');
+                // Suppress the unwanted image immediately; let Instagram's
+                // native close handler restore the underlying page/scroll.
+                // No location.assign(), replace(), fastRedirect(), or history.back().
+                root.style.setProperty('visibility', 'hidden', 'important');
+                root.style.setProperty('pointer-events', 'none', 'important');
+                closeOverlayIfPossible();
+            } else {
+                const panel = ig2955PostPanelForCollapseV322(root);
+                if (!panel || panel.getAttribute('data-ig-caption-panel-collapsed-v322') === '1') return;
+                IG_CAPTION_SURFACE_STATE_V321.permalinkBans++;
+                IG_CAPTION_SURFACE_STATE_V321.permalinkPanelsCollapsed++;
+                panel.setAttribute('data-ig-caption-banned-v321', '1');
+                panel.setAttribute('data-ig-caption-post-v322', postID || 'unknown');
+                panel.setAttribute('data-ig-caption-panel-collapsed-v322', '1');
+                // display:none collapses the post including its internal HR and
+                // height, rather than leaving a full-size invisible shell.
+                panel.style.setProperty('display', 'none', 'important');
+                ig2955TryRedirectBlockedPostV324(root, panel);
+            }
+        } catch {}
+    }
+
+    // Instagram's profile/photo galleries expose image/reel captions as alt
+    // text on each media thumbnail, *before* the user opens its modal.
+    // Inspect only that thumbnail's own alt (never comments or a whole grid).
+    function ig2955GridThumbnailBanV322(anchor) {
+        try {
+            const thumb = anchor?.querySelector?.('div._aagu img[alt], img.x5yr21d[alt]');
+            if (!thumb) return '';
+            const text = String(thumb.getAttribute('alt') || '');
+            if (!text) return '';
+            if (extractHandlesFromText(text).some(handle => instagramAccountsSet.has(handle))) return 'exact-mentioned-account';
+            if (keywordsToHide.some(rx => keywordRegexMatchesOutsideAllowedSpan(rx, text))) return 'caption-keyword';
+        } catch {}
+        return '';
+    }
+
+    function ig2955GridScanRouteV322() {
+        try {
+            if (location.hostname !== 'www.instagram.com' || isMetaManglerHomeFeedPath()) return false;
+            // V326: direct permalink recommendations are removed as one panel;
+            // retain individual thumbnail screening only on actual profile grids.
+            const parts = (location.pathname || '').split('/').filter(Boolean);
+            return parts.length === 1 && !new Set(['accounts','explore','reels','direct','stories','archive','ai','meta-ai']).has(parts[0].toLowerCase());
+        } catch { return false; }
+    }
+
+    function ig2955CollapseBannedGridCardsV322(scope = document) {
+        try {
+            if (!ig2955GridScanRouteV322() || !scope?.querySelectorAll) return 0;
+            const selector = 'a[href*="/reel/"], a[href*="/p/"], a[href*="/tv/"]';
+            const anchors = [];
+            if (scope.matches?.(selector)) anchors.push(scope);
+            scope.querySelectorAll(selector).forEach(a => anchors.push(a));
+            let changed = 0;
+            const relatedPage = isPermalinkView();
+            for (const anchor of anchors) {
+                if (!anchor.closest('main') || !anchor.querySelector('div._aagu img[alt], img.x5yr21d[alt]')) continue;
+                const href = anchor.getAttribute('href') || '';
+                const match = href.match(/^\/(?:[A-Za-z0-9._]+\/)?(?:p|reel|tv)\/([A-Za-z0-9_-]+)\/?(?:[?#].*)?$/i);
+                if (!match) continue;
+                const id = match[1];
+                const tile = anchor.closest('div.x1j53mea') ||
+                    (anchor.parentElement?.children.length === 1 ? anchor.parentElement : anchor);
+                if (!tile || tile.matches('main, body, html, article, [role="dialog"]')) continue;
+
+                // The old v324 reviewed marker said "alt checked", not "caption
+                // verified". For related cards, wait for the exact post's full
+                // caption before clearing paint. Profile grids retain their old
+                // behavior if no trusted full caption is available.
+                let pending = IG_RELATED_PENDING_TILES_V325.get(tile);
+                if (!pending || pending.id !== id) {
+                    if (pending?.timer) clearTimeout(pending.timer);
+                    pending = { id, deadline: performance.now() + IG_RELATED_CAPTION_GRACE_MS_V325, timer: null };
+                    IG_RELATED_PENDING_TILES_V325.set(tile, pending);
+                }
+                const authorMatch = href.match(/^\/([a-z0-9._]+)\/(?:p|reel|tv)\/[A-Za-z0-9_-]+\/?$/i);
+                const profile = location.pathname.match(/^\/([a-z0-9._]+)\/?$/i);
+                const trustedAuthor = !!((authorMatch && IG_TRUSTED_FRIEND_SET_V326.has(authorMatch[1].toLowerCase())) ||
+                    (!authorMatch && profile && IG_TRUSTED_FRIEND_SET_V326.has(profile[1].toLowerCase())));
+                const matched = trustedAuthor ? '' : ig2955GridThumbnailBanV322(anchor);
+                const previouslyBanned = !trustedAuthor && ( feedBannedPostIDs.has(id) ||
+                    networkFeedRejectedPostIDs.has(id) || scannedPostsCache.get(id) === true);
+                const fullVerdict = trustedAuthor ? 'clean' : ig2955RelatedCaptionVerdictV325(id);
+                const banned = !!matched || previouslyBanned || fullVerdict === 'blocked';
+                const awaitingCaption = !banned && relatedPage && fullVerdict === 'unknown' &&
+                    performance.now() < pending.deadline;
+                const quarantine = !banned && relatedPage && fullVerdict === 'unknown' && !awaitingCaption;
+                const collapse = banned || quarantine;
+                const isHidden = tile.getAttribute('data-ig-grid-card-collapsed-v322') === '1';
+                const wasQuarantined = tile.getAttribute('data-ig-grid-unverified-v325') === '1';
+
+                if (awaitingCaption) {
+                    tile.removeAttribute('data-ig-grid-reviewed-v324');
+                    if (!pending.timer) {
+                        IG_CAPTION_SURFACE_STATE_V321.gridMissingFullCaptionHeldV325++;
+                        pending.timer = setTimeout(() => {
+                            pending.timer = null;
+                            if (tile.isConnected && IG_RELATED_PENDING_TILES_V325.get(tile) === pending) {
+                                ig2955CollapseBannedGridCardsV322(tile);
+                            }
+                        }, IG_RELATED_CAPTION_GRACE_MS_V325 + 8);
+                    }
+                    continue;
+                }
+                if (pending.timer) { clearTimeout(pending.timer); pending.timer = null; }
+                if (collapse && !isHidden) {
+                    tile.setAttribute('data-ig-grid-card-collapsed-v322', '1');
+                    tile.setAttribute('data-ig-grid-card-post-v322', id);
+                    IG_CAPTION_SURFACE_STATE_V321.gridCardsCollapsed++;
+                    if (quarantine) IG_CAPTION_SURFACE_STATE_V321.gridUnverifiedQuarantinedV325++;
+                    else if (fullVerdict === 'blocked' && !matched && !previouslyBanned) IG_CAPTION_SURFACE_STATE_V321.gridFullCaptionBlockedV325++;
+                    else if (matched) IG_CAPTION_SURFACE_STATE_V321.gridCaptionMatches++;
+                    else IG_CAPTION_SURFACE_STATE_V321.gridCachedRejections++;
+                    changed++;
+                } else if (!collapse && isHidden) {
+                    // Identity-specific restoration for React's recycled tiles,
+                    // or for late, exact verified-clean network captions.
+                    tile.removeAttribute('data-ig-grid-card-collapsed-v322');
+                    tile.removeAttribute('data-ig-grid-card-post-v322');
+                    IG_CAPTION_SURFACE_STATE_V321.gridCardsRestored++;
+                    if (wasQuarantined && fullVerdict === 'clean') IG_CAPTION_SURFACE_STATE_V321.gridLateVerifiedRestoredV325++;
+                    changed++;
+                }
+                if (quarantine) tile.setAttribute('data-ig-grid-unverified-v325', '1');
+                else tile.removeAttribute('data-ig-grid-unverified-v325');
+                if (!collapse && tile.getAttribute('data-ig-grid-reviewed-v324') !== id) {
+                    tile.setAttribute('data-ig-grid-reviewed-v324', id);
+                    IG_CAPTION_SURFACE_STATE_V321.gridCardsPrepaintReviewedV324++;
+                    if (fullVerdict === 'clean') IG_CAPTION_SURFACE_STATE_V321.gridFullCaptionReleasedV325++;
+                } else if (collapse) {
+                    tile.removeAttribute('data-ig-grid-reviewed-v324');
+                }
+            }
+            return changed;
+        } catch { return 0; }
+    }
+
+    // ===== V324: microtask-paced, route-bounded prepaint observer =====
+    let IG_NONHOME_SURFACE_OBSERVER_V324 = null;
+    let IG_NONHOME_SURFACE_ROOT_V324 = null;
+    let IG_NONHOME_SURFACE_QUEUED_V324 = false;
+    function ig2955EnsureNonHomePrepaintObserverV324() {
+        try {
+            ig2955UpdatePostPrepaintRouteV324();
+            if (!isPermalinkView() && !ig2955GridScanRouteV322()) {
+                IG_NONHOME_SURFACE_OBSERVER_V324?.disconnect();
+                IG_NONHOME_SURFACE_OBSERVER_V324 = null;
+                IG_NONHOME_SURFACE_ROOT_V324 = null;
+                return;
+            }
+            const main = document.querySelector('main');
+            if (!main) return;
+            if (IG_NONHOME_SURFACE_ROOT_V324 === main && IG_NONHOME_SURFACE_OBSERVER_V324) return;
+            IG_NONHOME_SURFACE_OBSERVER_V324?.disconnect();
+            IG_NONHOME_SURFACE_ROOT_V324 = main;
+            IG_NONHOME_SURFACE_OBSERVER_V324 = trackObserver(new MutationObserver(mutations => {
+                try {
+                    if (!isPermalinkView() && !ig2955GridScanRouteV322()) return;
+                    let relevant = false;
+                    for (const m of mutations) {
+                        const node = m.target.nodeType === 1 ? m.target : m.target.parentElement;
+                        if (node?.closest?.('div.x1j53mea, div[style*="--x-maxWidth"]') ||
+                            node?.matches?.('main')) { relevant = true; break; }
+                    }
+                    if (!relevant || IG_NONHOME_SURFACE_QUEUED_V324) return;
+                    IG_NONHOME_SURFACE_QUEUED_V324 = true;
+                    queueMicrotask(() => {
+                        IG_NONHOME_SURFACE_QUEUED_V324 = false;
+                        if (ig2955GridScanRouteV322()) ig2955CollapseBannedGridCardsV322();
+                        if (isPermalinkView()) scanPermalinkArticleAndAct();
+                    });
+                } catch {}
+            }));
+            IG_NONHOME_SURFACE_OBSERVER_V324.observe(main, {
+                childList: true, subtree: true, characterData: true,
+                attributes: true, attributeFilter: ['alt', 'href']
+            });
+            if (ig2955GridScanRouteV322()) ig2955CollapseBannedGridCardsV322(main);
+            if (isPermalinkView()) scanPermalinkArticleAndAct();
+        } catch {}
+    }
+
     function collectCaptionTextsFromArticle(article) {
         const texts = [];
         try {
@@ -1631,20 +3443,22 @@ function isElementProtected(element) {
             const value = String(text || '');
             if (!keywordRegexMatches(regex, value)) return false;
             const lower = value.toLowerCase();
-            const flags = regex.flags.includes('g') ? regex.flags : regex.flags + 'g';
-            const matcher = new RegExp(regex.source, flags);
-            let match;
-            let inspected = 0;
-            while ((match = matcher.exec(value)) && inspected++ < 256) {
-                const start = match.index;
-                const end = start + Math.max(1, match[0].length);
-                const overlapsAllowed = allowedWordsLower.some(word => {
-                    if (!word) return false;
-                    const at = lower.indexOf(word, Math.max(0, start - word.length + 1));
-                    return at >= 0 && at < end && at + word.length > start;
-                });
-                if (!overlapsAllowed) return true;
-                if (!match[0].length) matcher.lastIndex++;
+            for (const candidate of ig2955MatchRegexes(regex, value)) {
+                const flags = candidate.flags.includes('g') ? candidate.flags : candidate.flags + 'g';
+                const matcher = new RegExp(candidate.source, flags);
+                let match;
+                let inspected = 0;
+                while ((match = matcher.exec(value)) && inspected++ < 256) {
+                    const start = match.index;
+                    const end = start + Math.max(1, match[0].length);
+                    const overlapsAllowed = allowedWordsLower.some(word => {
+                        if (!word) return false;
+                        const at = lower.indexOf(word, Math.max(0, start - word.length + 1));
+                        return at >= 0 && at < end && at + word.length > start;
+                    });
+                    if (!overlapsAllowed) return true;
+                    if (!match[0].length) matcher.lastIndex++;
+                }
             }
         } catch {}
         return false;
@@ -1669,6 +3483,10 @@ function isElementProtected(element) {
             }
             const attrNodes = article.querySelectorAll('[alt],[title],[aria-label]');
             for (const node of attrNodes) {
+                // A button's accessible label is interface text, not post content.
+                // Preserve real media image alt text even inside clickable media.
+                if (!node.matches('img[alt]') &&
+                    node.closest('button, [role="button"], [role="menuitem"], [role="toolbar"]')) continue;
                 ['alt','title','aria-label'].forEach(attr => {
                     const val = node.getAttribute(attr);
                     if (!val) return;
@@ -1688,15 +3506,13 @@ function isElementProtected(element) {
                 let pathname = '';
                 try {
                     const u = new URL(hrefRaw, location.origin);
-                    pathname = u.pathname.toLowerCase();
+                    pathname = (u.hostname === 'www.instagram.com' || u.hostname === 'instagram.com')
+                        ? u.pathname.toLowerCase() : '';
                 } catch {
                     pathname = hrefRaw.split('?')[0].split('#')[0].toLowerCase();
                 }
-                const parts = pathname.split('/').filter(Boolean);
-                if (parts.length) {
-                    const candidateUser = parts[0];
-                    if (instagramAccountsSet.has(candidateUser)) return true;
-                }
+                const profile = pathname.match(/^\/([a-z0-9._]{1,30})\/?$/);
+                if (profile && instagramAccountsSet.has(profile[1])) return true;
                 const hrefLow = hrefRaw.toLowerCase();
                 if (keywordsToHide.some(rx => keywordRegexMatchesOutsideAllowedSpan(rx, hrefLow))) {
                     return true;
@@ -1710,8 +3526,8 @@ function isElementProtected(element) {
 
     function closeOverlayIfPossible() {
         try {
-            const closeBtn = document.querySelector('div[role="dialog"] [aria-label="Sulje"], div[role="dialog"] [aria-label="Close"], div[role="dialog"] svg[aria-label="Sulje"], div[role="dialog"] svg[aria-label="Close"]');
-            closeBtn?.click();
+            const closeBtn = document.querySelector('div[role="dialog"] [aria-label="Sulje"], div[role="dialog"] [aria-label="Close"], div[role="dialog"] svg[aria-label="Sulje"], div[role="dialog"] svg[aria-label="Close"], button[aria-label="Sulje"], button[aria-label="Close"], svg[aria-label="Sulje"], svg[aria-label="Close"]');
+            (closeBtn?.closest?.('button, [role="button"]') || closeBtn)?.click();
         } catch {}
     }
 
@@ -1719,6 +3535,20 @@ function isElementProtected(element) {
         return new Promise((resolve) => {
             try {
                 if (!node) return resolve(true);
+                // A friend-shared DM viewer is an intentional safe zone.
+                // Do not turn its contents into a global approval of the post.
+                if (ig2955IsTrustedDMMediaV326() || ig2955TrustedAuthorFromPostV326(node)) return resolve(true);
+
+                // Exact standalone/overlay captions always outrank prior approvals.
+                // Do not infer a verdict from surrounding comment text.
+                if (isPermalinkView() || node.closest?.('[role="dialog"], [aria-modal="true"]')) {
+                    const caption = ig2955FindPostCaptionV321(node) ||
+                        (node.matches?.('h1._ap3a, div[data-caption-scanned]') ? node : null);
+                    if (ig2955CaptionBannedReasonV321(caption)) {
+                        ig2955RememberCaptionBanV321(postID);
+                        return resolve(false);
+                    }
+                }
 
                 if (postID && scannedPostsCache.has(postID)) {
                     return resolve(!scannedPostsCache.get(postID));
@@ -1991,58 +3821,86 @@ function isElementProtected(element) {
 
     function scanPermalinkArticleAndAct() {
         try {
-            let postID = null;
-            const match = location.pathname.match(/\/(p|reel|tv)\/([A-Za-z0-9_-]+)/);
-            if (match) postID = match[2];
+            // V326: never close/reject shared media viewed from a trusted DM.
+            // For standalone posts, allow only an exact verified author exemption.
+            if (ig2955IsTrustedDMMediaV326()) return;
+            const match = location.pathname.match(/\/(?:p|reel|tv)\/([A-Za-z0-9_-]+)/);
+            const postID = match ? match[1] : null;
 
-            if (isPermalinkView()) {
-                const root = document.querySelector('main') || document.body;
-                
-                const captionNode = getTargetCaptionNode(root);
-                
-                if (!captionNode) return;
-                if (captionNode.getAttribute('data-caption-scanned') === '1') return;
-                
+            // IMPORTANT: Instagram rewrites the URL to /reel/<id> *while the
+            // profile-grid viewer modal is still open*. Modal must win over
+            // permalink or the previous branch redirects away from the page.
+            if (isPostOverlayOpen()) {
+                const overlay = document.querySelector('div[role="dialog"]:has(li._a9zj._a9zl h1), section[role="dialog"]:has(li._a9zj._a9zl h1), div[aria-modal="true"]:has(li._a9zj._a9zl h1), div[role="dialog"]:has(article), section[role="dialog"]:has(article), div[aria-modal="true"]:has(article)');
+                if (!overlay || overlay.getAttribute('data-ig-caption-banned-v321') === '1') return;
+                if (isPermalinkView() && !IG_MODAL_PERMALINK_COUNTED_V322.has(overlay)) {
+                    IG_MODAL_PERMALINK_COUNTED_V322.add(overlay);
+                    IG_CAPTION_SURFACE_STATE_V321.modalPermalinkPriorityFixes++;
+                }
+                if (ig2955TrustedAuthorFromPostV326(overlay)) return;
+                const exactCaption = ig2955FindPostCaptionV321(overlay);
+                if (exactCaption && !overlay.querySelector('article') && !IG_ARTICLELESS_MODAL_COUNTED_V321.has(overlay)) {
+                    IG_ARTICLELESS_MODAL_COUNTED_V321.add(overlay);
+                    IG_CAPTION_SURFACE_STATE_V321.articlelessModalsSeen++;
+                }
+                if (ig2955CaptionBannedReasonV321(exactCaption)) {
+                    ig2955HideBlockedPostSurfaceV321(overlay, postID, true);
+                    return;
+                }
+                const captionNode = getTargetCaptionNode(overlay);
+                if (!captionNode || captionNode.getAttribute('data-caption-scanned') === '1') return;
                 captionNode.setAttribute('data-caption-scanned', '1');
-                
                 expandAndScanNode(captionNode, postID).then(isClean => {
-                    if (!isClean) {
-                        let author = getAuthorFromNode(root) || (location.pathname.match(/^\/([^/]+)\//)?.[1]?.toLowerCase() || '');
-                        const RESERVED = new Set(['p','reel','tv','explore','reels','accounts','stories','direct','meta-ai','ai']);
-                        if (RESERVED.has(author)) author = ''; 
-
-                        if (author) {
-                            fastRedirect(`https://www.instagram.com/${author}/`);
-                        } else {
-                            fastRedirect('https://www.instagram.com/');
-                        }
-                    } else {
-                        const article = root.tagName === 'ARTICLE' ? root : root.querySelector('article');
-                        if (article) article.setAttribute('data-banned-scan', 'safe');
-                    }
+                    if (!isClean) ig2955HideBlockedPostSurfaceV321(overlay, postID, true);
+                    else overlay.querySelector('article')?.setAttribute('data-banned-scan', 'safe');
                 });
                 return;
             }
-            
-            if (isPostOverlayOpen()) {
-                const overlay = document.querySelector('div[role="dialog"], section[role="dialog"], div[aria-modal="true"]');
-                if (!overlay) return;
-                
-                const captionNode = getTargetCaptionNode(overlay);
-                if (!captionNode) return;
 
-                if (captionNode.getAttribute('data-caption-scanned') === '1') return;
-                captionNode.setAttribute('data-caption-scanned', '1');
-                
-                expandAndScanNode(captionNode, postID).then(isClean => {
-                    if (!isClean) {
-                        closeOverlayIfPossible();
-                        safelyHideFeedArticle(overlay);
-                    } else {
-                        const article = overlay.querySelector('article');
-                        if (article) article.setAttribute('data-banned-scan', 'safe');
+            if (isPermalinkView()) {
+                const root = document.querySelector('main') || document.body;
+                if (!root) return;
+                if (ig2955TrustedAuthorFromPostV326(root)) {
+                    const panel = ig2955PostPanelForPrepaintV324(root);
+                    if (panel) {
+                        panel.removeAttribute('data-ig-caption-panel-collapsed-v322');
+                        panel.style.removeProperty('display');
+                        panel.setAttribute('data-ig-post-cleared-v324', '1');
                     }
-                });
+                    return;
+                }
+                ig2955StartPostPanelGateV324(root, postID);
+                const existing = root.querySelector('[data-ig-caption-panel-collapsed-v322="1"]');
+                if (existing) {
+                    // React may recycle a permalink panel without replacing its DOM.
+                    // A changed post ID must not inherit the previous post's ban.
+                    if (existing.getAttribute('data-ig-caption-post-v322') === (postID || 'unknown')) return;
+                    existing.removeAttribute('data-ig-caption-panel-collapsed-v322');
+                    existing.removeAttribute('data-ig-caption-banned-v321');
+                    existing.removeAttribute('data-ig-caption-post-v322');
+                    existing.removeAttribute('data-ig-post-cleared-v324');
+                    existing.style.removeProperty('display');
+                }
+                const exactCaption = ig2955FindPostCaptionV321(root);
+                if (ig2955CaptionBannedReasonV321(exactCaption)) {
+                    ig2955HideBlockedPostSurfaceV321(root, postID, false);
+                    return;
+                }
+                const captionNode = getTargetCaptionNode(root);
+                if (!captionNode || captionNode.getAttribute('data-caption-scanned') === '1') return;
+                captionNode.setAttribute('data-caption-scanned', '1');
+                const pendingPanel = ig2955PostPanelForPrepaintV324(root);
+                const pendingRecord = pendingPanel && IG_POST_PENDING_V324.get(pendingPanel);
+                if (pendingRecord) pendingRecord.expansionRunning = true;
+                expandAndScanNode(captionNode, postID).then(isClean => {
+                    if (pendingRecord) pendingRecord.expansionRunning = false;
+                    if (!isClean) ig2955HideBlockedPostSurfaceV321(root, postID, false);
+                    else {
+                        const article = root.tagName === 'ARTICLE' ? root : root.querySelector('article');
+                        if (article) article.setAttribute('data-banned-scan', 'safe');
+                        ig2955StartPostPanelGateV324(root, postID);
+                    }
+                }).catch(() => { if (pendingRecord) pendingRecord.expansionRunning = false; });
             }
         } catch {}
     }
@@ -2085,7 +3943,7 @@ function buildSearchBanCSS() {
     try {
         const scope = '[role="listbox"]';
         const rules = instagramAccountsToHideLower.map(acc => {
-            const p = `${scope} a[href*="/${acc}/"]`;
+            const p = `${scope} a[href="/${acc}/"], ${scope} a[href="/${acc}"]`;
             return `
 /* hide search result for /${acc}/ (scoped to listbox) */
 ${p}, ${p} * {
@@ -2166,6 +4024,28 @@ ${p}, ${p} * {
         }
     }
 
+    // v29.5.5: explicit account bans take precedence over cached/network approvals.
+    // Exact Instagram profile hrefs only; never substring-match a partial username or
+    // interpret an off-site URL's first path segment as an Instagram profile.
+    function ig2955ArticleHasListedAccountV320(article) {
+        try {
+            if (!article || article.nodeType !== 1 || !instagramAccountsSet.size) return false;
+            const anchors = article.querySelectorAll?.('a[href]') || [];
+            for (let index = 0; index < anchors.length && index < 72; index++) {
+                const href = String(anchors[index].getAttribute('href') || '');
+                if (!href || href[0] === '#') continue;
+                let url;
+                try { url = new URL(href, location.origin); } catch { continue; }
+                if (url.hostname !== 'www.instagram.com' && url.hostname !== 'instagram.com') continue;
+                const match = url.pathname.match(/^\/([A-Za-z0-9._]{1,30})\/?$/);
+                if (match && instagramAccountsSet.has(match[1].toLowerCase())) return true;
+            }
+            // Some React-mounted cards temporarily expose only an author label.
+            const author = getAuthorFromNode(article);
+            return !!author && instagramAccountsSet.has(author.toLowerCase());
+        } catch { return false; }
+    }
+
     function getSearchRowElement(anchor) {
         let row = anchor.closest('[role="option"], li, a[role="link"], a._a6hd, a.x1i10hfl, a');
         if (!row) row = anchor;
@@ -2194,9 +4074,6 @@ ${p}, ${p} * {
             if (!allowedWordsLower.some(w => low.includes(w))) {
                 for (const rx of keywordsToHide) {
                     try { if (keywordRegexMatches(rx, raw)) return `regex:${String(rx)}`; } catch {}
-                }
-                for (const rx of keywordsToHide) {
-                    try { if (rx.test(raw)) return `regex:${String(rx)}`; } catch {}
                 }
             }
         }
@@ -2256,6 +4133,10 @@ ${p}, ${p} * {
 
         anchorSet.forEach(a => {
             try {
+                // V333 owns these exact native account-result rows. The older
+                // generic search hider applies inline display:none to individual
+                // descendants, which cannot recover when React recycles a row.
+                if (a.closest('div.xmzvs34:has(> a.x1qnrgzn.x1cek8b2[href^="/"])')) return;
                 const row = getSearchRowElement(a);
                 if (!row) return;
                 if (row.getAttribute(IG_SEARCH_APPROVE_ATTR) === '1' || row.hasAttribute(IG_SEARCH_HIDDEN_ATTR)) return;
@@ -2897,16 +4778,8 @@ overflow: visible !important;
             margin-top: -16px !important; 
         }
 
-        /* Keep the whole tray paint-hidden until the first account-classification /
-           compaction commit has completed. Layout is preserved, so the reveal itself
-           does not make Instagram recalculate the carousel geometry. */
-        div[data-pagelet="story_tray"]:not([data-ig-story-tray-ready]) {
-            visibility: hidden !important;
-            opacity: 0 !important;
-            pointer-events: none !important;
-            transition: none !important;
-            animation: none !important;
-        }
+        /* v29.5.5: the whole Stories tray is never gated here. The early
+           stylesheet protects each unverified <li> independently instead. */
 
         /* Newly-created story slots are paint-gated individually until Instagram
            has populated the accessible username. IMPORTANT: keep their geometry while
@@ -2985,6 +4858,7 @@ overflow: visible !important;
 injectInlineCSS();
 
     const hideCriticalElements = () => {
+        if (ig2955ExploreRouteV328()) { ig2955EnsureExploreObserverV328(); return; }
         // Home Feed is virtualized and React-owned. Do not run the broad selector
         // sweep here; several legacy selectors can match live feed controls/cards.
         if (!isMetaManglerHomeFeedPath()) {
@@ -3018,8 +4892,180 @@ injectInlineCSS();
     updateOverlayState();
     scanPermalinkArticleAndAct();
 
+
+    // ===== v29.5.5 V327: private profiles and complete suggested-people modules =====
+    // Match a genuine privacy notice on a single-profile route. SVGs are not
+    // proof that an account is private (empty accounts reuse similar artwork).
+    const IG_PRIVATE_STATE_V327 = {
+        detected: 0, backButtonsAdded: 0, redirects: 0,
+        recommendationPanelsCollapsed: 0, currentProfile: '', privateFound: false,
+        publicPrepaintReleases: 0
+    };
+    const IG_PRIVATE_RECOMMENDATION_LABELS_V327 = new Set([
+        'sinulle ehdotettua', 'sinulle ehdotettu', 'suggested for you',
+        'recommended for you', 'people you may know', 'ehdotuksia sinulle'
+    ]);
+
+    function ig2955PrivateProfileRouteV327() {
+        try {
+            if (location.hostname !== 'www.instagram.com') return '';
+            const match = (location.pathname || '').match(/^\/([a-z0-9._]+)\/?$/i);
+            if (!match) return '';
+            const reserved = new Set([
+                'accounts','explore','reels','p','reel','tv','direct','stories',
+                'archive','ai','meta-ai','about','help','legal','developer','challenge',
+                'privacy','graphql','api','settings','search','notifications'
+            ]);
+            return reserved.has(match[1].toLowerCase()) ? '' : match[1].toLowerCase();
+        } catch { return ''; }
+    }
+
+    // Evidence of a public profile must come from its own media grid, not the
+    // suggested-people carousel. No timeout-based release: a late private notice
+    // must never let suggested accounts flash into view.
+    function ig2955PublicProfilePostGridV329(main) {
+        try {
+            return !!main?.querySelector('a[href^="/p/"]:has(> div._aagu), a[href^="/reel/"]:has(> div._aagu), a[href^="/tv/"]:has(> div._aagu)');
+        } catch { return false; }
+    }
+
+    function ig2955FindPrivateProfileNoticeV327() {
+        try {
+            const main = document.querySelector('main');
+            if (!main) return null;
+            const notices = main.querySelectorAll('div.xieb3on span[dir="auto"], div.xieb3on h2, div.xieb3on h3');
+            for (const node of notices) {
+                const text = String(node.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+                if (text === 'tämä profiili on yksityinen' ||
+                    text === 'tämä tili on yksityinen' ||
+                    text === 'this account is private' ||
+                    text === 'this profile is private') return node;
+            }
+        } catch {}
+        return null;
+    }
+
+    function ig2955CollapsePrivateRecommendationsV327(main) {
+        try {
+            if (!main || !ig2955PrivateProfileRouteV327()) return;
+            const headings = main.querySelectorAll('h2, h3, h4, [role="heading"]');
+            for (const heading of headings) {
+                const title = String(heading.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+                if (!IG_PRIVATE_RECOMMENDATION_LABELS_V327.has(title)) continue;
+
+                // Find the *smallest* containing heading + person-carousel wrapper.
+                // Never collapse main, headers, the profile itself or the privacy notice.
+                let panel = heading.parentElement;
+                for (let i = 0; panel && i < 7; i++, panel = panel.parentElement) {
+                    if (panel === main || panel.matches?.('main, nav, body, html, header, footer, article')) break;
+                    if (panel.querySelector?.('div.xieb3on')) break;
+                    if (!panel.querySelector?.('ul li, [role="list"] [role="listitem"]')) continue;
+                    if (!panel.querySelector?.('a[href^="/"]')) continue;
+                    if (panel.getAttribute('data-ig-private-recommendations-v327') !== '1') {
+                        panel.setAttribute('data-ig-private-recommendations-v327', '1');
+                        IG_PRIVATE_STATE_V327.recommendationPanelsCollapsed++;
+                    }
+                    break;
+                }
+            }
+        } catch {}
+    }
+
+    function ig2955AddPrivateBackButtonV327(notice) {
+        try {
+            const privateBlock = notice.closest('div.xieb3on');
+            if (!privateBlock) return;
+            const host = notice.parentElement?.parentElement || privateBlock;
+            if (host.querySelector('#ig-private-back-v327')) return;
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.id = 'ig-private-back-v327';
+            button.textContent = /^tämä /i.test(String(notice.textContent || '').trim()) ? '← Takaisin' : '← Go Back';
+            button.setAttribute('aria-label', 'Go back to previous page');
+            button.style.cssText = [
+                'display:block', 'margin:16px auto 0', 'padding:10px 20px',
+                'background:#0095f6', 'color:#fff', 'border:0',
+                'border-radius:8px', 'font:600 14px sans-serif',
+                'cursor:pointer', 'min-height:36px'
+            ].join(';');
+            button.addEventListener('click', () => {
+                // Avoid using the old private-account redirect. This is a real
+                // back action; Instagram Home is only a direct-landing fallback.
+                if (window.history.length > 1) window.history.back();
+                else location.assign(location.origin + '/');
+            });
+            host.appendChild(button);
+            IG_PRIVATE_STATE_V327.backButtonsAdded++;
+        } catch {}
+    }
+
+    function ig2955HandlePrivateProfileV327() {
+        try {
+            const profile = ig2955PrivateProfileRouteV327();
+            const html = document.documentElement;
+            if (!html) return false;
+            if (profile !== IG_PRIVATE_STATE_V327.currentProfile) {
+                IG_PRIVATE_STATE_V327.currentProfile = profile;
+                IG_PRIVATE_STATE_V327.privateFound = false;
+                html.removeAttribute('data-ig-private-profile-v327');
+            }
+            if (!profile) {
+                html.removeAttribute('data-ig-private-profile-v327');
+                html.removeAttribute('data-ig-profile-rec-prepaint-v329');
+                html.removeAttribute('data-ig-profile-rec-public-v329');
+                return false;
+            }
+
+            const notice = ig2955FindPrivateProfileNoticeV327();
+            if (!notice) {
+                html.removeAttribute('data-ig-private-profile-v327');
+                IG_PRIVATE_STATE_V327.privateFound = false;
+                // Do not mistake a late-loading private notice for a public page.
+                // Keep its recommendation wrapper prehidden until real public posts exist.
+                if (ig2955PublicProfilePostGridV329(document.querySelector('main'))) {
+                    if (html.getAttribute('data-ig-profile-rec-public-v329') !== profile)
+                        IG_PRIVATE_STATE_V327.publicPrepaintReleases++;
+                    html.setAttribute('data-ig-profile-rec-public-v329', profile);
+                    html.removeAttribute('data-ig-profile-rec-prepaint-v329');
+                } else {
+                    html.removeAttribute('data-ig-profile-rec-public-v329');
+                    html.setAttribute('data-ig-profile-rec-prepaint-v329', '1');
+                }
+                return false;
+            }
+            if (!IG_PRIVATE_STATE_V327.privateFound) IG_PRIVATE_STATE_V327.detected++;
+            IG_PRIVATE_STATE_V327.privateFound = true;
+            html.removeAttribute('data-ig-profile-rec-public-v329');
+            html.setAttribute('data-ig-profile-rec-prepaint-v329', '1');
+            html.setAttribute('data-ig-private-profile-v327', '1');
+
+            if (IG_PRIVATE_ACCOUNT_REDIRECT === 1) {
+                IG_PRIVATE_STATE_V327.redirects++;
+                fastRedirect(location.origin + '/');
+                return true;
+            }
+            ig2955AddPrivateBackButtonV327(notice);
+            ig2955CollapsePrivateRecommendationsV327(document.querySelector('main'));
+            return true;
+        } catch { return false; }
+    }
+
+    window.__IGCleanerPrivateProfilesV2955 = () => ({
+        redirectEnabled: IG_PRIVATE_ACCOUNT_REDIRECT === 1,
+        currentProfile: IG_PRIVATE_STATE_V327.currentProfile,
+        privateFound: IG_PRIVATE_STATE_V327.privateFound,
+        detected: IG_PRIVATE_STATE_V327.detected,
+        backButtonsAdded: IG_PRIVATE_STATE_V327.backButtonsAdded,
+        recommendationPanelsCollapsed: IG_PRIVATE_STATE_V327.recommendationPanelsCollapsed,
+        prepaintActive: document.documentElement?.getAttribute('data-ig-profile-rec-prepaint-v329') === '1',
+        publicPrepaintReleases: IG_PRIVATE_STATE_V327.publicPrepaintReleases,
+        redirects: IG_PRIVATE_STATE_V327.redirects
+    });
+
     function checkForRedirectElements() {
         if (!location.hostname.includes('instagram.com')) return;
+        // Private notices use the independent 0/1 setting, not generic icon redirection.
+        if (ig2955HandlePrivateProfileV327()) return;
         const allSelectors = selectorsToMonitorAndRedirect.join(',');
         const foundElements = document.querySelectorAll(allSelectors);
         if (foundElements.length > 0) {
@@ -3045,14 +5091,6 @@ injectInlineCSS();
             [aria-label*="Myös Metalta"],
             [title*="Myös Metalta"],
             svg[aria-label*="Myös Metalta"],
-            nav div[role="button"][tabindex][aria-label="Tutki"],
-            [role="navigation"] div[role="button"][tabindex][aria-label="Tutki"],
-            nav svg[aria-label="Tutki"],
-            [role="navigation"] svg[aria-label="Tutki"],
-            nav div > span.html-span > div.x1n2onr6 > a.x1i10hfl._a6hd[href="/explore/"],
-            [role="navigation"] div > span.html-span > div.x1n2onr6 > a.x1i10hfl._a6hd[href="/explore/"],
-            nav a[href="/explore/"],
-            [role="navigation"] a[href="/explore/"],
 	    nav span:has(a[href*="help.instagram.com/347751748650214"]),
             nav div[role="button"][tabindex][aria-label="Threads"],
             [role="navigation"] div[role="button"][tabindex][aria-label="Threads"],
@@ -3155,8 +5193,8 @@ injectInlineCSS();
 
     // ===== v48: targeted story-slot paint gate =====
     // Home-page story tray scope predicate used by the lightweight story-slot observer.
-    // V6H gates only the tray's paint during its first classification/compaction commit;
-    // this predicate tells the observer when that Story-only protection may operate.
+    // v29.5.5: only individual Stories tiles are prepaint-gated, not the tray.
+    // This predicate limits the early observer to the Home Stories surface.
     function isMetaManglerStoryTrayPathV45() {
         try {
             if (!location.hostname.includes('instagram.com')) return false;
@@ -3167,9 +5205,8 @@ injectInlineCSS();
         }
     }
 
-    // After the initial atomic tray reveal, only individual <li> slots are paint-hidden
-    // while their username is classified. Their geometry stays intact until any banned
-    // slot and the later translateX positions can be committed together before paint.
+    // A tile is never revealed until its username is positively classified.
+    // Banned tiles retain geometry until their transform compaction commits.
     // ===== Story tray account hider =====
     // Hide story tiles when the account username is explicitly listed in
     // instagramAccountsToHide or matches one of keywordsToHide.
@@ -3178,9 +5215,12 @@ injectInlineCSS();
     const IG_STORY_BAN_MARKER = 'data-ig-story-account-banned';
     const IG_STORY_PENDING_MARKER = 'data-ig-story-pending';
     const IG_STORY_BAN_STAGING_MARKER = 'data-ig-story-ban-staging';
-    const IG_STORY_TRAY_READY_MARKER = 'data-ig-story-tray-ready';
+    const IG_STORY_TRAY_READY_MARKER = 'data-ig-story-tray-ready'; // diagnostic only; never a paint gate
+    const IG_STORY_CLEARED_MARKER_V2955 = 'data-ig-story-cleared-v2955';
     let __igStoryTrayObserver = null;
     let __igStoryTrayObservedNode = null;
+    let __igStoryTrayArrivalObserverV2955 = null;
+    const __igStoryStartupV2955 = { startedAt: Date.now(), trayFoundAt: 0, firstSafeAt: 0, arrivalWatchHits: 0 };
 
     function normalizeInstagramStoryUsername(value = '') {
         try {
@@ -3240,7 +5280,7 @@ injectInlineCSS();
         for (const rx of keywordsToHide) {
             try {
                 if (rx.global || rx.sticky) rx.lastIndex = 0;
-                if (rx.test(value)) return true;
+                if (keywordRegexMatches(rx, value)) return true;
                 if (rx.global || rx.sticky) rx.lastIndex = 0;
             } catch {}
         }
@@ -3273,9 +5313,7 @@ injectInlineCSS();
                 const safe = value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
                 selectors.push(
                     `div[data-pagelet="story_tray"] li:has(> div[role="button"][aria-label*="Käyttäjän ${safe} " i])`,
-                    `div[data-pagelet="story_tray"] li:has(> div[role="button"][aria-label*="User ${safe} " i])`,
-                    `div[data-pagelet="story_tray"] div[role="button"][aria-label*="Käyttäjän ${safe} " i]`,
-                    `div[data-pagelet="story_tray"] div[role="button"][aria-label*="User ${safe} " i]`
+                    `div[data-pagelet="story_tray"] li:has(> div[role="button"][aria-label*="User ${safe} " i])`
                 );
             };
 
@@ -3324,6 +5362,8 @@ injectInlineCSS();
     function markInstagramStoryItemPendingV46(item) {
         try {
             if (!item || item.nodeType !== 1 || item.tagName !== 'LI') return false;
+            // A recycled <li> must be classified again before it can paint.
+            item.removeAttribute(IG_STORY_CLEARED_MARKER_V2955);
             if (item.hasAttribute(IG_STORY_BAN_MARKER) || item.hasAttribute(IG_STORY_BAN_STAGING_MARKER)) {
                 item.removeAttribute(IG_STORY_PENDING_MARKER);
                 return false;
@@ -3362,8 +5402,10 @@ injectInlineCSS();
                 return true;
             }
 
-            // Legitimate account: now that it has been positively classified,
-            // allow the story slot to enter the already-visible tray.
+            // Positive username classification releases this tile, independently
+            // of other tiles still loading elsewhere in the Stories tray.
+            item.setAttribute(IG_STORY_CLEARED_MARKER_V2955, 'true');
+            if (!__igStoryStartupV2955.firstSafeAt) __igStoryStartupV2955.firstSafeAt = Date.now();
             item.removeAttribute(IG_STORY_PENDING_MARKER);
             return true;
         } catch {
@@ -3501,10 +5543,91 @@ injectInlineCSS();
             // One initial pass is enough. After that, only mutation-affected <li>s are
             // classified, preventing the story observer from repeatedly walking the entire
             // tray while Instagram hydrates the rest of the homepage.
+            if (!__igStoryStartupV2955.trayFoundAt) __igStoryStartupV2955.trayFoundAt = Date.now();
             prepareInstagramStorySlotsV46(tray);
-            tray.setAttribute(IG_STORY_TRAY_READY_MARKER, 'true');
+            // The ready marker is retained for diagnostics, not visibility.
         } catch {}
     }
+
+    // Attach as soon as React inserts the Story tray, instead of waiting for
+    // the periodic maintenance sweep. This observer stops once the tray is found.
+    function watchForInstagramStoryTrayV2955() {
+        try {
+            if (!isMetaManglerStoryTrayPathV45()) {
+                __igStoryTrayArrivalObserverV2955?.disconnect();
+                __igStoryTrayArrivalObserverV2955 = null;
+                return;
+            }
+            if (getInstagramStoryTrayV46()) {
+                ensureInstagramStoryTrayObserverV48();
+                __igStoryTrayArrivalObserverV2955?.disconnect();
+                __igStoryTrayArrivalObserverV2955 = null;
+                return;
+            }
+            if (__igStoryTrayArrivalObserverV2955 || !document.documentElement) return;
+            const observer = trackObserver(new MutationObserver(mutations => {
+                if (!isMetaManglerStoryTrayPathV45()) {
+                    observer.disconnect();
+                    if (__igStoryTrayArrivalObserverV2955 === observer) __igStoryTrayArrivalObserverV2955 = null;
+                    return;
+                }
+                let found = false;
+                for (const mutation of mutations) {
+                    if (mutation.type === 'attributes' && mutation.target?.matches?.('div[data-pagelet="story_tray"]')) {
+                        found = true;
+                        break;
+                    }
+                    if (mutation.type !== 'childList') continue;
+                    for (const node of mutation.addedNodes || []) {
+                        if (node?.nodeType !== 1) continue;
+                        if (node.matches?.('div[data-pagelet="story_tray"]') ||
+                            node.querySelector?.('div[data-pagelet="story_tray"]')) {
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (found) break;
+                }
+                if (!found) return;
+                __igStoryStartupV2955.arrivalWatchHits++;
+                ensureInstagramStoryTrayObserverV48();
+                if (__igStoryTrayObserver) {
+                    observer.disconnect();
+                    if (__igStoryTrayArrivalObserverV2955 === observer) __igStoryTrayArrivalObserverV2955 = null;
+                }
+            }));
+            observer.observe(document.documentElement, {
+                childList: true, subtree: true,
+                attributes: true, attributeFilter: ['data-pagelet']
+            });
+            __igStoryTrayArrivalObserverV2955 = observer;
+        } catch {}
+    }
+
+    // Read-only, bounded startup report. No usernames or story URLs exported.
+    try {
+        Object.defineProperty(window, '__IGCleanerStoryTrayV2955', { configurable: true, value: () => {
+            const tray = getInstagramStoryTrayV46();
+            const items = tray ? Array.from(tray.querySelectorAll(':scope > li')).slice(0, 120) : [];
+            return {
+                mode: 'independent-story-tile-prepaint',
+                route: location.pathname,
+                trayPresent: !!tray,
+                trayObserverActive: !!__igStoryTrayObserver,
+                arrivalWatcherActive: !!__igStoryTrayArrivalObserverV2955,
+                arrivalWatchHits: __igStoryStartupV2955.arrivalWatchHits,
+                trayFirstDetectedAfterStartMs: __igStoryStartupV2955.trayFoundAt ?
+                    __igStoryStartupV2955.trayFoundAt - __igStoryStartupV2955.startedAt : null,
+                firstSafeStoryAfterStartMs: __igStoryStartupV2955.firstSafeAt ?
+                    __igStoryStartupV2955.firstSafeAt - __igStoryStartupV2955.startedAt : null,
+                safeTiles: items.filter(item => item.hasAttribute(IG_STORY_CLEARED_MARKER_V2955)).length,
+                pendingTiles: items.filter(item => item.hasAttribute(IG_STORY_PENDING_MARKER)).length,
+                blockedOrStagedTiles: items.filter(item => item.hasAttribute(IG_STORY_BAN_MARKER) ||
+                    item.hasAttribute(IG_STORY_BAN_STAGING_MARKER)).length,
+                totalSampledTiles: items.length
+            };
+        }});
+    } catch {}
 
     // Instagram's story carousel virtualizes/positions its <li> items with
     // explicit translateX() values. display:none removes the banned item itself,
@@ -3691,8 +5814,23 @@ injectInlineCSS();
         }
     }
 
+    // Search/Haku and Explore/Tutki navigation must never be mistaken for
+    // filtered content by the legacy broad selectors. Never unhide search results.
+    function ig2955ProtectNavSearchV328(element) {
+        try {
+            if (!element?.closest?.('nav, [role="navigation"]')) return false;
+            const selector = 'svg[aria-label="Haku"], svg[aria-label="Search"], svg[aria-label="Tutki"], svg[aria-label="Explore"], [aria-label="Search"], [aria-label="Haku"]';
+            return element.matches?.(selector) || !!element.querySelector?.(selector) ||
+                !!element.closest?.('a, [role="button"], span.html-span')?.querySelector?.(selector);
+        } catch { return false; }
+    }
+
     function collapseElement(element) {
-        if (isHomeFeedArticleContext(element)) return;
+        // V333: native search account rows are owned by the exact identity
+        // scanner. Broad keyword hiders must not leave non-restorable inline
+        // styles on avatar/name descendants when Instagram recycles the card.
+        if (element?.closest?.('div.xmzvs34:has(> a.x1qnrgzn.x1cek8b2[href^="/"])')) return;
+        if (isHomeFeedArticleContext(element) || ig2955ProtectNavSearchV328(element)) return;
         if (!hiddenElements.has(element)) {
             if (isElementProtected(element)) return;
 
@@ -3938,6 +6076,11 @@ injectInlineCSS();
 
     function handleRedirectionsAndContentHiding() {
         currentURL = window.location.href;
+        if (ig2955ExploreRouteV328() && IG_EXPLORE_PAGE_REDIRECT !== 1) {
+            ig2955EnsureExploreObserverV328();
+            ig2955ScanExploreCardsV328();
+            return;
+        }
 
         // === THE SAFE ZONE TOGGLE ===
         const currentPathLow = location.pathname.toLowerCase();
@@ -4005,7 +6148,7 @@ injectInlineCSS();
         for (const rx of keywordsToHide) {
             try {
                 if (rx.global || rx.sticky) rx.lastIndex = 0;
-                if (rx.test(value)) {
+                if (keywordRegexMatches(rx, value)) {
                     if (rx.global || rx.sticky) rx.lastIndex = 0;
                     return true;
                 }
@@ -4908,6 +7051,7 @@ injectInlineCSS();
         if (!hasAddedElement) return;
 
         injectMinimalNoGlimpseNavCSS();
+        ig2955HandlePrivateProfileV327();
 
         hideIGAccountEditSectionsV43();
         try {
@@ -4923,6 +7067,7 @@ injectInlineCSS();
         } catch {}
         hideProfileThreadsTags();
         updateOverlayState();
+        scanPermalinkArticleAndAct(); // v29.5.5: caption identity on the new <li>-based viewer
         makeOverlayLikesClickable(); 
         fastSynchronousHider(mutationsList); 
         if (observerScheduled) return;
@@ -5326,15 +7471,23 @@ injectInlineCSS();
     function mainHandler() {
         updateMetaManglerFeedGateClass();
         updateMetaManglerAccountEditClassV43();
+        ig2955UpdatePostPrepaintRouteV324();
         injectMinimalNoGlimpseNavCSS();
+        ig2955HandlePrivateProfileV327();
+        ig2955EnsureNonHomePrepaintObserverV324();
+        ig2955EnsureExploreObserverV328();
+        ig2955EnsureNativeSearchObserverV331();
+        ig2955SyncNativeSearchPresentationV335();
         patchIGSelfStoryShortcutV44();
         hideIGAccountEditSectionsV43();
         hideProfileThreadsTags();
         hideHomeFeedFooterLinks();
+        ig2955CollapseBannedGridCardsV322();
         refreshHomeFeedFooterObserver();
         watchForHomeFeedRootV27();
         ensureHomeFeedPrepaintObserverV27();
         injectHomeFeedHybridGateCSS();
+        watchForInstagramStoryTrayV2955();
         handleRedirectionsAndContentHiding();
         if (isReelsPage()) {
             updateOverlayState();
@@ -5455,9 +7608,14 @@ injectInlineCSS();
     onEvent(window, 'locationchange', function() {
         updateMetaManglerFeedGateClass();
         updateMetaManglerAccountEditClassV43();
-        if (isMetaManglerStoryTrayPathV45()) {
-            ensureInstagramStoryTrayObserverV48();
-        } else {
+        ig2955UpdatePostPrepaintRouteV324();
+        ig2955HandlePrivateProfileV327();
+        ig2955EnsureNonHomePrepaintObserverV324();
+        ig2955EnsureExploreObserverV328();
+        ig2955EnsureNativeSearchObserverV331();
+        ig2955SyncNativeSearchPresentationV335();
+        watchForInstagramStoryTrayV2955();
+        if (!isMetaManglerStoryTrayPathV45()) {
             if (__igStoryTrayObserver) {
                 try { __igStoryTrayObserver.disconnect(); } catch {}
             }
@@ -5745,6 +7903,11 @@ injectInlineCSS();
             if (!article?.isConnected || !id ||
                 __bf2760HomeV5GetArticlePostID(article) !== id ||
                 __bf2760HomeV6EStillRejected(id)) return false;
+            if (ig2955ArticleHasListedAccountV320(article)) {
+                __bf2760HomeV6NRevokePaint(article);
+                __bf2760HomeV5Reject(article, id, true, 'listed-account');
+                return false;
+            }
             article.setAttribute('data-bf-home-paint-ready', id);
             return true;
         } catch { return false; }
@@ -6115,6 +8278,12 @@ injectInlineCSS();
             if (!article?.isConnected || !id) return;
             const currentID = __bf2760HomeV5GetArticlePostID(article);
             if (currentID !== id) return;
+            const trustedAuthorV326 = ig2955TrustedHomeAuthorV326(article);
+            if (trustedAuthorV326) networkFeedRejectedPostIDs.delete(id);
+            if (!trustedAuthorV326 && ig2955ArticleHasListedAccountV320(article)) {
+                __bf2760HomeV5Reject(article, id, true, 'listed-account');
+                return;
+            }
             __bf2760HomeV1Decision(id, 'approve');
             __bf2760HomeV5RememberDecision(id, false, verification);
             __bf2760HomeV5RemoveQueued(article, id);
@@ -6136,6 +8305,10 @@ injectInlineCSS();
     function __bf2760HomeV5Reject(article, id, hide = true, reason = 'other') {
         try {
             if (!article?.isConnected || !id) return;
+            if (ig2955TrustedHomeAuthorV326(article)) {
+                __bf2760HomeV5Approve(article, id, 'trusted-author');
+                return;
+            }
             const currentID = __bf2760HomeV5GetArticlePostID(article);
             if (currentID && currentID !== id) return;
             __bf2760HomeV1Decision(id, 'reject', reason);
@@ -6163,6 +8336,7 @@ injectInlineCSS();
         try {
             if (!article?.isConnected || __bf2760HomeV5GetArticlePostID(article) !== id) return;
             if (networkFeedRejectedPostIDs.has(id) || feedBannedPostIDs.has(id) ||
+                ig2955ArticleHasListedAccountV320(article) ||
                 __bf2760HomeV5ImmediateRejectSignal(article, id) || __bf2760HomeV5CheapContentCheck(article)) {
                 __bf2760HomeV5Reject(article, id, true);
                 return;
@@ -6326,6 +8500,17 @@ injectInlineCSS();
             if (wasDirty) state.dirtyArticles.delete(article);
             const identityChanged = !priorID || priorID !== id;
 
+            // Exact owner trust overrides caption/previous network rejection.
+            if (ig2955TrustedHomeAuthorV326(article)) {
+                __bf2760HomeV5Approve(article, id, 'trusted-author');
+                return;
+            }
+            // Explicit listed accounts cannot inherit a prior post-ID allow decision,
+            // including while React recycles a visible article.
+            if (ig2955ArticleHasListedAccountV320(article)) {
+                __bf2760HomeV5Reject(article, id, true, 'listed-account');
+                return;
+            }
             // Structured/network and durable rejects always win. Persist a network
             // rejection once it reaches the DOM so recycled hosts keep the same decision.
             if (networkFeedRejectedPostIDs.has(id)) { __bf2760HomeV5Reject(article, id, true, 'network'); return; }
@@ -6799,7 +8984,9 @@ injectInlineCSS();
                     if (result === 'clean-stable' || result === 'clean-expanded' || result === 'clean-expanded-open') {
                         // MAIN-world classification can complete while DOM verification
                         // is already in flight, so structured rejects win at commit time.
-                        if (networkFeedRejectedPostIDs.has(id)) {
+                        if (ig2955ArticleHasListedAccountV320(article)) {
+                            __bf2760HomeV5Reject(article, id, true, 'listed-account');
+                        } else if (networkFeedRejectedPostIDs.has(id)) {
                             __bf2760HomeV5Reject(article, id, true, 'network');
                         } else if (__bf2760HomeV5ImmediateRejectSignal(article, id)) {
                             __bf2760HomeV5Reject(article, id, true, 'badge-or-follow');
@@ -7108,6 +9295,24 @@ injectInlineCSS();
             }
         } catch { hasAddedElement = true; }
         if (!hasAddedElement) return;
+        if (ig2955ExploreRouteV328() && IG_EXPLORE_PAGE_REDIRECT !== 1) {
+            ig2955EnsureExploreObserverV328();
+            ig2955ScheduleExploreScanV328();
+            return;
+        }
+        ig2955EnsureNonHomePrepaintObserverV324();
+
+        if (ig2955GridScanRouteV322()) {
+            for (const mutation of mutationsList || []) {
+                for (const node of mutation.addedNodes || []) {
+                    if (node?.nodeType !== 1) continue;
+                    if (node.matches?.('div.x1j53mea, a[href*="/reel/"], a[href*="/p/"], a[href*="/tv/"]') ||
+                        node.querySelector?.('div.x1j53mea > a[href], a:has(> div._aagu)')) {
+                        ig2955CollapseBannedGridCardsV322(node);
+                    }
+                }
+            }
+        }
 
         injectMinimalNoGlimpseNavCSS();
         hideIGAccountEditSectionsV43();
@@ -7139,6 +9344,7 @@ injectInlineCSS();
             } else {
                 collapseElementsBySelectors(selectorsToHide);
                 hideProfileThreadsTags();
+                ig2955CollapseBannedGridCardsV322();
                 processFeedPostsForScanning();
                 collapseElementsByKeywordsOrPaths(keywordsToHide, instagramBannedPaths, selectorsToMonitor);
                 if (location.hostname.includes('instagram.com')) {

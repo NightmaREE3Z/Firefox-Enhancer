@@ -1,6 +1,7 @@
 // ==UserScript==
-// @name         FBCleaner 29.5.0
-// @date      	 2026-10-20
+// @name         FBCleaner 29.5.5
+// @version	 29.5.5
+// @date	 2026-10-21
 // @description  Makes my Facebook experience less terrible.
 // @match        *://*.facebook.com/*
 // @grant        none
@@ -10,55 +11,60 @@
 (() => {
 'use strict';
 
-// ===== v103: early, post-only no-glimpse paint boundary =====
-// Installed at document_start before the remainder of the large scanner initializes.
-// Keep real Facebook loader cards native; never gate headers, chat, dialogs or navigation.
-const FB_EARLY_POST_GATE_STYLE_V103 = 'fb-early-post-gate-style-v103';
-const syncFBEarlyPostGateV103 = () => {
+// v313 diagnostic console entry: define this before the main startup routine.
+// The audit remains read-only; initialization failures must not erase its entry point.
+try {
+    window.__FBCleanerPassiveCaptionAuditV313 = () => {
+        try { return auditFBPassiveCaptionsV313(); }
+        catch (e) { return { mode: 'READ-ONLY', error: 'audit-not-initialized' }; }
+    };
+} catch (e) {}
+
+// ===== v311: immediate paint boundary for undecided feed posts =====
+// Content-bearing cards are concealed from document-start until the canonical
+// scanner approves or bans them. Unlike the experimental v103 gate, this adds
+// NO post-height placeholder and NO requirement for a network full-caption match.
+// Native Facebook skeletons without real post content retain their own paint.
+const FB_EARLY_FEED_GATE_STYLE_V311 = 'fb-early-feed-gate-v311';
+const syncFBEarlyFeedGateV311 = () => {
     try {
         const html = document.documentElement;
-        if (!html) return;
+        if (!html) return false;
         const path = (location.pathname || '/').replace(/\/+$/, '').toLowerCase() || '/';
         const home = path === '/' || path === '/home.php';
-        const specific = ['/four3four', '/itsstillrealtousdammit', '/prowrestlingworld',
-            '/weirdimagesworthseeing'].some(p => path === p || path.startsWith(p + '/'));
-        html.classList.toggle('fb-early-post-gate-v103', home || specific);
-        html.classList.toggle('fb-early-supported-page-v103', specific);
-        if (!home && !specific) return;
-        if (document.getElementById(FB_EARLY_POST_GATE_STYLE_V103)) return;
+        const supported = ['/four3four', '/itsstillrealtousdammit',
+            '/prowrestlingworld', '/weirdimagesworthseeing']
+            .some(page => path === page || path.startsWith(page + '/'));
+        html.classList.toggle('fb-early-home-feed-v311', home);
+        html.classList.toggle('fb-early-supported-page-v311', supported);
+        if (document.getElementById(FB_EARLY_FEED_GATE_STYLE_V311)) return true;
         const style = document.createElement('style');
-        style.id = FB_EARLY_POST_GATE_STYLE_V103;
+        style.id = FB_EARLY_FEED_GATE_STYLE_V311;
         style.textContent = `
-            /* Only top-level feed cards that have NOT received a final decision. */
-            html.fb-early-post-gate-v103 :is([role="feed"] div[aria-posinset], [role="feed"] > [role="article"], div[data-pagelet^="FeedUnit_"], div[data-pagelet^="TimelineFeedUnit_"]):not(.fb-post-approved):not(.fb-feed-unit-approved):not(.fb-post-banned):not(.fb-element-banned):not([data-fb-v25-scan-complete="1"]):not(:has([data-visualcompletion="loading-state"])) {
+            /* Only feed post units, never header, search, comments, dialogs or chat. */
+            html.fb-early-home-feed-v311 :is([role="feed"] div[aria-posinset], [role="feed"] > [role="article"], div[data-pagelet^="FeedUnit_"], div[data-pagelet^="TimelineFeedUnit_"]):not(.fb-post-approved):not(.fb-feed-unit-approved):not(.fb-post-banned):not(.fb-element-banned):not([data-fb-v25-scan-complete="1"]):not(:has(.fb-post-approved, .fb-feed-unit-approved)):is(:not(:has([data-visualcompletion="loading-state"])), :has([data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"])),
+            html.fb-early-supported-page-v311 :is([role="feed"] div[aria-posinset], [role="feed"] > [role="article"], div[data-pagelet^="FeedUnit_"], div[data-pagelet^="TimelineFeedUnit_"]):not(.fb-post-approved):not(.fb-feed-unit-approved):not(.fb-post-banned):not(.fb-element-banned):not([data-fb-v25-scan-complete="1"]):not(:has(.fb-post-approved, .fb-feed-unit-approved)):is(:not(:has([data-visualcompletion="loading-state"])), :has([data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"])),
+            /* v317: link-preview-only Page articles may have no story_message. Gate them too. */
+            html.fb-early-supported-page-v311 [role="main"] [role="article"]:not(:where([role="article"] [role="article"], [role="dialog"] [role="article"], [data-pagelet*="Comment" i] [role="article"], [data-pagelet*="Notification" i] [role="article"])):has([data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"], [data-ad-rendering-role="profile_name"], a[href] img, [role="link"] img, video, [data-ad-rendering-role*="attachment" i]):not(.fb-post-approved):not(.fb-feed-unit-approved):not(.fb-post-banned):not(.fb-element-banned):not([data-fb-v25-scan-complete="1"]):not(:has(.fb-post-approved, .fb-feed-unit-approved)) {
                 visibility: hidden !important;
                 opacity: 0 !important;
                 pointer-events: none !important;
                 transition: none !important;
                 animation: none !important;
             }
-            /* A Page article may have no FeedUnit/aria-posinset wrapper yet. */
-            html.fb-early-supported-page-v103 [role="main"] [role="article"]:not(:where([role="dialog"] [role="article"], [data-pagelet*="Comment" i] [role="article"], [data-pagelet*="Notification" i] [role="article"])):not(.fb-post-approved):not(.fb-feed-unit-approved):not(.fb-post-banned):not(.fb-element-banned):not([data-fb-v25-scan-complete="1"]):has([data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"]):not(:has([data-visualcompletion="loading-state"])) {
-                visibility: hidden !important;
-                opacity: 0 !important;
-                pointer-events: none !important;
-            }
-            /* During React's mixed post/loader stage, paint only the native skeleton. */
-            html.fb-early-post-gate-v103 :is([role="feed"] div[aria-posinset], div[data-pagelet^="FeedUnit_"], div[data-pagelet^="TimelineFeedUnit_"]):not(.fb-post-approved):not(.fb-feed-unit-approved):not(.fb-post-banned):not(.fb-element-banned):has([data-visualcompletion="loading-state"]):has([data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"]) {
-                visibility: hidden !important;
-                opacity: 1 !important;
-                pointer-events: none !important;
-            }
-            html.fb-early-post-gate-v103 :is([role="feed"] div[aria-posinset], div[data-pagelet^="FeedUnit_"], div[data-pagelet^="TimelineFeedUnit_"]):not(.fb-post-approved):not(.fb-feed-unit-approved):has([data-visualcompletion="loading-state"]):has([data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"]) [data-visualcompletion="loading-state"],
-            html.fb-early-post-gate-v103 :is([role="feed"] div[aria-posinset], div[data-pagelet^="FeedUnit_"], div[data-pagelet^="TimelineFeedUnit_"]):not(.fb-post-approved):not(.fb-feed-unit-approved):has([data-visualcompletion="loading-state"]):has([data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"]) [data-visualcompletion="loading-state"] * {
-                visibility: visible !important;
-                opacity: 1 !important;
-            }
         `;
         (document.head || html).appendChild(style);
-    } catch (e) {}
+        return true;
+    } catch (e) { return false; }
 };
-syncFBEarlyPostGateV103();
+if (!syncFBEarlyFeedGateV311()) {
+    try {
+        const initialGateObserverV311 = new MutationObserver((_, observer) => {
+            if (syncFBEarlyFeedGateV311()) observer.disconnect();
+        });
+        initialGateObserverV311.observe(document, { childList: true });
+    } catch (e) {}
+}
 
 // ============================================================
 // BRAVEFOX FACEBOOK.JS NAVIGATION INDEX (v67)
@@ -274,25 +280,9 @@ function getFBNativeSkeletonRectV82(post) {
     } catch (e) { return null; }
 }
 
-// v100: the surrounding FeedUnit and its only positioned article describe
-// one loading card; keep a single visual copy for both entry points.
-function getFBNativeSkeletonOwnerV100(post) {
-    try {
-        if (!post?.querySelectorAll || post.matches?.('div[aria-posinset]')) return post;
-        const positioned = post.querySelectorAll('div[aria-posinset]');
-        if (positioned.length !== 1) return post;
-        const inner = positioned[0];
-        const feed = post.closest?.('[role="feed"]');
-        return feed && inner.closest?.('[role="feed"]') === feed ? inner : post;
-    } catch (e) { return post; }
-}
-
 function findFBNativeSkeletonEntryV82(post) {
-    try {
-        const owner = getFBNativeSkeletonOwnerV100(post);
-        return owner ? (__fbNativeSkeletonSnapshotByPostV81.get(owner) ||
-            __fbNativeSkeletonSnapshotByPostV81.get(post)) : null;
-    } catch (e) { return null; }
+    try { return post ? __fbNativeSkeletonSnapshotByPostV81.get(post) : null; }
+    catch (e) { return null; }
 }
 
 function forgetFBNativeSkeletonSnapshotV81(post, reason = 'finished') {
@@ -300,15 +290,11 @@ function forgetFBNativeSkeletonSnapshotV81(post, reason = 'finished') {
         const entry = findFBNativeSkeletonEntryV82(post);
         if (!entry) return;
         traceFBNativeSkeletonV82(reason, entry);
-        // v100: a prepared copy may exist without ever having been shown.
-        // Retire both references on a terminal decision or route change.
-        try { entry.prepared?.remove(); } catch (e) {}
-        try { if (entry.mounted !== entry.prepared) entry.mounted?.remove(); } catch (e) {}
+        try { entry.mounted?.remove(); } catch (e) {}
         entry.mounted = null;
-        entry.prepared = null;
         entry.template = null;
         __fbNativeSkeletonSnapshotsV82.delete(entry);
-        __fbNativeSkeletonSnapshotByPostV81.delete(entry.post);
+        __fbNativeSkeletonSnapshotByPostV81.delete(post);
         refreshFBNativeSkeletonPaintWatchV86();
         if (!__fbNativeSkeletonSnapshotsV82.size && __fbNativeSkeletonSweepTimerV82) {
             clearInterval(__fbNativeSkeletonSweepTimerV82);
@@ -328,7 +314,6 @@ function clearFBNativeSkeletonSnapshotsV82(reason = 'route-clear') {
 
 function captureFBNativeSkeletonSnapshotV81(post) {
     try {
-        post = getFBNativeSkeletonOwnerV100(post);
         if (!post?.isConnected || !isFBHomeFeedSurface() || isFBNoPostScanUrl() ||
             isFBInsideEmbeddedChatSurfaceV56(post) || isFBCommentSurfaceElement(post) ||
             isNotificationPanelElement(post) || post.classList?.contains('fb-post-approved') ||
@@ -361,7 +346,7 @@ function captureFBNativeSkeletonSnapshotV81(post) {
                 FB_NATIVE_SKELETON_OWNER_CLASS_V81, FB_NATIVE_SKELETON_COPY_CLASS_V81);
         }
         const entry = {
-            id: ++__fbNativeSkeletonSequenceV82, post, template, mounted: null, prepared: null, rect,
+            id: ++__fbNativeSkeletonSequenceV82, post, template, mounted: null, rect,
             createdAt: performance.now(), pageHref: window.location.href,
             feed: post.closest?.('[role="feed"]') || null,
             pos: post.getAttribute?.('aria-posinset') || '',
@@ -369,9 +354,6 @@ function captureFBNativeSkeletonSnapshotV81(post) {
         };
         __fbNativeSkeletonSnapshotByPostV81.set(post, entry);
         __fbNativeSkeletonSnapshotsV82.add(entry);
-        // v100: prepare the original Facebook skeleton outside the React-owned slot
-        // while its native paint is still visible. Do NOT display the copy yet.
-        prepareFBNativeSkeletonVisualV100(entry);
         refreshFBNativeSkeletonPaintWatchV86();
         traceFBNativeSkeletonV82('captured', entry, '', {
             x: Math.round(rect.x), y: Math.round(rect.y), w: Math.round(rect.w), h: Math.round(rect.h),
@@ -381,57 +363,19 @@ function captureFBNativeSkeletonSnapshotV81(post) {
     } catch (e) {}
 }
 
-// v100: stage only captured, genuine Facebook skeleton markup. The parked copy
-// stays invisible while Facebook paints its own loader; no fabricated placeholders.
-function prepareFBNativeSkeletonVisualV100(entry) {
-    try {
-        if (!entry?.template) return null;
-        if (entry.prepared?.isConnected) return entry.prepared;
-        const portal = getFBNativeSkeletonPortalV82();
-        if (!portal) return null;
-        const visual = document.createElement('div');
-        visual.className = FB_NATIVE_SKELETON_COPY_CLASS_V81;
-        visual.setAttribute('aria-hidden', 'true');
-        visual.style.setProperty('display', 'none', 'important');
-        visual.appendChild(entry.template.cloneNode(true));
-        entry.prepared = visual;
-        portal.appendChild(visual);
-        positionFBNativeSkeletonSnapshotV82(entry);
-        return visual;
-    } catch (e) { return null; }
-}
-
 function positionFBNativeSkeletonSnapshotV82(entry) {
     try {
-        const visual = entry?.prepared?.isConnected ? entry.prepared : entry?.mounted;
-        if (!visual?.isConnected) return;
+        if (!entry?.mounted?.isConnected) return;
         const rect = entry.post.isConnected ? getFBNativeSkeletonRectV82(entry.post) : null;
-        // Preserve the loader's captured dimensions. A taller, unapproved React post
-        // must not stretch the visual clone into an enormous artificial white card.
-        if (rect && entry.rect) entry.rect = {
-            x: rect.x, y: rect.y, w: entry.rect.w, h: entry.rect.h,
-            scrollY: rect.scrollY
-        };
+        if (rect) entry.rect = rect;
         const last = entry.rect;
         if (!last) return;
         const y = rect ? rect.y : last.y - (window.scrollY - last.scrollY);
-        visual.style.left = `${last.x}px`;
-        visual.style.top = `${y}px`;
-        visual.style.width = `${last.w}px`;
-        visual.style.height = `${last.h}px`;
-        // The old class used display:block!important; a normal inline 'none' lost
-        // that CSS contest and could leave a copy painting at the wrong time.
-        const active = entry.mounted === visual &&
-            y <= window.innerHeight + 120 && y + last.h >= -120;
-        visual.style.setProperty('display', active ? 'block' : 'none', 'important');
-    } catch (e) {}
-}
-
-function hideFBNativeSkeletonSnapshotV100(entry) {
-    try {
-        if (!entry?.mounted) return;
-        entry.mounted.style.setProperty('display', 'none', 'important');
-        entry.mounted = null;
+        entry.mounted.style.left = `${last.x}px`;
+        entry.mounted.style.top = `${y}px`;
+        entry.mounted.style.width = `${last.w}px`;
+        entry.mounted.style.height = `${last.h}px`;
+        entry.mounted.style.display = y > window.innerHeight + 120 || y + last.h < -120 ? 'none' : 'block';
     } catch (e) {}
 }
 
@@ -445,12 +389,17 @@ function showFBNativeSkeletonSnapshotWhilePendingV81(post) {
             forgetFBNativeSkeletonSnapshotV81(post, 'terminal');
             return;
         }
-        const visual = prepareFBNativeSkeletonVisualV100(entry);
-        if (!visual) return;
-        const wasActive = entry.mounted === visual;
+        if (entry.mounted?.isConnected) return;
+        const portal = getFBNativeSkeletonPortalV82();
+        if (!portal) return;
+        const visual = document.createElement('div');
+        visual.className = FB_NATIVE_SKELETON_COPY_CLASS_V81;
+        visual.setAttribute('aria-hidden', 'true');
+        visual.appendChild(entry.template.cloneNode(true));
         entry.mounted = visual;
+        portal.appendChild(visual);
         positionFBNativeSkeletonSnapshotV82(entry);
-        if (!wasActive) traceFBNativeSkeletonV82('retained-native', entry);
+        traceFBNativeSkeletonV82('retained-native', entry);
         queueFBNativeSkeletonReconcileV82();
     } catch (e) {}
 }
@@ -482,13 +431,7 @@ function reconcileFBNativeSkeletonSnapshotsV82() {
                 // A native loading card is still visible: never cover it with the copy.
                 const nativePresent = entry.post.querySelector('[data-visualcompletion="loading-state"]') &&
                     isFBNativeHydrationOnlyPost(entry.post, false);
-                // v102: an inner aria-posinset article and its outer FeedUnit are one
-                // native loading card. v100 captures the inner node, while v53 can mark
-                // the outer node. Do not show a backup on top of an already-painted loader.
-                const markedNative = entry.post.classList.contains('fb-native-skeleton-visible-v65') ||
-                    !!entry.post.closest?.('div[data-pagelet^="FeedUnit_"].fb-native-skeleton-visible-v65, div[data-pagelet^="TimelineFeedUnit_"].fb-native-skeleton-visible-v65') ||
-                    !!entry.post.closest?.('[role="feed"] > [role="article"].fb-native-skeleton-visible-v65');
-                if (nativePresent && markedNative) {
+                if (nativePresent && entry.post.classList.contains('fb-native-skeleton-visible-v65')) {
                     // v86: a mounted marker does NOT guarantee a visible skeleton. Its own
                     // style, or a parent gate, can hide it while the feed still reserves space.
                     const native = entry.post.querySelector('[data-visualcompletion="loading-state"]');
@@ -502,9 +445,8 @@ function reconcileFBNativeSkeletonSnapshotsV82() {
                         // Show the *captured Facebook markup* above the invisible original.
                         if (!entry.mounted) showFBNativeSkeletonSnapshotWhilePendingV81(entry.post);
                     } else {
-                        // Keep the already-built copy parked for the next native
-                        // paint transition; do not tear it down and recreate it.
-                        hideFBNativeSkeletonSnapshotV100(entry);
+                        entry.mounted?.remove();
+                        entry.mounted = null;
                     }
                 } else {
                     // The marker can disappear before the full post scanner runs. This
@@ -1220,34 +1162,6 @@ const clearFBCleanerHideStylesOnly = (element) => {
     } catch (e) {}
 };
 
-// v105: Facebook's single "Uusi ilmoitus" / "New notification" toast is a
-// role=complementary surface, just like the contacts rail fallback. Keep it native.
-// Do not use transient obfuscated classes such as x78zum5 to identify it.
-const FB_NOTIFICATION_TOAST_LINK_SELECTOR_V105 =
-    'a[href*="notif_id="], a[href*="notif_t="], a[href*="ref=notif"], a[href*="/afad/"]';
-
-const isFBNotificationToastRootV105 = (root) => {
-    try {
-        if (!root?.matches?.('[role="complementary"]') ||
-            root.closest('[data-pagelet="RightRail"]')) return false;
-        if (root.querySelector(FB_NOTIFICATION_TOAST_LINK_SELECTOR_V105)) return true;
-        const headings = root.querySelectorAll('h2, [role="heading"]');
-        for (let i = 0; i < headings.length && i < 6; i++) {
-            if (/^(?:uusi ilmoitus|new notification)$/.test(fbNotifNorm(headings[i].textContent || ''))) {
-                return true;
-            }
-        }
-    } catch (e) {}
-    return false;
-};
-
-const getFBNotificationToastRootV105 = (element) => {
-    try {
-        const root = element?.closest?.('[role="complementary"]');
-        return isFBNotificationToastRootV105(root) ? root : null;
-    } catch (e) { return null; }
-};
-
 const notificationTextLooksLikePanel = (text) => {
     const t = fbNotifNorm(text);
     if (!t) return false;
@@ -1261,10 +1175,6 @@ const notificationTextLooksLikePanel = (text) => {
 const isNotificationPanelElement = (element) => {
     try {
         if (!element || !element.closest) return false;
-
-        // Standalone security/activity toast; the old "Ilmoitukset" panel text
-        // classifier does not recognize its singular "Uusi ilmoitus" heading.
-        if (getFBNotificationToastRootV105(element)) return true;
 
         // Full notifications page.
         if (/\/(notifications|ilmoitukset)(?:\/|$)/i.test(location.pathname || '')) {
@@ -1304,14 +1214,13 @@ const protectNotificationSurfaces = (root = document) => {
         }
 
         if (scanRoot.nodeType === 1 && isNotificationPanelElement(scanRoot)) {
-            add(getFBNotificationToastRootV105(scanRoot) ||
-                scanRoot.closest?.('[data-pagelet*="Notification" i], [aria-label*="Ilmoitukset" i], [aria-label*="Notifications" i], [role="dialog"], [role="menu"], [role="region"], [role="list"]') || scanRoot);
+            add(scanRoot.closest?.('[data-pagelet*="Notification" i], [aria-label*="Ilmoitukset" i], [aria-label*="Notifications" i], [role="dialog"], [role="menu"], [role="region"], [role="list"]') || scanRoot);
         }
 
         // The full notifications route already has one authoritative root. Avoid walking the
         // entire page again looking for nested dialog/list/region candidates inside that root.
         if (!fullNotificationsPage || scanRoot.nodeType === 1) {
-            const selector = '[data-pagelet*="Notification" i], [aria-label*="Ilmoitukset" i], [aria-label*="Notifications" i], [role="dialog"], [role="menu"], [role="region"], [role="list"], [role="complementary"]';
+            const selector = '[data-pagelet*="Notification" i], [aria-label*="Ilmoitukset" i], [aria-label*="Notifications" i], [role="dialog"], [role="menu"], [role="region"], [role="list"]';
             const candidates = scanRoot.querySelectorAll ? scanRoot.querySelectorAll(selector) : [];
             for (let i = 0; i < candidates.length && panels.length < 8; i++) {
                 const candidate = candidates[i];
@@ -2212,6 +2121,7 @@ const isFBFeedResumeRecoveryActiveV60 = () => {
 const updateFBHomeFeedGateClass = () => {
     try {
         if (!document.documentElement) return;
+        syncFBEarlyFeedGateV311();
         document.documentElement.classList.toggle('fb-home-feed-unit-softgate-v23', isFBHomeFeedSurface());
 
         // v50: trusted own/Dad/friend timelines are native territory. They never enter
@@ -2291,14 +2201,20 @@ const injectFBSafeNoGlimpseBootstrap = () => {
                 content-visibility: hidden !important;
             }
 
-            /* v99: Do not pre-hide an entire Facebook contacts sidebar while waiting
-               for v87 readiness. React can replace/mount a different rail wrapper before
-               the handoff runs, leaving a permanently blank right panel. Keep the v87
-               individual contact-row no-glimpse rules directly below instead. */
+            /* v87: right-rail contacts get the same no-glimpse contract as feed cards.
+               The rail starts covered until its own rows are screened. Thereafter, a newly
+               hydrated contact/avatar row remains hidden until a local allow/block decision.
+               Never apply this to Messenger, dialogs, the feed or Dad's account. */
+            html.fb-strict-element-hiding-v37.fb-home-feed-unit-softgate-v23:not(.fb-messenger-native-v54) [data-pagelet="RightRail"]:not(.fb-contact-rail-ready-v87),
+            html.fb-strict-element-hiding-v37.fb-home-feed-unit-softgate-v23:not(.fb-messenger-native-v54) [role="complementary"]:not(:has([data-pagelet="RightRail"])):not(.fb-contact-rail-ready-v87) {
+                visibility: hidden !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
+            }
 
-            html.fb-strict-element-hiding-v37.fb-home-feed-unit-softgate-v23:not(.fb-messenger-native-v54) :is([data-pagelet="RightRail"], [role="complementary"]:not(.fb-notifications-protected):not(:has(a[href*="notif_id="], a[href*="notif_t="], a[href*="ref=notif"], a[href*="/afad/"], [role="alert"][aria-live="polite"]))) [role="button"]:has(img, svg image, i[data-visualcompletion="css-img"]):not(:has([role="button"] img, [role="listitem"] img, [role="row"] img, [role="button"] svg image, [role="listitem"] svg image, [role="row"] svg image, a[href*="/messages/t/"] img)):not(:has(a[href] + a[href])):not(.fb-contact-rail-approved-v87):not(.fb-profile-card-approved):not(.fb-profile-card-banned):not(.fb-element-banned),
-            html.fb-strict-element-hiding-v37.fb-home-feed-unit-softgate-v23:not(.fb-messenger-native-v54) :is([data-pagelet="RightRail"], [role="complementary"]:not(.fb-notifications-protected):not(:has(a[href*="notif_id="], a[href*="notif_t="], a[href*="ref=notif"], a[href*="/afad/"], [role="alert"][aria-live="polite"]))) [role="listitem"]:has(img, svg image, i[data-visualcompletion="css-img"]):not(:has([role="button"] img, [role="button"] svg image, [role="button"] i[data-visualcompletion="css-img"])):not(.fb-contact-rail-approved-v87):not(.fb-profile-card-approved):not(.fb-profile-card-banned):not(.fb-element-banned),
-            html.fb-strict-element-hiding-v37.fb-home-feed-unit-softgate-v23:not(.fb-messenger-native-v54) :is([data-pagelet="RightRail"], [role="complementary"]:not(.fb-notifications-protected):not(:has(a[href*="notif_id="], a[href*="notif_t="], a[href*="ref=notif"], a[href*="/afad/"], [role="alert"][aria-live="polite"]))) a[href*="/messages/t/"]:not(.fb-contact-rail-approved-v87):not(.fb-profile-card-approved):not(.fb-profile-card-banned):not(.fb-element-banned) {
+            html.fb-strict-element-hiding-v37.fb-home-feed-unit-softgate-v23:not(.fb-messenger-native-v54) :is([data-pagelet="RightRail"], [role="complementary"]) [role="button"]:has(img, svg image, i[data-visualcompletion="css-img"]):not(:has([role="button"] img, [role="button"] svg image, [role="button"] i[data-visualcompletion="css-img"])):not(.fb-contact-rail-approved-v87):not(.fb-profile-card-approved):not(.fb-profile-card-banned):not(.fb-element-banned),
+            html.fb-strict-element-hiding-v37.fb-home-feed-unit-softgate-v23:not(.fb-messenger-native-v54) :is([data-pagelet="RightRail"], [role="complementary"]) [role="listitem"]:has(img, svg image, i[data-visualcompletion="css-img"]):not(:has([role="button"] img, [role="button"] svg image, [role="button"] i[data-visualcompletion="css-img"])):not(.fb-contact-rail-approved-v87):not(.fb-profile-card-approved):not(.fb-profile-card-banned):not(.fb-element-banned),
+            html.fb-strict-element-hiding-v37.fb-home-feed-unit-softgate-v23:not(.fb-messenger-native-v54) :is([data-pagelet="RightRail"], [role="complementary"]) a[href*="/messages/t/"]:not(.fb-contact-rail-approved-v87):not(.fb-profile-card-approved):not(.fb-profile-card-banned):not(.fb-element-banned) {
                 visibility: hidden !important;
                 opacity: 0 !important;
                 pointer-events: none !important;
@@ -2767,18 +2683,6 @@ const injectInlineCSS = () => {
             content-visibility: visible !important;
         }
 
-        /* v99: Terminally approved but empty People You May Know FeedUnits.
-           The captured sample has a banned recommendation region inside an approved
-           outer post. Collapse ONLY that whole recommendation shell, never a real
-           story, loading skeleton, undecided slot or any Page timeline. */
-        html.fb-home-feed-unit-softgate-v23 div[data-pagelet^="FeedUnit_"].fb-post-approved:has([role="region"].fb-element-banned[aria-label="Ihmisiä, jotka saatat tuntea"]):not(:has([data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"], [data-visualcompletion="loading-state"])),
-        html.fb-home-feed-unit-softgate-v23 div[data-pagelet^="FeedUnit_"].fb-post-approved:has([role="region"].fb-element-banned[aria-label="People you may know"]):not(:has([data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"], [data-visualcompletion="loading-state"])) {
-            display: none !important;
-            height: 0 !important;
-            margin: 0 !important;
-            padding: 0 !important;
-        }
-
         /* v65: Join/Follow/Suggested posts are no longer hidden by brittle Facebook class-shape
            selectors. Every undecided canonical post is already behind the generic no-glimpse
            gate below, then the mutation-local scanner makes the terminal allow/ban decision. */
@@ -2961,21 +2865,6 @@ const injectInlineCSS = () => {
             animation: none !important;
         }
 
-
-        /* v102: React can mount real story content before it removes its old
-           loading-state marker. Never use that marker (or the old v65 exemption)
-           to expose an undecided mixed card. Keep Facebook's native skeleton
-           painted inside that otherwise hidden shell. No fabricated loader. */
-        html.fb-feed-screening-gate-v46 :is([role="feed"] div[aria-posinset], div[data-pagelet^="FeedUnit_"], div[data-pagelet^="TimelineFeedUnit_"]):not(.fb-post-approved):not(.fb-feed-unit-approved):not(.fb-post-banned):not(.fb-element-banned):has([data-visualcompletion="loading-state"]):has([data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"], a[href*="/posts/"]) {
-            visibility: hidden !important;
-            opacity: 1 !important;
-            pointer-events: none !important;
-        }
-        html.fb-feed-screening-gate-v46 :is([role="feed"] div[aria-posinset], div[data-pagelet^="FeedUnit_"], div[data-pagelet^="TimelineFeedUnit_"]):not(.fb-post-approved):not(.fb-feed-unit-approved):has([data-visualcompletion="loading-state"]):has([data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"], a[href*="/posts/"]) [data-visualcompletion="loading-state"],
-        html.fb-feed-screening-gate-v46 :is([role="feed"] div[aria-posinset], div[data-pagelet^="FeedUnit_"], div[data-pagelet^="TimelineFeedUnit_"]):not(.fb-post-approved):not(.fb-feed-unit-approved):has([data-visualcompletion="loading-state"]):has([data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"], a[href*="/posts/"]) [data-visualcompletion="loading-state"] * {
-            visibility: visible !important;
-            opacity: 1 !important;
-        }
         /* Patch 1's generated 300px placeholder was itself the visible empty post slot. */
         .fb-post-screening-v47::after {
             content: none !important;
@@ -3591,6 +3480,7 @@ const applyCachedFBPostDecision = (post) => {
         post.removeAttribute('data-fb-v47-screen-start');
 
         if (cached.decision === 'banned') {
+            try { noteFBPassiveTimingTerminalV315(post, 'banned'); } catch (e) {}
             forgetFBNativeSkeletonSnapshotV81(post);
             post.classList.remove('fb-post-approved', 'fb-feed-unit-approved', 'fb-post-processed');
             post.removeAttribute('data-fb-v46-approved-key');
@@ -3604,11 +3494,7 @@ const applyCachedFBPostDecision = (post) => {
         }
 
         if (cached.decision === 'approved') {
-            // A header Follow/Join control beats any earlier approval, even a stable cache hit.
-            if (hasFBUnconnectedFeedHeaderCTAV77(post)) {
-                banPostAfterScan(post, 'header Follow/Join CTA overrides cached approval');
-                return true;
-            }
+            try { noteFBPassiveTimingTerminalV315(post, 'approved'); } catch (e) {}
             forgetFBNativeSkeletonSnapshotV81(post);
             releaseFBFeedSlot(post);
             try { if (typeof releaseFBNativeHydrationSlotV53 === 'function') releaseFBNativeHydrationSlotV53(post); } catch (e) {}
@@ -3671,7 +3557,12 @@ const FB_CANONICAL_POST_SELECTOR_V65 = [
     '[role="feed"] div[aria-posinset]',
     'div[data-pagelet^="FeedUnit_"]',
     'div[data-pagelet^="TimelineFeedUnit_"]',
-    '[role="feed"] > [role="article"]'
+    '[role="feed"] > [role="article"]',
+    // v29.5.2: The supported-Page no-glimpse CSS also gates standalone articles
+    // without a role=feed / FeedUnit parent. The scanner MUST claim that exact
+    // article shape, or safe Page posts remain invisible forever. The html class
+    // confines this fallback to the four explicitly supported Page timelines.
+    'html.fb-early-supported-page-v311 [role="main"] [role="article"]:not(:where([role="article"] [role="article"], [role="dialog"] [role="article"], [data-pagelet*="Comment" i] [role="article"], [data-pagelet*="Notification" i] [role="article"])):has([data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"], [data-ad-rendering-role="profile_name"], a[href] img, [role="link"] img, video, [data-ad-rendering-role*="attachment" i])'
 ].join(',');
 
 const getFBFeedUnitWrapper = (seed) => {
@@ -4070,11 +3961,6 @@ const retainFBNativeHydrationSlotV53 = (post) => {
         // unmounts it before the pending post receives its approval decision.
         captureFBNativeSkeletonSnapshotV81(post);
         post.classList.add('fb-native-skeleton-visible-v65');
-        const nativeOwnerV102 = getFBNativeSkeletonOwnerV100(post);
-        if (nativeOwnerV102 && nativeOwnerV102 !== post &&
-            isFBNativeHydrationOnlyPost(nativeOwnerV102, false)) {
-            nativeOwnerV102.classList?.add('fb-native-skeleton-visible-v65');
-        }
         post.classList.remove(
             'fb-native-post-hydrating-v52', 'fb-feed-slot-hydrating-v52', 'fb-feed-slot-screening-v51',
             'fb-post-screening-v47', 'fb-post-resume-screening-v60', 'fb-post-scanning'
@@ -4101,14 +3987,7 @@ const releaseFBNativeHydrationSlotV53 = (post) => {
         if (departingNative && !post.classList.contains('fb-post-approved') &&
             !post.classList.contains('fb-post-banned') &&
             post.getAttribute?.('data-fb-v25-scan-complete') !== '1') {
-            // v100: reveal the staged native skeleton BEFORE closing the old native
-            // exemption. These changes execute in the same mutation turn, before paint.
-            showFBNativeSkeletonSnapshotWhilePendingV81(post);
             applyFBPostScreeningClassV60(post, true);
-        }
-        const nativeOwnerV102 = getFBNativeSkeletonOwnerV100(post);
-        if (nativeOwnerV102 && nativeOwnerV102 !== post) {
-            nativeOwnerV102.classList?.remove('fb-native-skeleton-visible-v65');
         }
         post.classList?.remove(
             'fb-native-skeleton-visible-v65', 'fb-native-post-hydrating-v52',
@@ -4455,6 +4334,46 @@ const installFBLateHeaderCTATextWatchV295 = () => {
             try {
                 if (isFBMessengerPath(window.location.href) || isFBNoPostScanUrl()) return;
                 const posts = new Set();
+                // v311: characterData edits inside an already approved caption must be
+                // checked before the next paint, not in a later timed Page sweep.
+                // Keep this scoped to actual caption roots; comments and UI labels
+                // are never treated as new post content.
+                const changedApprovedCaptionsV311 = new Set();
+                const newlyBlockedAttachmentPostsV317 = new Set();
+                const inspectBlockedAttachmentV317 = node => {
+                    try {
+                        if (newlyBlockedAttachmentPostsV317.size >= 12) return;
+                        const el = node?.nodeType === 3 ? node.parentElement : node;
+                        if (!el || el.nodeType !== 1 || !el.closest) return;
+                        if (isInsideComment(el) || isNotificationPanelElement(el) ||
+                            isFBInsideEmbeddedChatSurfaceV56(el)) return;
+                        const candidates = [];
+                        if (el.matches?.('a[href]')) candidates.push(el);
+                        const more = el.querySelectorAll?.('a[href]') || [];
+                        for (let k = 0; k < more.length && k < 24; k++) candidates.push(more[k]);
+                        for (const link of candidates) {
+                            if (isInsideComment(link) || isNotificationPanelElement(link)) continue;
+                            if (!matchesBlockedUrlCandidates(safeDecodeFBValue(
+                                (link.href || '') + ' ' + (link.getAttribute('href') || '')))) continue;
+                            const post = getFBCanonicalPostV65(link);
+                            if (!post?.isConnected || !isFBPostScannerSafeCandidateV65(post)) continue;
+                            newlyBlockedAttachmentPostsV317.add(post);
+                        }
+                    } catch (e) {}
+                };
+                const inspectCaptionChangeV311 = node => {
+                    if (changedApprovedCaptionsV311.size >= 12) return;
+                    const element = node?.nodeType === 3 ? node.parentElement : node;
+                    if (!element?.closest) return;
+                    const selector = '[data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"]';
+                    const caption = element.closest(selector) ||
+                        (element.matches?.(selector) ? element : null);
+                    if (!caption || isInsideComment(caption) || isNotificationPanelElement(caption)) return;
+                    const post = getFBCanonicalPostV65(caption);
+                    if (post?.isConnected && post.classList?.contains('fb-post-approved') &&
+                        post.getAttribute('data-fb-v25-scan-complete') === '1' &&
+                        isFBPostScannerSafeCandidateV65(post)) changedApprovedCaptionsV311.add(post);
+                };
                 const testButton = button => {
                     if (!button?.matches?.(buttonSelector)) return;
                     if (!getFBHeaderCTALabelV295(button)) return;
@@ -4466,6 +4385,7 @@ const installFBLateHeaderCTATextWatchV295 = () => {
                     if (!element || element.nodeType !== 1) return;
                     // Ignore menus, the right rail and other non-feed subtrees.
                     if (!element.closest?.('[role="feed"], [data-pagelet^="FeedUnit_"], [data-pagelet^="TimelineFeedUnit_"]') &&
+                        !element.closest?.(FB_CANONICAL_POST_SELECTOR_V65) &&
                         !element.matches?.('[role="feed"], [data-pagelet^="FeedUnit_"], [data-pagelet^="TimelineFeedUnit_"]') &&
                         !element.querySelector?.(FB_CANONICAL_POST_SELECTOR_V65)) return;
                     testButton(element.closest?.(buttonSelector));
@@ -4478,6 +4398,9 @@ const installFBLateHeaderCTATextWatchV295 = () => {
                 };
                 for (let i = 0; i < mutations.length && i < 96 && posts.size < 10; i++) {
                     const mutation = mutations[i];
+                    if (mutation.type !== 'attributes') {
+                        inspectCaptionChangeV311(mutation.target);
+                    }
                     if (mutation.type === 'characterData') {
                         if (FB_OWN_FEED_HEADER_CTA_TEXT_V77.has(fbNotifNorm(mutation.target?.nodeValue || ''))) {
                             inspectNode(mutation.target);
@@ -4485,7 +4408,8 @@ const installFBLateHeaderCTATextWatchV295 = () => {
                         continue;
                     }
                     if (mutation.type === 'attributes') {
-                        inspectNode(mutation.target);
+                        if (mutation.attributeName === 'href') inspectBlockedAttachmentV317(mutation.target);
+                        else inspectNode(mutation.target);
                         continue;
                     }
                     // A complete Follow button can be inserted with its text already present.
@@ -4497,8 +4421,32 @@ const installFBLateHeaderCTATextWatchV295 = () => {
                             if (FB_OWN_FEED_HEADER_CTA_TEXT_V77.has(fbNotifNorm(node.nodeValue || ''))) inspectNode(node);
                         } else if (node.nodeType === 1) {
                             inspectNode(node);
+                            inspectBlockedAttachmentV317(node);
                         }
                     }
+                }
+                for (const post of newlyBlockedAttachmentPostsV317) {
+                    if (post.classList.contains('fb-post-banned') ||
+                        post.classList.contains('fb-element-banned')) continue;
+                    banPostAfterScan(post, 'blocked link inserted/hydrated before paint v317');
+                    __fb434NoGlimpseStatsV317.blockedLinkBeforePaint++;
+                }
+                for (const post of changedApprovedCaptionsV311) {
+                    try {
+                        // v312: do not retroactively ban an approved post merely because
+                        // the user expanded its native See more caption. Other posts and
+                        // late header Follow/Join checks remain fully active.
+                        if (__fbUserExpandedPostsV312.has(post)) {
+                            __fbShowMoreCaptionChecksSkippedV312++;
+                            continue;
+                        }
+                        if (post.classList.contains('fb-post-banned') || !post.isConnected) continue;
+                        if (postCaptionMentionsStandaloneAIV96(post)) {
+                            banPostAfterScan(post, 'late caption edit: standalone AI');
+                        } else if (matchesAnyActiveRegex(collectPostTextForScan(post))) {
+                            banPostAfterScan(post, 'late caption edit: blocked words/regex');
+                        }
+                    } catch (e) {}
                 }
                 for (const post of posts) {
                     // Revalidate the full header shape and surface before applying a ban.
@@ -4512,7 +4460,7 @@ const installFBLateHeaderCTATextWatchV295 = () => {
         }));
         observer.observe(document.documentElement, {
             subtree: true, childList: true, characterData: true,
-            attributes: true, attributeFilter: ['role', 'aria-label']
+            attributes: true, attributeFilter: ['role', 'aria-label', 'href']
         });
     } catch (e) {}
 };
@@ -4532,8 +4480,15 @@ const hasFBUnconnectedFeedHeaderCTAV77 = (seed) => {
         // with an exact timestamp-adjacent Seuraa/Liity button in its own header.
         // Judge the post ROOT and its ancestors only, as the canonical scanner
         // already does. Never exempt the entire post because of content inside it.
+        // Supported Pages can place a standalone top-level article outside [role=feed].
+        // Require a real story-message and the exact timestamp-adjacent CTA below.
+        const standalonePageArticle = isCurrentSpecificUrlSurface() &&
+            unit.matches?.('[role="article"]') && !!unit.closest?.('[role="main"]') &&
+            !unit.parentElement?.closest?.('[role="article"]') &&
+            !!unit.querySelector?.('[data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"]');
         if (!unit.closest?.('[role="feed"]') &&
-            !unit.matches?.('div[data-pagelet^="FeedUnit_"], div[data-pagelet^="TimelineFeedUnit_"]')) return false;
+            !unit.matches?.('div[data-pagelet^="FeedUnit_"], div[data-pagelet^="TimelineFeedUnit_"]') &&
+            !standalonePageArticle) return false;
         if (unit.matches?.(FB_PROFILE_HEADER_PROTECT_SELECTOR) ||
             unit.closest?.(FB_PROFILE_HEADER_PROTECT_SELECTOR) ||
             isTopLeftSearchDropdownElement(unit)) return false;
@@ -4546,13 +4501,12 @@ const hasFBUnconnectedFeedHeaderCTAV77 = (seed) => {
 
 const hasRestrictedFeedCTAOrReels = (seed) => {
     try {
-        // Header CTA must be checked even where cosmetic suggestions are optional.
-        if (hasFBUnconnectedFeedHeaderCTAV77(seed)) return true;
         if (!isFBCosmeticElementHidingAllowed()) return false;
         const unit = getFBFeedUnitWrapper(seed) || seed;
         if (!unit || !isProbablyHomeFeedUnit(unit)) return false;
 
         if (postHasAIInfoTag(unit)) return true;
+        if (hasFBUnconnectedFeedHeaderCTAV77(unit)) return true;
 
         // v65: recommendation labels are terminal post-level signals just like Join/Follow.
         // Use the comment-safe post text so a comment saying "suggested for you" cannot kill
@@ -4649,13 +4603,6 @@ const scrubRestrictedFeedUnits = () => {
                     if (!unit || seen.has(unit)) return;
                     seen.add(unit);
                     if (unit.classList?.contains('fb-post-banned') || unit.classList?.contains('fb-element-banned')) return;
-                    // Header CTA is a terminal veto, including on a previously approved FeedUnit.
-                    // Do this BEFORE every approved/cached early exit.
-                    if (hasFBUnconnectedFeedHeaderCTAV77(unit)) {
-                        banPostAfterScan(unit, 'header Follow/Join CTA overrides feed-unit approval');
-                        hidden++;
-                        return;
-                    }
                     if (unit.getAttribute?.('data-fb-v25-scan-complete') === '1' && unit.classList?.contains('fb-post-approved')) return;
                     if (applyCachedFBFeedUnitRestrictionDecision(unit)) return;
                     if (hasRestrictedFeedCTAOrReels(unit)) {
@@ -5139,17 +5086,6 @@ function FB_centralPolicySnapshotVerdict(value) {
         const host = FB_normalizeCentralPolicyHost(parsed.hostname);
         const pathname = String(parsed.pathname || '/').replace(/\/{2,}/g, '/');
 
-        // Explicit block decisions always win over broad allowed hosts/path rules.
-        // This also covers paths under an otherwise allowed .com host.
-        for (const fragment of FB_centralPolicySnapshot.blockedSites || []) {
-            if (fragment && href.includes(String(fragment))) return 'block';
-        }
-
-        const lowerHost = host.toLowerCase();
-        for (const tld of FB_centralPolicySnapshot.blockedTLDs || []) {
-            if (tld && lowerHost.endsWith(String(tld).toLowerCase())) return 'block';
-        }
-
         for (const domainValue of FB_centralPolicySnapshot.allowedHosts || []) {
             const domain = FB_normalizeCentralPolicyHost(domainValue);
             if (domain && (host === domain || host.endsWith(`.${domain}`))) return 'allow';
@@ -5161,6 +5097,15 @@ function FB_centralPolicySnapshotVerdict(value) {
             if (!prefix.startsWith('/')) prefix = `/${prefix}`;
             prefix = prefix.replace(/\/{2,}/g, '/').replace(/\/$/, '') || '/';
             if (host === ruleHost && (pathname === prefix || pathname.startsWith(`${prefix}/`))) return 'allow';
+        }
+
+        for (const fragment of FB_centralPolicySnapshot.blockedSites || []) {
+            if (fragment && href.includes(String(fragment))) return 'block';
+        }
+
+        const lowerHost = host.toLowerCase();
+        for (const tld of FB_centralPolicySnapshot.blockedTLDs || []) {
+            if (tld && lowerHost.endsWith(String(tld).toLowerCase())) return 'block';
         }
     } catch (e) {}
 
@@ -5575,43 +5520,58 @@ const isolatedRegex = [
 	/gareta/i, /\bkati\b/i, /juutilainen/i, /harjula/i, /taisto/i, /riituska/i, /rupaska/i, /hvanain/i, /eidih/i,
 ];
 
+// ===== v309: Unicode-aware AI token boundaries =====
+// A hyphenated AI prefix must begin a separate token, not appear inside an
+// ordinary Finnish word. The -AI suffix must END there, not match -AIka.
+// This named rule survives reorderings of the user-controlled keyword list.
+const FB_HYPHEN_AI_PATTERN_V309 = /(?<![\p{L}\p{N}])AI-(?=[\p{L}\p{N}])/iu;
+
 const globalRegex = [
      // Classic Regexes (Might cause Meta to push more AI slop onto us)
-	/lex bl/i, /AI-/i, /-AI/i, /AI-suck/i, /Ripl/i, /Shira/i, /Steph's place/i, /Stephanie's place/i, /Steph McMahon/i, /Stepan/i, /Stratu/i, /Stratt/i, /Gina Adam/i, /lantaaa/i, /lantaai/i, /Sherilyn/i, /Tiffa/i,
-	/Tiffy/i, /Dreambooth/i, /Dream booth/i, /Dualipa/i, /Dua Lipa/i, /Meta AI/i, /Tatu Toiviainen/i, /IInspiration/i, /IIconics/i, /cargil/i, /cargirl/i, /cargril/i, /gargril/i, /gargirl/i, /garcirl/i, /watanabe/i,
-	/barlow/i, /Nikki/i, /Saya Kamitani/i, /Kamitani/i, /Katie/i, /Nikkita/i, /Nikkita Lyons/i, /Lisa Marie/i, /Lisa Marie Varon/i, /Lisa Varon/i, /Marie Varon/i, /Takaichi/i, /Sakurai/i, /Arrivederci/i, /Alice/i,
-	/Alicy/i, /Alici/i, /Arisu Endo/i, /Crowley/i, /Ruby Soho/i, /Monica/i, /Castillo/i, /Matsumoto/i, /Shino Suzuki/i, /AIblow/i, /5uck/i, /Suckin/i, /Sucks/i, /Sucki/i, /Sucky/i, /AIsuck/i, /AI-suck/i, /drool/i,
-	/RemovingAI/i, /blowjob/i, /bjob/i, /b-job/i, /bj0b/i, /bl0w/i, /blowj0b/i, /dr0ol/i, /dro0l/i, /dr00l/i, /Rhea Ripley/i, /Roxanne/i, /Lauren/i, /Liv Morgan/i, /Alexa Bliss/i, /Cathy/i, /Kelley/i, /Cathy Kelley/i,
-	/\bMarie\b/i, /Juliette/i, /Artificial/i, /Artificial Intelligence/i, /Powered by AI/i, /AI made/i, /AI creation/i, /IYO SKY/i, /AI creative/i, /AI created/i, /Tekoäly/i, /Teko äly/i, /Teko-äly/i, /Teko_äly/i,
-	/gener/i, /generoiva/i, /generoitu/i, /generated/i, /generative/i, /AI create/i, /generation/i, /seksi/i, /anaali/i, /pillu/i, /pimppi/i, /kyrpä/i, /kulli/i, /sexual/i, /sensuel/i, /Kiana James/i, /seksuaali/i, 
-    	/Alexa Bliss/i, /Alexa WWE/i, /5 feet of fury/i, /five feet of fury/i, /Tiffy time/i, /Mercedes/i, /Samantha/i, /La Leona/i, /livmorgan/i, /Mariah May/i, /Mandy Rose/i, /Chelsea Green/i, /liv morgan/i, /sexual/i,
-    	/Sportskeeda/i, /Vince Russo/i, /Samantha Irvin/i, /Brave Software/i, /Shirakawa/i, /Nikkita/i, /Blackheart/i, /Charlotte/i, /Becky Lynch/i, /Samantha Irwin/i, /Serena Deeb/i, /Mia Yim/i, /AJ Lee/i, /Stephanie/i, 
-	/Liv Morgan/i, /Piper Niven/i, /Julia Rajal/i, /Jordynne Grace/i, /Jordynne/i, /Carr WWE/i, /Iyo Shirai/i, /Izzi Dame/i, /Iyo Sky/i, /Playboy/i, /goddess/i, /Izzi WWE/i, /NXT Womens/i, /NXT Women/i, /NXT Woman/i, 
-	/DeepSeek AI/i, /Rhea Ripley/i, /Instagram/i, /Jakara/i, /Lash Legend/i, /Alba Fyre/i, /Isla Dawn/i, /Suositeltu/i, /Eerika/i, /Lana WWE/i, /Raquel Rodriguez/i, /Zelina Vega/i, /Alicia Fox/i, /Willow Nightingale/i, 
-	/Kris Statlander/i, /Kayden Carter/i, /Katana Chance/i, /Izzi Dame/i, /Dame WWE/i, /Indi Hartwell/i, /Blair Davenport/i, /Lola Vice/i, /\bValhalla\b/i, /Maxxine Dupri/i, /Karmen Petrovic/i, /Ava Raine/i, /Rousey/i, 
-	/Jacy Jayne/i, /Gigi Dolin/i, /Io Sky/i, /Shirai/i, /Scarlett/i, /Thea Hail/i, /Tatum Paxley/i, /Dakota Kai/i, /Kelani Jordan/i, /Electra Lopez/i, /Wendy Choo/i, /Yulisa Leon/i, /Valentina/i, /Baszler/i, /Shayna/i,
-	/Amari Miller/i, /Young Bucks/i, /Torrie Wilson/i, /Ripley!/i, /Monroe/i, /Arianna Grace/i, /Zelina/i, /Natalya/i, /Sexy/i, /Kairi Sane/i, /Satomura/i, /Candice/i, /Nia Jax/i, /\bNaomi\b/i, /Roxanne/i, /Xia Li/i,  
-	/Cora Jade/i, /Velvet Sky/i, /Carmella/i, /Dana Brooke/i, /Martinez/i, /Marina/i, /goddess/i, /Sasha Banks/i, /Valkyria/i, /arabra/i, /Primera/i, /Summer Rae/i, /Michelle McCool/i, /Eve Torres/i, /Kelly Kelly/i, 
-	/Tatu Toiviainen/i, /Jessika Carr/i, /Jessica Karr/i, /Venice/i, /Jessica Carr/i, /Jessica WWE/i, /Matt Jackson/i, /Karr WWE/i, /Melina wrestler/i, /bKanellis/i, /Beth Phoenix/i, /Kaipio/i, /Victoria/i, /Jazz WWE/i, 
-	/Molly Holly/i, /Priscilla/i, /Red Velvet/i, /Meta AI/i, /sasha/i, /Awesome Kong/i, /Madison Rayne/i, /Angelina/i, /Tessmacher/i, /Su Yung/i, /woman/i, /women/i,  /Taya Valkyrie/i, /Bianca Belair/i, /Skye Blue/i, 
-	/Bordeaux/i, /Brooke/i, /Purrazzo/i, /Toni Storm/i, /Jamie Hayter/i, /Anna Jay/i, /Hikaru/i, /Sakazaki/i, /Nyla Rose/i, /Sakura/i, /Penelope Ford/i, /Julia Hart/i, /Kamifuku/i, /Elayna/i, /Juliette/i, /Juliana/i, 
-	/Julianna/i, /Henley/i, /Saya Kamitani/i, /AJ Lee's/i, /Nikkita Lyons/i, /Lisa Varon/i, /Marie Varon/i, /Irving/i, /Belts Mone/i, /Amanda Huber/i, /Megan Bayne/i, /Wren Sinclair/i, /Bella Twins/i, /Britt Baker/i,  
-	/Sexxy/i, /Xia Li/i, /Kairii/i, /Kairi's/i, /Sexx/i, /Sexi/i, /Monroe/i, /Girlfriend/i, /Girl's/i, /Women's/i, /Woman's/i, /Lady's/i, /Ladies'/i, /Toni Harsunen/i, /Wikman/i, /Vikman/i, /Jaida Parker/i, /Kiana/i, 
-	/suositukset/i, /ehdotukset/i, /Kamitani/i, /Artificial Intelligence/i, /20\. heinäkuu klo/i, /Sisältö ei ole käytettävissä tällä hetkellä/i, /sinulle ehdotettu/i, /kendal.*(grey|gray)/i, /leila.*(grey|gray)/i, 
-	/Jessika WWE/i, /Fallon Henley/i, /QTCinderella/i, /KaliArmstrong/i, /Kali Armstrong/i, /#Kali/i, /#KaliArmstrong/i, /Gail Kim/i, /Mira Immo/i, /Serrano/i, /Nina Immo/i, /Heli Kupa/i, /DeepSeek/i, /CJ Perry/i, 
+	/lex bl/i, /Ripl/i, /Shira/i, /Steph's place/i, /Stephanie's place/i, /Steph McMahon/i, /Stepan/i, /Stratu/i, /Stratt/i, /Gina Adam/i, /Sherilyn/i, /Tiffa/i, /Tiffy/i, /Dreambooth/i, 
+	/Dream booth/i, /Dualipa/i, /Dua Lipa/i, /Tatu Toiviainen/i, /IInspiration/i, /IIconics/i, /cargil/i, /cargirl/i, /cargril/i, /gargril/i, /gargirl/i, /garcirl/i, /watanabe/i, /Alice/i,
+	/barlow/i, /Nikki/i, /Saya Kamitani/i, /Kamitani/i, /Katie/i, /Nikkita/i, /Nikkita Lyons/i, /Lisa Marie/i, /Lisa Marie Varon/i, /Lisa Varon/i, /Marie Varon/i, /Takaichi/i, /Sakurai/i, 
+	/Arrivederci/i, /Alicy/i, /Alici/i, /Arisu Endo/i, /Crowley/i, /Ruby Soho/i, /Monica/i, /Castillo/i, /Matsumoto/i, /Shino Suzuki/i, /5uck/i, /Suckin/i, /Sucks/i, /Sucki/i, /Sucky/i, 
+	/drool/i, /blowjob/i, /bjob/i, /b-job/i, /bj0b/i, /bl0w/i, /blowj0b/i, /dr0ol/i, /dro0l/i, /dr00l/i, /Rhea Ripley/i, /Roxanne/i, /Lauren/i, /Liv Morgan/i, /Alexa Bliss/i, /Cathy/i, 
+	/Kelley/i, /Cathy Kelley/i, /Juliette/i, /IYO SKY/i, /DeepSeek/i, /seksi/i, /anaali/i, /pillu/i, /pimppi/i, /kyrpä/i, /kulli/i, /sexual/i, /sensuel/i, /Kiana James/i, /seksuaali/i, 
+    	/Alexa Bliss/i, /Alexa WWE/i, /5 feet of fury/i, /five feet of fury/i, /Tiffy time/i, /Mercedes/i, /Samantha/i, /La Leona/i, /livmorgan/i, /Mariah May/i, /Mandy Rose/i, /sexual/i, 
+	/Chelsea Green/i, /liv morgan/i, /Sportskeeda/i, /Vince Russo/i, /Samantha Irvin/i, /Brave Software/i, /Shirakawa/i, /Nikkita/i, /Iyo Sky/i, /Charlotte/i, /Becky Lynch/i, /Mia Yim/i,
+	/Samantha Irwin/i, /Serena Deeb/i, /AJ Lee/i, /Stephanie/i, /Liv Morgan/i, /Piper Niven/i, /Julia Rajal/i, /Jordynne Grace/i, /Jordynne/i, /Carr WWE/i, /Iyo Shirai/i, /Izzi Dame/i, 
+	/Blackheart/i, /Playboy/i, /goddess/i, /Izzi WWE/i, /NXT Womens/i, /NXT Women/i, /NXT Woman/i, /Rhea Ripley/i, /Instagram/i, /Jakara/i, /Lash Legend/i, /Alba Fyre/i, /Isla Dawn/i, 
+	/Suositeltu/i, /Eerika/i, /Lana WWE/i, /Raquel Rodriguez/i, /Zelina Vega/i, /Alicia Fox/i, /Willow Nightingale/i, /Kris Statlander/i, /Kayden Carter/i, /Katana Chance/i, /Dame WWE/i, 
+	/Indi Hartwell/i, /Blair Davenport/i, /Lola Vice/i, /Maxxine Dupri/i, /Karmen Petrovic/i, /Ava Raine/i, /Rousey/i, /Jacy Jayne/i, /Gigi Dolin/i, /Io Sky/i, /Shirai/i, /Scarlett/i, 
+	/Thea Hail/i, /Tatum Paxley/i, /Dakota Kai/i, /Kelani Jordan/i, /Electra Lopez/i, /Wendy Choo/i, /Yulisa Leon/i, /Valentina/i, /Baszler/i, /Shayna/i, /Amari Miller/i, /Young Bucks/i, 
+	/Torrie Wilson/i, /Ripley!/i, /Monroe/i, /Arianna Grace/i, /Zelina/i, /Natalya/i, /Sexy/i, /Kairi Sane/i, /Satomura/i, /Candice/i, /Nia Jax/i, /Roxanne/i, /Xia Li/i, /Cora Jade/i, 
+	/Velvet Sky/i, /Carmella/i, /Dana Brooke/i, /Martinez/i, /Marina/i, /goddess/i, /Sasha Banks/i, /Valkyria/i, /arabra/i, /Primera/i, /Summer Rae/i, /Michelle McCool/i, /Eve Torres/i, 
+	/Kelly Kelly/i, /Tatu Toiviainen/i, /Jessika Carr/i, /Jessica Karr/i, /Venice/i, /Jessica Carr/i, /Jessica WWE/i, /Matt Jackson/i, /Karr WWE/i, /Melina wrestler/i, /Beth Phoenix/i, 
+	/Kaipio/i, /Victoria/i, /Jazz WWE/i, /Molly Holly/i, /Priscilla/i, /Red Velvet/i, /sasha/i, /Awesome Kong/i, /Madison Rayne/i, /Angelina/i, /Tessmacher/i, /Su Yung/i, /Nyla Rose/i, 
+	/woman/i,  /women/i, /Taya Valkyrie/i, /Bianca Belair/i, /Skye Blue/i, /Bordeaux/i, /Brooke/i, /Purrazzo/i, /Toni Storm/i, /Jamie Hayter/i, /Anna Jay/i, /Hikaru/i, /Sakazaki/i,  
+	/Sakura/i, /Penelope Ford/i, /Julia Hart/i, /Kamifuku/i, /Elayna/i, /Juliette/i, /Juliana/i, /Julianna/i, /Henley/i, /Saya Kamitani/i, /AJ Lee's/i, /Nikkita Lyons/i, /Lisa Varon/i, 
+	/Marie Varon/i, /Irving/i, /Belts Mone/i, /Amanda Huber/i, /Megan Bayne/i, /Wren Sinclair/i, /Bella Twins/i, /Britt Baker/i, /Sexxy/i, /Xia Li/i, /Kairii/i, /Kairi's/i, /Sexx/i, 
+	/Sexi/i, /Monroe/i, /Girlfriend/i, /Girl's/i, /Women's/i, /Woman's/i, /Lady's/i, /Ladies'/i, /Toni Harsunen/i, /Wikman/i, /Vikman/i, /Jaida Parker/i, /Kiana/i, /suositukset/i, 
+	/ehdotukset/i, /Kamitani/i, /Mira Immo/i, /Serrano/i, /Nina Immo/i, /Heli Kupa/i, /20\. heinäkuu klo/i, /Sisältö ei ole käytettävissä tällä hetkellä/i, /sinulle ehdotettu/i, 
+	/Jessika WWE/i, /Fallon Henley/i, /QTCinderella/i, /KaliArmstrong/i, /Kali Armstrong/i, /#Kali/i, /#KaliArmstrong/i, /DeepSeek/i, /kendal.*(grey|gray)/i, /leila.*(grey|gray)/i,  
+	/Gail Kim/i, /CJ Perry/i, 
+	
+
+     // AI-handling/regexes
+FB_HYPHEN_AI_PATTERN_V309, /-AI(?![\p{L}\p{N}])/iu, /(?<![\p{L}\p{N}])AI-suck(?![\p{L}\p{N}])/iu, /(?<![\p{L}\p{N}])AIsuck(?![\p{L}\p{N}])/iu, /(?<![\p{L}\p{N}])AI-suck(?![\p{L}\p{N}])/iu, /(?<![\p{L}\p{N}])AI creative(?![\p{L}\p{N}])/iu, /(?<![\p{L}\p{N}])AI created(?![\p{L}\p{N}])/iu, /(?<![\p{L}\p{N}])Artificial(?![\p{L}\p{N}])/iu, /Powered by AI(?![\p{L}\p{N}])/iu, /(?<![\p{L}\p{N}])AI made(?![\p{L}\p{N}])/iu, /(?<![\p{L}\p{N}])AI creation(?![\p{L}\p{N}])/iu, /(?<![\p{L}\p{N}])gener(?:at|o(?:i|it))/iu, 
+	/(?<![\p{L}\p{N}])AI create(?![\p{L}\p{N}])/iu, /DeepSeek AI(?![\p{L}\p{N}])/iu, /Artificial Intelligence(?![\p{L}\p{N}])/iu, /Tekoäly/i, /Teko äly/i, /Teko-äly/i, /Teko_äly/i, /generoiva/i, /generoitu/i, /(?<![\p{L}\p{N}])generated(?![\p{L}\p{N}])/iu, /(?<![\p{L}\p{N}])generative(?![\p{L}\p{N}])/iu, /(?<![\p{L}\p{N}])generation(?![\p{L}\p{N}])/iu, 
+	/lantaaa/i, /lantaai/i, /Meta AI(?![\p{L}\p{N}])/iu, /(?<![\p{L}\p{N}])RemovingAI(?![\p{L}\p{N}])/iu, /(?<![\p{L}\p{N}])AIblow(?![\p{L}\p{N}])/iu, /Meta AI(?![\p{L}\p{N}])/iu, /\bBy AI(?![\p{L}\p{N}])/iu, /(?<![\p{L}\p{N}])Ais(?![\p{L}\p{N}])/iu, 
 
 
      // Boundaried regexes (separated for clarity)
-	/\bVaughn\b/i, /\bEvelyn\b/i, /\bSol\b/i, /\bShe\b/i, /\bHer\b/i, /\bHer's\b/i, /\bShe's\b/i, /\bRiho\b/i, /\bCum\b/i, /\bSlut\b/i, /\bTor\b/i, /\bIzzi\b/i, /\bDame\b/i, /\bNox\b/i, /\bLiv\b/i, /\bAlexa\b/i, 
-	/\bTay\b/i, /\bMelo\b/i, /\bConti\b/i, /\bPaige\b/i, /\bShotzi\b/i, /\bTiffy\b/i, /\bStratton\b/i, /\bBy AI\b/i, /\bAis\b/i, /\bIvory\b/i, /\bposing\b/i, /\bSasha\b/i, /\bAnal\b/i, /\bBliss\b/i, /\bODB\b/i,
-	/\bZoey\b/i, /\bGay\b/i, /\bTransvestite\b/i, /\bTransu\b/i, /\bPride\b/i, /\bLesbian\b/i, /\bLesbo\b/i, /\bHomo\b/i, /\bQueer\b/i, /\bSable\b/i, /\bBella\b/i, /\bNikki\b/i, /\bTegan\b/i, /\bGoddess\b/i, 
-	/\bLita\b/i, /\bRusso\b/i, /\bLGBT\b/i, /\bLGBTQ\b/i, /\bMami\b/i, /\bTrish\b/i, /\bStratus\b/i, /\bGiulia\b/i, /\bMichin\b/i, /\bJayne\b/i, /\bLLM\b/i, /\bMLM\b/i, /\bG1na\b/i, /\bGlna\b/i, /\bG!na\b/i, 
-	/\bChyna\b/i, /\bSaraya\b/i, /\bBrooke\b/i, /\bCora\b/i, /\bGin4\b/i, /\bG1n4\b/i, /\bKara\b/i, /\bTessa\b/i, /\bRuca\b/i, /\bRuby\b/i, /\bSoho\b/i, /\bTrans\b/i, /\bposed\b/i, /\bLayla\b/i, /\bLana\b/i, 
-	/\bJacy\b/i, /\bKara\b/i, /\bBrie\b/i, /\bYung\b/i, /\bHavok\b/i, /\bJade\b/i, /\bAthena\b/i, /\bFuku\b/i, /\bGina\b/i, /\bSex\b/i, /\bKairi\b/i, /\bKiana\b/i, /\bGirl\b/i, /\bGirls\b/i, /\bThekla\b/i, 
-	/\bWoman\b/i, /\bWomen\b/i, /\bWomens\b/i, /\bWomans\b/i, /\bLady\b/i, /\bLadies\b/i, /\bLadys\b/i, /\bMarie\b/i, /\bKairi\b/i, /\bAsuka\b/i, /\bB-Fab\b/i,  /\bTiffany\b/i, /\bStratton\b/i, /\bPerez\b/i, 
-	/\bPerze\b/i, /\bHavok\b/i, /\bJillian\b/i, /\bMickie\b/i, /\bFlair\b/i, /\bMeltzer\b/i, /\bLayla\b/i, /\bBlake\b/i, /\bRipley\b/i, /\bKatie\b/i, /\bShafir\b/i, /\bStacy\b/i, /\bKeibler\b/i, /\bMaryse\b/i, 
-	/\bTrish\b/i, /\bSarray\b/i, /\bXia\b/i, /\bRonda\b/i, /\bNattie\b/i, /\bBayley\b/i, /\bGiulia\b/i, /\bFallon\b/i, /\bMichin\b/i, /\bStratus\b/i, /\bKelly\b/i, /\bKarr\b/i, /\bFallon\b/i, /\bDeonna\b/i, 
-	/\bErika\b/i, /\bLeRae\b/i, /\bTamina\b/i, /\bTiff\b/i,
+	/\bVaughn\b/i, /\bEvelyn\b/i, /\bSol\b/i, /\bShe\b/i, /\bHer\b/i, /\bHer's\b/i, /\bShe's\b/i, /\bRiho\b/i, /\bCum\b/i, /\bSlut\b/i, /\bTor\b/i, /\bIzzi\b/i, /\bDame\b/i, /\bNox\b/i, 
+	/\bLiv\b/i, /\bAlexa\b/i, /\bTay\b/i, /\bMelo\b/i, /\bConti\b/i, /\bPaige\b/i, /\bShotzi\b/i, /\bTiffy\b/i, /\bStratton\b/i, /\bIvory\b/i, /\bposing\b/i, /\bSasha\b/i, /\bAnal\b/i, 
+	/\bBliss\b/i, /\bODB\b/i, /\bZoey\b/i, /\bGay\b/i, /\bTransvestite\b/i, /\bTransu\b/i, /\bPride\b/i, /\bLesbian\b/i, /\bLesbo\b/i, /\bHomo\b/i, /\bQueer\b/i, /\bSable\b/i, /\bBella\b/i, 
+	/\bNikki\b/i, /\bTegan\b/i, /\bGoddess\b/i, /\bLita\b/i, /\bRusso\b/i, /\bLGBT\b/i, /\bLGBTQ\b/i, /\bMami\b/i, /\bTrish\b/i, /\bStratus\b/i, /\bGiulia\b/i, /\bMichin\b/i, /\bJayne\b/i, 
+	/\bLLM\b/i, /\bMLM\b/i, /\bG1na\b/i, /\bGlna\b/i, /\bG!na\b/i, /\bChyna\b/i, /\bSaraya\b/i, /\bBrooke\b/i, /\bCora\b/i, /\bGin4\b/i, /\bG1n4\b/i, /\bKara\b/i, /\bTessa\b/i, /\bRuca\b/i, 
+	/\bRuby\b/i, /\bSoho\b/i, /\bTrans\b/i, /\bposed\b/i, /\bLayla\b/i, /\bLana\b/i, /\bJacy\b/i, /\bKara\b/i, /\bBrie\b/i, /\bYung\b/i, /\bHavok\b/i, /\bJade\b/i, /\bAthena\b/i, /\bFuku\b/i, 
+	/\bGina\b/i, /\bSex\b/i, /\bKairi\b/i, /\bKiana\b/i, /\bGirl\b/i, /\bGirls\b/i, /\bThekla\b/i, /\bWoman\b/i, /\bWomen\b/i, /\bWomens\b/i, /\bWomans\b/i, /\bShafir\b/i, /\bValhalla\b/i,
+	/\bLadies\b/i, /\bLadys\b/i, /\bMarie\b/i, /\bKairi\b/i, /\bAsuka\b/i, /\bB-Fab\b/i, /\bTiffany\b/i, /\bStratton\b/i, /\bPerez\b/i, /\bPerze\b/i, /\bHavok\b/i, /\bJillian\b/i, /\bTiff\b/i,
+	/\bMickie\b/i, /\bFlair\b/i, /\bMeltzer\b/i, /\bLayla\b/i, /\bBlake\b/i, /\bRipley\b/i, /\bKatie\b/i, /\bLady\b/i,  /\bKeibler\b/i, /\bMaryse\b/i, /\bStacy\b/i, /\bTrish\b/i, /\bSarray\b/i, 
+	/\bXia\b/i, /\bRonda\b/i, /\bNattie\b/i, /\bBayley\b/i, /\bGiulia\b/i, /\bFallon\b/i, /\bMichin\b/i, /\bStratus\b/i, /\bKelly\b/i, /\bKarr\b/i, /\bFallon\b/i, /\bDeonna\b/i, /\bErika\b/i, 
+	/\bLeRae\b/i, /\bTamina\b/i, /\bNaomi\b/i, /\bMarie\b/i, /\bKanellis/i, 
 ];
 
 // v32: Dynamic wrestler names from wrestling.js/background storage.
@@ -5637,6 +5597,8 @@ const FB_DYNAMIC_WRESTLER_FALLBACK_URLS = [
 ];
 let fbDynamicWrestlerRegexes = [];
 let fbDynamicWrestlerRegexSources = new Set();
+// v310: compact hashtag names from SmackDownHotel storage/fallback.
+let fbDynamicWrestlerHashtagKeysV310 = [];
 let fbDynamicWrestlerVersion = 0;
 
 const buildFBWrestlerRegexes = (urls) => {
@@ -5658,6 +5620,7 @@ const buildFBWrestlerRegexes = (urls) => {
 
         const next = [];
         const nextSources = new Set();
+        const nextHashtagKeys = [];
         combinedUrls.forEach(url => {
             try {
                 const raw = String(url || '').trim();
@@ -5673,11 +5636,13 @@ const buildFBWrestlerRegexes = (urls) => {
                 if (nextSources.has(source)) return;
                 nextSources.add(source);
                 next.push(new RegExp(source, 'i'));
+                nextHashtagKeys.push(name.replace(/[^\p{L}\p{N}]/gu, '').toLowerCase());
             } catch (e) {}
         });
 
         fbDynamicWrestlerRegexes = next;
         fbDynamicWrestlerRegexSources = nextSources;
+        fbDynamicWrestlerHashtagKeysV310 = nextHashtagKeys;
         fbDynamicWrestlerVersion++;
         return true;
     } catch (e) {
@@ -5720,6 +5685,43 @@ const applyFBDynamicWrestlerBans = (urls) => {
 buildFBWrestlerRegexes([]);
 
 let regexBlockedWords = [];
+// v310: generated from active rules, never an independent ban list.
+let __fbHashtagCompactAliasesV310 = new Map();
+
+// Extract only literal phrases. Never try to strip arbitrary regex syntax:
+// alternations, wildcards and lookarounds could silently broaden a user's rule.
+const getFBHashtagLiteralPhraseV310 = (pattern) => {
+    try {
+        let source = String(pattern?.source || '');
+        const lead = '(?<![\\p{L}\\p{N}])';
+        const tail = '(?![\\p{L}\\p{N}])';
+        if (source.startsWith(lead)) source = source.slice(lead.length);
+        if (source.endsWith(tail)) source = source.slice(0, -tail.length);
+        if (source.startsWith('\\b')) source = source.slice(2);
+        if (source.endsWith('\\b')) source = source.slice(0, -2);
+        if (!/^[\p{L}\p{N}][\p{L}\p{N} ._\-'’]*[\p{L}\p{N}]$/u.test(source)) return '';
+        // Joining multi-word names is useful; compacting a single ordinary
+        // word would introduce overbroad prefix matching in hashtags.
+        if (!/[ ._\-'’]/u.test(source)) return '';
+        return source.replace(/[^\p{L}\p{N}]/gu, '').toLowerCase();
+    } catch (e) { return ''; }
+};
+
+const rebuildFBHashtagAliasesV310 = () => {
+    const aliases = new Map();
+    for (let i = 0; i < regexBlockedWords.length; i++) {
+        const key = getFBHashtagLiteralPhraseV310(regexBlockedWords[i]);
+        if (key && !aliases.has(key)) aliases.set(key, i);
+    }
+    // The SmackDownHotel patterns contain [\s_\-]+ separators, so the
+    // validated storage/fallback slugs give us safer compact equivalents.
+    // Every key shares its index with its generated dynamic wrestler regex.
+    const dynamicStart = regexBlockedWords.length - fbDynamicWrestlerRegexes.length;
+    fbDynamicWrestlerHashtagKeysV310.forEach((key, i) => {
+        if (key && !aliases.has(key)) aliases.set(key, dynamicStart + i);
+    });
+    __fbHashtagCompactAliasesV310 = aliases;
+};
 let __fbLastStrictScope = null;
 let __fbLastWrestlerVersion = -1;
 const refreshAccountScopedFilters = () => {
@@ -5744,6 +5746,7 @@ const refreshAccountScopedFilters = () => {
         blockedFbids = __fbStrictAccountEnabled ? isolatedFbids : [];
         const baseRegexWords = __fbStrictAccountEnabled ? globalRegex.concat(isolatedRegex) : globalRegex;
         regexBlockedWords = baseRegexWords.concat(fbDynamicWrestlerRegexes);
+        rebuildFBHashtagAliasesV310();
         return __fbStrictAccountEnabled;
     } catch (e) {
         __fbStrictAccountEnabled = false;
@@ -5751,51 +5754,101 @@ const refreshAccountScopedFilters = () => {
         try { document.documentElement?.classList.remove('fb-strict-element-hiding-v37'); } catch (e) {}
         blockedFbids = [];
         regexBlockedWords = globalRegex.concat(fbDynamicWrestlerRegexes);
+        rebuildFBHashtagAliasesV310();
     }
 };
 refreshAccountScopedFilters();
 
-// v36: consume SmackDownHotel dynamic bans from both Chromium and Firefox-style
-// extension storage APIs. The old FB side only read chrome.storage.local, so Firefox/Android
-// or timing weirdness could leave FB search running on the static regex list only.
-const consumeFBWrestlingStoragePayload = (payload) => {
+// v311: Initial dynamic name loading is a POLICY prerequisite for newly
+// encountered posts, not something that may ban already-painted posts later.
+// Hold only until first storage result; retain the static fallback when storage
+// cannot be reached. A bounded timeout prevents a permanently blank timeline.
+let __fbWrestlerStorageInitialPendingV311 = false;
+let __fbWrestlerStorageInitialDoneV311 = false;
+let __fbWrestlerStorageInitialSourceV311 = 'fallback-only';
+const finishFBInitialWrestlerStorageV311 = (source) => {
+    if (__fbWrestlerStorageInitialDoneV311) return;
+    __fbWrestlerStorageInitialDoneV311 = true;
+    __fbWrestlerStorageInitialPendingV311 = false;
+    __fbWrestlerStorageInitialSourceV311 = source;
+    // Release withheld posts only through their normal scanner; no CSS-only unhide.
+    addTimeout(() => {
+        try {
+            if (!isFBMessengerPath(window.location.href) && !isFBNoPostScanUrl(window.location.href))
+                scanFBCanonicalPostsInRootV65(document, 64, true);
+        } catch (e) {}
+    }, 0);
+};
+const consumeFBWrestlingStoragePayload = (payload, source = 'storage-loaded') => {
     try {
         const urls = payload && Array.isArray(payload.wrestling_women_urls) ? payload.wrestling_women_urls : [];
         applyFBDynamicWrestlerBans(urls);
     } catch (e) {}
+    finishFBInitialWrestlerStorageV311(source);
 };
-
+let __fbWrestlerStorageInitialRequestedV311 = false;
 try {
-    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-        chrome.storage.local.get(['wrestling_women_urls'], consumeFBWrestlingStoragePayload);
-        if (chrome.storage.onChanged && !window.__fbWrestlingChromeStorageListenerV36Installed) {
-            window.__fbWrestlingChromeStorageListenerV36Installed = true;
-            chrome.storage.onChanged.addListener((changes, areaName) => {
-                try {
-                    if (areaName !== 'local' || !changes.wrestling_women_urls) return;
-                    applyFBDynamicWrestlerBans(Array.isArray(changes.wrestling_women_urls.newValue) ? changes.wrestling_women_urls.newValue : []);
-                } catch (e) {}
-            });
-        }
+    if (typeof chrome !== 'undefined' && chrome.storage?.local?.get) {
+        __fbWrestlerStorageInitialRequestedV311 = true;
+        __fbWrestlerStorageInitialPendingV311 = true;
+        chrome.storage.local.get(['wrestling_women_urls'], result => {
+            try {
+                if (chrome.runtime?.lastError) {
+                    finishFBInitialWrestlerStorageV311('chrome-error-fallback');
+                    return;
+                }
+            } catch (e) {}
+            consumeFBWrestlingStoragePayload(result, 'chrome-storage');
+        });
+    }
+} catch (e) { finishFBInitialWrestlerStorageV311('chrome-error-fallback'); }
+try {
+    if (typeof chrome !== 'undefined' && chrome.storage?.onChanged &&
+        !window.__fbWrestlingChromeStorageListenerV36Installed) {
+        window.__fbWrestlingChromeStorageListenerV36Installed = true;
+        chrome.storage.onChanged.addListener((changes, areaName) => {
+            try {
+                if (areaName !== 'local' || !changes.wrestling_women_urls) return;
+                applyFBDynamicWrestlerBans(Array.isArray(changes.wrestling_women_urls.newValue)
+                    ? changes.wrestling_women_urls.newValue : []);
+            } catch (e) {}
+        });
     }
 } catch (e) {}
-
 try {
-    if (typeof browser !== 'undefined' && browser.storage && browser.storage.local) {
-        browser.storage.local.get(['wrestling_women_urls'])
-            .then(consumeFBWrestlingStoragePayload)
-            .catch(() => {});
-        if (browser.storage.onChanged && !window.__fbWrestlingBrowserStorageListenerV36Installed) {
-            window.__fbWrestlingBrowserStorageListenerV36Installed = true;
-            browser.storage.onChanged.addListener((changes, areaName) => {
-                try {
-                    if (areaName !== 'local' || !changes.wrestling_women_urls) return;
-                    applyFBDynamicWrestlerBans(Array.isArray(changes.wrestling_women_urls.newValue) ? changes.wrestling_women_urls.newValue : []);
-                } catch (e) {}
-            });
-        }
+    if (!__fbWrestlerStorageInitialRequestedV311 &&
+        typeof browser !== 'undefined' && browser.storage?.local?.get) {
+        __fbWrestlerStorageInitialRequestedV311 = true;
+        __fbWrestlerStorageInitialPendingV311 = true;
+        Promise.resolve(browser.storage.local.get(['wrestling_women_urls']))
+            .then(result => consumeFBWrestlingStoragePayload(result, 'browser-storage'))
+            .catch(() => finishFBInitialWrestlerStorageV311('browser-error-fallback'));
     }
-} catch (e) {}
+    if (typeof browser !== 'undefined' && browser.storage?.onChanged &&
+        !window.__fbWrestlingBrowserStorageListenerV36Installed) {
+        window.__fbWrestlingBrowserStorageListenerV36Installed = true;
+        browser.storage.onChanged.addListener((changes, areaName) => {
+            try {
+                if (areaName !== 'local' || !changes.wrestling_women_urls) return;
+                applyFBDynamicWrestlerBans(Array.isArray(changes.wrestling_women_urls.newValue)
+                    ? changes.wrestling_women_urls.newValue : []);
+            } catch (e) {}
+        });
+    }
+} catch (e) { finishFBInitialWrestlerStorageV311('browser-error-fallback'); }
+if (__fbWrestlerStorageInitialPendingV311) {
+    // Chrome storage generally returns much faster. Never make the wait endless.
+    addTimeout(() => finishFBInitialWrestlerStorageV311('timeout-fallback'), 2200);
+}
+// No supported storage API means the already-built local fallback is ready.
+if (!__fbWrestlerStorageInitialRequestedV311 && !__fbWrestlerStorageInitialDoneV311)
+    finishFBInitialWrestlerStorageV311('fallback-only');
+window.__FBCleanerWrestlerReadinessV311 = () => ({
+    pending: __fbWrestlerStorageInitialPendingV311,
+    completed: __fbWrestlerStorageInitialDoneV311,
+    source: __fbWrestlerStorageInitialSourceV311,
+    dynamicNames: fbDynamicWrestlerRegexes.length
+});
 
 // ===== SAFE MATCH HELPERS =====
 // Keeps the old feed approval behavior alive while using the new regex-only blocklists.
@@ -5809,11 +5862,51 @@ const testRegexPattern = (pattern, value) => {
     }
 };
 
-const matchesAnyActiveRegex = (value) => {
-    const text = String(value || '');
-    if (!text) return false;
-    return regexBlockedWords.some((pattern) => testRegexPattern(pattern, text));
+const getFBFirstBlockedHashtagRegexIndexV310 = (value) => {
+    try {
+        const text = String(value || '');
+        if (!text.includes('#')) return -1;
+        const matches = text.matchAll(/(?<![\p{L}\p{N}_])#([\p{L}\p{N}_]{2,72})/gu);
+        let checked = 0;
+        for (const match of matches) {
+            if (++checked > 20) break;
+            const tag = match[1];
+            const joined = tag.replace(/_/g, '').toLowerCase();
+            const exactIndex = __fbHashtagCompactAliasesV310.get(joined);
+            if (exactIndex !== undefined) return exactIndex;
+            const split = tag.replace(/_/g, ' ')
+                .replace(/([\p{Ll}\p{N}])([\p{Lu}])/gu, '$1 $2')
+                .replace(/([\p{Lu}])([\p{Lu}][\p{Ll}])/gu, '$1 $2');
+            if (split === tag) continue;
+            for (let i = 0; i < regexBlockedWords.length; i++) {
+                try {
+                    const pattern = regexBlockedWords[i];
+                    pattern.lastIndex = 0;
+                    const hit = pattern.exec(split);
+                    if (!hit) continue;
+                    // The CamelCase form creates genuine word boundaries.
+                    // Don't let /Chelsea Green/i falsely match #ChelseaGreenland.
+                    const before = hit.index ? split[hit.index - 1] : '';
+                    const after = split[hit.index + hit[0].length] || '';
+                    if ((!before || !/[\p{L}\p{N}]/u.test(before)) &&
+                        (!after || !/[\p{L}\p{N}]/u.test(after))) return i;
+                } catch (e) {}
+            }
+        }
+    } catch (e) {}
+    return -1;
 };
+
+const getFBFirstMatchingActiveRegexIndexV310 = (value) => {
+    const text = String(value || '');
+    if (!text) return -1;
+    for (let i = 0; i < regexBlockedWords.length; i++) {
+        if (testRegexPattern(regexBlockedWords[i], text)) return i;
+    }
+    return getFBFirstBlockedHashtagRegexIndexV310(text);
+};
+
+const matchesAnyActiveRegex = (value) => getFBFirstMatchingActiveRegexIndexV310(value) >= 0;
 
 const matchesAnyBlockedUrl = (value) => {
     const text = String(value || '');
@@ -6271,8 +6364,6 @@ const getRegexBlockedWords = () => regexBlockedWords;
 // Function to get allowed URLs (maintain function signature)
 const getAllowedUrls = () => allowedUrls;
 const isAllowedUrl = (value = '') => {
-    // Never allow a broad whitelist (including / .com /) to override an explicit veto.
-    if (matchesBlockedUrlCandidates(value)) return false;
     if (isFBCentralAllowedURL(value)) return true;
     const text = String(value || '');
     return allowedUrls.some(pattern => testRegexPattern(pattern, text));
@@ -6510,14 +6601,10 @@ const stripFBCentralAllowedURLSignals = (value = '') => {
 
 const matchesBlockedUrlCandidates = (value = '') => {
     try {
-        const raw = String(value || '');
-        const decoded = safeDecodeFBValue(raw);
-        // Check the original URL(s) FIRST. Stripping allowed signals before this
-        // could erase the very URL that blockedUrls was meant to veto.
-        if (matchesAnyBlockedUrl(raw) || matchesAnyBlockedUrl(decoded) ||
-            hasFBCentralBlockedURL(raw) || hasFBCentralBlockedURL(decoded)) return true;
+        if (hasFBCentralBlockedURL(value)) return true;
+        const decoded = safeDecodeFBValue(value);
         const filteredDecoded = stripFBCentralAllowedURLSignals(decoded);
-        const filteredRaw = stripFBCentralAllowedURLSignals(raw);
+        const filteredRaw = stripFBCentralAllowedURLSignals(String(value || ''));
         return matchesAnyBlockedUrl(filteredDecoded) || matchesAnyBlockedUrl(filteredRaw);
     } catch (e) {
         return matchesAnyBlockedUrl(value);
@@ -8284,6 +8371,17 @@ const deleteBlockedElements = () => {
     }
 };
 
+// v308: accessibility labels on Facebook UI buttons describe the control, not
+// the post. On /four3four an identical aria-label matching /AI-/i appeared in
+// 96 different posts. Exclude only button-control aria/title from the broad
+// keyword text; dedicated AI-info, Follow/Join and URL/FBID checks stay active.
+const isFBPostUIControlAttributeV308 = (el, attribute) => {
+    try {
+        return (attribute === 'aria-label' || attribute === 'title') &&
+            !!el?.matches?.('button, [role="button"], [role="menuitem"], [role="toolbar"]');
+    } catch (e) { return false; }
+};
+
 // v65: comment-safe text collection for the canonical post scanner.
 // Show More is never auto-clicked; user-triggered expansion is re-screened before repaint.
 const collectPostTextForScan = (post) => {
@@ -8327,13 +8425,16 @@ const collectPostTextForScan = (post) => {
         for (let i = 0; i < attrNodes.length && i < 180; i++) {
             const el = attrNodes[i];
             if (!el || isInsideComment(el) || isNotificationPanelElement(el)) continue;
-            push(el.getAttribute && el.getAttribute('aria-label'));
-            push(el.getAttribute && el.getAttribute('title'));
+            if (!isFBPostUIControlAttributeV308(el, 'aria-label'))
+                push(el.getAttribute && el.getAttribute('aria-label'));
+            if (!isFBPostUIControlAttributeV308(el, 'title'))
+                push(el.getAttribute && el.getAttribute('title'));
             push(el.getAttribute && el.getAttribute('alt'));
             push(el.getAttribute && el.getAttribute('href'));
             push(el.href || '');
-            push(el.getAttribute && el.getAttribute('data-store'));
-            push(el.getAttribute && el.getAttribute('data-ft'));
+            // Do not treat Facebook's opaque tracking fields as human-readable
+            // content. URL and blocked-FBID detection still inspect these fields
+            // separately through postHasBlockedLinksOrFbids().
         }
 
         return fbNotifNorm(safeDecodeFBValue(chunks.join(' ')));
@@ -8345,7 +8446,9 @@ const collectPostTextForScan = (post) => {
 
 // ===== v96: actual-caption AI term filter, restored from the earlier experiment =====
 // Do not apply the standalone AI term to Facebook metadata or hidden hydration data.
-const FB_VISIBLE_CAPTION_AI_WORD_V96 = /\bAI\b/i;
+// JavaScript \b treats Finnish ä/ö as non-word characters. Require actual Unicode
+// letter/number boundaries instead, so "hammaslääkäri-AIka" is NOT an AI tag.
+const FB_VISIBLE_CAPTION_AI_WORD_V96 = /(?<![\p{L}\p{N}])AI(?![\p{L}\p{N}])/iu;
 const getFBVisibleCaptionTextV96 = (post) => {
     try {
         if (!post?.querySelectorAll) return '';
@@ -8411,166 +8514,6 @@ const getShowMoreButtonsForPost = (post) => {
     } catch (e) {
         return [];
     }
-};
-
-// ===== 29.5.0: passive full-caption feed bridge (no Show More clicks) =====
-// Only an exact post ID/permalink may associate a caption with a DOM FeedUnit.
-// No network caption is ever required for initial approval; this preserves fast hydration.
-const FB_PASSIVE_CAPTION_MESSAGE_V295 = 'bravefox-fb-passive-caption-v295';
-const __fbPassiveCaptionByKeyV295 = new Map();
-const FB_PASSIVE_CAPTION_MAX_KEYS_V295 = 850;
-const FB_PASSIVE_CAPTION_MAX_AGE_V295 = 4 * 60 * 1000;
-let __fbPassiveCaptionRouteV295 = '';
-let __fbPassiveCaptionAuditQueuedV295 = false;
-
-const getFBPassiveCaptionRouteV295 = () => {
-    try {
-        const path = location.pathname.replace(/\/+$/, '').toLowerCase() || '/';
-        if (path === '/' || path === '/home.php') return '/';
-        if (isCurrentSpecificUrlSurface(location.href)) return path;
-    } catch (e) {}
-    return '';
-};
-
-const refreshFBPassiveCaptionRouteV295 = () => {
-    const route = getFBPassiveCaptionRouteV295();
-    if (route !== __fbPassiveCaptionRouteV295) {
-        __fbPassiveCaptionByKeyV295.clear();
-        __fbPassiveCaptionRouteV295 = route;
-    }
-    return route;
-};
-
-const getFBPassiveCaptionForPostV295 = (post) => {
-    try {
-        if (!refreshFBPassiveCaptionRouteV295() || !post?.querySelectorAll || !__fbPassiveCaptionByKeyV295.size) return '';
-        // Only intrinsic IDs and permalinks belonging to the top-level post header.
-        // Links inside attached/quoted posts cannot identify the outer FeedUnit.
-        const keys = new Set(getFBIntrinsicStablePostKeysV55(post).map(key => String(key).toLowerCase()));
-        const articles = post.matches?.('[role="article"]') ? [post] :
-            Array.from(post.querySelectorAll('[role="article"]')).filter(article => {
-                const parent = article.parentElement?.closest?.('[role="article"]');
-                return !parent || !post.contains(parent);
-            }).slice(0, 2);
-        for (const article of articles) {
-            const caption = article.querySelector?.('[data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"]');
-            const links = article.querySelectorAll?.('a[href*="/posts/"], a[href*="/permalink/"], a[href*="/reel/"], a[href*="/videos/"]') || [];
-            for (let i = 0; i < links.length && i < 30; i++) {
-                const link = links[i];
-                if (link.closest?.('[role="article"]') !== article) continue;
-                if (caption && (caption.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING)) continue;
-                try {
-                    const url = new URL(link.getAttribute('href'), location.origin);
-                    if (!/(^|\.)facebook\.com$/i.test(url.hostname)) continue;
-                    const match = url.pathname.match(/\/(?:posts|permalink|reel|videos)\/([^/?#]+)/i);
-                    if (match) keys.add(('post:' + match[1]).toLowerCase());
-                } catch (e) {}
-            }
-        }
-        let found = null;
-        const now = Date.now();
-        for (const key of keys) {
-            const entry = __fbPassiveCaptionByKeyV295.get(String(key).toLowerCase());
-            if (!entry || now - entry.at > FB_PASSIVE_CAPTION_MAX_AGE_V295) continue;
-            // Different post identities found within one FeedUnit are ambiguous: fail to
-            // associate rather than borrow a caption from an attached/shared post.
-            if (found && found.identity !== entry.identity) return '';
-            found = entry;
-        }
-        return found?.text || '';
-    } catch (e) { return ''; }
-};
-
-const auditFBPassiveCaptionsV295 = () => {
-    try {
-        __fbPassiveCaptionAuditQueuedV295 = false;
-        if (!refreshFBPassiveCaptionRouteV295() || isFBNoPostScanUrl()) return;
-        // Process ONLY posts near the viewport; the canonical scanner will match
-        // cached captions as other posts reach the screen. No whole-page retry loop.
-        const posts = getFBVisibleCanonicalPostsV69(28);
-        for (const post of posts) {
-            if (!post?.isConnected || post.classList?.contains('fb-post-banned') ||
-                post.classList?.contains('fb-element-banned') ||
-                !isFBPostScannerSafeCandidateV65(post)) continue;
-            const caption = getFBPassiveCaptionForPostV295(post);
-            if (!caption) continue;
-            if (matchesAnyActiveRegex(caption) || FB_VISIBLE_CAPTION_AI_WORD_V96.test(caption) ||
-                matchesBlockedUrlCandidates(caption)) {
-                banPostAfterScan(post, 'blocked full caption/URL from exact GraphQL post identity');
-            }
-        }
-    } catch (e) { __fbPassiveCaptionAuditQueuedV295 = false; }
-};
-
-const installFBPassiveCaptionBridgeV295 = () => {
-    try {
-        refreshFBPassiveCaptionRouteV295();
-        onWindowEvent(window, 'message', event => {
-            try {
-                if (event.source !== window || event.origin !== location.origin) return;
-                const data = event.data;
-                if (!data || data.type !== FB_PASSIVE_CAPTION_MESSAGE_V295 ||
-                    !Array.isArray(data.posts) || data.posts.length > 80) return;
-                const route = refreshFBPassiveCaptionRouteV295();
-                if (!route || data.route !== route) return;
-                const now = Date.now();
-                let added = false;
-                for (const record of data.posts) {
-                    if (!record || typeof record.text !== 'string' || !record.text ||
-                        record.text.length > 16000 || !Array.isArray(record.keys) ||
-                        record.keys.length > 6) continue;
-                    const keys = record.keys.filter(key => typeof key === 'string' &&
-                        /^post:[a-z0-9_-]{8,110}$/i.test(key)).map(key => key.toLowerCase());
-                    if (!keys.length) continue;
-                    const identity = keys.find(key => /^post:\d{8,}$/.test(key)) || keys[0];
-                    const entry = { identity, text: record.text, at: now };
-                    for (const key of keys) __fbPassiveCaptionByKeyV295.set(key, entry);
-                    added = true;
-                }
-                if (!added) return;
-                for (const [key, entry] of __fbPassiveCaptionByKeyV295) {
-                    if (now - entry.at > FB_PASSIVE_CAPTION_MAX_AGE_V295 ||
-                        __fbPassiveCaptionByKeyV295.size > FB_PASSIVE_CAPTION_MAX_KEYS_V295)
-                        __fbPassiveCaptionByKeyV295.delete(key);
-                }
-                if (!__fbPassiveCaptionAuditQueuedV295) {
-                    __fbPassiveCaptionAuditQueuedV295 = true;
-                    addTimeout(auditFBPassiveCaptionsV295, 65);
-                }
-            } catch (e) {}
-        });
-    } catch (e) {}
-};
-
-// ===== v99: short, identity-aware caption verdict grace (no native expansion) =====
-// A small delay gives the already-in-flight GraphQL side channel time to report the
-// exact full caption BEFORE a truncated post is revealed. Never gate ordinary posts,
-// native skeletons, recommendations, comments, chat or unmatched/no-ID captions.
-// This does not promise zero glimpse if Facebook publishes the response later.
-const __fbPassiveCaptionGraceV299 = new WeakMap();
-const FB_PASSIVE_CAPTION_GRACE_MS_V299 = 135;
-
-const isFBPassiveCaptionGracePendingV299 = (post, generation = getFBSpaGeneration()) => {
-    try {
-        if (!post?.isConnected || !refreshFBPassiveCaptionRouteV295() ||
-            isFBMessengerPath() || isFBNoPostScanUrl() || document.hidden ||
-            !post.querySelector?.('[data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"]')) return false;
-        if (getFBPassiveCaptionForPostV295(post)) return false;
-        // Grace is useful only when the post has a trustworthy intrinsic ID or
-        // an unambiguous top-level permalink. Unidentified posts stay fast.
-        const hasIntrinsic = getFBIntrinsicStablePostKeysV55(post).length > 0;
-        const hasPermalink = !!post.querySelector('a[href*="/posts/"], a[href*="/permalink/"]');
-        if (!hasIntrinsic && !hasPermalink) return false;
-        const hasTruncatedCaption = getShowMoreButtonsForPost(post).some(btn =>
-            !!btn.closest('[data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"]'));
-        if (!hasTruncatedCaption) return false;
-        let entry = __fbPassiveCaptionGraceV299.get(post);
-        if (!entry || entry.generation !== generation) {
-            entry = { startedAt: performance.now(), generation };
-            __fbPassiveCaptionGraceV299.set(post, entry);
-        }
-        return performance.now() - entry.startedAt < FB_PASSIVE_CAPTION_GRACE_MS_V299;
-    } catch (e) { return false; }
 };
 
 // ===== v46 ONE-SHOT POST HYDRATION STATE =====
@@ -8712,6 +8655,614 @@ const getFBIntrinsicStablePostKeysV55 = (post) => {
     return Array.from(keys).sort().slice(0, 6);
 };
 
+// ===== v313/v314: passive full-caption cache and read-only availability audit =====
+// The MAIN-world observer emits bounded GraphQL/Relay caption records. This
+// listener ONLY caches them; it never changes the DOM or invokes a scanner.
+// v314 lets the existing Classic scanner consult exact-ID data at approval time
+// on The 434, without network-triggered rescans, waits or See more clicks.
+const FB_PASSIVE_DIAG_MESSAGE_V313 = 'bravefox-fb-passive-caption-v295';
+const FB_PASSIVE_DIAG_MAX_AGE_V313 = 35 * 60 * 1000;
+const FB_PASSIVE_DIAG_MAX_KEYS_V313 = 600;
+const FB_PASSIVE_DIAG_MIN_PREFIX_V313 = 105;
+const __fbPassiveDiagRecordsV313 = new Map();
+// v314: conflicting captions under the same exact post key are NOT safe
+// to use for decisions. Keep conflicts separate from the read-only audit cache.
+const __fbPassivePageConflictingKeysV314 = new Map();
+const __fbPassiveDiagSlotIdsV313 = new WeakMap();
+let __fbPassiveDiagNextSlotV313 = 0;
+let __fbPassiveDiagRouteV313 = '';
+let __fbPassiveDiagInstalledV313 = false;
+let __fbPassiveDiagEventsV313 = 0;
+let __fbPassiveDiagReceivedV313 = 0;
+let __fbPassiveDiagRejectedV313 = 0;
+// v316: diagnostic only, to distinguish completed responses from early chunks.
+const __fbPassiveCaptureSourcesV316 = new Map();
+// v315 is diagnostic ONLY. Keep post references weak; retain a bounded amount of
+// internal identity/preview data, never expose either in the console report.
+let __fbPassiveTimingByPostV315 = new WeakMap();
+const __fbPassiveTimingSamplesV315 = [];
+let __fbPassiveTimingSequenceV315 = 0;
+
+const getFBPassiveDiagRouteV313 = () => {
+    try {
+        const path = (location.pathname || '/').replace(/\/+$/, '').toLowerCase() || '/';
+        if (path === '/' || path === '/home.php') return '/';
+        return ['/four3four', '/itsstillrealtousdammit', '/prowrestlingworld',
+            '/weirdimagesworthseeing'].includes(path) ? path : '';
+    } catch (e) { return ''; }
+};
+
+const syncFBPassiveDiagRouteV313 = () => {
+    const route = getFBPassiveDiagRouteV313();
+    if (route !== __fbPassiveDiagRouteV313) {
+        __fbPassiveDiagRecordsV313.clear();
+        __fbPassivePageConflictingKeysV314.clear();
+        __fbPassiveDiagEventsV313 = 0;
+        __fbPassiveDiagReceivedV313 = 0;
+        __fbPassiveDiagRejectedV313 = 0;
+        __fbPassiveCaptureSourcesV316.clear();
+        __fbPassiveTimingByPostV315 = new WeakMap();
+        __fbPassiveTimingSamplesV315.length = 0;
+        __fbPassiveTimingSequenceV315 = 0;
+        __fbPassiveDiagRouteV313 = route;
+    }
+    return route;
+};
+
+const normalizeFBPassiveDiagTextV313 = (value) => String(value || '')
+    .replace(/\s+/g, ' ').trim()
+    .replace(/(?:\s*(?:Näytä lisää|See more|Show more))$/iu, '')
+    .replace(/[.…\s]+$/u, '').trim();
+
+const getFBPassiveDiagPostKeysV313 = (post) => {
+    const keys = new Set(getFBIntrinsicStablePostKeysV55(post)
+        .filter(key => /^post:[a-z0-9_-]{8,110}$/i.test(key)).map(key => key.toLowerCase()));
+    try {
+        // Only timestamp/header permalinks of the outer article, not quoted posts,
+        // attachment links or nested comments. The positive DOM identity is essential.
+        const articles = post.matches?.('[role="article"]') ? [post] :
+            Array.from(post.querySelectorAll('[role="article"]')).filter(article => {
+                const ancestor = article.parentElement?.closest?.('[role="article"]');
+                return !ancestor || !post.contains(ancestor);
+            }).slice(0, 2);
+        for (const article of articles) {
+            const caption = article.querySelector?.('[data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"]');
+            const links = article.querySelectorAll('a[href*="/posts/"], a[href*="/permalink/"], a[href*="/reel/"], a[href*="/videos/"]');
+            for (let i = 0; i < links.length && i < 25; i++) {
+                const a = links[i];
+                if (a.closest?.('[role="article"]') !== article) continue;
+                if (caption && (caption.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING)) continue;
+                const u = new URL(a.getAttribute('href') || '', location.origin);
+                if (!/(^|\.)facebook\.com$/i.test(u.hostname)) continue;
+                const m = u.pathname.match(/\/(?:posts|permalink|reel|videos)\/([^/?#]+)/i);
+                if (m && /^[a-z0-9_-]{8,110}$/i.test(m[1])) keys.add('post:' + m[1].toLowerCase());
+            }
+        }
+    } catch (e) {}
+    return Array.from(keys).slice(0, 12);
+};
+
+const trimFBPassiveDiagCacheV313 = () => {
+    const now = Date.now();
+    for (const [key, entry] of __fbPassiveDiagRecordsV313) {
+        if (now - entry.at > FB_PASSIVE_DIAG_MAX_AGE_V313 ||
+            __fbPassiveDiagRecordsV313.size > FB_PASSIVE_DIAG_MAX_KEYS_V313)
+            __fbPassiveDiagRecordsV313.delete(key);
+    }
+    for (const [key, at] of __fbPassivePageConflictingKeysV314) {
+        if (now - at > FB_PASSIVE_DIAG_MAX_AGE_V313 ||
+            __fbPassivePageConflictingKeysV314.size > FB_PASSIVE_DIAG_MAX_KEYS_V313)
+            __fbPassivePageConflictingKeysV314.delete(key);
+    }
+};
+
+const installFBPassiveDiagListenerV313 = () => {
+    try {
+        if (__fbPassiveDiagInstalledV313) return;
+        __fbPassiveDiagInstalledV313 = true;
+        syncFBPassiveDiagRouteV313();
+        onWindowEvent(window, 'message', event => {
+            try {
+                if (event.source !== window || event.origin !== location.origin) return;
+                const data = event.data;
+                if (!data || data.type !== FB_PASSIVE_DIAG_MESSAGE_V313) return;
+                const route = syncFBPassiveDiagRouteV313();
+                if (!route || data.route !== route || !Array.isArray(data.posts) || data.posts.length > 80) return;
+                __fbPassiveDiagEventsV313++;
+                const source = ['xhr', 'fetch', 'relay-bootstrap'].includes(data.captureSource)
+                    ? data.captureSource : 'legacy';
+                const phase = data.capturePhase === 'stream' ? 'stream' : 'complete';
+                const sourceKey = `${source}-${phase}`;
+                __fbPassiveCaptureSourcesV316.set(sourceKey,
+                    (__fbPassiveCaptureSourcesV316.get(sourceKey) || 0) + 1);
+                const at = Date.now();
+                for (const record of data.posts) {
+                    if (!record || typeof record.text !== 'string' || !record.text ||
+                        record.text.length > 16000 || !Array.isArray(record.keys) || record.keys.length > 6) {
+                        __fbPassiveDiagRejectedV313++; continue;
+                    }
+                    const keys = record.keys.filter(key => typeof key === 'string' &&
+                        /^post:[a-z0-9_-]{8,110}$/i.test(key)).map(key => key.toLowerCase());
+                    if (!keys.length) { __fbPassiveDiagRejectedV313++; continue; }
+                    // The observer can report the same ID with different message bodies
+                    // (for example an attachment or a Facebook edit). Never let either
+                    // conflicting body authorize a preapproval ban for that ID.
+                    for (const key of keys) {
+                        const prior = __fbPassiveDiagRecordsV313.get(key);
+                        if (prior && prior.text !== record.text)
+                            __fbPassivePageConflictingKeysV314.set(key, at);
+                    }
+                    const prev = keys.map(key => __fbPassiveDiagRecordsV313.get(key))
+                        .find(entry => entry?.text === record.text);
+                    const identity = prev?.identity || keys.find(key => /^post:\d{8,}$/.test(key)) || keys[0];
+                    const entry = { identity, text: record.text, at };
+                    for (const key of keys) __fbPassiveDiagRecordsV313.set(key, entry);
+                    __fbPassiveDiagReceivedV313++;
+                    // v315: correlate reception with earlier preapproval checks.
+                    // Observation only: no DOM lookup, retries, approvals or bans.
+                    try { noteFBPassiveTimingArrivalV315(keys, record.text, at); } catch (e) {}
+                }
+                trimFBPassiveDiagCacheV313();
+            } catch (e) { /* Instrumentation must never affect the feed. */ }
+        });
+    } catch (e) {}
+};
+
+const inspectFBPassiveDiagPostV313 = (post) => {
+    try {
+        if (!post?.isConnected || !isFBPostScannerSafeCandidateV65(post)) return null;
+        const caption = post.querySelector?.('[data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"]');
+        if (!caption) return null;
+        const truncated = getShowMoreButtonsForPost(post).some(btn => caption.contains(btn));
+        const preview = normalizeFBPassiveDiagTextV313(caption.textContent || '');
+        const keys = getFBPassiveDiagPostKeysV313(post);
+        const now = Date.now();
+        let entry = null;
+        let status = 'unmatched';
+        let reason = keys.length ? 'identity-not-in-cache' : 'no-exact-identity';
+        for (const key of keys) {
+            const next = __fbPassiveDiagRecordsV313.get(key);
+            if (!next || now - next.at > FB_PASSIVE_DIAG_MAX_AGE_V313) continue;
+            if (entry && entry.identity !== next.identity) {
+                entry = null; status = 'ambiguous'; reason = 'conflicting-exact-identities'; break;
+            }
+            entry = next;
+        }
+        if (entry) { status = 'exact-id'; reason = ''; }
+        // Diagnostic-only confidence tier. Never use prefix matches to ban posts.
+        if (!entry && status !== 'ambiguous' && truncated &&
+            syncFBPassiveDiagRouteV313() !== '/' &&
+            preview.length >= FB_PASSIVE_DIAG_MIN_PREFIX_V313) {
+            let candidate = null;
+            const seen = new Set();
+            for (const next of __fbPassiveDiagRecordsV313.values()) {
+                if (now - next.at > FB_PASSIVE_DIAG_MAX_AGE_V313 ||
+                    seen.has(next.identity)) continue;
+                seen.add(next.identity);
+                if (!normalizeFBPassiveDiagTextV313(next.text).startsWith(preview)) continue;
+                if (candidate && candidate.identity !== next.identity) {
+                    candidate = null; status = 'ambiguous'; reason = 'shared-caption-prefix'; break;
+                }
+                candidate = next;
+            }
+            if (candidate) { entry = candidate; status = 'unique-prefix-diagnostic'; reason = ''; }
+            else if (status !== 'ambiguous') reason = 'no-unique-prefix-match';
+        } else if (!entry && !keys.length && truncated && preview.length < FB_PASSIVE_DIAG_MIN_PREFIX_V313)
+            reason = 'short-preview-and-no-id';
+        const full = entry?.text || '';
+        const previewBlocked = !!preview && (matchesAnyActiveRegex(preview) ||
+            FB_VISIBLE_CAPTION_AI_WORD_V96.test(preview) || matchesBlockedUrlCandidates(preview));
+        const fullBlocked = !!full && (matchesAnyActiveRegex(full) ||
+            FB_VISIBLE_CAPTION_AI_WORD_V96.test(full) || matchesBlockedUrlCandidates(full));
+        if (!__fbPassiveDiagSlotIdsV313.has(post))
+            __fbPassiveDiagSlotIdsV313.set(post, ++__fbPassiveDiagNextSlotV313);
+        return {
+            slot: __fbPassiveDiagSlotIdsV313.get(post),
+            truncated,
+            decision: post.classList.contains('fb-post-banned') ? 'banned' :
+                post.classList.contains('fb-post-approved') ? 'approved' : 'pending',
+            match: status,
+            ...(reason ? { reason } : {}),
+            visibleChars: preview.length, fullChars: full.length,
+            fullLongerThanPreview: !!full && full.length > preview.length + 10,
+            visibleBlocked: previewBlocked,
+            networkBlocked: fullBlocked,
+            hiddenOnlyBlockCandidate: !!(truncated && entry && !previewBlocked && fullBlocked && full.length > preview.length + 10)
+        };
+    } catch (e) { return null; }
+};
+
+const auditFBPassiveCaptionsV313 = () => {
+    try {
+        const route = syncFBPassiveDiagRouteV313();
+        if (!route) return { route: location.pathname, available: false,
+            note: 'Audit available on Home and the four supported Pages only' };
+        trimFBPassiveDiagCacheV313();
+        const posts = [], seen = new Set();
+        const candidates = document.querySelectorAll(FB_CANONICAL_POST_SELECTOR_V65);
+        for (let i = 0; i < candidates.length && i < 600 && posts.length < 100; i++) {
+            const post = getFBCanonicalPostV65(candidates[i]) || candidates[i];
+            if (!post?.isConnected || seen.has(post)) continue;
+            seen.add(post);
+            const info = inspectFBPassiveDiagPostV313(post);
+            if (info) posts.push(info);
+        }
+        const truncated = posts.filter(post => post.truncated);
+        const matched = truncated.filter(post => post.match === 'exact-id' || post.match === 'unique-prefix-diagnostic');
+        const byMatch = {}, byReason = {};
+        for (const post of truncated) {
+            byMatch[post.match] = (byMatch[post.match] || 0) + 1;
+            if (post.reason) byReason[post.reason] = (byReason[post.reason] || 0) + 1;
+        }
+        const unique = new Set(Array.from(__fbPassiveDiagRecordsV313.values(), entry => entry.identity));
+        return {
+            mode: 'READ-ONLY-AUDIT+FOUR3FOUR-EXACT-PREAPPROVAL', route,
+            observerEvents: __fbPassiveDiagEventsV313,
+            observerRecordsAccepted: __fbPassiveDiagReceivedV313,
+            observerRecordsRejected: __fbPassiveDiagRejectedV313,
+            observerCaptureSourcesV316: Object.fromEntries(__fbPassiveCaptureSourcesV316),
+            cachedPostIdentities: unique.size,
+            cachedKeys: __fbPassiveDiagRecordsV313.size,
+            domPostsSampled: posts.length,
+            truncatedPosts: truncated.length,
+            truncatedMatched: matched.length,
+            exactIdMatches: matched.filter(post => post.match === 'exact-id').length,
+            prefixOnlyMatches: matched.filter(post => post.match === 'unique-prefix-diagnostic').length,
+            withLongerNetworkCaption: matched.filter(post => post.fullLongerThanPreview).length,
+            networkBlockedWhilePreviewClean: matched.filter(post => post.hiddenOnlyBlockCandidate).length,
+            unmatchedReasons: byReason, byMatch,
+            sample: truncated.slice(-24),
+            pagePreapprovalV314: {
+                enabled: route === '/four3four',
+                ...__fbPassivePagePreapprovalStatsV314,
+                conflictingCachedKeys: __fbPassivePageConflictingKeysV314.size
+            },
+            pageArrivalTimingV315: getFBPassiveTimingAuditV315(route),
+            pageNoGlimpseV317: { enabled: route === '/four3four',
+                maxCaptionGraceMs: FB_434_CAPTION_GRACE_MS_V317,
+                ...__fb434NoGlimpseStatsV317 },
+            note: 'The audit is read-only. On /four3four the scanner uses exact-ID caption preapproval plus a finite 440ms ceiling for truncated captions; unverified ones are quarantined. The observer never initiates DOM updates or clicks.'
+        };
+    } catch (e) { return { error: 'Passive caption audit unavailable' }; }
+};
+
+// v313 console-context fallback. Userscript and DevTools may run in separate JS worlds.
+// A native DOM event crosses those worlds; the result is a small, read-only JSON snapshot.
+// Nothing here expands, hides, approves, bans, or relocates Facebook post elements.
+const FB_PASSIVE_DIAG_AUDIT_EVENT_V313 = 'fbc-passive-caption-audit-request-v313';
+const FB_PASSIVE_DIAG_RESULT_ELEMENT_V313 = 'fbc-passive-caption-audit-result-v313';
+let __fbPassiveDiagAuditBridgeInstalledV313 = false;
+const installFBPassiveDiagAuditBridgeV313 = () => {
+    if (__fbPassiveDiagAuditBridgeInstalledV313) return;
+    __fbPassiveDiagAuditBridgeInstalledV313 = true;
+    onWindowEvent(document, FB_PASSIVE_DIAG_AUDIT_EVENT_V313, () => {
+        try {
+            const result = auditFBPassiveCaptionsV313();
+            let output = document.getElementById(FB_PASSIVE_DIAG_RESULT_ELEMENT_V313);
+            if (!output) {
+                output = document.createElement('script');
+                output.id = FB_PASSIVE_DIAG_RESULT_ELEMENT_V313;
+                output.type = 'application/json';
+                (document.head || document.documentElement).appendChild(output);
+            }
+            output.textContent = JSON.stringify(result);
+        } catch (e) { /* Diagnostics must never interrupt Facebook. */ }
+    }, false);
+};
+// Start observing BEFORE the rest of FBCleaner's startup and its early returns.
+installFBPassiveDiagListenerV313();
+installFBPassiveDiagAuditBridgeV313();
+
+// ===== v314: FOUR3FOUR exact-ID, approval-time full-caption veto =====
+// Reuse the v313 cache, but NEVER trigger DOM scans from the network listener.
+// Only the regular Classic scanner can act, on a post that it was already going
+// to screen and that has NOT been approved. No timer, wait, expanded-click action,
+// or fresh CSS/DOM gate is introduced by this feature. Home remains audit-only.
+const __fbPassivePagePreapprovalStatsV314 = {
+    checks: 0, exactPreviewMatches: 0, blockedBeforeApproval: 0,
+    hiddenOnlyBlocked: 0, matchedClean: 0, noExactRecord: 0,
+    conflictingIdentity: 0, previewMismatch: 0, tooShortOrNotLonger: 0
+};
+// ===== v315: read-only arrival-vs-first-check timing (The 434 only) =====
+// The timestamp is when the MAIN-world observer's postMessage is RECEIVED,
+// not necessarily when Facebook's HTTP response first became available.
+// There is no async wait, network-triggered scan or manipulation of Facebook's DOM.
+const FB_PASSIVE_TIMING_LIMIT_V315 = 220;
+const FB_PASSIVE_TIMING_AGE_V315 = 12 * 60 * 1000;
+
+const noteFBPassiveTimingCaptionV315 = (sample, full, receivedAt) => {
+    try {
+        if (sample.receivedAt !== null || !full) return;
+        sample.receivedAt = receivedAt;
+        const normalized = normalizeFBPassiveDiagTextV313(full).toLowerCase();
+        if (sample.previewCapped || sample.preview.length < 24 || normalized.length <= sample.preview.length + 10) {
+            sample.prefix = 'not-verifiable';
+            return;
+        }
+        if (!normalized.startsWith(sample.preview)) {
+            sample.prefix = 'mismatch';
+            return;
+        }
+        sample.prefix = 'verified';
+        sample.previewBlocked = matchesAnyActiveRegex(sample.preview) ||
+            FB_VISIBLE_CAPTION_AI_WORD_V96.test(sample.preview) ||
+            matchesBlockedUrlCandidates(sample.preview);
+        sample.fullBlocked = matchesAnyActiveRegex(full) ||
+            FB_VISIBLE_CAPTION_AI_WORD_V96.test(full) ||
+            matchesBlockedUrlCandidates(full);
+    } catch (e) { sample.prefix = 'check-error'; }
+};
+
+const noteFBPassiveTimingFirstCheckV315 = (post, caption, keys) => {
+    try {
+        if (syncFBPassiveDiagRouteV313() !== '/four3four') return;
+        const preview = normalizeFBPassiveDiagTextV313(caption.textContent || '').toLowerCase();
+        // One record per post DOM identity and original truncated preview.
+        // The same React slot may later be recycled into a different post.
+        const signature = keys.join('|') + '::' + preview.slice(0, 180);
+        const prior = __fbPassiveTimingByPostV315.get(post);
+        if (prior?.signature === signature) return;
+        const now = Date.now();
+        // Hydrating a permalink later must not turn ONE Page post into two
+        // first-check samples. Preserve the original timestamp and note the
+        // exact ID appeared only after the first screening opportunity.
+        if (prior && !prior.keys.length && keys.length && prior.preview === preview.slice(0, 1000)) {
+            prior.keys = keys.slice(0, 12);
+            prior.signature = signature;
+            prior.identityAddedAfterCheck = true;
+            const lateIdentityRecord = keys.map(key => __fbPassiveDiagRecordsV313.get(key))
+                .filter(entry => entry && now - entry.at <= FB_PASSIVE_DIAG_MAX_AGE_V313)
+                .sort((a, b) => a.at - b.at)[0];
+            if (lateIdentityRecord) noteFBPassiveTimingCaptionV315(prior, lateIdentityRecord.text, lateIdentityRecord.at);
+            return;
+        }
+        const sample = {
+            slot: ++__fbPassiveTimingSequenceV315, signature,
+            keys: keys.slice(0, 12), keysPresentAtFirstCheck: !!keys.length,
+            identityAddedAfterCheck: false, preview: preview.slice(0, 1000),
+            previewCapped: preview.length > 1000, previewChars: preview.length,
+            checkedAt: now, receivedAt: null, terminalAt: null, terminal: 'not-observed',
+            prefix: 'not-received', previewBlocked: false, fullBlocked: false
+        };
+        __fbPassiveTimingByPostV315.set(post, sample);
+        __fbPassiveTimingSamplesV315.push(sample);
+        // If the observer's text was already present, record its first cached receipt.
+        // Never mistake missing identity for a late record.
+        const existing = keys.map(key => __fbPassiveDiagRecordsV313.get(key))
+            .filter(entry => entry && now - entry.at <= FB_PASSIVE_DIAG_MAX_AGE_V313)
+            .sort((a, b) => a.at - b.at)[0];
+        if (existing) noteFBPassiveTimingCaptionV315(sample, existing.text, existing.at);
+        while (__fbPassiveTimingSamplesV315.length > FB_PASSIVE_TIMING_LIMIT_V315)
+            __fbPassiveTimingSamplesV315.shift();
+        // Age cleanup is read-only; weak post references are never retained here.
+        while (__fbPassiveTimingSamplesV315.length &&
+            now - __fbPassiveTimingSamplesV315[0].checkedAt > FB_PASSIVE_TIMING_AGE_V315)
+            __fbPassiveTimingSamplesV315.shift();
+    } catch (e) {}
+};
+
+const noteFBPassiveTimingArrivalV315 = (keys, text, at) => {
+    try {
+        if (__fbPassiveDiagRouteV313 !== '/four3four') return;
+        const keySet = new Set(keys);
+        for (const sample of __fbPassiveTimingSamplesV315) {
+            if (sample.receivedAt !== null || !sample.keys.length ||
+                !sample.keys.some(key => keySet.has(key))) continue;
+            noteFBPassiveTimingCaptionV315(sample, text, at);
+        }
+    } catch (e) {}
+};
+
+const noteFBPassiveTimingTerminalV315 = (post, decision) => {
+    try {
+        if (__fbPassiveDiagRouteV313 !== '/four3four') return;
+        const sample = __fbPassiveTimingByPostV315.get(post);
+        if (sample && sample.terminalAt === null) {
+            sample.terminalAt = Date.now();
+            sample.terminal = decision;
+        }
+    } catch (e) {}
+};
+
+const getFBPassiveTimingAuditV315 = (route) => {
+    if (route !== '/four3four') return { enabled: false, note: 'The 434 only; Home remains audit-only' };
+    const now = Date.now();
+    const samples = __fbPassiveTimingSamplesV315.filter(s =>
+        now - s.checkedAt <= FB_PASSIVE_TIMING_AGE_V315);
+    const bins = { '0-50ms': 0, '51-150ms': 0, '151-500ms': 0,
+        '501-1500ms': 0, '1501-5000ms': 0, 'over-5000ms': 0 };
+    const chooseBin = ms => ms <= 50 ? '0-50ms' : ms <= 150 ? '51-150ms' :
+        ms <= 500 ? '151-500ms' : ms <= 1500 ? '501-1500ms' :
+        ms <= 5000 ? '1501-5000ms' : 'over-5000ms';
+    let noDomId = 0, identityAddedLater = 0, alreadyCached = 0, arrivedLate = 0,
+        stillMissing = 0, arrivedAfterApproval = 0, arrivedBeforeDecision = 0,
+        noTerminalDecision = 0, previewVerified = 0, mismatches = 0,
+        hiddenOnlyBannedLate = 0, previewBlockedLate = 0;
+    for (const s of samples) {
+        if (!s.keysPresentAtFirstCheck) noDomId++;
+        if (s.identityAddedAfterCheck) identityAddedLater++;
+        if (!s.keys.length) continue;
+        if (s.receivedAt === null) { stillMissing++; continue; }
+        if (s.prefix === 'verified') previewVerified++;
+        if (s.prefix === 'mismatch') mismatches++;
+        if (s.receivedAt <= s.checkedAt) { alreadyCached++; continue; }
+        arrivedLate++;
+        bins[chooseBin(s.receivedAt - s.checkedAt)]++;
+        if (s.terminalAt === null) noTerminalDecision++;
+        else if (s.receivedAt > s.terminalAt && s.terminal === 'approved') {
+            arrivedAfterApproval++;
+            if (s.prefix === 'verified' && s.fullBlocked && !s.previewBlocked)
+                hiddenOnlyBannedLate++;
+        } else if (s.receivedAt <= s.terminalAt) arrivedBeforeDecision++;
+        if (s.prefix === 'verified' && s.previewBlocked) previewBlockedLate++;
+    }
+    return {
+        mode: 'READ-ONLY-observer-message-timing',
+        measuredAt: new Date(now).toISOString(),
+        enabled: true,
+        sampledFirstChecks: samples.length,
+        withoutExactDomIdentityAtFirstCheck: noDomId,
+        identityAcquiredOnLaterRetry: identityAddedLater,
+        withExactDomIdentityAtFirstCheck: samples.length - noDomId,
+        recordAlreadyCachedAtCheck: alreadyCached,
+        recordReceivedAfterCheck: arrivedLate,
+        recordStillNotObserved: stillMissing,
+        recordAfterApproval: arrivedAfterApproval,
+        recordBeforeTerminalDecision: arrivedBeforeDecision,
+        lateRecordWithoutTerminalDecision: noTerminalDecision,
+        verifiedCaptionPrefixes: previewVerified,
+        prefixMismatches: mismatches,
+        hiddenOnlyBlockedAfterApproval: hiddenOnlyBannedLate,
+        previewAlreadyBlockedAmongLate: previewBlockedLate,
+        receptionDelayBuckets: bins,
+        sample: samples.slice(-24).map(s => ({
+            slot: s.slot, hadExactDomIdentityAtFirstCheck: s.keysPresentAtFirstCheck,
+            identityAcquiredOnLaterRetry: s.identityAddedAfterCheck,
+            decision: s.terminal, previewChars: s.previewChars,
+            reception: !s.keys.length ? 'no-dom-id' : s.receivedAt === null ? 'not-observed' :
+                s.receivedAt <= s.checkedAt ? 'already-cached' : 'after-first-check',
+            msAfterCheck: s.receivedAt !== null && s.receivedAt > s.checkedAt ?
+                s.receivedAt - s.checkedAt : null,
+            msAfterDecision: s.receivedAt !== null && s.terminalAt !== null ?
+                s.receivedAt - s.terminalAt : null,
+            captionPrefix: s.prefix,
+            hiddenOnlyBlocked: s.prefix === 'verified' && s.fullBlocked && !s.previewBlocked
+        })),
+        note: 'Timestamps measure when FBCleaner receives observer messages, not original HTTP response arrival. No decisions, visibility, or post DOM changed by timing instrumentation. Samples are bounded and route-scoped.'
+    };
+};
+
+const getFBPassivePageCaptionVerdictV314 = (post) => {
+    if (syncFBPassiveDiagRouteV313() !== '/four3four' || !post?.isConnected) return null;
+    try {
+        const caption = post.querySelector?.(
+            '[data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"]');
+        if (!caption || !getShowMoreButtonsForPost(post).some(btn => caption.contains(btn))) return null;
+        __fbPassivePagePreapprovalStatsV314.checks++;
+
+        // DOM post ID is mandatory. A unique caption prefix alone NEVER bans a post.
+        const keys = getFBPassiveDiagPostKeysV313(post);
+        noteFBPassiveTimingFirstCheckV315(post, caption, keys);
+        if (!keys.length) {
+            __fbPassivePagePreapprovalStatsV314.noExactRecord++; return null;
+        }
+        let entry = null;
+        const now = Date.now();
+        for (const key of keys) {
+            if (__fbPassivePageConflictingKeysV314.has(key)) {
+                __fbPassivePagePreapprovalStatsV314.conflictingIdentity++; return null;
+            }
+            const found = __fbPassiveDiagRecordsV313.get(key);
+            if (!found || now - found.at > FB_PASSIVE_DIAG_MAX_AGE_V313) continue;
+            if (entry && (entry.identity !== found.identity || entry.text !== found.text)) {
+                __fbPassivePagePreapprovalStatsV314.conflictingIdentity++; return null;
+            }
+            entry = found;
+        }
+        if (!entry) {
+            __fbPassivePagePreapprovalStatsV314.noExactRecord++; return null;
+        }
+        // Confirm that the network message is THIS post's caption, not a linked
+        // story or attachment whose ID happened to be present on the same card.
+        const visible = normalizeFBPassiveDiagTextV313(caption.textContent || '').toLowerCase();
+        const complete = normalizeFBPassiveDiagTextV313(entry.text).toLowerCase();
+        if (visible.length < 24 || complete.length <= visible.length + 10) {
+            __fbPassivePagePreapprovalStatsV314.tooShortOrNotLonger++; return null;
+        }
+        if (!complete.startsWith(visible)) {
+            __fbPassivePagePreapprovalStatsV314.previewMismatch++; return null;
+        }
+        __fbPassivePagePreapprovalStatsV314.exactPreviewMatches++;
+        const blocked = matchesAnyActiveRegex(entry.text) ||
+            FB_VISIBLE_CAPTION_AI_WORD_V96.test(entry.text) ||
+            matchesBlockedUrlCandidates(entry.text);
+        if (blocked) {
+            __fbPassivePagePreapprovalStatsV314.blockedBeforeApproval++;
+            const previewBlocked = matchesAnyActiveRegex(visible) ||
+                FB_VISIBLE_CAPTION_AI_WORD_V96.test(visible) ||
+                matchesBlockedUrlCandidates(visible);
+            if (!previewBlocked) __fbPassivePagePreapprovalStatsV314.hiddenOnlyBlocked++;
+        } else {
+            __fbPassivePagePreapprovalStatsV314.matchedClean++;
+        }
+        return { blocked };
+    } catch (e) { return null; }
+};
+
+// Installation is near the existing startup hooks. Inspect explicitly in DevTools;
+// incoming messages only populate the bounded cache, never trigger a DOM sweep.
+
+// ===== v317: fail-closed preapproval for truncated 434 captions =====
+// No one can reliably exclude hidden banned words if the full caption is not
+// verifiable. Give the early streaming reader a very short, finite opportunity;
+// then collapse ONLY that unverified truncated Page post. Never reveal it first,
+// and never tie its visibility to a network event after approval.
+const FB_434_CAPTION_GRACE_MS_V317 = 420;
+const __fb434CaptionFirstCheckV317 = new WeakMap();
+const __fb434NoGlimpseStatsV317 = {
+    verifiedAllowed: 0,
+    verifiedBlocked: 0,
+    visibleCaptionBlocked: 0,
+    heldForFullCaption: 0,
+    unverifiableQuarantined: 0,
+    blockedLinkBeforePaint: 0
+};
+const getFB434StrictCaptionResultV317 = (post, verdict, expectedGeneration) => {
+    try {
+        if (syncFBPassiveDiagRouteV313() !== '/four3four') return 'not-applicable';
+        const caption = post.querySelector?.(
+            '[data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"]');
+        if (!caption || !getShowMoreButtonsForPost(post).some(button => caption.contains(button)))
+            return 'not-applicable';
+        if (verdict) {
+            __fb434CaptionFirstCheckV317.delete(post);
+            if (verdict.blocked) __fb434NoGlimpseStatsV317.verifiedBlocked++;
+            else __fb434NoGlimpseStatsV317.verifiedAllowed++;
+            return verdict.blocked ? 'blocked' : 'verified-clean';
+        }
+        // A proven visible-caption violation needs no additional network wait.
+        const preview = caption.textContent || '';
+        if (matchesAnyActiveRegex(preview) || FB_VISIBLE_CAPTION_AI_WORD_V96.test(preview) ||
+            matchesBlockedUrlCandidates(preview)) {
+            __fb434NoGlimpseStatsV317.visibleCaptionBlocked++;
+            __fb434CaptionFirstCheckV317.delete(post);
+            return 'visible-blocked';
+        }
+        const now = Date.now();
+        let first = __fb434CaptionFirstCheckV317.get(post);
+        if (!first) {
+            first = now;
+            __fb434CaptionFirstCheckV317.set(post, first);
+            // One finite deadline, INDEPENDENT of the classic generic retry count.
+            // A long initial wrestler-storage load must never exhaust our final check.
+            addTimeout(() => {
+                try {
+                    if (!isFBSpaGenerationCurrent(expectedGeneration) || !post.isConnected ||
+                        syncFBPassiveDiagRouteV313() !== '/four3four' ||
+                        post.classList.contains('fb-post-approved') ||
+                        post.classList.contains('fb-post-banned') ||
+                        post.classList.contains('fb-element-banned')) return;
+                    screenFBCanonicalPostNowV65(post, true, expectedGeneration);
+                } catch (e) {}
+            }, FB_434_CAPTION_GRACE_MS_V317 + 20);
+        }
+        if (now - first < FB_434_CAPTION_GRACE_MS_V317) {
+            __fb434NoGlimpseStatsV317.heldForFullCaption++;
+            applyFBPostScreeningClassV60(post, true);
+            return 'pending';
+        }
+        // A *missing or conflicting* complete caption is NOT a proven policy hit.
+        // It is quarantined because a truly no-glimpse policy cannot approve it.
+        __fb434NoGlimpseStatsV317.unverifiableQuarantined++;
+        __fb434CaptionFirstCheckV317.delete(post);
+        return 'unverifiable';
+    } catch (e) {
+        // Never strand a visible-length Page slot behind a permanent paint gate.
+        __fb434NoGlimpseStatsV317.unverifiableQuarantined++;
+        return 'unverifiable';
+    }
+};
+
 const __fbStablePostDecisionCacheV55 = new Map();
 const FB_STABLE_POST_DECISION_TTL_V55 = 6 * 60 * 60 * 1000;
 const FB_STABLE_POST_DECISION_LIMIT_V55 = 2400;
@@ -8757,6 +9308,8 @@ const getFBStablePostDecisionV55 = (post) => {
 const reopenFBRecycledPost = (post) => {
     try {
         if (!post?.classList) return false;
+        // v312: a different post must never inherit a previous post's expansion exemption.
+        __fbUserExpandedPostsV312.delete(post);
         forgetFBNativeSkeletonSnapshotV81(post);
         releaseFBFeedSlot(post);
         post.classList.remove('fb-post-approved', 'fb-feed-unit-approved', 'fb-post-processed', 'fb-native-skeleton-visible-v65');
@@ -8873,13 +9426,7 @@ const scheduleFBPostScanRetryV65 = (post, expectedGeneration = getFBSpaGeneratio
         const attempts = (__fbPostScanRetryCountV65.get(post) || 0) + 1;
         __fbPostScanRetryCountV65.set(post, attempts);
         if (attempts > 12) return; // fail closed, but do not strand ordinary hydration after three tiny retries.
-        const grace = __fbPassiveCaptionGraceV299.get(post);
-        const remainingGrace = grace && grace.generation === expectedGeneration
-            ? FB_PASSIVE_CAPTION_GRACE_MS_V299 - (performance.now() - grace.startedAt)
-            : 0;
-        const delay = remainingGrace > 0
-            ? Math.max(1, Math.ceil(remainingGrace) + 1)
-            : (attempts <= 3 ? attempts * 70 : Math.min(900, 220 + ((attempts - 3) * 110)));
+        const delay = attempts <= 3 ? attempts * 70 : Math.min(900, 220 + ((attempts - 3) * 110));
         addTimeout(() => {
             if (!isFBSpaGenerationCurrent(expectedGeneration) || !post.isConnected) return;
             screenFBCanonicalPostNowV65(post, true, expectedGeneration);
@@ -8952,6 +9499,16 @@ const screenFBCanonicalPostNowV65 = (seed, forceRecheck = false, expectedGenerat
         releaseFBNativeHydrationSlotV53(post);
         showFBNativeSkeletonSnapshotWhilePendingV81(post);
 
+        // v311: Static fallback names are ready, but storage can add wrestlers
+        // that would otherwise appear briefly before a forced late ban.
+        if (__fbWrestlerStorageInitialPendingV311 &&
+            !(post.getAttribute('data-fb-v25-scan-complete') === '1' &&
+              post.classList.contains('fb-post-approved'))) {
+            applyFBPostScreeningClassV60(post, true);
+            scheduleFBPostScanRetryV65(post, expectedGeneration);
+            return false;
+        }
+
         let terminalApproved = post.getAttribute('data-fb-v25-scan-complete') === '1' && post.classList.contains('fb-post-approved');
         if (terminalApproved) {
             if (approvedPostIdentityChanged(post)) {
@@ -8959,38 +9516,23 @@ const screenFBCanonicalPostNowV65 = (seed, forceRecheck = false, expectedGenerat
                 reopenFBRecycledPost(post);
                 terminalApproved = false;
             } else {
-                // Newly hydrated links/header controls can arrive after a cached
-                // approval. Veto them in this mutation turn, before the next paint;
-                // never temporarily unapprove the post or rescan the entire feed.
-                if (hasFBUnconnectedFeedHeaderCTAV77(post) || postHasBlockedLinksOrFbids(post)) {
-                    banPostAfterScan(post, 'late-arriving blocked header CTA/URL/FBID');
-                    return true;
-                }
-                // v103: on supported Page timelines, React may fill in a new caption,
-                // AI disclosure or link AFTER the short initial approval. The touched
-                // post is already in this pre-paint mutation batch. Veto the new content
-                // immediately rather than leaving its decision to a timed heavy sweep.
-                // Do not re-scan home feed posts or any other Facebook surface here.
-                if (isCurrentSpecificUrlSurface() && (
-                    postHasAIInfoTag(post) ||
-                    postOrNetworkCaptionMentionsStandaloneAIV96(post, getFBPassiveCaptionForPostV295(post)) ||
-                    matchesAnyActiveRegex(collectPostTextForScan(post)) ||
-                    hasRestrictedFeedCTAOrReels(post))) {
-                    banPostAfterScan(post, 'supported Page updated post content before paint');
-                    return true;
-                }
                 // v78: ordinary childList changes NEVER revoke a stable approval.
                 // Explicit policy refreshes can still ban new violations in place,
                 // without first hiding and then re-approving an unchanged post.
-                if (forceRecheck) {
+                // v317: a new blocked attachment/link on an approved card must
+                // be rejected in the SAME childList mutation turn, not 45ms later.
+                // User-triggered caption expansion alone does not enter this lane.
+                if (postHasBlockedLinksOrFbids(post)) {
+                    banPostAfterScan(post, 'new blocked link/FBID in approved post v317');
+                    __fb434NoGlimpseStatsV317.blockedLinkBeforePaint++;
+                    return true;
+                }
+                if (forceRecheck && !__fbUserExpandedPostsV312.has(post)) {
                     let reason = '';
                     if (postHasAIInfoTag(post)) reason = 'updated policy: Facebook AI-info disclosure';
-                    else if (postOrNetworkCaptionMentionsStandaloneAIV96(post, getFBPassiveCaptionForPostV295(post))) reason = 'updated policy: AI mentioned in caption';
+                    else if (postCaptionMentionsStandaloneAIV96(post)) reason = 'updated policy: standalone AI caption term';
                     else if (hasRestrictedFeedCTAOrReels(post)) reason = 'updated policy: restricted feed content';
-                    else if (matchesAnyActiveRegex(collectPostTextForScan(post)) ||
-                        (getFBPassiveCaptionForPostV295(post) &&
-                            (matchesAnyActiveRegex(getFBPassiveCaptionForPostV295(post)) ||
-                                matchesBlockedUrlCandidates(getFBPassiveCaptionForPostV295(post))))) reason = 'updated policy: blocked words/regex/URL';
+                    else if (matchesAnyActiveRegex(collectPostTextForScan(post))) reason = 'updated policy: blocked words/regex';
                     else if (postHasBlockedLinksOrFbids(post)) reason = 'updated policy: blocked FBID/URL';
                     if (reason) banPostAfterScan(post, reason);
                 }
@@ -9002,41 +9544,32 @@ const screenFBCanonicalPostNowV65 = (seed, forceRecheck = false, expectedGenerat
         applyFBPostScreeningClassV60(post, true);
         post.classList.remove('fb-native-skeleton-visible-v65');
 
-        // A cached early approval must never override a hard URL/FBID or an exact
-        // timestamp-adjacent Follow/Join header. Decide while the post is prehidden.
-        if (hasFBUnconnectedFeedHeaderCTAV77(post) || postHasBlockedLinksOrFbids(post)) {
-            banPostAfterScan(post, 'blocked header Follow/Join or URL/FBID before cache');
+        // Do not let a cached early approval bypass an exact Join/Follow header signal.
+        // This runs while the new post is still behind the existing paint gate.
+        if (!forceRecheck && hasFBUnconnectedFeedHeaderCTAV77(post)) {
+            banPostAfterScan(post, 'home-feed header Join/Follow CTA');
             __fbPostScanRetryCountV65.delete(post);
             return true;
         }
 
-        // A cached early DOM approval must never override a freshly matched
-        // full-caption ban. The passive cache only matches exact post identities.
-        const knownFullCaptionV299 = getFBPassiveCaptionForPostV295(post);
-        if (postOrNetworkCaptionMentionsStandaloneAIV96(post, knownFullCaptionV299)) {
-            __fbPassiveCaptionGraceV299.delete(post);
-            banPostAfterScan(post, 'AI mentioned in post caption before cached approval');
+        // v314: only The 434, only before a terminal approval, and only when
+        // exact-ID network text already exists and agrees with the visible preview.
+        // Check BEFORE cached approvals, which otherwise bypass normal content scans.
+        // No match means the Classic path proceeds immediately, without waiting.
+        const fullCaptionVerdictV314 = getFBPassivePageCaptionVerdictV314(post);
+        const strictCaptionV317 = getFB434StrictCaptionResultV317(post, fullCaptionVerdictV314, expectedGeneration);
+        if (strictCaptionV317 === 'pending') return false;
+        if (strictCaptionV317 === 'blocked' || strictCaptionV317 === 'visible-blocked' ||
+            strictCaptionV317 === 'unverifiable') {
+            banPostAfterScan(post, strictCaptionV317 === 'blocked'
+                ? 'exact-ID full network caption before approval v314'
+                : strictCaptionV317 === 'visible-blocked'
+                ? 'blocked term in visible 434 caption before approval v317'
+                : 'unverifiable truncated 434 caption quarantined before approval v317');
             __fbPostScanRetryCountV65.delete(post);
             return true;
         }
-        if (knownFullCaptionV299 && (matchesAnyActiveRegex(knownFullCaptionV299) ||
-            matchesBlockedUrlCandidates(knownFullCaptionV299))) {
-            __fbPassiveCaptionGraceV299.delete(post);
-            banPostAfterScan(post, 'blocked full caption/URL before cached approval');
-            __fbPostScanRetryCountV65.delete(post);
-            return true;
-        }
-        // A previously cached short-caption approval is still provisional for a
-        // *new* truncated mount. Give the full network verdict the same bounded
-        // opportunity; cached bans, however, are applied immediately below.
-        if (!forceRecheck && !knownFullCaptionV299) {
-            const oldDecision = getFBElementDecision(post, 'post') || getFBStablePostDecisionV55(post);
-            if (oldDecision?.decision === 'approved' &&
-                isFBPassiveCaptionGracePendingV299(post, expectedGeneration)) {
-                scheduleFBPostScanRetryV65(post, expectedGeneration);
-                return false;
-            }
-        }
+
         if (!forceRecheck && applyCachedFBPostDecision(post)) {
             __fbPostScanRetryCountV65.delete(post);
             return true;
@@ -9257,11 +9790,7 @@ const queueFBPostForSingleScan = (seed, delay = 90, expectedGeneration = getFBSp
 
 const approvePostAfterScan = (post) => {
     try {
-        // Last no-glimpse veto before any CSS class or cached approval can reveal a post.
-        if (hasFBUnconnectedFeedHeaderCTAV77(post)) {
-            banPostAfterScan(post, 'header Follow/Join CTA before approval');
-            return;
-        }
+        noteFBPassiveTimingTerminalV315(post, 'approved');
         forgetFBNativeSkeletonSnapshotV81(post);
         releaseFBFeedSlot(post);
         try { releaseFBNativeHydrationSlotV53(post); } catch (e) {}
@@ -9274,7 +9803,6 @@ const approvePostAfterScan = (post) => {
         const approvedKey = getFBStablePostIdentity(post);
         if (approvedKey) post.setAttribute('data-fb-v46-approved-key', approvedKey);
         __fbPostHydrationState.delete(post);
-        __fbPassiveCaptionGraceV299.delete(post);
         post.style?.removeProperty('--fb-v47-screen-height');
         if (wasHardHiddenByFBCleaner) clearFBHideStyles(post);
         post.querySelectorAll?.('[role="article"]').forEach(article => {
@@ -9289,6 +9817,8 @@ const approvePostAfterScan = (post) => {
 
 const banPostAfterScan = (post, reason = 'blocked post content') => {
     try {
+        noteFBPassiveTimingTerminalV315(post, 'banned');
+        __fbUserExpandedPostsV312.delete(post);
         forgetFBNativeSkeletonSnapshotV81(post);
         post.classList.remove('fb-post-approved', 'fb-feed-unit-approved', 'fb-post-pending', 'fb-post-scanning', 'fb-post-expanding', 'fb-post-screening-v47', 'fb-post-resume-screening-v60', 'fb-native-skeleton-visible-v65');
         post.querySelectorAll?.('[role="article"]').forEach(article => {
@@ -9301,7 +9831,6 @@ const banPostAfterScan = (post, reason = 'blocked post content') => {
         if (terminalKeyV67) post.setAttribute('data-fb-v67-terminal-key', terminalKeyV67);
         else post.removeAttribute('data-fb-v67-terminal-key');
         __fbPostHydrationState.delete(post);
-        __fbPassiveCaptionGraceV299.delete(post);
         post.style?.removeProperty('--fb-v47-screen-height');
         rememberFBElementDecision(post, 'post', 'banned', reason);
         rememberFBStablePostDecisionV55(post, 'banned');
@@ -9355,8 +9884,8 @@ const evaluatePostForBan = (post) => {
             banPostAfterScan(post, 'Facebook AI-info disclosure tag');
             return true;
         }
-        if (postOrNetworkCaptionMentionsStandaloneAIV96(post, getFBPassiveCaptionForPostV295(post))) {
-            banPostAfterScan(post, 'AI mentioned in post caption');
+        if (postCaptionMentionsStandaloneAIV96(post)) {
+            banPostAfterScan(post, 'standalone AI term in post caption');
             return true;
         }
         if (hasRestrictedFeedCTAOrReels(post)) {
@@ -9365,11 +9894,8 @@ const evaluatePostForBan = (post) => {
         }
 
         const fullPostText = collectPostTextForScan(post);
-        const passiveCaption = getFBPassiveCaptionForPostV295(post);
-        if (matchesAnyActiveRegex(fullPostText) || matchesBlockedUrlCandidates(fullPostText) ||
-            (passiveCaption && (matchesAnyActiveRegex(passiveCaption) ||
-                matchesBlockedUrlCandidates(passiveCaption)))) {
-            banPostAfterScan(post, 'blocked words/regex');
+        if (matchesAnyActiveRegex(fullPostText) || matchesBlockedUrlCandidates(fullPostText)) {
+            banPostAfterScan(post, 'blocked words/regex or link-domain text');
             return true;
         }
         if (postHasBlockedLinksOrFbids(post)) {
@@ -9377,11 +9903,6 @@ const evaluatePostForBan = (post) => {
             return true;
         }
 
-        // Only a truncated caption with an exact potential network identity gets
-        // a bounded 135ms chance to receive its passive full-text verdict.
-        // All existing visible-text, AI, CTA, FBID and URL vetoes ran above.
-        if (isFBPassiveCaptionGracePendingV299(post, getFBSpaGeneration())) return false;
-        __fbPassiveCaptionGraceV299.delete(post);
         approvePostAfterScan(post);
         return true;
     } catch (e) {
@@ -10162,6 +10683,7 @@ const deleteElement = () => {
 const updateSpecificUrlNoGlimpseClass = () => {
     try {
         if (!document.documentElement) return false;
+        syncFBEarlyFeedGateV311();
         const active = isCurrentSpecificUrlSurface();
         document.documentElement.classList.toggle('fb-specific-url-noglimpse-v26', active);
         return active;
@@ -10587,34 +11109,12 @@ const injectSpecificUrlPrehideCSS = () => {
             animation: none !important;
         }
 
-        /* v101: prepaint canonical Page feed shells from insertion, not only
-           after a story_message/profile_name carrier arrives. This closes the
-           header-first flash on SPA navigation. Real native loading states keep
-           their Facebook-owned placeholder visible and are never collapsed. */
-        html.fb-specific-url-noglimpse-v26 [role="feed"] div[aria-posinset]:not(.fb-post-approved):not(.fb-feed-unit-approved):not(.fb-post-banned):not(.fb-element-banned):not(.fb-native-skeleton-visible-v65):not(:has([data-visualcompletion="loading-state"])),
-        html.fb-specific-url-noglimpse-v26 div[data-pagelet^="FeedUnit_"]:not(.fb-post-approved):not(.fb-feed-unit-approved):not(.fb-post-banned):not(.fb-element-banned):not(.fb-native-skeleton-visible-v65):not(:has([data-visualcompletion="loading-state"])),
-        html.fb-specific-url-noglimpse-v26 div[data-pagelet^="TimelineFeedUnit_"]:not(.fb-post-approved):not(.fb-feed-unit-approved):not(.fb-post-banned):not(.fb-element-banned):not(.fb-native-skeleton-visible-v65):not(:has([data-visualcompletion="loading-state"])) {
-            visibility: hidden !important;
-            opacity: 0 !important;
-            pointer-events: none !important;
-            transition: none !important;
-            animation: none !important;
-        }
-
-        /* v100: supported Page prepaint. The Page timeline can mount a real article
-           without aria-posinset, or a message using data-ad-comet-preview rather than
-           story_message. Keep real posts hidden until the EXISTING scanner decides them.
-           Pure Facebook loading skeletons retain the native lane below; do not gate
-           broad [role=main] containers, page headers, notifications or chat. */
-        html.fb-specific-url-noglimpse-v26 [role="feed"] div[aria-posinset]:not(.fb-native-skeleton-visible-v65):not(:has(.fb-native-skeleton-visible-v65)):not(.fb-feed-unit-approved):not(.fb-post-approved):not(.fb-post-banned):not(.fb-element-banned):has([data-ad-rendering-role="profile_name"], [data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"], a[href*="/posts/"]),
-        html.fb-specific-url-noglimpse-v26 div[data-pagelet^="FeedUnit_"]:not(.fb-native-skeleton-visible-v65):not(:has(.fb-native-skeleton-visible-v65)):not(.fb-feed-unit-approved):not(.fb-post-approved):not(.fb-post-banned):not(.fb-element-banned):has([data-ad-rendering-role="profile_name"], [data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"], a[href*="/posts/"]),
-        html.fb-specific-url-noglimpse-v26 div[data-pagelet^="TimelineFeedUnit_"]:not(.fb-native-skeleton-visible-v65):not(:has(.fb-native-skeleton-visible-v65)):not(.fb-feed-unit-approved):not(.fb-post-approved):not(.fb-post-banned):not(.fb-element-banned):has([data-ad-rendering-role="profile_name"], [data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"], a[href*="/posts/"]),
-        html.fb-specific-url-noglimpse-v26 [role="feed"] > [role="article"]:not(.fb-native-skeleton-visible-v65):not(:has(.fb-native-skeleton-visible-v65)):not(.fb-feed-unit-approved):not(.fb-post-approved):not(.fb-post-banned):not(.fb-element-banned):has([data-ad-rendering-role="profile_name"], [data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"], a[href*="/posts/"]),
-        html.fb-specific-url-noglimpse-v26 [role="feed"] [role="article"][aria-posinset]:not(.fb-native-skeleton-visible-v65):not(:has(.fb-native-skeleton-visible-v65)):not(.fb-feed-unit-approved):not(.fb-post-approved):not(.fb-post-banned):not(.fb-element-banned):has([data-ad-rendering-role="profile_name"], [data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"], a[href*="/posts/"]),
-        /* Some supported Pages mount their timeline articles without a role=feed
-           or stable FeedUnit pagelet. Require a real story-caption carrier and
-           exclude native dialogs, comments and notifications. */
-        html.fb-specific-url-noglimpse-v26 [role="main"] [role="article"]:not(:where([role="dialog"] [role="article"], [data-pagelet*="Comment" i] [role="article"], [data-pagelet*="Notification" i] [role="article"])):not(.fb-native-skeleton-visible-v65):not(.fb-feed-unit-approved):not(.fb-post-approved):not(.fb-post-banned):not(.fb-element-banned):has([data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"]) {
+        /* v72: only prehide hydrated Page posts with real content. Empty/unmounted
+           Facebook loading shells must retain their normal paint and native height.
+           The synchronous post scanner still claims added, hydrated FeedUnits. */
+        html.fb-specific-url-noglimpse-v26 [role="feed"] div[aria-posinset]:not(.fb-native-skeleton-visible-v65):not(.fb-feed-unit-approved):not(.fb-post-approved):not(.fb-post-banned):not(.fb-element-banned):has([data-ad-rendering-role="profile_name"], [data-ad-rendering-role="story_message"], [data-ad-preview="message"]),
+        html.fb-specific-url-noglimpse-v26 div[data-pagelet^="FeedUnit_"]:not(.fb-native-skeleton-visible-v65):not(.fb-feed-unit-approved):not(.fb-post-approved):not(.fb-post-banned):not(.fb-element-banned):has([data-ad-rendering-role="profile_name"], [data-ad-rendering-role="story_message"], [data-ad-preview="message"]),
+        html.fb-specific-url-noglimpse-v26 div[data-pagelet^="TimelineFeedUnit_"]:not(.fb-native-skeleton-visible-v65):not(.fb-feed-unit-approved):not(.fb-post-approved):not(.fb-post-banned):not(.fb-element-banned):has([data-ad-rendering-role="profile_name"], [data-ad-rendering-role="story_message"], [data-ad-preview="message"]) {
             visibility: hidden !important;
             opacity: 0 !important;
             pointer-events: none !important;
@@ -10632,20 +11132,6 @@ const injectSpecificUrlPrehideCSS = () => {
             content-visibility: visible !important;
         }
 
-
-        /* v102: protect mixed native-loader + story states on supported Pages.
-           The old loading-state exemption could momentarily reveal a
-           post while Facebook was still hydrating its caption or attachments. */
-        html.fb-specific-url-noglimpse-v26 :is([role="feed"] div[aria-posinset], div[data-pagelet^="FeedUnit_"], div[data-pagelet^="TimelineFeedUnit_"], [role="feed"] > [role="article"]):not(.fb-post-approved):not(.fb-feed-unit-approved):not(.fb-post-banned):not(.fb-element-banned):has([data-visualcompletion="loading-state"]):has([data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"], a[href*="/posts/"]) {
-            visibility: hidden !important;
-            opacity: 1 !important;
-            pointer-events: none !important;
-        }
-        html.fb-specific-url-noglimpse-v26 :is([role="feed"] div[aria-posinset], div[data-pagelet^="FeedUnit_"], div[data-pagelet^="TimelineFeedUnit_"], [role="feed"] > [role="article"]):not(.fb-post-approved):not(.fb-feed-unit-approved):has([data-visualcompletion="loading-state"]):has([data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"], a[href*="/posts/"]) [data-visualcompletion="loading-state"],
-        html.fb-specific-url-noglimpse-v26 :is([role="feed"] div[aria-posinset], div[data-pagelet^="FeedUnit_"], div[data-pagelet^="TimelineFeedUnit_"], [role="feed"] > [role="article"]):not(.fb-post-approved):not(.fb-feed-unit-approved):has([data-visualcompletion="loading-state"]):has([data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"], a[href*="/posts/"]) [data-visualcompletion="loading-state"] * {
-            visibility: visible !important;
-            opacity: 1 !important;
-        }
         /* v65: native loading skeletons are intentionally visible; real content is still gated. */
         `;
         // Safe append (no document.write)
@@ -10665,8 +11151,7 @@ const injectSpecificUrlPrehideCSS = () => {
     }
 };
 
-// Run supported Page gate/CSS immediately, including on a direct navigation.
-updateSpecificUrlNoGlimpseClass();
+// Run specific URL prehide CSS injection immediately
 injectSpecificUrlPrehideCSS();
 
 // FIXED: Function to delete elements for specific URLs - now with proper URL restriction
@@ -11306,37 +11791,43 @@ const noteFBUserInteractionV53 = (event) => {
     scheduleFBViewportRescueV69();
 };
 
-let __fbShowMoreRescanInstalledV65 = false;
-const installFBShowMoreRescanV65 = () => {
+// ===== v312: stable, native See more expansion experiment =====
+// The old capture click handler revoked approval and hid a whole post BEFORE
+// Facebook revealed its longer caption. That caused approved posts to disappear
+// or jump as soon as they were clicked. For this isolated baseline, expanding an
+// already-approved post remains Facebook-native; no status reset, forced rescan,
+// replacement slot, timer or DOM adjustment is performed on the click.
+// Prevent the separate caption-mutation watcher from undoing that experiment:
+// a user-expanded, already-approved post is not retrospectively banned because
+// its newly shown caption happens to include a blocked term. This exemption is
+// scoped to this DOM post and is cleared when Facebook recycles that post.
+const __fbUserExpandedPostsV312 = new WeakSet();
+let __fbShowMoreStableHandlerInstalledV312 = false;
+let __fbShowMoreNativeClicksV312 = 0;
+let __fbShowMoreCaptionChecksSkippedV312 = 0;
+const installFBStableShowMoreClickV312 = () => {
     try {
-        if (__fbShowMoreRescanInstalledV65) return;
-        __fbShowMoreRescanInstalledV65 = true;
+        if (__fbShowMoreStableHandlerInstalledV312) return;
+        __fbShowMoreStableHandlerInstalledV312 = true;
         onWindowEvent(document, 'click', event => {
             try {
                 if (isFBMessengerPath(window.location.href)) return;
                 const target = event?.target?.closest?.('[role="button"], button, div[role="button"], span[role="button"]');
                 if (!target || !isExactPostShowMoreControl(target)) return;
                 const post = getFBCanonicalPostV65(target);
-                if (!isFBPostScannerSafeCandidateV65(post)) return;
-
-                // Hide the already-approved post inside the same click dispatch. Facebook still
-                // receives the native click, then child-list hydration rechecks the expanded text.
-                post.classList.remove('fb-post-approved', 'fb-feed-unit-approved', 'fb-post-processed');
-                post.removeAttribute('data-fb-v25-scan-complete');
-                post.removeAttribute('data-fb-v46-approved-key');
-                __fbElementDecisionCache.delete(post);
-                applyFBPostScreeningClassV60(post, true);
-
-                // Do not immediately approve the old collapsed text before Facebook has expanded it.
-                // A child-list mutation will re-screen sooner if one arrives; otherwise this bounded
-                // fallback handles characterData-only expansion while the post remains no-glimpse.
-                addTimeout(() => {
-                    if (post?.isConnected && post.getAttribute?.('data-fb-v25-scan-complete') !== '1') {
-                        screenFBCanonicalPostNowV65(post, true);
-                    }
-                }, 240);
+                if (!isFBPostScannerSafeCandidateV65(post) ||
+                    !post.classList.contains('fb-post-approved') ||
+                    post.getAttribute('data-fb-v25-scan-complete') !== '1') return;
+                __fbUserExpandedPostsV312.add(post);
+                __fbShowMoreNativeClicksV312++;
+                // Facebook handles this click normally. No visibility/approval change here.
             } catch (e) {}
         }, true);
+        window.__FBCleanerExpansionBaselineV312 = () => ({
+            mode: 'native-click-no-expanded-caption-rescreen',
+            markedClicks: __fbShowMoreNativeClicksV312,
+            captionMutationChecksSkipped: __fbShowMoreCaptionChecksSkippedV312
+        });
     } catch (e) {}
 };
 
@@ -11412,8 +11903,6 @@ const handleFBSPARouteTransition = (reason = '') => {
         FB_SPA_RUNTIME.generation++;
         FB_SPA_RUNTIME.transitionPending = true;
         FB_SPA_RUNTIME.initialized = true;
-        // Update the post paint boundary synchronously with History navigation.
-        syncFBEarlyPostGateV103();
 
         // Reset route-bound state first. Delayed callbacks from the previous route are invalidated
         // by the generation bump, while the current surface gets a clean lifecycle below.
@@ -11439,7 +11928,6 @@ const handleFBSPARouteTransition = (reason = '') => {
             updateFBCommentImmunityClasses();
             updateFBCommentOverlayClass();
             updateFBHomeFeedGateClass();
-            updateSpecificUrlNoGlimpseClass();
             refreshFBElementHidingAccountScope();
             updateFBFriendsSoftGate();
             refreshFBFriendsIdentityAttributeObserverV61();
@@ -12343,11 +12831,10 @@ const scrubBlockedFriendAndContactCards = (root = document) => {
         const rightRailRoots = Array.from(queryIncludingRoot('[data-pagelet="RightRail"], [role="complementary"]'));
         rightRailRoots.forEach((rail) => {
             try {
-                if (isFBNotificationToastRootV105(rail) || isNotificationPanelElement(rail)) return;
                 rail.querySelectorAll('[role="button"], [role="listitem"], [role="row"], a[href*="/messages/t/"], a[href*="profile.php?id="], a[href*="facebook.com/"]').forEach((seed) => {
                     try {
                         if (!seed || seed.classList.contains('fb-profile-card-banned')) return;
-                        if (isFBCommentSurfaceElement(seed) || isNotificationPanelElement(seed)) return;
+                        if (isFBCommentSurfaceElement(seed)) return;
                         const row = seed.closest('[role="listitem"], [role="row"], [role="button"]') || seed;
                         if (!row || row === rail || row.classList.contains('fb-profile-card-banned')) return;
                         if (row.closest('[aria-label*="Syntymäpäiv" i], [aria-label*="Birthday" i]')) return;
@@ -12398,8 +12885,7 @@ const getFBContactRailRootsV87 = () => {
         const pageletRails = Array.from(document.querySelectorAll('[data-pagelet="RightRail"]'));
         if (pageletRails.length) return pageletRails.slice(0, 3);
         return Array.from(document.querySelectorAll('[role="complementary"]'))
-            .filter(rail => !isFBNotificationToastRootV105(rail) &&
-                !rail.closest('[role="dialog"], [role="menu"], [role="feed"], [role="main"]'))
+            .filter(rail => !rail.closest('[role="dialog"], [role="menu"], [role="feed"], [role="main"]'))
             .slice(0, 3);
     } catch (e) { return []; }
 };
@@ -12407,7 +12893,7 @@ const getFBContactRailRootsV87 = () => {
 const findFBContactRailRowV87 = (seed, rail) => {
     try {
         const node = seed?.nodeType === 1 ? seed : seed?.parentElement;
-        if (!node || !rail.contains(node) || isNotificationPanelElement(node)) return null;
+        if (!node || !rail.contains(node)) return null;
         const row = node.closest('[role="button"], [role="listitem"], [role="row"]') ||
             node.closest('a[href*="/messages/t/"], a[href*="messenger.com/t/"]');
         if (!row || !rail.contains(row) || row === rail) return null;
@@ -12440,7 +12926,7 @@ const collectFBContactRailSignalsV87 = (row) => {
 
 const screenFBContactRailRowV87 = (row) => {
     try {
-        if (!row || !row.isConnected || isNotificationPanelElement(row)) return;
+        if (!row || !row.isConnected) return;
         if (row.matches('[role="complementary"], [data-pagelet="RightRail"]')) return;
         if (row.closest('[role="dialog"], [role="menu"], [role="feed"], [role="main"]')) return;
         // Never turn a whole multi-person contact list into a banned card.
@@ -12485,10 +12971,6 @@ const screenFBContactRailRowV87 = (row) => {
 const screenFBContactRailV87 = (rail) => {
     try {
         if (!rail?.isConnected || !isFBContactRailScopeV87()) return;
-        if (isFBNotificationToastRootV105(rail)) {
-            protectNotificationSurfaces(rail);
-            return;
-        }
         refreshAccountScopedFilters();
         if (!__fbStrictAccountEnabled) return;
         const rows = rail.querySelectorAll(FB_CONTACT_RAIL_ROW_SELECTOR_V87);
@@ -12528,11 +13010,6 @@ const syncFBContactRailNoGlimpseV87 = () => {
                 // Only this one right-rail subtree; never watch attributes across the main page.
                 // Class/style/decision-attribute writes are excluded to avoid feedback loops.
                 if (mutations.some(m => m.type === 'childList' || m.type === 'characterData' || m.type === 'attributes')) {
-                    if (isFBNotificationToastRootV105(rail)) {
-                        protectNotificationSurfaces(rail);
-                        syncFBContactRailNoGlimpseV87();
-                        return;
-                    }
                     screenFBContactRailV87(rail);
                 }
             }));
@@ -12558,11 +13035,6 @@ const processFBContactRailMutationBatchV87 = (mutations) => {
             const m = mutations[i];
             const target = m.target?.nodeType === 1 ? m.target : m.target?.parentElement;
             const currentRail = target?.closest?.('[data-pagelet="RightRail"], [role="complementary"]');
-            if (currentRail && isFBNotificationToastRootV105(currentRail)) {
-                protectNotificationSurfaces(currentRail);
-                syncFBContactRailNoGlimpseV87();
-                continue;
-            }
             // Already-observed rails have their own focused observer. Avoid duplicate scans.
             if (currentRail && !__fbContactRailObserversV87.has(currentRail)) {
                 syncFBContactRailNoGlimpseV87();
@@ -14100,8 +14572,7 @@ const initializeFacebookCleaner = () => {
     devLog('Initializing BraveFox Facebook policy engine v58');
     refreshFBSpecificSurfaceHydrationObserverV58();
     installFBUserInteractionQuietLaneV53();
-    installFBPassiveCaptionBridgeV295();
-    installFBShowMoreRescanV65();
+    installFBStableShowMoreClickV312();
     updateFBProfileScreening(true);
     updateFBSearchPageClass();
     updateFBHomeFeedGateClass();

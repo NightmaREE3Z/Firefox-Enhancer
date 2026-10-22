@@ -1,6 +1,7 @@
 // ==UserScript==
-// @name         Content hiding and filtering
-// @version      2026-10-20
+// @name         BraveFox WebFilter Script
+// @version	 29.5.5
+// @date	 2026-10-21
 // @description  Filter out stuff on the internet (Targeted Enforcer)
 // @match        *://xvideos.com/*
 // @match        *://*.xvideos.com/*
@@ -18,6 +19,13 @@
 // @match        *://*.youporn.com/*
 // @match        *://thumbzilla.com/*
 // @match        *://*.thumbzilla.com/*
+// @match        *://bunkr.cr/*
+// @match        *://*.bunkr.cr/*
+// @match        *://balbums.st/*
+// @match        *://*.balbums.st/*
+// @match        *://balbums.at/*
+// @match        *://*.balbums.at/*
+// @include      /^https?:\/\/(?:[a-z0-9-]+\.)*(?:bunkr|balbums)\.[a-z0-9-]+(?:\.[a-z0-9-]+)*(?::[0-9]+)?(?:[/?#]|$)/
 // @match        *://tenor.com/*
 // @match        *://*.tenor.com/*
 // @grant        none
@@ -34,7 +42,8 @@
     //   2) sitewide no-glimpse RedTube video, category and directory-card filtering; and
     //   3) a tiny Tenor search-submit guard; and
     //   4) targeted, no-glimpse RedGifs card/tag/profile filtering; and
-    //   5) per-site Pornhub, YouPorn and Thumbzilla card/menu filtering.
+    //   5) per-site Pornhub, YouPorn and Thumbzilla card/menu filtering; and
+    //   6) Bunkr/Balbums album and file filtering, including Balbums search interception.
     // It must remain completely dormant everywhere else, even when an extension manifest from an
     // older build still injects the file broadly.
     const BRAVEFOX_FILTERING_HOST = String(window.location.hostname || '')
@@ -52,6 +61,10 @@
         BRAVEFOX_FILTERING_HOST.endsWith('.youporn.com');
     const BRAVEFOX_IS_THUMBZILLA = BRAVEFOX_FILTERING_HOST === 'thumbzilla.com' ||
         BRAVEFOX_FILTERING_HOST.endsWith('.thumbzilla.com');
+    // Hostname routing is deliberately narrow: only a bunkr/balbums domain label,
+    // plus optional subdomains and any TLD (including multi-label country suffixes).
+    const BRAVEFOX_IS_BUNKR = /(?:^|\.)bunkr\.[a-z0-9-]+(?:\.[a-z0-9-]+)*$/.test(BRAVEFOX_FILTERING_HOST);
+    const BRAVEFOX_IS_BALBUMS = /(?:^|\.)balbums\.[a-z0-9-]+(?:\.[a-z0-9-]+)*$/.test(BRAVEFOX_FILTERING_HOST);
     const BRAVEFOX_IS_REDTUBE =
         BRAVEFOX_FILTERING_HOST === 'redtube.com' ||
         BRAVEFOX_FILTERING_HOST.endsWith('.redtube.com') ||
@@ -62,7 +75,21 @@
 
     if (!BRAVEFOX_IS_XVIDEOS && !BRAVEFOX_IS_TENOR && !BRAVEFOX_IS_REDTUBE &&
         !BRAVEFOX_IS_REDGIFS && !BRAVEFOX_IS_PORNHUB && !BRAVEFOX_IS_YOUPORN &&
-        !BRAVEFOX_IS_THUMBZILLA) return;
+        !BRAVEFOX_IS_THUMBZILLA && !BRAVEFOX_IS_BUNKR && !BRAVEFOX_IS_BALBUMS) return;
+
+    // Only bunkr.cr's actual homepage redirects to Balbums. /a/, /f/, /v/ and
+    // every other Bunkr path continue to load normally for their hosted content.
+    // Run at document-start so no homepage content flashes before navigation.
+    function redirectBunkrCrHomepageIfNeeded() {
+        if (BRAVEFOX_FILTERING_HOST !== 'bunkr.cr' || window.location.pathname !== '/')
+            return false;
+        const destination = 'https://balbums.st/';
+        try { window.location.replace(destination); }
+        catch (e) { window.location.href = destination; }
+        return true;
+    }
+
+    if (redirectBunkrCrHomepageIfNeeded()) return;
 
     // === FOCUS MASTER REMOTE TERMS ===
     // Keep this remote layer semantically aligned with Focus Master's blockedTerms.csv handling:
@@ -275,18 +302,18 @@
     function createStaticBlockedRegexWords() {
         return [
         /deepn/i, /deepf/i, /deeps/i, /udif/i, /nudif/i, /ndres/i, /alexa/i, /poshspi(?:c|s)y/i, /face[\s_-]*swap/i, /swap[\s_-]*face/i, /Brie/i, /face[\s_-]*morph/i, 
-	/morph[\s_-]*face/i, /dream[\s_-]*booth/i, /wondershare/i, /filmora/i, /app/i, /Liv[\s_-]+Morgan/i, /Liv[\s_-]+Xoxo/i, /Morgan[\s_-]+Xoxo/i, /Sweeney/i, /Sydne/i, 
-	/Steward/i, /Stewart/i, /Kristen/i, /Kriis/i, /Bella/i, /Nikki/i, /Hulk/i, /lex[\s_-]*bl/i, /leks[\s_-]*bl/i, /Lexi/i, /Hogan/i, /Tiffy/i, /Transg/i, /Transv/i,
-	/Bliss/i, /Marg[\s_-]+Robb/i, /Margo/i, /Robbie/i, /Elyna/i, /Elyina/i, /Eliyna/i, /Eliyina/i, /Dua[\s_-]*Lipa/i, /Kamitani/i, /Katie/i, /Nikkita/i, /Alicy/i,
-	/Lisa[\s_-]+Marie/i, /Lisa[\s_-]+Varon/i, /Marie[\s_-]+Varon/i, /Takaichi/i, /Sakurai/i, /Arrivederci/i, /Alice/i, /Alici/i, /Arisu[\s_-]+Endo/i, /Crowley/i, 
-	/Ruby[\s_-]+Soho/i, /Castillo/i, /Monica/i, /Matsumoto/i, /Shino[\s_-]+Suzuki/i, /Lily[\s_-]+Adam/i, /Lana/i, /Blake/i, /Bailey/i, /Bayley/i, /Naomi/i, /Ruca/i, 
-	/Irving/i, /Monroe/i, /Del[\s_-]+Rey/i, /McMahon/i, /CJ[\s_-]+Perry/i, /Stratton/i, /Lola[\s_-]+Vice/i, /shirakawa/i, /Belts[\s_-]+Mone/i, /gay/i, /pride/i, 
-	/Amanda[\s_-]+Huber/i, /Joanie[\s_-]+Laurer/i, /AEW/i, /TNA/i, /WWE/i, /NJPW/i, /LGBT/i, /Trans/i, /playboy/i, /anorexic/i, /Arab/i, /Stee/i, /Sweee/i, /Waaa/i,
-	/deviant[\s_-]*art/i, /r[\s_-]*34/i, /Stee/i, /Sweee/i, /Sol/i, /Transsexual/i, /Femdom/i, /Animat/i, /AI Porn/i, /AI Nude/i, /AI Pussy/i, /AI Anal/i, /AI Sex/i, 
-	/guy-guy/i, /homo/i, /grandpa/i, /grandma/i, /aunty/i, /piss/i, /pee/i, /crap/i, /shit/i, /fece/i, /Cuckold/i, /Bikini/i, /Lingerie/i, /Hentai/i, /Animation/i, 
-	/Artific/i, /Intel/i, /male-/i, /africa/i, /japan/i, /china/i, /twerk/i, /strip/i, /whori/i, /muscular/i, /-male/i, /male-/i, /shemale/i, /shemale/i, /Appli/i,
-	/old-young/i, /young-old/i, /old-vs-young/i, /Nude AI/i, /nudi AI/i, /software/i, /undre AI/i, /Nud3/i, /Nud1/i, /Naked AI/i, /-AI/i, /AI-/i, /-AI-/i, /AI App/i, 
-	/-App/i, /App-/i, /-IA/i, /IA-/i, /-IA-/i, /Serrano/i, /Russia/i, /Russian/i,
+	/morph[\s_-]*face/i, /dream[\s_-]*booth/i, /wondershare/i, /filmora/i, /app/i, /Liv[\s_-]+Morgan/i, /Liv[\s_-]+Xoxo/i, /Morgan[\s_-]+Xoxo/i, /Kriis/i, /Bella/i, 
+	/Nikki/i, /Hulk/i, /lex[\s_-]*bl/i, /leks[\s_-]*bl/i, /Lexi/i, /Hogan/i, /Tiffy/i, /Transg/i, /Transv/i, /Bliss/i, /Marg[\s_-]+Robb/i, /Margo/i, /Robbie/i, 
+	/Elyna/i, /Elyina/i, /Eliyna/i, /Eliyina/i, /Dua[\s_-]*Lipa/i, /Kamitani/i, /Katie/i, /Nikkita/i, /Alicy/i, /gay/i, /pride/i, /Crowley/i, /shemale/i, /Appli/i,
+	/Lisa[\s_-]+Marie/i, /Lisa[\s_-]+Varon/i, /Marie[\s_-]+Varon/i, /Takaichi/i, /Sakurai/i, /Arrivederci/i, /Alice/i, /Alici/i, /Arisu[\s_-]+Endo/i, /Ruca/i,
+	/Ruby[\s_-]+Soho/i, /Castillo/i, /Monica/i, /Matsumoto/i, /Shino[\s_-]+Suzuki/i, /Lily[\s_-]+Adam/i, /Lana/i, /Blake/i, /Bailey/i, /Bayley/i, /Naomi/i,  
+	/Irving/i, /nudi AI/i, /Monroe/i, /Del[\s_-]+Rey/i, /McMahon/i, /CJ[\s_-]+Perry/i, /Stratton/i, /Lola[\s_-]+Vice/i, /shirakawa/i, /Belts[\s_-]+Mone/i, 
+	/Amanda[\s_-]+Huber/i, /AEW/i, /TNA/i, /WWE/i, /NJPW/i, /LGBT/i, /Trans/i, /playboy/i, /Arab/i, /deviant[\s_-]*art/i, /r[\s_-]*34/i, /Sol/i, /Femdom/i, 
+	/Transsexual/i, /Animat/i, /AI Porn/i, /AI Nude/i, /AI Pussy/i, /AI Anal/i, /AI Sex/i, /guy-guy/i, /homo/i, /grandpa/i, /grandma/i, /aunty/i, /Russia/i,  
+	/piss/i,  /pee/i, /crap/i, /shit/i, /fece/i, /Cuckold/i, /Bikini/i, /Lingerie/i, /Hentai/i, /Animation/i, /Artific/i, /Intel/i, /male-/i, /africa/i, 
+	/china/i, /twerk/i, /strip/i, /whori/i, /muscular/i, /-male/i, /male-/i, /shemale/i, /old-young/i, /young-old/i, /old-vs-young/i, /Nude AI/i, /japan/i, 
+	/software/i, /undre AI/i, /Nud3/i, /Nud1/i, /Naked AI/i, /-AI/i, /AI-/i, /-AI-/i, /AI App/i,/-App/i, /App-/i, /-IA/i, /IA-/i, /-IA-/i, /Serrano/i,  
+	/anorexic/i, /Russian/i, /japan/i, /AJ Lee/i, /AI Fake/i, /F4k3/i, /Fak3/i, /F4ke/i, /Mondomonger/i, /Mondo monger/i,
 
 
         // Symbols and standalone abbreviations
@@ -2680,6 +2707,447 @@
             }
         }, true);
         console.log(`BraveFox ${site} filtering enabled.`);
+    }
+
+    // === BUNKR / BALBUMS FILTERING ===
+    // Balbums' album cards and Bunkr's file tiles use unrelated DOM structures.
+    // They share only the existing fixed regexes, Focus Master remote terms, and
+    // wrestler exclusions; no other site's scanner or menu behavior is modified.
+    function installBraveFoxBunkrBalbumsFilter() {
+        if (window.__braveFoxBunkrBalbumsInstalled) return;
+        window.__braveFoxBunkrBalbumsInstalled = true;
+
+        const site = BRAVEFOX_IS_BALBUMS ? 'balbums' : 'bunkr';
+        const stateAttr = 'data-bravefox-bunkr-balbums-state';
+        const filterRevision = 'bunkr-balbums-sitewide-v1';
+        // Exact site navigation links to suppress. Keep selectors scoped to the
+        // matching host and link destinations so content cards remain untouched.
+        const navigationRemovalSelector = site === 'balbums'
+            ? 'a[href="/topalbums"], a[href="/topalbums/"], ' +
+              'a[href="/topvideos"], a[href="/topvideos/"], ' +
+              'a[href="/topfiles"], a[href="/topfiles/"], ' +
+              'a[href="/topimages"], a[href="/topimages/"]'
+            : 'a.btn[href="/upload"], a.btn[href="/upload/"], ' +
+              'a.btn[href="https://status.bunkr.ru/"], ' +
+              'a.btn[href="https://status.bunkr.ru"]';
+        const bunkrLogoSelector = 'figure a[href="/"]:has(> img[src="/images/icon.svg"][alt="bunkr"])';
+        const bunkrLogoDestination = 'https://balbums.st/';
+        // Match the old-domain notice by its red inline background and exact link,
+        // without touching other banners or Bunkr's video/file content.
+        const bunkrMigrationBannerSelector =
+            'div:is([style*="background: red"], [style*="background:red"]):has(> a[href="https://balbums.st"], > a[href="https://balbums.st/"])';
+        const cardSelector = site === 'balbums'
+            ? 'a.card[href]:has(h3, img.thumb-img)'
+            : 'div.theItem';
+        const regexes = createStaticBlockedRegexWords();
+        const exclusions = new Set([
+            'melina', 'melina-perez', 'aj-lee', 'aj', 'becky-lynch', 'becky', 'katarina', 'jojo'
+        ]);
+        const cache = new WeakMap();
+        const pendingRoots = new Set();
+        let wrestlerRegexes = [];
+        let wrestlerReady = false;
+        let remoteReady = false;
+        let generation = 0;
+        let observer = null;
+        let draining = false;
+        let lastUrl = window.location.href;
+        let redirecting = false;
+        let removeStorageListener = null;
+
+        function comparableTexts(value) {
+            const raw = String(value || '');
+            if (!raw) return [];
+            // Some album names insert invisible Unicode formatting characters between
+            // letters. Also test the normalized visible spelling, not only the raw text.
+            const clean = raw.normalize('NFKC')
+                .replace(/[\u00ad\u200b-\u200f\u2060\ufeff]/gi, '');
+            return clean === raw ? [raw] : [raw, clean];
+        }
+
+        function containsBlocked(value) {
+            return comparableTexts(value).some(text =>
+                regexes.some(regex => regexMatches(regex, text)) ||
+                wrestlerRegexes.some(regex => regexMatches(regex, text))
+            );
+        }
+
+        function buildWrestlerRegexes(urls) {
+            const seen = new Set();
+            const output = [];
+            for (const url of Array.isArray(urls) ? urls : []) {
+                try {
+                    const slug = decodeURIComponent(String(url).split('/').filter(Boolean).pop() || '')
+                        .toLowerCase().trim();
+                    if (!slug || exclusions.has(slug)) continue;
+                    const parts = slug.split(/[-_\s]+/).filter(Boolean);
+                    const name = parts.join(' ');
+                    if (!name || seen.has(name)) continue;
+                    seen.add(name);
+                    const escaped = parts.map(part => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+                    output.push(new RegExp('\\b' + escaped.join('[\\s_-]+') + '\\b', 'i'));
+                } catch (e) {}
+            }
+            return output;
+        }
+
+        function useWrestlerUrls(urls) {
+            wrestlerRegexes = buildWrestlerRegexes(urls);
+            wrestlerReady = true;
+            generation++;
+            runPass(true);
+        }
+
+        function loadWrestlers() {
+            const done = result => useWrestlerUrls(
+                Array.isArray(result?.wrestling_women_urls) ? result.wrestling_women_urls : []
+            );
+            try {
+                if (typeof browser !== 'undefined' && browser.storage?.local) {
+                    Promise.resolve(browser.storage.local.get(['wrestling_women_urls']))
+                        .then(done, () => done({}));
+                    return;
+                }
+                if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+                    chrome.storage.local.get(['wrestling_women_urls'], result => {
+                        try { if (chrome.runtime?.lastError) return done({}); } catch (e) {}
+                        done(result || {});
+                    });
+                    return;
+                }
+            } catch (e) {}
+            done({});
+        }
+
+        function watchWrestlerChanges() {
+            const onChange = (changes, area) => {
+                if (area && area !== 'local') return;
+                if (!Object.prototype.hasOwnProperty.call(changes || {}, 'wrestling_women_urls')) return;
+                useWrestlerUrls(changes.wrestling_women_urls?.newValue || []);
+            };
+            try {
+                const storage = typeof browser !== 'undefined' && browser.storage?.onChanged
+                    ? browser.storage : typeof chrome !== 'undefined' && chrome.storage?.onChanged
+                        ? chrome.storage : null;
+                if (storage) {
+                    storage.onChanged.addListener(onChange);
+                    removeStorageListener = () => storage.onChanged.removeListener(onChange);
+                }
+            } catch (e) {}
+        }
+
+        function installNoGlimpseCSS() {
+            if (!document.documentElement) return false;
+            document.documentElement.classList.add('bravefox-bunkr-balbums-active');
+            if (document.getElementById('bravefox-bunkr-balbums-css')) return true;
+            const style = document.createElement('style');
+            style.id = 'bravefox-bunkr-balbums-css';
+            style.setAttribute('data-bravefox-revision', filterRevision);
+            style.textContent = `
+                /* Preserve geometry/lazy loading but never reveal an unclassified tile. */
+                html.bravefox-bunkr-balbums-active ${cardSelector}:not([${stateAttr}="clean"]) {
+                    visibility: hidden !important;
+                    pointer-events: none !important;
+                    transition: none !important;
+                    animation: none !important;
+                }
+                html.bravefox-bunkr-balbums-active ${cardSelector}[${stateAttr}="blocked"] {
+                    display: none !important;
+                    visibility: hidden !important;
+                    pointer-events: none !important;
+                    transition: none !important;
+                    animation: none !important;
+                }
+                /* Hide unwanted navigation immediately, before the DOM removal pass. */
+                ${navigationRemovalSelector.split(', ').map(selector =>
+                    `html.bravefox-bunkr-balbums-active ${selector}`).join(',\n')} {
+                    display: none !important;
+                    visibility: hidden !important;
+                    pointer-events: none !important;
+                }
+                ${BRAVEFOX_FILTERING_HOST === 'bunkr.cr' ? `
+                /* Prevent Bunkr's old-domain migration banner from flashing. */
+                html.bravefox-bunkr-balbums-active ${bunkrMigrationBannerSelector} {
+                    display: none !important;
+                    visibility: hidden !important;
+                    pointer-events: none !important;
+                }` : ''}
+            `;
+            (document.head || document.documentElement).appendChild(style);
+            return true;
+        }
+
+        function applySiteNavigation(root) {
+            const element = root?.nodeType === 1 ? root : root?.parentElement;
+            if (!element) return;
+
+            // Remove already-rendered links and links added during SPA hydration.
+            if (element.matches?.(navigationRemovalSelector)) element.remove();
+            element.querySelectorAll(navigationRemovalSelector).forEach(link => link.remove());
+
+            // Remove Bunkr's obsolete red domain-migration notice, including
+            // versions injected after initial page load.
+            if (site !== 'bunkr') return;
+            if (BRAVEFOX_FILTERING_HOST === 'bunkr.cr') {
+                if (element.matches?.(bunkrMigrationBannerSelector)) element.remove();
+                element.querySelectorAll(bunkrMigrationBannerSelector).forEach(banner => banner.remove());
+            }
+
+            // Only the Bunkr home/logo link is changed; other home links remain intact.
+            if (element.matches?.(bunkrLogoSelector))
+                element.setAttribute('href', bunkrLogoDestination);
+            element.querySelectorAll(bunkrLogoSelector).forEach(link =>
+                link.setAttribute('href', bunkrLogoDestination));
+        }
+
+        function cardText(element) {
+            const values = [];
+            const push = value => {
+                const text = String(value || '').normalize('NFKC')
+                    .replace(/[\u00ad\u200b-\u200f\u2060\ufeff]/gi, '')
+                    .replace(/\s+/g, ' ').trim();
+                if (text && !values.includes(text)) values.push(text);
+            };
+            if (site === 'balbums') {
+                // Album IDs and CDN paths are opaque; use only user-facing titles.
+                element.querySelectorAll('h3, .thumb-img[alt]').forEach(node => {
+                    if (node.matches('h3')) push(node.textContent);
+                    push(node.getAttribute('alt'));
+                    push(node.getAttribute('title'));
+                });
+                push(element.getAttribute('title'));
+                push(element.getAttribute('aria-label'));
+            } else {
+                // Bunkr /a/<id> file tiles from the supplied .theItem markup.
+                push(element.querySelector('.theName')?.textContent);
+                push(element.getAttribute('title'));
+                element.querySelectorAll('.grid-images_box-txt > p, .grid-images_box-img[alt]')
+                    .forEach(node => {
+                        if (node.matches('p')) push(node.textContent);
+                        const alt = node.getAttribute('alt');
+                        if (alt && !/^(?:image|thumbnail|video icon)$/i.test(alt.trim())) push(alt);
+                    });
+            }
+            return values.join(' ').trim();
+        }
+
+        function classify(element, force = false) {
+            if (!element?.isConnected || !element.matches(cardSelector)) return;
+            if (!remoteReady || !wrestlerReady) return;
+            const text = cardText(element);
+            const previous = cache.get(element);
+            if (!force && previous?.text === text && previous.generation === generation &&
+                previous.state === element.getAttribute(stateAttr)) return;
+            const state = !text ? 'pending' : containsBlocked(text) ? 'blocked' : 'clean';
+            cache.set(element, { text, state, generation });
+            if (element.getAttribute(stateAttr) !== state) element.setAttribute(stateAttr, state);
+            if (state === 'blocked') element.setAttribute('aria-hidden', 'true');
+            else element.removeAttribute('aria-hidden');
+        }
+
+        function scan(root, force = false) {
+            const element = root?.nodeType === 1 ? root : root?.parentElement;
+            if (!element) return;
+            const parent = element.closest?.(cardSelector);
+            if (parent) classify(parent, force);
+            if (element.matches(cardSelector)) classify(element, force);
+            element.querySelectorAll(cardSelector).forEach(card => classify(card, force));
+        }
+
+        function routeSearchText() {
+            if (site !== 'balbums') return '';
+            try {
+                return new URL(window.location.href).searchParams.get('search') || '';
+            } catch (e) { return ''; }
+        }
+
+        function routeTitleText() {
+            if (site !== 'bunkr' || !/^\/(?:a|f|v|d)\/[^/]+/i.test(window.location.pathname || ''))
+                return '';
+            const values = [];
+            const push = value => {
+                const text = String(value || '').normalize('NFKC')
+                    .replace(/[\u00ad\u200b-\u200f\u2060\ufeff]/gi, '')
+                    .replace(/\s+/g, ' ').trim();
+                if (text && !values.includes(text)) values.push(text);
+            };
+            document.querySelectorAll(
+                'h1, .album-title, .albumTitle, .file-name, .fileName, ' +
+                '.theAlbumName, .theFileName, meta[property="og:title"]'
+            ).forEach(node => {
+                if (node.matches('meta')) push(node.getAttribute('content'));
+                else if (!node.closest('div.theItem')) push(node.textContent);
+            });
+            return values.join(' ').trim();
+        }
+
+        function redirectHome(event) {
+            if (redirecting) return;
+            if (event) {
+                if (event.cancelable) event.preventDefault();
+                event.stopImmediatePropagation();
+                event.stopPropagation();
+            }
+            redirecting = true;
+            try { window.stop(); } catch (e) {}
+            try { window.location.replace(window.location.origin + '/'); }
+            catch (e) { window.location.href = window.location.origin + '/'; }
+        }
+
+        function checkRoute() {
+            if (redirecting) return;
+            // Also catch a client-side navigation back to bunkr.cr's root.
+            if (redirectBunkrCrHomepageIfNeeded()) {
+                redirecting = true;
+                return;
+            }
+            const search = routeSearchText();
+            if (search && containsBlocked(search)) return redirectHome();
+            // Bunkr's album/file slugs are opaque IDs; check rendered title metadata instead.
+            if (remoteReady && wrestlerReady && containsBlocked(routeTitleText())) redirectHome();
+        }
+
+        function runPass(force = false) {
+            installNoGlimpseCSS();
+            if (document.documentElement) applySiteNavigation(document.documentElement);
+            checkRoute();
+            if (!remoteReady || !wrestlerReady || redirecting) return;
+            if (document.documentElement) scan(document.documentElement, force);
+        }
+
+        function blockSearchSubmission(event, input) {
+            if (site !== 'balbums' || !input || !containsBlocked(input.value)) return;
+            redirectHome(event);
+        }
+
+        // The sample form submits to /?search=, not /search?query=.
+        if (site === 'balbums') {
+            document.addEventListener('submit', event => {
+                const form = event.target;
+                if (!form?.matches?.('form#searchForm')) return;
+                blockSearchSubmission(event, form.querySelector('#searchInput, input[name="search"]'));
+            }, true);
+            document.addEventListener('keydown', event => {
+                if (event.key !== 'Enter') return;
+                const input = event.target;
+                if (!input?.matches?.('#searchInput, input[name="search"]') ||
+                    !input.closest('form#searchForm')) return;
+                blockSearchSubmission(event, input);
+            }, true);
+            document.addEventListener('click', event => {
+                const button = event.target?.closest?.('form#searchForm button[type="submit"]');
+                if (!button) return;
+                blockSearchSubmission(event, button.closest('form#searchForm')?.querySelector(
+                    '#searchInput, input[name="search"]'
+                ));
+            }, true);
+        }
+
+        function drain() {
+            draining = false;
+            const roots = [...pendingRoots];
+            pendingRoots.clear();
+            if (roots.length > 80) return runPass();
+            roots.forEach(root => applySiteNavigation(root));
+            if (remoteReady && wrestlerReady) roots.forEach(root => scan(root));
+            // Search route / album title may be hydrated after initial DOM parsing.
+            checkRoute();
+        }
+
+        function observe() {
+            if (!document.documentElement) { setTimeout(observe, 10); return; }
+            installNoGlimpseCSS();
+            if (observer) return;
+            observer = new MutationObserver(records => {
+                for (const record of records) {
+                    if (record.type === 'childList') {
+                        record.addedNodes.forEach(node => {
+                            if (node.nodeType === 1) pendingRoots.add(node);
+                            else if (node.parentElement) pendingRoots.add(node.parentElement);
+                        });
+                        if (record.removedNodes.length && record.target.nodeType === 1)
+                            pendingRoots.add(record.target);
+                    } else {
+                        const element = record.target.nodeType === 1
+                            ? record.target : record.target.parentElement;
+                        if (element) pendingRoots.add(element);
+                    }
+                }
+                if (!draining && pendingRoots.size) {
+                    draining = true;
+                    queueMicrotask(drain);
+                }
+            });
+            observer.observe(document.documentElement, {
+                childList: true, subtree: true, characterData: true, attributes: true,
+                attributeFilter: ['title', 'alt', 'aria-label', 'href', 'class', 'content']
+            });
+            runPass();
+        }
+
+        function onRouteChange() {
+            if (lastUrl === window.location.href) return;
+            lastUrl = window.location.href;
+            redirecting = false;
+            runPass(true);
+        }
+
+        function installHistoryHooks() {
+            ['pushState', 'replaceState'].forEach(method => {
+                try {
+                    const original = history[method];
+                    if (typeof original !== 'function') return;
+                    history[method] = function() {
+                        const result = original.apply(this, arguments);
+                        queueMicrotask(onRouteChange);
+                        return result;
+                    };
+                } catch (e) {}
+            });
+            window.addEventListener('popstate', onRouteChange, true);
+            window.addEventListener('hashchange', onRouteChange, true);
+            window.addEventListener('pageshow', () => {
+                onRouteChange();
+                observe();
+                runPass();
+            }, true);
+        }
+
+        Promise.resolve(focusMasterBlockedTermsFetchInFlight).finally(() => {
+            remoteReady = true;
+            generation++;
+            runPass(true);
+        });
+        setTimeout(() => {
+            if (!remoteReady) { remoteReady = true; generation++; runPass(true); }
+            if (!wrestlerReady) useWrestlerUrls([]);
+        }, 5500);
+        loadWrestlers();
+        watchWrestlerChanges();
+        window.addEventListener(FOCUS_MASTER_BLOCKED_TERMS_UPDATED_EVENT, () => {
+            generation++;
+            runPass(true);
+        }, true);
+        observe();
+        installHistoryHooks();
+        if (document.readyState === 'loading')
+            document.addEventListener('DOMContentLoaded', () => runPass(), { once: true });
+        window.addEventListener('pagehide', event => {
+            if (event.persisted) return;
+            if (observer) observer.disconnect();
+            observer = null;
+            pendingRoots.clear();
+            if (removeStorageListener) {
+                try { removeStorageListener(); } catch (e) {}
+                removeStorageListener = null;
+            }
+        }, true);
+        console.log(`BraveFox ${site} filtering enabled.`);
+    }
+
+    if (BRAVEFOX_IS_BUNKR || BRAVEFOX_IS_BALBUMS) {
+        installBraveFoxBunkrBalbumsFilter();
+        return;
     }
 
     if (BRAVEFOX_IS_PORNHUB || BRAVEFOX_IS_YOUPORN || BRAVEFOX_IS_THUMBZILLA) {

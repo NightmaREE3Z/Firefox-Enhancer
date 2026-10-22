@@ -1,6 +1,7 @@
 // ==UserScript==
-// @name         IGCleaner v27.6.0-V6H
-// @version      2026-09-08
+// @name         IGCleaner 29.5.5
+// @version	 29.5.5
+// @date	 2026-10-22
 // @description  Trying to make my Instagram experience tolerable.
 // @match        *://www.instagram.com/*
 // @match        *://www.instagram.com/?next=%2F/*
@@ -55,6 +56,9 @@
                     latestHomeGraphqlAt: 0,
                     latestHomeGraphqlDoneAt: 0,
                     matchedConnections: 0,
+                    completeCaptionsSeen: 0,
+                    completeCaptionsBlocked: 0,
+                    verifiedCaptionEvidence: 0,
                     originalEdges: 0,
                     deliveredEdges: 0,
                     lastFeedRequestAt: 0,
@@ -99,6 +103,25 @@
                 recentDecisions: []
             };
             try { window.__bfInstagramFeedDiagnosticsV1 = bfFeedTelemetryV1; } catch {}
+            try {
+                window.__IGCleanerPrepaintV2955 = () => ({
+                    route: location.pathname || '/',
+                    mode: 'MAIN-world structured-caption/pre-render audit',
+                    feedConnections: bfFeedTelemetryV1.network.matchedConnections,
+                    feedEdgesReceived: bfFeedTelemetryV1.network.originalEdges,
+                    feedEdgesDelivered: bfFeedTelemetryV1.network.deliveredEdges,
+                    completeCaptionsInspected: bfFeedTelemetryV1.network.completeCaptionsSeen,
+                    captionsBlockedByContent: bfFeedTelemetryV1.network.completeCaptionsBlocked,
+                    completeCaptionEvidencePublished: bfFeedTelemetryV1.network.verifiedCaptionEvidence,
+                    dom: bfFeedTelemetryV1.dom ? {
+                        articles: bfFeedTelemetryV1.dom.articles,
+                        pendingNear: bfFeedTelemetryV1.dom.pendingNear,
+                        collapsedNear: bfFeedTelemetryV1.dom.collapsedNear,
+                        decisionReasons: bfFeedTelemetryV1.dom.decisionReasons
+                    } : null,
+                    note: 'Aggregate, read-only; network counters refer to recognized Home feed responses, not every Instagram post.'
+                });
+            } catch {}
 
             // ===== v2 passive Home GraphQL operation census =====
             // Capture request *metadata* across GraphQL formats, not just the one
@@ -435,6 +458,8 @@
             let configuredKeywordRegexFallback = [];
             let configuredAllowedWords = [];
             let configuredBannedAccounts = new Set();
+            let configuredTrustedAuthorsV326 = new Set();
+            let friendConfigReadyV326 = false;
             let keywordConfigReady = false;
             let allowedConfigReady = false;
             let accountConfigReady = false;
@@ -446,13 +471,13 @@
             const builtInCriticalRegexes = [
                 /tekoälysisältö/i,
                 /luotu todennäköisesti tekoälyllä/i,
-                /ai[ -]?generated/i,
-                /ai[ -]?created/i,
-                /ai[ -]?generated content/i,
-                /ai[ -]?created content/i,
-                /ai[ -]?art/i,
-                /ai[ -]?edited/i,
-                /\bAI\b/i
+                /(?<![\p{L}\p{N}])ai[ -]?generated(?![\p{L}\p{N}])/iu,
+                /(?<![\p{L}\p{N}])ai[ -]?created(?![\p{L}\p{N}])/iu,
+                /(?<![\p{L}\p{N}])ai[ -]?generated content(?![\p{L}\p{N}])/iu,
+                /(?<![\p{L}\p{N}])ai[ -]?created content(?![\p{L}\p{N}])/iu,
+                /(?<![\p{L}\p{N}])ai[ -]?art(?![\p{L}\p{N}])/iu,
+                /(?<![\p{L}\p{N}])ai[ -]?edited(?![\p{L}\p{N}])/iu,
+                /(?<![\p{L}\p{N}])AI(?![\p{L}\p{N}])/iu
             ];
 
             function normalizeUsername(value) {
@@ -463,24 +488,55 @@
                 return String(value || '').replace(/\s+/g, ' ').trim();
             }
 
+            // ===== v29.5.5: keep MAIN-world matching aligned with the DOM matcher =====
+            // Full structured caption.text is already inspected BEFORE React renders Home
+            // pagination. Only improve matcher semantics; never alter feed cursors or DOM.
+            function ig2955NetworkRegexSource(source) {
+                const compact = source.replace(/\\-/g, '-');
+                if (compact === 'AI-') return '(?<![\\p{L}\\p{N}])AI-';
+                if (compact === '-\\AI' || compact === '-AI') return '-AI(?![\\p{L}\\p{N}])';
+                if (source === '\\bAI\\b') return '(?<![\\p{L}\\p{N}])AI(?![\\p{L}\\p{N}])';
+                if (source === '\\b#AI\\b') return '(?<![\\p{L}\\p{N}_])#AI(?![\\p{L}\\p{N}_])';
+                if (source.toLowerCase() === 'gener') return '(?<![\\p{L}\\p{N}])(?:generat(?:e|ed|ing|ion|ions|ive|or|ors)|generoi(?:va|tu|da|nti)[\\p{L}]*)(?![\\p{L}\\p{N}])';
+                if (source.toLowerCase() === 'generative' || source.toLowerCase() === 'generated') return '(?<![\\p{L}\\p{N}])' + source + '(?![\\p{L}\\p{N}])';
+                if (/^AI(?:[ -](?:generated|created|creative|create|model|art|edit|edited|suck)|blow|suck)$/i.test(compact)) return '(?<![\\p{L}\\p{N}])' + source;
+                return source;
+            }
+
+            function ig2955NetworkHashtagSource(source) {
+                const literal = source.replace(/\\([.\-])/g, '$1');
+                if (!/^[\p{L}\p{N}]+(?:[ ._-][\p{L}\p{N}]+)+$/u.test(literal)) return '';
+                const parts = literal.split(/[ ._-]+/);
+                if (parts.join('').length < 6) return '';
+                return '(?<![\\p{L}\\p{N}_])#' + parts.join('[._-]?') + '(?![\\p{L}\\p{N}_])';
+            }
+
             function compileKeywordRegex(patterns) {
                 try {
                     configuredKeywordRegexes = [];
                     configuredKeywordRegexFallback = [];
                     if (!Array.isArray(patterns) || !patterns.length) return;
                     const sources = [];
+                    const hashtags = [];
                     for (const item of patterns) {
                         if (!item || typeof item.source !== 'string' || !item.source) continue;
                         try {
                             const flags = typeof item.flags === 'string' && item.flags ? item.flags : 'i';
-                            const test = new RegExp(item.source, flags);
-                            if (test.flags === 'i') sources.push(`(?:${item.source})`);
+                            const source = ig2955NetworkRegexSource(item.source);
+                            const unicodeFlags = source !== item.source && !flags.includes('u') ? flags + 'u' : flags;
+                            const test = new RegExp(source, unicodeFlags);
+                            if (test.flags === 'i') sources.push(`(?:${source})`);
                             else configuredKeywordRegexFallback.push(test);
+                            const tag = ig2955NetworkHashtagSource(item.source);
+                            if (tag) hashtags.push(tag);
                         } catch {}
                     }
                     const CHUNK_SIZE = 48;
                     for (let i = 0; i < sources.length; i += CHUNK_SIZE) {
                         try { configuredKeywordRegexes.push(new RegExp(sources.slice(i, i + CHUNK_SIZE).join('|'), 'i')); } catch {}
+                    }
+                    for (let i = 0; i < hashtags.length; i += CHUNK_SIZE) {
+                        try { configuredKeywordRegexFallback.push(new RegExp(hashtags.slice(i, i + CHUNK_SIZE).join('|'), 'iu')); } catch {}
                     }
                 } catch {
                     configuredKeywordRegexes = [];
@@ -516,8 +572,20 @@
                 accountConfigReady = true;
             }
 
+            function updateFriendAuthorConfigV326(accounts) {
+                const next = new Set();
+                if (Array.isArray(accounts)) {
+                    for (const account of accounts.slice(0, 128)) {
+                        const username = normalizeUsername(account);
+                        if (/^[a-z0-9._]{1,30}$/.test(username)) next.add(username);
+                    }
+                }
+                configuredTrustedAuthorsV326 = next;
+                friendConfigReadyV326 = true;
+            }
+
             function allConfigsReady() {
-                return keywordConfigReady && allowedConfigReady && accountConfigReady;
+                return keywordConfigReady && allowedConfigReady && accountConfigReady && friendConfigReadyV326;
             }
 
             function textHasAllowedWord(value) {
@@ -614,6 +682,8 @@
                         updateAccountConfig(data.accounts);
                         isolatedWorldReady = true;
                         flushPendingClassifications();
+                    } else if (data.__metamanglerType === 'ig-friend-author-config-v326') {
+                        updateFriendAuthorConfigV326(data.accounts);
                     } else if (data.__metamanglerType === 'ig-feed-classifier-ready') {
                         isolatedWorldReady = true;
                         flushPendingClassifications();
@@ -714,6 +784,7 @@
                 try {
                     if (!media || typeof media !== 'object') return users;
                     if (media.user && typeof media.user === 'object') users.push(media.user);
+                    if (media.owner && typeof media.owner === 'object') users.push(media.owner);
                     const arrayKeys = ['coauthor_producers', 'invited_coauthor_producers', 'all_previous_submitters'];
                     for (const key of arrayKeys) {
                         const value = media[key];
@@ -947,6 +1018,10 @@
             function decideMedia(node, media, options = null) {
                 try {
                     if (!media || typeof media !== 'object') return { keep: true, reasons: ['unknown-media'] };
+                    // Exact author-only whitelist. A friend sharing a different
+                    // account's media does not whitelist that account globally.
+                    if (configuredTrustedAuthorsV326.has(normalizeUsername(media?.user?.username || media?.owner?.username)))
+                        return { keep: true, reasons: ['trusted-author'] };
                     const reasons = [];
                     if (mediaHasAiLabel(media)) reasons.push('ai-content');
                     if (mediaHasBannedAccount(media)) reasons.push('banned-account');
@@ -1076,6 +1151,11 @@
                             keep = decision.keep;
                         }
 
+                        if (media && typeof media.caption?.text === 'string' && media.caption.text.trim()) {
+                            bfFeedTelemetryV1.network.completeCaptionsSeen++;
+                            if (!keep && decision?.reasons?.includes('banned-content'))
+                                bfFeedTelemetryV1.network.completeCaptionsBlocked++;
+                        }
                         if (!keep) {
                             changed = true;
                             const reasons = decision?.reasons || ['filtered'];
@@ -1099,6 +1179,7 @@
                                 addClassification(classifications, media, 'allow', decision?.reasons || ['network-safe']);
                             }
                             if (typeof media.caption?.text === 'string' && media.caption.text.trim()) {
+                                bfFeedTelemetryV1.network.verifiedCaptionEvidence++;
                                 const code = mediaCode(media);
                                 const current = code && classifications.get(code);
                                 if (current && current.decision === 'allow') {
@@ -1527,5 +1608,284 @@
     }
 
     __bfInstallHomeFeedNetworkSanitizer();
+
+    // ===== V325: read-only exact-shortcode captions for NON-HOME galleries =====
+    // The Home feed sanitizer above is deliberately untouched. Instagram's
+    // media thumbnails often carry a shorter alt than the real caption; only
+    // pair a network caption with a verified media code/shortcode from the SAME
+    // JSON object. This never creates requests or rewrites responses.
+    function __bfInstallRelatedCaptionObserverV325() {
+        try {
+            if (location.hostname !== 'www.instagram.com' || window.__bfIGRelatedCaptionsV325) return;
+            window.__bfIGRelatedCaptionsV325 = true;
+            const MSG = 'ig-related-full-caption-v325';
+            const seen = new Map();
+            const isNonHome = () => location.pathname !== '/' && !!location.pathname;
+            const isEligible = raw => {
+                try {
+                    const url = new URL(String(raw || ''), location.origin);
+                    return url.hostname === 'www.instagram.com' &&
+                        (/^\/(?:api\/)?graphql(?:\/|$)/i.test(url.pathname) ||
+                        /^\/api\/v1\/(?:feed|media)\//i.test(url.pathname));
+                } catch { return false; }
+            };
+            function collect(payload, batch) {
+                const queue = [[payload, 0]];
+                const visited = new WeakSet();
+                let inspected = 0;
+                while (queue.length && inspected++ < 30000 && batch.length < 48) {
+                    const [obj, depth] = queue.pop();
+                    if (!obj || typeof obj !== 'object' || visited.has(obj) || depth > 23) continue;
+                    visited.add(obj);
+                    if (!Array.isArray(obj)) {
+                        const id = String(obj.code || obj.shortcode || '').trim();
+                        let caption = typeof obj.caption?.text === 'string' ? obj.caption.text : '';
+                        if (!caption && typeof obj.caption === 'string') caption = obj.caption;
+                        if (!caption && obj.edge_media_to_caption?.edges?.[0]?.node &&
+                            typeof obj.edge_media_to_caption.edges[0].node.text === 'string') {
+                            caption = obj.edge_media_to_caption.edges[0].node.text;
+                        }
+                        const username = String(obj.user?.username || obj.owner?.username || '').toLowerCase();
+                        if (/^[A-Za-z0-9_-]{5,40}$/.test(id) && caption.trim() && caption.length <= 12000 &&
+                            (!username || /^[a-z0-9._]{1,30}$/.test(username))) {
+                            const key = caption + '\u0000' + username;
+                            if (seen.get(id) !== key) {
+                                seen.set(id, key);
+                                while (seen.size > 480) seen.delete(seen.keys().next().value);
+                                batch.push({ id, caption, username });
+                            }
+                        }
+                    }
+                    for (const child of Object.values(obj)) {
+                        if (child && typeof child === 'object') queue.push([child, depth + 1]);
+                    }
+                }
+            }
+            function processRaw(raw) {
+                try {
+                    if (!isNonHome() || typeof raw !== 'string' || raw.length < 20 || raw.length > 3500000) return;
+                    let stripped = raw.trim();
+                    if (stripped.startsWith('for (;;);')) stripped = stripped.slice(9).trim();
+                    const batch = [];
+                    const parse = line => {
+                        try { collect(JSON.parse(line), batch); } catch {}
+                    };
+                    if (stripped.startsWith('{') || stripped.startsWith('[')) parse(stripped);
+                    if (!batch.length && stripped.includes('\n')) {
+                        for (const line of stripped.split(/\r?\n/).slice(0, 36)) {
+                            let text = line.trim();
+                            if (text.startsWith('for (;;);')) text = text.slice(9).trim();
+                            if (text.startsWith('{') || text.startsWith('[')) parse(text);
+                            if (batch.length >= 48) break;
+                        }
+                    }
+                    if (batch.length) window.postMessage({ __metamanglerType: MSG, items: batch }, location.origin);
+                } catch {}
+            }
+            // Observe XHR without changing open/send semantics or response access.
+            const nativeSend = XMLHttpRequest.prototype.send;
+            XMLHttpRequest.prototype.send = function() {
+                try {
+                    const url = this.__bfFeedRequestStateV6H?.url || this.responseURL || '';
+                    if (isNonHome() && isEligible(url)) {
+                        this.addEventListener('readystatechange', () => {
+                            try {
+                                if (this.readyState !== 4 || this.status < 200 || this.status >= 400) return;
+                                if (this.responseType && this.responseType !== 'text') return;
+                                const raw = this.responseText;
+                                if (typeof raw === 'string' && raw.length <= 3500000) {
+                                    setTimeout(() => processRaw(raw), 0);
+                                }
+                            } catch {}
+                        }, { once: false });
+                    }
+                } catch {}
+                return nativeSend.apply(this, arguments);
+            };
+            // Passive cloned response reader: caller receives the original Promise
+            // and the original Response object, never a replacement.
+            const nativeFetch = window.fetch;
+            window.fetch = function(input, init) {
+                const result = nativeFetch.apply(this, arguments);
+                try {
+                    const url = typeof input === 'string' ? input : input?.url || '';
+                    if (isNonHome() && isEligible(url)) {
+                        result.then(response => {
+                            try {
+                                const length = Number(response.headers?.get('content-length'));
+                                if (!response.ok || (length > 0 && length > 3500000)) return;
+                                response.clone().text().then(processRaw).catch(() => {});
+                            } catch {}
+                        }).catch(() => {});
+                    }
+                } catch {}
+                return result;
+            };
+        } catch {}
+    }
+    __bfInstallRelatedCaptionObserverV325();
+
+    // ===== V337: native GraphQL Search using this page's own live Relay metadata =====
+    // HAR verification (2026-10-22): /api/graphql POST,
+    // PolarisSearchBoxRefetchableQuery / doc_id 27706427925724183,
+    // response data.xdt_api__v1__fbsearch__topsearch_connection.users.
+    // Retain auth/CSRF metadata strictly in MAIN-world memory during this page
+    // lifetime. Never persist or post tokens, captured form bodies or cookies.
+    function __bfInstallNativeGraphQLSearchV337() {
+        try {
+            if (location.hostname !== 'www.instagram.com' || window.__bfIGSearchGraphQLV337) return;
+            window.__bfIGSearchGraphQLV337 = true;
+            const OP = 'PolarisSearchBoxRefetchableQuery';
+            const DOC_ID = '27706427925724183';
+            const ROOT = 'xdt_api__v1__fbsearch__topsearch_connection';
+            const cache = { body:'', headers:{}, at:0 };
+            let inAdapter = false;
+
+            const isRelay = url => {
+                try { const u = new URL(String(url||''), location.origin);
+                    return u.origin === location.origin &&
+                        /^\/(?:api\/graphql|graphql\/query)\/?$/i.test(u.pathname);
+                } catch { return false; }
+            };
+            const headersSafeInMemory = headers => {
+                const out = {};
+                try {
+                    const iter = headers instanceof Headers ? headers.entries() :
+                        Array.isArray(headers) ? headers : Object.entries(headers || {});
+                    for (const [k,v] of iter) {
+                        const name = String(k).toLowerCase();
+                        if (['x-csrftoken','x-fb-lsd','x-asbd-id','x-ig-app-id'].includes(name) &&
+                            typeof v === 'string' && v.length < 512) out[name] = v;
+                    }
+                } catch {}
+                return out;
+            };
+            function remember(method, url, body, headers) {
+                try {
+                    if (inAdapter || String(method).toUpperCase() !== 'POST' || !isRelay(url) ||
+                        typeof body !== 'string' || body.length > 45000) return;
+                    const fields = new URLSearchParams(body);
+                    if (!fields.has('doc_id') || !fields.has('fb_api_req_friendly_name') ||
+                        (!fields.has('fb_dtsg') && !fields.has('lsd'))) return;
+                    cache.body = fields.toString();
+                    cache.headers = { ...cache.headers, ...headersSafeInMemory(headers) };
+                    cache.at = Date.now();
+                } catch {}
+            }
+            const originalOpen = XMLHttpRequest.prototype.open;
+            XMLHttpRequest.prototype.open = function(method,url) {
+                try { this.__bfGraphQLCapture337 = !inAdapter && isRelay(url) ?
+                    {method:String(method),url:String(url),headers:{}} : null; } catch {}
+                return originalOpen.apply(this,arguments);
+            };
+            const originalSetHeader = XMLHttpRequest.prototype.setRequestHeader;
+            if (typeof originalSetHeader === 'function') {
+                XMLHttpRequest.prototype.setRequestHeader = function(k,v) {
+                    try { if (this.__bfGraphQLCapture337) this.__bfGraphQLCapture337.headers[String(k)] = String(v); } catch {}
+                    return originalSetHeader.apply(this,arguments);
+                };
+            }
+            const originalSend = XMLHttpRequest.prototype.send;
+            XMLHttpRequest.prototype.send = function(body) {
+                try { const s = this.__bfGraphQLCapture337;
+                    if (s) remember(s.method,s.url,body,s.headers);
+                } catch {}
+                return originalSend.apply(this,arguments);
+            };
+            const originalFetch = window.fetch;
+            window.fetch = function(input, init) {
+                try {
+                    const url = typeof input === 'string' ? input : input?.url;
+                    const method = String(init?.method || input?.method || 'GET');
+                    if (!inAdapter && isRelay(url) && method.toUpperCase() === 'POST') {
+                        const data = init?.body;
+                        const headers = init?.headers || input?.headers;
+                        if (typeof data === 'string') remember(method,url,data,headers);
+                        else if (data instanceof URLSearchParams) remember(method,url,data.toString(),headers);
+                        else if (data == null && input?.clone && typeof input?.text === 'function') {
+                            input.clone().text().then(body => remember(method,url,body,headers)).catch(()=>{});
+                        }
+                    }
+                } catch {}
+                return originalFetch.apply(this,arguments);
+            };
+
+            window.addEventListener('message', async e => {
+                if (e.source !== window || e.origin !== location.origin ||
+                    e.data?.__metamanglerType !== 'ig-search-graphql-request-v337') return;
+                const id = e.data.id;
+                const query = String(e.data.query || '').trim();
+                if (typeof id !== 'string' || !/^ig337-[0-9]+-[a-z0-9]+$/i.test(id) ||
+                    query.length < 1 || query.length > 100) return;
+                const reply = (ok,status,error,data) => {
+                    window.postMessage({ __metamanglerType:'ig-search-graphql-result-v337',
+                        id, ok:!!ok, status:Number(status)||0, error:String(error||''),
+                        data: data || null }, location.origin);
+                };
+                if (!cache.body) {
+                    reply(false,0,'no-live-relay-template'); return;
+                }
+                try {
+                    const payload = new URLSearchParams(cache.body);
+                    payload.set('fb_api_caller_class', 'RelayModern');
+                    payload.set('fb_api_req_friendly_name', OP);
+                    payload.set('doc_id', DOC_ID);
+                    payload.set('server_timestamps', 'true');
+                    payload.delete('fb_api_analytics_tags');
+                    payload.set('variables', JSON.stringify({
+                        data: { context:'blended', include_reel:'true', query,
+                            rank_token:'', search_session_id: typeof crypto?.randomUUID === 'function' ?
+                                crypto.randomUUID() : 'ig-' + Date.now() + '-' + Math.random().toString(36).slice(2),
+                            search_surface:'web_top_search' }, hasQuery:true
+                    }));
+                    const headers = { ...cache.headers, 'Accept':'application/json',
+                        'Content-Type':'application/x-www-form-urlencoded',
+                        'X-FB-Friendly-Name':OP };
+                    inAdapter = true;
+                    let request;
+                    try { request = originalFetch.call(window, '/api/graphql', {
+                        method:'POST', body:payload.toString(), headers,
+                        credentials:'same-origin', redirect:'error'
+                    }); } finally { inAdapter = false; }
+                    const response = await request;
+                    if (!response.ok) { reply(false,response.status,'http-' + response.status); return; }
+                    const raw = await response.text();
+                    if (raw.length > 1900000) { reply(false,response.status,'oversized-response'); return; }
+                    const json = JSON.parse(raw.replace(/^for \(;;\);/, ''));
+                    const rows = json?.data?.[ROOT];
+                    if (!rows || !Array.isArray(rows.users)) {
+                        reply(false,response.status,'no-search-results-field'); return;
+                    }
+                    // Never expose upstream response objects or private metadata:
+                    // only the account and hashtag display fields required by UI.
+                    const users = rows.users.slice(0,60).map(entry => {
+                        const user = entry?.user || entry;
+                        const username = String(user?.username || '').slice(0,30);
+                        if (!/^[a-z0-9._]{1,30}$/i.test(username)) return null;
+                        // The HAR's native Search response includes profile_pic_url.
+                        // Forward only a validated CDN URL, never account metadata.
+                        const picture = String(user?.profile_pic_url || '');
+                        let profile_pic_url = '';
+                        try {
+                            const url = new URL(picture);
+                            const host = url.hostname.toLowerCase();
+                            if (url.protocol === 'https:' && picture.length < 2200 &&
+                                (host === 'cdninstagram.com' || host.endsWith('.cdninstagram.com') ||
+                                 host === 'fbcdn.net' || host.endsWith('.fbcdn.net')))
+                                profile_pic_url = url.href;
+                        } catch {}
+                        return { user:{ username, full_name:String(user?.full_name||'').slice(0,140),
+                            profile_pic_url } };
+                    }).filter(Boolean);
+                    const hashtags = (rows.hashtags || []).slice(0,20).map(entry => {
+                        const name = String((entry?.hashtag || entry)?.name || '').slice(0,100);
+                        return /^[\p{L}\p{N}_]{1,100}$/u.test(name) ? { hashtag:{name} } : null;
+                    }).filter(Boolean);
+                    reply(true,response.status,'', {users,hashtags});
+                } catch { reply(false,0,'request-error'); }
+            },false);
+        } catch {}
+    }
+    __bfInstallNativeGraphQLSearchV337();
 
 })();

@@ -1,6 +1,6 @@
-// BraveFox Enhancer 29.5.0 — passive Facebook caption observer, MAIN world.
-// Reads ONLY bounded feed GraphQL response text; never changes requests, cursors,
-// Facebook response objects, the DOM, scroll position, or post approvals.
+// BraveFox Enhancer 29.5.5 — passive Facebook caption observer, MAIN world.
+// Reads bounded feed GraphQL responses and initial Relay JSON; never changes
+// requests, cursors, response objects, post DOM, scroll position, or approvals.
 (() => {
 'use strict';
 const INSTALLED = '__bravefoxFbPassiveCaptionWorldV295';
@@ -10,7 +10,7 @@ Object.defineProperty(window, INSTALLED, { value: true });
 const TYPE = 'bravefox-fb-passive-caption-v295';
 const MAX_BYTES = 2 * 1024 * 1024;
 const MAX_POSTS = 70;
-const PAGE = /^(?:ProfileCometTimelineFeed|ProfileCometTilesFeed|PageCometTimelineFeed|CometPageTimelineFeed).*(?:Query|Pagination|Refetch)$/i;
+const PAGE = /^(?:(?:Profile|Page|CometPage).*(?:TimelineFeed|TilesFeed|PostsFeed|PagePosts)|CometSinglePage.*Feed).*(?:Query|Pagination|Refetch)$/i;
 const HOME = /^(?:(?:Comet|Home|News).*(?:Feed|Timeline)|(?:Feed|NewsFeed)).*(?:Query|Pagination|Refetch)$/i;
 
 function route() {
@@ -70,10 +70,22 @@ function extract(obj, records) {
                 if (key && !keys.includes(key)) keys.push(key);
             }
             if (keys.length) {
-                const signature = keys.join('|');
-                if (!seen.has(signature) && records.length < MAX_POSTS) {
-                    seen.add(signature);
-                    records.push({ keys: keys.slice(0, 6), text: message });
+                // Facebook repeats the SAME complete caption in an inner message renderer.
+                // Its renderer may have only the pfbid permalink, while the outer story
+                // also carries the numeric post_id. Merge equal-text records sharing an
+                // exact key so the consumer never mistakes them for two different posts.
+                const existing = records.find(record => record.text === message &&
+                    record.keys.some(key => keys.includes(key)));
+                if (existing) {
+                    for (const key of keys) {
+                        if (!existing.keys.includes(key) && existing.keys.length < 6) existing.keys.push(key);
+                    }
+                } else {
+                    const signature = keys.join('|');
+                    if (!seen.has(signature) && records.length < MAX_POSTS) {
+                        seen.add(signature);
+                        records.push({ keys: keys.slice(0, 6), text: message });
+                    }
                 }
             }
         }
@@ -87,16 +99,58 @@ function extract(obj, records) {
     }
     visit(obj, 0);
 }
+// v316: publish complete GraphQL JSON lines as soon as they arrive, not at EOF.
+// Partial lines are buffered and NEVER inspected for post content. The parser is
+// per-response and bounded; it cannot alter, consume or delay Facebook's stream.
+function makeCaptionStreamV316(fromRoute, source) {
+    let pending = '';
+    let seenChars = 0;
+    let seenPosts = 0;
+    let ended = false;
+    const seenRecords = new Set();
+    return {
+        append(part = '', final = false) {
+            try {
+                if (ended || !fromRoute || route() !== fromRoute) { ended = true; return; }
+                seenChars += part.length;
+                if (seenChars > MAX_BYTES) { ended = true; pending = ''; return; }
+                pending += part;
+                const posts = [];
+                const handleLine = line => {
+                    if (!line || !line.startsWith('{') || seenPosts >= MAX_POSTS) return;
+                    const extracted = [];
+                    try { extract(JSON.parse(line), extracted); } catch { return; }
+                    for (const record of extracted) {
+                        if (seenPosts >= MAX_POSTS) break;
+                        const signature = record.keys.join('|') + '\n' + record.text;
+                        if (seenRecords.has(signature)) continue;
+                        seenRecords.add(signature);
+                        posts.push(record);
+                        seenPosts++;
+                    }
+                };
+                let newline;
+                while ((newline = pending.indexOf('\n')) >= 0 && seenPosts < MAX_POSTS) {
+                    const line = pending.slice(0, newline).replace(/\r$/, '');
+                    pending = pending.slice(newline + 1);
+                    handleLine(line);
+                }
+                if (final && seenPosts < MAX_POSTS) handleLine(pending);
+                if (posts.length && route() === fromRoute) window.postMessage({
+                    type: TYPE, route: fromRoute, posts,
+                    captureSource: source, capturePhase: final ? 'complete' : 'stream'
+                }, location.origin);
+                if (final || seenPosts >= MAX_POSTS) { ended = true; pending = ''; }
+            } catch { ended = true; pending = ''; }
+        }
+    };
+}
+
 function publish(payload, fromRoute) {
     try {
         if (!fromRoute || route() !== fromRoute || !payload || payload.length > MAX_BYTES) return;
-        const posts = [];
-        for (const line of payload.split(/\r?\n/)) {
-            if (!line || !line.startsWith('{')) continue;
-            try { extract(JSON.parse(line), posts); } catch {}
-            if (posts.length >= MAX_POSTS) break;
-        }
-        if (posts.length) window.postMessage({ type: TYPE, route: fromRoute, posts }, location.origin);
+        const stream = makeCaptionStreamV316(fromRoute, 'relay-bootstrap');
+        stream.append(payload, true);
     } catch {}
 }
 
@@ -110,14 +164,36 @@ try {
     };
     XMLHttpRequest.prototype.send = function(body) {
         const fromRoute = requestUrls.get(this) ? observe('/api/graphql/', body) : '';
-        if (fromRoute) this.addEventListener('loadend', () => {
-            try {
-                if (this.status < 200 || this.status >= 300 ||
-                    (this.responseType && this.responseType !== 'text')) return;
-                const response = this.responseText;
-                if (response && response.length <= MAX_BYTES) setTimeout(() => publish(response, fromRoute), 0);
-            } catch {}
-        }, { once: true });
+        if (fromRoute) {
+            const stream = makeCaptionStreamV316(fromRoute, 'xhr');
+            let readChars = 0;
+            // readyState 3 and progress can reveal completed JSON lines before loadend.
+            // Read only responseText; never touch Facebook's handlers or response data.
+            const onChunk = (final = false) => {
+                try {
+                    if (!final && this.readyState !== 3) return;
+                    if (this.status < 200 || this.status >= 300 ||
+                        (this.responseType && this.responseType !== 'text')) return;
+                    const value = this.responseText;
+                    if (typeof value !== 'string' || value.length > MAX_BYTES || value.length < readChars) return;
+                    if (!final && value.length === readChars) return;
+                    const fragment = value.slice(readChars);
+                    readChars = value.length;
+                    // Let Facebook's own progress/readyState handlers finish first.
+                    // Microtasks preserve fragment order without waiting for loadend.
+                    Promise.resolve().then(() => stream.append(fragment, final)).catch(() => {});
+                } catch {}
+            };
+            const onProgress = () => onChunk(false);
+            const onStateChange = () => onChunk(false);
+            this.addEventListener('progress', onProgress);
+            this.addEventListener('readystatechange', onStateChange);
+            this.addEventListener('loadend', () => {
+                onChunk(true);
+                this.removeEventListener('progress', onProgress);
+                this.removeEventListener('readystatechange', onStateChange);
+            }, { once: true });
+        }
         return send.apply(this, arguments);
     };
 } catch {}
@@ -130,8 +206,8 @@ try {
         catch {}
         const result = originalFetch.apply(this, arguments);
         if (!fromRoute) return result;
-        // Observe an independent clone asynchronously. The original response is NEVER
-        // consumed, changed or delayed; stop reading if size exceeds the hard limit.
+        // Read only an independent clone. Its streaming JSON lines can be published
+        // before EOF; the original fetch promise/body are never awaited or changed.
         result.then(response => {
             try {
                 const size = Number(response.headers?.get('content-length') || 0);
@@ -142,19 +218,17 @@ try {
                     try {
                         if (!clone.body?.getReader) return;
                         reader = clone.body.getReader();
-                        const chunks = [];
+                        const decoder = new TextDecoder();
+                        const stream = makeCaptionStreamV316(fromRoute, 'fetch');
                         let length = 0;
                         while (true) {
                             const part = await reader.read();
                             if (part.done) break;
                             length += part.value.byteLength;
                             if (length > MAX_BYTES) { await reader.cancel(); return; }
-                            chunks.push(part.value);
+                            stream.append(decoder.decode(part.value, { stream: true }), false);
                         }
-                        const all = new Uint8Array(length);
-                        let pos = 0;
-                        for (const c of chunks) { all.set(c, pos); pos += c.length; }
-                        publish(new TextDecoder().decode(all), fromRoute);
+                        stream.append(decoder.decode(), true);
                     } catch { try { await reader?.cancel(); } catch {} }
                 });
             } catch {}
@@ -162,4 +236,69 @@ try {
         return result;
     };
 } catch {}
+
+// v302/v316: initial full-page loads may hydrate stories from inline Relay JSON.
+// Inspect once at readystatechange=interactive (just after HTML parsing) and
+// again at DOMContentLoaded for scripts inserted between these stages. Never
+// execute/eval scripts, and don't reprocess the same successfully parsed node.
+const inspectedRelayScriptsV316 = new WeakSet();
+function scanInitialRelayBootstrap() {
+    try {
+        const r = route();
+        if (!r) return;
+        let bytes = 0;
+        let inspected = 0;
+        const scripts = document.querySelectorAll('script[type="application/json"], script[data-sjs]');
+        for (const script of scripts) {
+            if (++inspected > 180 || bytes > 6 * 1024 * 1024) break;
+            if (inspectedRelayScriptsV316.has(script)) continue;
+            const value = script.textContent || '';
+            if (!value || value.length > MAX_BYTES) continue;
+            bytes += value.length;
+            if (!/post_id|timeline_list_feed_units/i.test(value)) continue;
+            let parsed;
+            try { parsed = JSON.parse(value); } catch { continue; }
+            inspectedRelayScriptsV316.add(script);
+            const posts = [];
+            let walked = 0;
+            const visit = (value, depth = 0) => {
+                if (++walked > 12000 || depth > 28 || posts.length >= MAX_POSTS || !value) return;
+                if (typeof value === 'string') {
+                    if (value.length < MAX_BYTES && value.startsWith('{') &&
+                        /post_id|timeline_list_feed_units/.test(value)) {
+                        try { visit(JSON.parse(value), depth + 1); } catch {}
+                    }
+                    return;
+                }
+                if (Array.isArray(value)) {
+                    for (const item of value.slice(0, 160)) visit(item, depth + 1);
+                    return;
+                }
+                if (typeof value !== 'object') return;
+                // Reuse the exact post-key extraction; never publish arbitrary text
+                // without an intrinsic post_id or Facebook post permalink.
+                if (value.post_id || value.wwwURL || value.permalink_url) extract(value, posts);
+                for (const key of ['require', '__bbox', 'result', 'payload', 'response',
+                    'data', 'node', 'edges', 'timeline_list_feed_units', 'feed_units',
+                    'comet_sections', 'content', 'story', 'message_container']) {
+                    if (value[key] !== undefined) visit(value[key], depth + 1);
+                }
+            };
+            visit(parsed);
+            if (posts.length && route() === r)
+                window.postMessage({ type: TYPE, route: r, posts,
+                    captureSource: 'relay-bootstrap', capturePhase: 'complete' }, location.origin);
+        }
+    } catch {}
+}
+if (document.readyState === 'loading') {
+    document.addEventListener('readystatechange', () => {
+        if (document.readyState === 'interactive') scanInitialRelayBootstrap();
+    }, { once: true });
+    document.addEventListener('DOMContentLoaded', scanInitialRelayBootstrap, { once: true });
+} else {
+    scanInitialRelayBootstrap();
+    if (document.readyState === 'interactive')
+        document.addEventListener('DOMContentLoaded', scanInitialRelayBootstrap, { once: true });
+}
 })();

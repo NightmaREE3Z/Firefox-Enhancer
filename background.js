@@ -233,6 +233,21 @@ const blockedSites = [
    "reddit.com/media?url=https%3A%2F%2Fi.redd.it%2Fkwfiq6v52dp81.jpg",
    "reddit.com/media?url=https%3A%2F%2Fi.redd.it%2Fmh3mrxsf4cg91.jpg",
    "reddit.com/media?url=https%3A%2F%2Fi.redd.it%2Fcl2le6iawhk71.jpg",
+   "a/JldxWY54",
+   "a/R3UmItwV",
+   "a/MssYJFJt",
+   "f/r4tcMhbAirsDJ",
+   "f/wOza8H8xn1YFV",
+   "f/DKw45ExJ99P7P",
+   "f/qTwJDQ0xRFuX5",
+   "f/Xcj7kczZCrkaW",
+   "f/xnl3Q9MoicCHt",
+   "f/bpTBVUY8P8q9z",
+   "f/E17wc5RWVSpJu",
+   "f/UwuF7kGBy7Q0P",
+   "f/FRxc0A0I4erng",
+   "f/71TZ2FuIcxIFQ",
+   "f/zFbwdDyzpvTdI",
    "reddit.com/u/birppis",
    "reveddit.com/y/birppis",
    "jiujau.blogspot.com",
@@ -415,8 +430,77 @@ function isAllowlistedHostname(hostname) {
   return hostnameMatchesSet(hostname, ALLOWED_SITES) || isCompletelyExcludedHostname(hostname);
 }
 
+// Match the actual URL components, never arbitrary substrings of a full href.
+// A blocked hostname mentioned in another site's query/redirect token must not
+// turn that other site into a blocked host. Preserve explicitly configured
+// relative paths and query-only rules as their own categories.
+function parseBraveFoxStaticBlockedSite(entry) {
+  const raw = String(entry || "").trim();
+  if (!raw) return null;
+
+  if (raw.startsWith("?")) {
+    const params = [...new URLSearchParams(raw.slice(1))];
+    return params.length ? { kind: "query", params, entry: raw } : null;
+  }
+
+  const hasScheme = /^https?:\/\//i.test(raw);
+  const isRelativePath = !hasScheme && (
+    raw.startsWith("/") ||
+    /^[^/?]+\.html?(?:[/?#]|$)/i.test(raw) ||
+    !/^[a-z0-9-]+(?:\.[a-z0-9-]+)+(?::\d{1,5})?(?:[/?#]|$)/i.test(raw)
+  );
+
+  try {
+    const parsed = new URL(hasScheme ? raw :
+      `https://${isRelativePath ? "bravefox.invalid/" : ""}${raw.replace(/^\/+/, "")}`);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+    const host = normalizeHostname(parsed.hostname);
+    if (!isRelativePath && (!host || !host.includes("."))) return null;
+    return {
+      kind: isRelativePath ? "path" : "host",
+      host: isRelativePath ? "" : host,
+      path: parsed.pathname.replace(/\/{2,}/g, "/"),
+      params: [...parsed.searchParams],
+      entry: raw
+    };
+  } catch (_) {
+    return null;
+  }
+}
+
+const BRAVEFOX_STATIC_BLOCKED_SITE_RULES = blockedSites
+  .map(parseBraveFoxStaticBlockedSite)
+  .filter(Boolean);
+
+function findStaticBlockedSite(url) {
+  let parsed;
+  try {
+    parsed = new URL(String(url || ""));
+  } catch (_) {
+    return "";
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return "";
+  const hostname = normalizeHostname(parsed.hostname);
+  const pathname = parsed.pathname.replace(/\/{2,}/g, "/");
+
+  for (const rule of BRAVEFOX_STATIC_BLOCKED_SITE_RULES) {
+    if (rule.kind === "host" &&
+      hostname !== rule.host && !hostname.endsWith(`.${rule.host}`)) continue;
+
+    if (rule.kind !== "query") {
+      const prefix = rule.path === "/" ? "/" : rule.path.replace(/\/$/, "");
+      if (prefix !== "/" && pathname !== prefix && !pathname.startsWith(`${prefix}/`)) continue;
+    }
+
+    if (!rule.params.every(([key, value]) => parsed.searchParams.getAll(key).includes(value))) continue;
+    return rule.entry;
+  }
+
+  return "";
+}
+
 function matchesStaticBlockedSite(url) {
-  return blockedSites.some(site => String(url || "").includes(site));
+  return Boolean(findStaticBlockedSite(url));
 }
 
 function binarySearch(sortedValues, target) {
@@ -539,8 +623,9 @@ async function classifyBraveFoxCentralUrl(value, dataset = null) {
   // Hard shields are intentionally evaluated before Trusted Sites. The static
   // background list protects path/query-specific impulse blocks, while
   // BraveFoxHosts + legacyFox provide a remotely maintained whole-host floor.
-  if (matchesStaticBlockedSite(href)) {
-    return { action: "block", url: href, hostname, source: "background-hardcoded-shield" };
+  const staticBlockedSite = findStaticBlockedSite(href);
+  if (staticBlockedSite) {
+    return { action: "block", url: href, hostname, source: "background-hardcoded-shield", matched: staticBlockedSite };
   }
 
   try {
