@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         FBCleaner 29.5.5
-// @version	 29.5.5
-// @date	 2026-10-21
+// @name         FBCleaner
+// @version	 29.6.1
+// @date	 2026-10-25
 // @description  Makes my Facebook experience less terrible.
 // @match        *://*.facebook.com/*
 // @grant        none
@@ -5551,7 +5551,7 @@ const globalRegex = [
 	/Sexi/i, /Monroe/i, /Girlfriend/i, /Girl's/i, /Women's/i, /Woman's/i, /Lady's/i, /Ladies'/i, /Toni Harsunen/i, /Wikman/i, /Vikman/i, /Jaida Parker/i, /Kiana/i, /suositukset/i, 
 	/ehdotukset/i, /Kamitani/i, /Mira Immo/i, /Serrano/i, /Nina Immo/i, /Heli Kupa/i, /20\. heinäkuu klo/i, /Sisältö ei ole käytettävissä tällä hetkellä/i, /sinulle ehdotettu/i, 
 	/Jessika WWE/i, /Fallon Henley/i, /QTCinderella/i, /KaliArmstrong/i, /Kali Armstrong/i, /#Kali/i, /#KaliArmstrong/i, /DeepSeek/i, /kendal.*(grey|gray)/i, /leila.*(grey|gray)/i,  
-	/Gail Kim/i, /CJ Perry/i, 
+	/Gail Kim/i, /CJ Perry/i, /Elegance Brand/i, /By Elegance/i, 
 	
 
      // AI-handling/regexes
@@ -5571,7 +5571,7 @@ FB_HYPHEN_AI_PATTERN_V309, /-AI(?![\p{L}\p{N}])/iu, /(?<![\p{L}\p{N}])AI-suck(?!
 	/\bLadies\b/i, /\bLadys\b/i, /\bMarie\b/i, /\bKairi\b/i, /\bAsuka\b/i, /\bB-Fab\b/i, /\bTiffany\b/i, /\bStratton\b/i, /\bPerez\b/i, /\bPerze\b/i, /\bHavok\b/i, /\bJillian\b/i, /\bTiff\b/i,
 	/\bMickie\b/i, /\bFlair\b/i, /\bMeltzer\b/i, /\bLayla\b/i, /\bBlake\b/i, /\bRipley\b/i, /\bKatie\b/i, /\bLady\b/i,  /\bKeibler\b/i, /\bMaryse\b/i, /\bStacy\b/i, /\bTrish\b/i, /\bSarray\b/i, 
 	/\bXia\b/i, /\bRonda\b/i, /\bNattie\b/i, /\bBayley\b/i, /\bGiulia\b/i, /\bFallon\b/i, /\bMichin\b/i, /\bStratus\b/i, /\bKelly\b/i, /\bKarr\b/i, /\bFallon\b/i, /\bDeonna\b/i, /\bErika\b/i, 
-	/\bLeRae\b/i, /\bTamina\b/i, /\bNaomi\b/i, /\bMarie\b/i, /\bKanellis/i, 
+	/\bLeRae\b/i, /\bTamina\b/i, /\bNaomi\b/i, /\bMarie\b/i, /\bKanellis/i, /\bSKADI/i,
 ];
 
 // v32: Dynamic wrestler names from wrestling.js/background storage.

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BraveFox WebFilter Script
-// @version	 29.5.5
-// @date	 2026-10-21
+// @version	 29.6.1
+// @date	 2026-10-25
 // @description  Filter out stuff on the internet (Targeted Enforcer)
 // @match        *://xvideos.com/*
 // @match        *://*.xvideos.com/*
@@ -26,6 +26,10 @@
 // @match        *://balbums.at/*
 // @match        *://*.balbums.at/*
 // @include      /^https?:\/\/(?:[a-z0-9-]+\.)*(?:bunkr|balbums)\.[a-z0-9-]+(?:\.[a-z0-9-]+)*(?::[0-9]+)?(?:[/?#]|$)/
+// @match        *://alastonsuomi.com/*
+// @match        *://*.alastonsuomi.com/*
+// @match        *://nudography.com/*
+// @match        *://*.nudography.com/*
 // @match        *://tenor.com/*
 // @match        *://*.tenor.com/*
 // @grant        none
@@ -43,7 +47,9 @@
     //   3) a tiny Tenor search-submit guard; and
     //   4) targeted, no-glimpse RedGifs card/tag/profile filtering; and
     //   5) per-site Pornhub, YouPorn and Thumbzilla card/menu filtering; and
-    //   6) Bunkr/Balbums album and file filtering, including Balbums search interception.
+    //   6) Bunkr/Balbums album and file filtering, including Balbums search interception; and
+    //   7) no-glimpse Nudography listing, fake/ad cleanup, and search interception; and
+    //   8) Alastonsuomi native women-only galleries, no-glimpse profiles, gender options, and search guards.
     // It must remain completely dormant everywhere else, even when an extension manifest from an
     // older build still injects the file broadly.
     const BRAVEFOX_FILTERING_HOST = String(window.location.hostname || '')
@@ -51,6 +57,10 @@
         .replace(/\.$/, '');
     const BRAVEFOX_IS_XVIDEOS = BRAVEFOX_FILTERING_HOST === 'xvideos.com' ||
         BRAVEFOX_FILTERING_HOST.endsWith('.xvideos.com');
+    const BRAVEFOX_IS_ALASTONSUOMI = BRAVEFOX_FILTERING_HOST === 'alastonsuomi.com' ||
+        BRAVEFOX_FILTERING_HOST.endsWith('.alastonsuomi.com');
+    const BRAVEFOX_IS_NUDOGRAPHY = BRAVEFOX_FILTERING_HOST === 'nudography.com' ||
+        BRAVEFOX_FILTERING_HOST.endsWith('.nudography.com');
     const BRAVEFOX_IS_TENOR = BRAVEFOX_FILTERING_HOST === 'tenor.com' ||
         BRAVEFOX_FILTERING_HOST.endsWith('.tenor.com');
     const BRAVEFOX_IS_REDGIFS = BRAVEFOX_FILTERING_HOST === 'redgifs.com' ||
@@ -74,6 +84,7 @@
         BRAVEFOX_FILTERING_HOST.endsWith('.redtube.com.br');
 
     if (!BRAVEFOX_IS_XVIDEOS && !BRAVEFOX_IS_TENOR && !BRAVEFOX_IS_REDTUBE &&
+        !BRAVEFOX_IS_NUDOGRAPHY && !BRAVEFOX_IS_ALASTONSUOMI &&
         !BRAVEFOX_IS_REDGIFS && !BRAVEFOX_IS_PORNHUB && !BRAVEFOX_IS_YOUPORN &&
         !BRAVEFOX_IS_THUMBZILLA && !BRAVEFOX_IS_BUNKR && !BRAVEFOX_IS_BALBUMS) return;
 
@@ -3143,6 +3154,1148 @@
             }
         }, true);
         console.log(`BraveFox ${site} filtering enabled.`);
+    }
+
+    // === NUDOGRAPHY FILTERING ===
+    // Keep this handler site-scoped. The pending CSS is installed at document-start before
+    // celebrity/listing cards can paint; matches are collapsed, while clean entries reveal.
+    function installBraveFoxNudographyFilter() {
+        if (window.__braveFoxNudographyFilteringInstalled) return;
+        window.__braveFoxNudographyFilteringInstalled = true;
+
+        const STATE_ATTR = 'data-bravefox-nudography-state';
+        const DETAIL_GUARD_CLASS = 'bravefox-nudography-detail-pending';
+        const ACTIVE_CLASS = 'bravefox-nudography-filtering-active';
+        const STYLE_ID = 'bravefox-nudography-no-glimpse';
+        const FAKE_HIDDEN_ATTR = 'data-bravefox-nudography-fake-hidden';
+        const regexes = createStaticBlockedRegexWords();
+        let wrestlerRegexes = [];
+        let remoteReady = false;
+        let wrestlerReady = false;
+        let observer = null;
+        let removeStorageListener = null;
+        let pendingScan = false;
+        let redirecting = false;
+        const pendingRoots = new Set();
+        const scannedText = new WeakMap();
+
+        // Deliberately specific card shapes from Nudography's supplied markup.
+        // The last selector covers stand-alone celebrity links and text-only directories.
+        const LIST_PARTS = [
+            'div.Item',
+            'tr:has(td.Appearances a[href])',
+            'li:has(> a[href*="/Celebrities/" i])',
+            'div:has(> div[style*="float:left"] > a[href*="/Celebrities/" i])',
+            'div:has(> div > a[id*="_lvAppearance_" i])',
+            'div:has(> a[id*="_lvNews_" i])',
+            'a[href*="/Celebrities/" i]'
+        ];
+        const LIST_SELECTOR = LIST_PARTS.join(', ');
+        const HIDE_ADS = [
+            '#RightSideBanner',
+            '#RightSideBannerContent',
+            '.AppearanceMorePicturesAtMrSkin',
+            'div:has(> .AppearanceMorePicturesAtMrSkin)',
+            'a[id*="_rBanners_"][id$="_hlBanner"]',
+            'a[href*="Out.aspx?RedirectTo" i]',
+            'a[href*="mrskin.com" i]',
+            'a[href*="bannedsextapes.com" i]',
+            'a[href*="x-art.com" i]',
+            'a[id*="FakesExploitedHollywood" i]'
+        ];
+        const HIDE_FAKES = [
+            '[id*="_rCelebFakes_"]',
+            '[id*="lblNoFakes"]',
+            '.AppearanceAdditional:has(img[id*="_rCelebFakes_"], img[alt*="fake picture" i])',
+            '.AppearanceAdditional:has(> .AppearanceFirstPictures):not(:has(img))',
+            'img[alt*="fake picture" i]',
+            'a[id*="FakesExploitedHollywood" i]',
+            'a[href*="/Fakes/" i]',
+            `[${FAKE_HIDDEN_ATTR}="1"]`
+        ];
+
+        function safeTest(regex, value) {
+            try { regex.lastIndex = 0; return regex.test(value); }
+            catch (e) { return false; }
+        }
+
+        function hasBlockedTerm(value) {
+            const text = String(value || '');
+            if (!text) return false;
+            return regexes.some(regex => safeTest(regex, text)) ||
+                wrestlerRegexes.some(regex => safeTest(regex, text));
+        }
+
+        function isCelebrityDetailRoute() {
+            return /^\/Celebrities\/[^/?#]+\.aspx\/?$/i.test(window.location.pathname || '');
+        }
+
+        function createCSS() {
+            if (!document.documentElement) return false;
+            document.documentElement.classList.add(ACTIVE_CLASS);
+            if (isCelebrityDetailRoute()) document.documentElement.classList.add(DETAIL_GUARD_CLASS);
+            if (document.getElementById(STYLE_ID)) return true;
+
+            const pending = LIST_PARTS.map(selector =>
+                `html.${ACTIVE_CLASS} ${selector}:not([${STATE_ATTR}="clean"]):not([${STATE_ATTR}="blocked"])`
+            ).join(',\n');
+            const blocked = LIST_PARTS.map(selector =>
+                `html.${ACTIVE_CLASS} ${selector}[${STATE_ATTR}="blocked"]`
+            ).join(',\n');
+            const clean = LIST_PARTS.map(selector =>
+                `html.${ACTIVE_CLASS} ${selector}[${STATE_ATTR}="clean"]`
+            ).join(',\n');
+            const style = document.createElement('style');
+            style.id = STYLE_ID;
+            style.textContent = `
+                ${pending} {
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                    transition: none !important;
+                    animation: none !important;
+                }
+                ${blocked} {
+                    display: none !important;
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                    height: 0 !important;
+                    min-height: 0 !important;
+                    max-height: 0 !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    overflow: hidden !important;
+                    transition: none !important;
+                    animation: none !important;
+                }
+                ${clean} {
+                    visibility: visible !important;
+                    opacity: 1 !important;
+                    pointer-events: auto !important;
+                    transition: none !important;
+                    animation: none !important;
+                }
+                html.${ACTIVE_CLASS} h4:not([${STATE_ATTR}="clean"]):not([${STATE_ATTR}="blocked"]) {
+                    visibility: hidden !important;
+                }
+                html.${ACTIVE_CLASS} h4[${STATE_ATTR}="blocked"],
+                ${HIDE_ADS.map(selector => `html.${ACTIVE_CLASS} ${selector}`).join(',\n')},
+                ${HIDE_FAKES.map(selector => `html.${ACTIVE_CLASS} ${selector}`).join(',\n')} {
+                    display: none !important;
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                }
+                html.${ACTIVE_CLASS}.${DETAIL_GUARD_CLASS} body {
+                    visibility: hidden !important;
+                }
+            `;
+            (document.head || document.documentElement).appendChild(style);
+            return true;
+        }
+
+        function nameFromLink(link) {
+            const names = [link.textContent, link.getAttribute('title'), link.getAttribute('aria-label')];
+            const href = link.getAttribute('href');
+            if (href) {
+                try {
+                    const parsed = new URL(href, window.location.href);
+                    // The last slug is searchable, but unrelated IDs and query strings are not.
+                    if (parsed.hostname === window.location.hostname &&
+                        /(?:\/Celebrities\/|\/News\.aspx$|\/AppearancesBySource\.aspx$)/i.test(parsed.pathname)) {
+                        const slug = decodeURIComponent(parsed.pathname.split('/').pop() || '')
+                            .replace(/\.aspx$/i, '').replace(/[_-]+/g, ' ');
+                        names.push(slug);
+                    }
+                } catch (e) {}
+            }
+            return names.filter(Boolean).join(' ');
+        }
+
+        function itemSearchText(element) {
+            const chunks = [element.textContent];
+            const links = element.matches('a[href]') ? [element] : element.querySelectorAll('a[href]');
+            for (const link of links) chunks.push(nameFromLink(link));
+            // Image title/alt may carry a name where a text link is absent.
+            const images = element.matches('img') ? [element] : element.querySelectorAll('img[alt], img[title]');
+            for (const img of images) {
+                chunks.push(img.getAttribute('alt'), img.getAttribute('title'));
+            }
+            return chunks.filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+        }
+
+        function classifyItem(element, force = false) {
+            if (!element || !element.isConnected || !element.matches(LIST_SELECTOR)) return;
+            // No clean verdict before both local exclusions and remote terms are ready.
+            if (!remoteReady || !wrestlerReady) return;
+            const text = itemSearchText(element);
+            if (!text) return;
+            if (!force && scannedText.get(element) === text && element.hasAttribute(STATE_ATTR)) return;
+            scannedText.set(element, text);
+            const blocked = hasBlockedTerm(text);
+            element.setAttribute(STATE_ATTR, blocked ? 'blocked' : 'clean');
+            if (blocked) element.setAttribute('aria-hidden', 'true');
+            else element.removeAttribute('aria-hidden');
+        }
+
+        function classifyFakeHeaders(root) {
+            const headings = root.matches?.('h4') ? [root] : [...(root.querySelectorAll?.('h4') || [])];
+            for (const heading of headings) {
+                const isFake = /\bfakes?\b/i.test(heading.textContent || '');
+                heading.setAttribute(STATE_ATTR, isFake ? 'blocked' : 'clean');
+                if (!isFake) continue;
+                // Remove the small decorative spacer immediately after the fake heading.
+                const spacer = heading.nextElementSibling;
+                if (spacer?.matches('div[style*="height:20px"], div[style*="height: 20px"]')) {
+                    spacer.setAttribute(FAKE_HIDDEN_ATTR, '1');
+                }
+            }
+        }
+
+        function relevantDetailName() {
+            // The canonical /Celebrities/<name>.aspx slug is more reliable than a whole
+            // h1 (which can include generic words like "Appearances" and false-match /app/i).
+            return decodeURIComponent((window.location.pathname.split('/').pop() || ''))
+                .replace(/\.aspx$/i, '').replace(/[_-]+/g, ' ');
+        }
+
+        function navigateAway(event = null) {
+            if (event) {
+                try { event.preventDefault(); } catch (e) {}
+                try { event.stopImmediatePropagation(); } catch (e) {}
+                try { event.stopPropagation(); } catch (e) {}
+            }
+            if (redirecting) return;
+            redirecting = true;
+            try {
+                if (window.history.length > 1) window.history.back();
+                else window.location.replace(window.location.origin + '/');
+            } catch (e) { window.location.replace(window.location.origin + '/'); }
+        }
+
+        function checkCelebrityDetail() {
+            if (!isCelebrityDetailRoute()) {
+                document.documentElement?.classList.remove(DETAIL_GUARD_CLASS);
+                return;
+            }
+            if (!remoteReady || !wrestlerReady) return;
+            if (hasBlockedTerm(relevantDetailName())) {
+                navigateAway();
+                return;
+            }
+            document.documentElement?.classList.remove(DETAIL_GUARD_CLASS);
+        }
+
+        function scan(root) {
+            createCSS();
+            const element = root?.nodeType === 1 ? root : root?.parentElement;
+            if (!element) return;
+            const heading = element.closest?.('h4');
+            if (heading) classifyFakeHeaders(heading);
+            classifyFakeHeaders(element);
+            // When a title, image, or child link changes, reclassify every containing
+            // listing shell, not only the new child node.
+            let ancestor = element;
+            while (ancestor && ancestor !== document.documentElement) {
+                if (ancestor.matches?.(LIST_SELECTOR)) classifyItem(ancestor);
+                ancestor = ancestor.parentElement;
+            }
+            element.querySelectorAll?.(LIST_SELECTOR).forEach(item => classifyItem(item));
+            checkCelebrityDetail();
+        }
+
+        function runPass(force = false) {
+            createCSS();
+            classifyFakeHeaders(document);
+            if (remoteReady && wrestlerReady) {
+                document.querySelectorAll(LIST_SELECTOR).forEach(item => classifyItem(item, force));
+            }
+            checkCelebrityDetail();
+        }
+
+        function scheduleScan() {
+            if (pendingScan) return;
+            pendingScan = true;
+            queueMicrotask(() => {
+                pendingScan = false;
+                const roots = [...pendingRoots];
+                pendingRoots.clear();
+                if (roots.length > 100) runPass();
+                else roots.forEach(scan);
+            });
+        }
+
+        function observe() {
+            if (!document.documentElement) { setTimeout(observe, 10); return; }
+            createCSS();
+            if (observer) return;
+            observer = new MutationObserver(records => {
+                for (const record of records) {
+                    if (record.type === 'childList') {
+                        record.addedNodes.forEach(node => {
+                            if (node.nodeType === 1) pendingRoots.add(node);
+                            else if (node.parentElement) pendingRoots.add(node.parentElement);
+                        });
+                        if (record.removedNodes.length && record.target.nodeType === 1)
+                            pendingRoots.add(record.target);
+                    } else {
+                        const element = record.target.nodeType === 1
+                            ? record.target : record.target.parentElement;
+                        if (element) pendingRoots.add(element);
+                    }
+                }
+                if (pendingRoots.size) scheduleScan();
+            });
+            observer.observe(document.documentElement, {
+                childList: true, subtree: true, characterData: true, attributes: true,
+                attributeFilter: ['href', 'title', 'alt', 'data-src', 'src', 'value']
+            });
+            runPass();
+        }
+
+        function searchInputs(scope) {
+            const selector = [
+                '#ctl00_ctl00_txtSearch', '#ctl00_ContentPlaceHolder1_txtSearchName',
+                'input[name$="$txtSearch" i]', 'input[name$="$txtSearchName" i]',
+                'input[type="search"]',
+                'input[type="text"][name*="Search" i]'
+            ].join(', ');
+            if (!scope) return [];
+            return [...scope.querySelectorAll(selector)];
+        }
+
+        function searchHasBlockedTerm(scope) {
+            return searchInputs(scope).some(input => hasBlockedTerm((input.value || '').trim()));
+        }
+
+        function isSearchControl(button) {
+            if (!button) return false;
+            if (button.matches(
+                '#ctl00_ContentPlaceHolder1_btnAdvancedSearch, ' +
+                'input[id*="btnSearch" i], button[id*="btnSearch" i]'
+            )) return true;
+            const label = String(button.matches('button') ? button.textContent :
+                (button.value || button.getAttribute('aria-label') || button.getAttribute('title') || '')).trim();
+            return /^(?:search|go)$/i.test(label);
+        }
+
+        // Capture ASP.NET postbacks and regular search forms, but leave unrelated form
+        // buttons alone even when they share an ASP.NET form with the search input.
+        document.addEventListener('submit', event => {
+            const form = event.target;
+            if (!form?.matches?.('form')) return;
+            if (event.submitter && !isSearchControl(event.submitter)) return;
+            if (searchHasBlockedTerm(form)) navigateAway(event);
+        }, true);
+        document.addEventListener('keydown', event => {
+            if (event.key !== 'Enter' || !event.target?.matches?.('input')) return;
+            if (!searchInputs(document).includes(event.target)) return;
+            if (searchHasBlockedTerm(event.target.closest('form') || document)) navigateAway(event);
+        }, true);
+        document.addEventListener('click', event => {
+            const button = event.target?.closest?.('button, input[type="submit"], input[type="button"], input[type="image"]');
+            if (!isSearchControl(button)) return;
+            if (searchHasBlockedTerm(button.closest('form') || document)) navigateAway(event);
+        }, true);
+
+        function wrestlerPatterns(urls) {
+            const exclusions = new Set(['melina', 'melina-perez', 'aj-lee', 'aj', 'becky', 'becky-lynch', 'katarina', 'jojo']);
+            const output = [], seen = new Set();
+            for (const raw of Array.isArray(urls) ? urls : []) {
+                try {
+                    const slug = decodeURIComponent(String(raw).split('/').filter(Boolean).pop() || '')
+                        .toLowerCase().trim();
+                    if (!slug || exclusions.has(slug) || seen.has(slug)) continue;
+                    seen.add(slug);
+                    const words = slug.split(/[-_\s]+/).filter(Boolean);
+                    if (!words.length) continue;
+                    const escape = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    output.push(new RegExp('\\b' + words.map(escape).join('[\\s_-]+') + '\\b', 'i'));
+                } catch (e) {}
+            }
+            return output;
+        }
+
+        function setWrestlers(urls) {
+            wrestlerRegexes = wrestlerPatterns(urls);
+            wrestlerReady = true;
+            runPass(true);
+        }
+
+        function loadWrestlers() {
+            const done = result => setWrestlers(result?.wrestling_women_urls || []);
+            try {
+                if (typeof browser !== 'undefined' && browser.storage?.local) {
+                    Promise.resolve(browser.storage.local.get(['wrestling_women_urls']))
+                        .then(done, () => done({}));
+                    return;
+                }
+                if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+                    chrome.storage.local.get(['wrestling_women_urls'], result => {
+                        try { if (chrome.runtime?.lastError) return done({}); } catch (e) {}
+                        done(result || {});
+                    });
+                    return;
+                }
+            } catch (e) {}
+            done({});
+        }
+
+        function watchWrestlers() {
+            const storage = typeof browser !== 'undefined' && browser.storage?.onChanged
+                ? browser.storage : typeof chrome !== 'undefined' && chrome.storage?.onChanged
+                    ? chrome.storage : null;
+            if (!storage) return;
+            const listener = (changes, area) => {
+                if (area && area !== 'local') return;
+                if (!Object.prototype.hasOwnProperty.call(changes || {}, 'wrestling_women_urls')) return;
+                setWrestlers(changes.wrestling_women_urls?.newValue || []);
+            };
+            storage.onChanged.addListener(listener);
+            removeStorageListener = () => storage.onChanged.removeListener(listener);
+        }
+
+        Promise.resolve(focusMasterBlockedTermsFetchInFlight).finally(() => {
+            remoteReady = true;
+            runPass(true);
+        });
+        // Existing filters use a bounded remote wait to avoid permanently blank pages on failures.
+        setTimeout(() => {
+            if (!remoteReady) { remoteReady = true; runPass(true); }
+            if (!wrestlerReady) setWrestlers([]);
+        }, 5500);
+        loadWrestlers();
+        watchWrestlers();
+        window.addEventListener(FOCUS_MASTER_BLOCKED_TERMS_UPDATED_EVENT, () => runPass(true), true);
+        observe();
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => runPass(), { once: true });
+        }
+        window.addEventListener('pageshow', () => { observe(); runPass(true); }, true);
+        window.addEventListener('pagehide', event => {
+            if (event.persisted) return;
+            observer?.disconnect();
+            observer = null;
+            pendingRoots.clear();
+            if (removeStorageListener) removeStorageListener();
+        }, true);
+        console.log('BraveFox Nudography no-glimpse filtering enabled.');
+    }
+
+    // === ALASTONSUOMI FILTERING ===
+    // No-glimpse filtering of member tiles and search results, while retaining all existing
+    // static/remote/wrestler blocklists. The class="boy" rule is unconditional.
+    function installBraveFoxAlastonsuomiFilter() {
+        if (window.__braveFoxAlastonsuomiFilteringInstalled) return;
+        window.__braveFoxAlastonsuomiFilteringInstalled = true;
+
+        const ACTIVE_CLASS = 'bravefox-alastonsuomi-filtering-active';
+        const STYLE_ID = 'bravefox-alastonsuomi-no-glimpse';
+        const STATE_ATTR = 'data-bravefox-alastonsuomi-state';
+        const CARD_SELECTOR = 'td:has(> a.boy[href]), td:has(> a.girl[href]), .image-container';
+        // Only small single-profile featured panels qualify. Profile image viewers
+        // use dl.box.centered.noborder and must NEVER be gated or collapsed here.
+        const FEATURED_PANEL_SELECTOR =
+            'dl.box.centered:not(.noborder):has(> dd > a[href*="/images/"]), ' +
+            'dl.box.centered:not(.noborder):has(> dd > p.shoutimg)';
+        const FEATURED_STATE_ATTR = 'data-bravefox-alastonsuomi-featured-state';
+        const GENDER_SELECTOR = 'select[name="sex" i], select[id="sex" i], select[name$="[sex]" i]';
+        const HOME_URL = `${window.location.origin}/`;
+        // Alastonsuomi provides its own server-side gender restriction for homepage
+        // galleries. Request genuine women-only results instead of cloning the few
+        // a.girl tiles already on the page (which would duplicate names/images).
+        const NATIVE_GENDER_SELECTOR = 'select[name="show_gender"]';
+        const NATIVE_GENDER_WOMEN = '2'; // "Vain naiset"; site also supports women + couples (4).
+        const NATIVE_GENDER_ATTEMPT_KEY = 'bravefox-alastonsuomi-women-gallery-attempt-v1';
+        const GALLERY_PREPARING_CLASS = 'bravefox-alastonsuomi-gallery-preparing';
+        const IS_HOMEPAGE = /^\/(?:index\.php)?\/?$/i.test(window.location.pathname || '/');
+        // The site's old four-column table rows do not flow around hidden <td>s.
+        // Repack both homepage galleries visually and backfill eligible cells from
+        // their *native* refresh endpoints, never by duplicating existing profiles.
+        const GALLERY_REFILL_TARGETS = [
+            { id: 'randomImages', refreshData: 'randomImages_refresh' },
+            { id: 'imagecontainer', refreshData: 'lastlogin_refresh' }
+        ];
+        const GALLERY_REFILL_MAX_ATTEMPTS = 3;
+        const galleryRefillState = new Map();
+        let nativeGenderChecked = false;
+        if (IS_HOMEPAGE && document.documentElement) {
+            document.documentElement.classList.add(GALLERY_PREPARING_CLASS);
+        }
+        const regexes = createStaticBlockedRegexWords();
+        let wrestlerRegexes = [];
+        let remoteReady = false;
+        let wrestlerReady = false;
+        let redirecting = false;
+        let observer = null;
+        let removeStorageListener = null;
+        let scanQueued = false;
+        const searchableCache = new WeakMap();
+
+        function addNoGlimpseCSS() {
+            if (!document.documentElement) return false;
+            if (!document.documentElement.classList.contains(ACTIVE_CLASS)) {
+                document.documentElement.classList.add(ACTIVE_CLASS);
+            }
+            if (document.getElementById(STYLE_ID)) return true;
+            const style = document.createElement('style');
+            style.id = STYLE_ID;
+            style.textContent = `
+                /* While enabling the website's women-only preference, prevent a
+                   mixed-gender homepage gallery from flashing on screen. */
+                html.${ACTIVE_CLASS}.${GALLERY_PREPARING_CLASS} #randomImages,
+                html.${ACTIVE_CLASS}.${GALLERY_PREPARING_CLASS} #imagecontainer {
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                    transition: none !important;
+                    animation: none !important;
+                }
+                /* Treat the site's <tbody> as a grid, not four independent table rows:
+                   filtered <td>s then leave no invisible gaps between approved profiles. */
+                html.${ACTIVE_CLASS} #randomImages,
+                html.${ACTIVE_CLASS} #imagecontainer {
+                    min-height: 0 !important;
+                }
+                html.${ACTIVE_CLASS} #randomImages > table,
+                html.${ACTIVE_CLASS} #imagecontainer > table {
+                    display: block !important;
+                    width: 100% !important;
+                }
+                html.${ACTIVE_CLASS} #randomImages > table > tbody,
+                html.${ACTIVE_CLASS} #imagecontainer > table > tbody {
+                    display: grid !important;
+                    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+                    grid-auto-flow: row !important;
+                    gap: 12px 0 !important;
+                    width: 100% !important;
+                }
+                html.${ACTIVE_CLASS} #randomImages > table > tbody > tr,
+                html.${ACTIVE_CLASS} #imagecontainer > table > tbody > tr {
+                    display: contents !important;
+                }
+                html.${ACTIVE_CLASS} #randomImages > table > tbody > tr > td,
+                html.${ACTIVE_CLASS} #imagecontainer > table > tbody > tr > td {
+                    width: auto !important;
+                    min-width: 0 !important;
+                    box-sizing: border-box !important;
+                }
+                /* Featured boxes remain non-paintable until screened. Explicitly
+                   EXCLUDE .noborder, used by the site's full-size profile photo viewer. */
+                html.${ACTIVE_CLASS} dl.box.centered:not(.noborder):has(> dd > a[href*="/images/"]):not([${FEATURED_STATE_ATTR}="clean"]),
+                html.${ACTIVE_CLASS} dl.box.centered:not(.noborder):has(> dd > p.shoutimg):not([${FEATURED_STATE_ATTR}="clean"]) {
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                    transition: none !important;
+                    animation: none !important;
+                }
+                /* No-glimpse: immediately collapse a male owner in the matching
+                   single-person panel or the Shoutbox advertisement placeholder.
+                   Never match generic profile/image viewer dl elements. */
+                html.${ACTIVE_CLASS} dl.box.centered:not(.noborder):has(> dd > a[href*="/images/"]):has(> dd > a.boy[href]),
+                html.${ACTIVE_CLASS} dl.box.centered:not(.noborder):has(> dd > a[href*="/images/"]):has(> dd > p > a.boy[href]),
+                html.${ACTIVE_CLASS} dl.box.centered:not(.noborder):has(> dd > p.shoutimg):has(> dd > p > a.boy[href]),
+                html.${ACTIVE_CLASS} dl.box.centered:not(.noborder):has(> dd > p.shoutimg img[src*="shoutbox_dummy.png"]),
+                html.${ACTIVE_CLASS} dl.box.centered:not(.noborder):has(> dd > p.shoutimg > a[href*="/shoutboxBuy.php"]),
+                html.${ACTIVE_CLASS} dl.box.centered:not(.noborder)[${FEATURED_STATE_ATTR}="blocked"] {
+                    display: none !important;
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                    height: 0 !important;
+                    min-height: 0 !important;
+                    max-height: 0 !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    overflow: hidden !important;
+                    transition: none !important;
+                    animation: none !important;
+                }
+                html.${ACTIVE_CLASS} dl.box.centered:not(.noborder)[${FEATURED_STATE_ATTR}="clean"] {
+                    visibility: visible !important;
+                    opacity: 1 !important;
+                    pointer-events: auto !important;
+                }
+                /* Gender-marked male member tiles are never revealed, even before lists load. */
+                /* Gender-marked male member tiles are never revealed, even before lists load. */
+                html.${ACTIVE_CLASS} td:has(> a.boy[href]),
+                html.${ACTIVE_CLASS} .image-container:has(a.boy[href]),
+                html.${ACTIVE_CLASS} [${STATE_ATTR}="blocked"] {
+                    display: none !important;
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                    height: 0 !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    overflow: hidden !important;
+                    transition: none !important;
+                    animation: none !important;
+                }
+                /* Preserve native geometry pending classification, but paint nothing. */
+                html.${ACTIVE_CLASS} .image-container:not([${STATE_ATTR}="clean"]),
+                html.${ACTIVE_CLASS} td:has(> a.girl[href]):not([${STATE_ATTR}="clean"]) {
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                    transition: none !important;
+                    animation: none !important;
+                }
+                html.${ACTIVE_CLASS} .image-container[${STATE_ATTR}="clean"],
+                html.${ACTIVE_CLASS} td[${STATE_ATTR}="clean"]:has(> a.girl[href]) {
+                    visibility: visible !important;
+                    opacity: 1 !important;
+                    pointer-events: auto !important;
+                }
+                /* Pre-hide unwanted choices, even before the DOM cleanup removes them. */
+                html.${ACTIVE_CLASS} ${GENDER_SELECTOR.split(', ').map(s => s + ' option[value="0"], html.' + ACTIVE_CLASS + ' ' + s + ' option[value="1"]').join(',\n')} {
+                    display: none !important;
+                }
+            `;
+            (document.head || document.documentElement).appendChild(style);
+            return true;
+        }
+
+        function releaseHomepageGalleries() {
+            document.documentElement?.classList.remove(GALLERY_PREPARING_CLASS);
+        }
+
+        function ensureNativeWomenOnlyGalleries() {
+            if (!IS_HOMEPAGE || nativeGenderChecked) return;
+            const selector = document.querySelector(NATIVE_GENDER_SELECTOR);
+            if (!selector) {
+                // A page without the site's native preference widget cannot
+                // safely use the native route. Keep the existing DOM filter.
+                if (document.readyState !== 'loading') {
+                    nativeGenderChecked = true;
+                    releaseHomepageGalleries();
+                }
+                return;
+            }
+            nativeGenderChecked = true;
+            if (selector.value === NATIVE_GENDER_WOMEN) {
+                // Native preference already applied; the existing card scanner
+                // remains authoritative for blacklist and male-tile hiding.
+                releaseHomepageGalleries();
+                return;
+            }
+            if (!selector.querySelector('option[value="2"]')) {
+                releaseHomepageGalleries();
+                return;
+            }
+
+            // A one-shot guard prevents loops if the server rejects the setting,
+            // fails to persist its cookie, or a privacy setting blocks cookies.
+            try {
+                if (sessionStorage.getItem(NATIVE_GENDER_ATTEMPT_KEY) === '1') {
+                    releaseHomepageGalleries();
+                    return;
+                }
+                sessionStorage.setItem(NATIVE_GENDER_ATTEMPT_KEY, '1');
+            } catch (e) {
+                releaseHomepageGalleries();
+                return;
+            }
+
+            // Use precisely the GET endpoint in the site's native select handler:
+            // /getPage.php?data=set_gender_cookie&show_gender=2
+            // This avoids replacing gallery markup, fabricating profiles, or
+            // making repeated requests for more adult thumbnails.
+            const endpoint = new URL('/getPage.php', window.location.origin);
+            endpoint.searchParams.set('data', 'set_gender_cookie');
+            endpoint.searchParams.set('show_gender', NATIVE_GENDER_WOMEN);
+            fetch(endpoint.href, {
+                method: 'GET',
+                credentials: 'same-origin',
+                cache: 'no-store',
+                redirect: 'follow'
+            }).then(response => {
+                if (!response.ok) throw new Error(`Gender preference HTTP ${response.status}`);
+                // A new homepage response should render fresh, actual a.girl
+                // gallery entries selected by Alastonsuomi itself.
+                window.location.reload();
+            }).catch(error => {
+                // No blind refresh loops, no unsafe client-side HTML injection:
+                // retain existing no-glimpse filtering as the fallback.
+                console.debug('BraveFox: Alastonsuomi native women-only gallery setting unavailable.', error);
+                releaseHomepageGalleries();
+            });
+        }
+
+        function safeTest(regex, text) {
+            try { regex.lastIndex = 0; return regex.test(text); }
+            catch (e) { return false; }
+        }
+
+        function blockedText(text) {
+            const candidate = String(text || '').trim();
+            if (!candidate) return false;
+            return regexes.some(regex => safeTest(regex, candidate)) ||
+                wrestlerRegexes.some(regex => safeTest(regex, candidate));
+        }
+
+        function isSearchPage() {
+            return /^\/search\.php\/?$/i.test(window.location.pathname || '');
+        }
+
+        function goHome(event) {
+            if (event) {
+                try { event.preventDefault(); } catch (e) {}
+                try { event.stopImmediatePropagation(); } catch (e) {}
+                try { event.stopPropagation(); } catch (e) {}
+            }
+            if (redirecting) return;
+            redirecting = true;
+            try { window.stop?.(); } catch (e) {}
+            try { window.location.replace(HOME_URL); }
+            catch (e) { window.location.href = HOME_URL; }
+        }
+
+        function checkSearchUrl() {
+            if (!isSearchPage() || redirecting) return;
+            try {
+                const params = new URL(window.location.href).searchParams;
+                // Block direct requests for 'Kaikki' (0) and 'Mies' (1). A submitted
+                // search without sex would default to 'Kaikki' on some site versions.
+                const requestedSex = params.getAll('sex');
+                if (requestedSex.some(sex => sex === '0' || sex === '1') ||
+                    (params.get('haku') === '1' && !requestedSex.length)) {
+                    goHome();
+                    return;
+                }
+                if (remoteReady && wrestlerReady && blockedText(params.get('user') || '')) {
+                    goHome();
+                }
+            } catch (e) {}
+        }
+
+        function getCardSearchText(card) {
+            const parts = [];
+            const links = card.querySelectorAll('a[href]');
+            // Only scan the user name and associated image metadata, not the entire
+            // surrounding table: one blocked profile must never hide its neighbors.
+            for (const link of links) {
+                if (link.matches('.boy, .girl, [title]') || link.querySelector('img')) {
+                    parts.push(link.textContent, link.getAttribute('title'), link.getAttribute('aria-label'));
+                    try {
+                        const parsed = new URL(link.getAttribute('href'), window.location.href);
+                        if (parsed.hostname === window.location.hostname) {
+                            const slug = parsed.pathname.split('/').filter(Boolean)[0] || '';
+                            parts.push(decodeURIComponent(slug).replace(/[_-]+/g, ' '));
+                        }
+                    } catch (e) {}
+                }
+            }
+            for (const image of card.querySelectorAll('img')) {
+                parts.push(image.getAttribute('alt'), image.getAttribute('title'));
+            }
+            return parts.filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+        }
+
+        function classifyCard(card, force = false) {
+            if (!card || !card.isConnected || !card.matches(CARD_SELECTOR)) return;
+            if (card.querySelector('a.boy[href]')) {
+                searchableCache.delete(card);
+                if (card.getAttribute(STATE_ATTR) !== 'blocked') card.setAttribute(STATE_ATTR, 'blocked');
+                return;
+            }
+            if (!remoteReady || !wrestlerReady) return;
+            const text = getCardSearchText(card);
+            // Do not reveal an unidentifiable tile until a name/link exists to scan.
+            if (!text) return;
+            if (!force && searchableCache.get(card) === text) return;
+            searchableCache.set(card, text);
+            card.setAttribute(STATE_ATTR, blockedText(text) ? 'blocked' : 'clean');
+        }
+
+        function classifyFeaturedPanel(panel, force = false) {
+            if (!panel || !panel.isConnected || panel.classList.contains('noborder') ||
+                !panel.matches(FEATURED_PANEL_SELECTOR)) return;
+            const dd = panel.querySelector(':scope > dd');
+            if (!dd) return;
+            // Only the three named single-profile sections participate. An unrelated
+            // box using similar markup should never have its photo filtered here.
+            const heading = (panel.querySelector(':scope > dt')?.textContent || '')
+                .replace(/\s+/g, ' ').trim().toLocaleLowerCase('fi-FI');
+            const isShoutbox = heading === 'shoutbox';
+            if (!isShoutbox && heading !== 'päivän paras' && heading !== 'viimeksi lisätty') {
+                // A structural lookalike may have been prehidden by the early CSS.
+                // Mark it clean rather than leaving it invisibly pending forever.
+                if (panel.getAttribute(FEATURED_STATE_ATTR) !== 'clean')
+                    panel.setAttribute(FEATURED_STATE_ATTR, 'clean');
+                return;
+            }
+            // Inspect only a featured author's own link, not another profile buried
+            // in a larger gallery, navigation item or message body.
+            const owner = dd.querySelector(':scope > a.boy[href], :scope > a.girl[href], ' +
+                ':scope > a.pari[href], :scope > p > a.boy[href], ' +
+                ':scope > p > a.girl[href], :scope > p > a.pari[href]');
+            // The site's empty Shoutbox ad has no .boy/.girl author at all.
+            // Remove it as a whole (image, placeholder message and queue), just
+            // like a rejected Shoutbox author, instead of leaving a blank panel.
+            const isShoutboxPlaceholder = isShoutbox && !!dd.querySelector(
+                ':scope > p.shoutimg img[src*="shoutbox_dummy.png"], ' +
+                ':scope > p.shoutimg > a[href*="/shoutboxBuy.php"]'
+            );
+            if (owner?.matches('a.boy[href]') || isShoutboxPlaceholder) {
+                searchableCache.delete(panel);
+                if (panel.getAttribute(FEATURED_STATE_ATTR) !== 'blocked') {
+                    panel.setAttribute(FEATURED_STATE_ATTR, 'blocked');
+                }
+                return;
+            }
+            if (!remoteReady || !wrestlerReady || !owner) return;
+            // A featured author, thumbnail and associated caption are one card.
+            const text = getCardSearchText(panel);
+            if (!text) return;
+            if (!force && searchableCache.get(panel) === text &&
+                panel.hasAttribute(FEATURED_STATE_ATTR)) return;
+            searchableCache.set(panel, text);
+            const state = blockedText(text) ? 'blocked' : 'clean';
+            if (panel.getAttribute(FEATURED_STATE_ATTR) !== state) {
+                panel.setAttribute(FEATURED_STATE_ATTR, state);
+            }
+        }
+
+        // Refill shortages caused by blocked entries *after* the real server has
+        // generated the homepage. Never load blocked thumbnail URLs into the live DOM.
+        // Bounded attempts protect against a depleted server-side women-only pool.
+        function galleryVisibleCards(root) {
+            // In the server-preference fallback, existing couple cards stay visible
+            // under the old policy; count them so refills never overrun the grid.
+            return root.querySelectorAll(
+                `td[${STATE_ATTR}="clean"]:has(> a.girl[href]), ` +
+                `td:has(> a.pari[href]):not([${STATE_ATTR}="blocked"])`
+            ).length;
+        }
+
+        function galleryNames(root) {
+            const names = new Set();
+            root.querySelectorAll('td > a.girl[href], td > a.boy[href], td > a.pari[href]').forEach(anchor => {
+                try {
+                    const path = new URL(anchor.getAttribute('href'), window.location.origin).pathname;
+                    const key = decodeURIComponent(path.split('/').filter(Boolean)[0] || '').toLowerCase();
+                    if (key) names.add(key);
+                } catch (e) {}
+            });
+            return names;
+        }
+
+        function safeGalleryLink(value, profileName, photo = false) {
+            try {
+                const url = new URL(value, window.location.origin);
+                if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
+                if (url.hostname !== window.location.hostname) return null;
+                const parts = url.pathname.split('/').filter(Boolean);
+                if (!parts.length || decodeURIComponent(parts[0]).toLowerCase() !== profileName.toLowerCase()) return null;
+                if (photo && (parts.length < 3 || parts[1].toLowerCase() !== 'images')) return null;
+                if (!photo && parts.length !== 1) return null;
+                return url;
+            } catch (e) { return null; }
+        }
+
+        function safeGalleryThumbnail(value) {
+            try {
+                const url = new URL(value, window.location.origin);
+                if (url.protocol !== 'https:') return null;
+                const host = url.hostname.toLowerCase();
+                if (host !== 'alastonsuomi.com' && !/^(?:media-[a-z0-9-]+\.)alastonsuomi\.com$/.test(host)) return null;
+                if (!/\/thumbnails\/[^/]+\.(?:jpe?g|png|webp)$/i.test(url.pathname)) return null;
+                return url;
+            } catch (e) { return null; }
+        }
+
+        function buildSafeGalleryCell(source, existingNames) {
+            const anchor = source.querySelector(':scope > a.girl[href]');
+            if (!anchor) return null;
+            const name = String(anchor.textContent || '').trim();
+            if (!name) return null;
+            const profile = safeGalleryLink(anchor.getAttribute('href'), name);
+            if (!profile) return null;
+            const username = decodeURIComponent(profile.pathname.split('/').filter(Boolean)[0]).toLowerCase();
+            if (existingNames.has(username)) return null;
+            const originalImage = source.querySelector('img[src]');
+            const imageAnchor = originalImage?.closest('a[href]');
+            if (!originalImage || !imageAnchor) return null;
+            const imagePage = safeGalleryLink(imageAnchor.getAttribute('href'), name, true);
+            const thumbnail = safeGalleryThumbnail(originalImage.getAttribute('src'));
+            if (!imagePage || !thumbnail) return null;
+            const alt = String(originalImage.getAttribute('alt') || '').trim();
+            const description = [name, anchor.getAttribute('title'), alt,
+                imageAnchor.getAttribute('title')].filter(Boolean).join(' ');
+            if (blockedText(description)) return null;
+
+            // Construct only the allowed fields. Do not insert remote HTML,
+            // scripts, inline event handlers, or unscanned image elements.
+            const cell = document.createElement('td');
+            cell.setAttribute('align', 'center');
+            cell.setAttribute('valign', 'top');
+            cell.setAttribute('width', '25%');
+            const profileAnchor = document.createElement('a');
+            profileAnchor.className = 'girl';
+            profileAnchor.href = profile.href;
+            profileAnchor.title = name;
+            profileAnchor.textContent = name;
+            const imageLink = document.createElement('a');
+            imageLink.href = imagePage.href;
+            const image = document.createElement('img');
+            image.alt = alt;
+            image.loading = 'lazy';
+            image.decoding = 'async';
+            image.src = thumbnail.href;
+            imageLink.appendChild(image);
+            cell.append(profileAnchor, document.createElement('br'), imageLink);
+            cell.setAttribute(STATE_ATTR, 'clean');
+            searchableCache.set(cell, getCardSearchText(cell));
+            existingNames.add(username);
+            return cell;
+        }
+
+        async function refillGallery(target, state) {
+            if (state.inFlight || state.done) return;
+            state.inFlight = true;
+            try {
+                while (state.attempts < GALLERY_REFILL_MAX_ATTEMPTS && !redirecting &&
+                    document.documentElement?.classList.contains(ACTIVE_CLASS)) {
+                    const root = document.getElementById(target.id);
+                    const table = root?.querySelector(':scope > table');
+                    if (!root || !table || table !== state.table || !table.isConnected) break;
+                    const remaining = state.capacity - galleryVisibleCards(root);
+                    if (remaining <= 0) break;
+                    state.attempts++;
+                    const endpoint = new URL('/getPage.php', window.location.origin);
+                    endpoint.searchParams.set('data', target.refreshData);
+                    // Match the site's native getPage AJAX request; the response is
+                    // treated strictly as a pool of candidates, not inserted as HTML.
+                    const response = await fetch(endpoint.href, {
+                        method: 'GET', credentials: 'same-origin', cache: 'no-store',
+                        headers: { 'X-Requested-With': 'XMLHttpRequest', Accept: 'text/html, */*' }
+                    });
+                    if (!response.ok) break;
+                    const markup = await response.text();
+                    // The refresh endpoint may return a <table> or only its rows.
+                    const parsed = new DOMParser().parseFromString(
+                        /<table[\s>]/i.test(markup) ? markup : `<table><tbody>${markup}</tbody></table>`,
+                        'text/html'
+                    );
+                    const names = galleryNames(root);
+                    const additions = [];
+                    for (const source of parsed.querySelectorAll('td:has(> a.girl[href])')) {
+                        if (additions.length >= remaining) break;
+                        const cell = buildSafeGalleryCell(source, names);
+                        if (cell) additions.push(cell);
+                    }
+                    if (additions.length) {
+                        const tbody = table.tBodies[0] || table.appendChild(document.createElement('tbody'));
+                        const row = document.createElement('tr');
+                        row.append(...additions);
+                        tbody.appendChild(row);
+                    }
+                }
+            } catch (e) {
+                console.debug('BraveFox: Alastonsuomi gallery refill unavailable.', e);
+            } finally {
+                state.inFlight = false;
+                state.done = true;
+            }
+        }
+
+        function refillHomepageGalleries() {
+            if (!IS_HOMEPAGE || !nativeGenderChecked || !remoteReady || !wrestlerReady ||
+                redirecting || document.readyState === 'loading' ||
+                document.documentElement?.classList.contains(GALLERY_PREPARING_CLASS)) return;
+            for (const target of GALLERY_REFILL_TARGETS) {
+                const root = document.getElementById(target.id);
+                const table = root?.querySelector(':scope > table');
+                if (!table || !table.tBodies.length) continue;
+                let state = galleryRefillState.get(target.id);
+                if (!state || state.table !== table) {
+                    const originalCount = table.querySelectorAll('td:has(> a.girl[href], > a.boy[href], > a.pari[href])').length;
+                    if (!originalCount) continue;
+                    state = {
+                        table, attempts: 0, inFlight: false, done: false,
+                        capacity: Math.min(24, Math.ceil(originalCount / 4) * 4)
+                    };
+                    galleryRefillState.set(target.id, state);
+                }
+                if (!state.done && !state.inFlight && galleryVisibleCards(root) < state.capacity) {
+                    void refillGallery(target, state);
+                }
+            }
+        }
+
+        function cleanupGenderOptions() {
+            if (!isSearchPage()) return;
+            document.querySelectorAll(GENDER_SELECTOR).forEach(select => {
+                // Move the active selection off a removed entry before dropping it.
+                if (select.value === '0' || select.value === '1') select.value = '2';
+                select.querySelectorAll('option[value="0"], option[value="1"]').forEach(option => option.remove());
+            });
+        }
+
+        function runPass(force = false) {
+            addNoGlimpseCSS();
+            ensureNativeWomenOnlyGalleries();
+            checkSearchUrl();
+            if (redirecting) return;
+            cleanupGenderOptions();
+            document.querySelectorAll(CARD_SELECTOR).forEach(card => classifyCard(card, force));
+            document.querySelectorAll(FEATURED_PANEL_SELECTOR).forEach(panel => classifyFeaturedPanel(panel, force));
+            refillHomepageGalleries();
+        }
+
+        function schedulePass(force = false) {
+            if (scanQueued) return;
+            scanQueued = true;
+            queueMicrotask(() => {
+                scanQueued = false;
+                runPass(force);
+            });
+        }
+
+        function observe() {
+            if (!document.documentElement) { setTimeout(observe, 15); return; }
+            addNoGlimpseCSS();
+            if (observer) return;
+            observer = new MutationObserver(records => {
+                if (records.length) schedulePass();
+            });
+            observer.observe(document.documentElement, {
+                childList: true, subtree: true, characterData: true, attributes: true,
+                attributeFilter: ['href', 'title', 'alt', 'class', 'aria-label', 'value']
+            });
+            runPass();
+        }
+
+        function searchFormForbidden(form) {
+            const sex = form.querySelector('[name="sex" i]');
+            if (sex && (sex.value === '0' || sex.value === '1')) return true;
+            const user = form.querySelector('input[name="user" i]');
+            return !!(user && blockedText(user.value));
+        }
+
+        document.addEventListener('submit', event => {
+            if (!isSearchPage() || !event.target?.matches?.('form')) return;
+            if (searchFormForbidden(event.target)) goHome(event);
+        }, true);
+        document.addEventListener('keydown', event => {
+            if (!isSearchPage() || event.key !== 'Enter' ||
+                !event.target?.matches?.('input[name="user" i]')) return;
+            const form = event.target.closest('form');
+            if (form && searchFormForbidden(form)) goHome(event);
+        }, true);
+        document.addEventListener('change', event => {
+            if (!isSearchPage() || !event.target?.matches?.(GENDER_SELECTOR)) return;
+            if (event.target.value === '0' || event.target.value === '1') event.target.value = '2';
+            cleanupGenderOptions();
+        }, true);
+        document.addEventListener('click', event => {
+            const anchor = event.target?.closest?.('a[href]');
+            if (!anchor) return;
+            try {
+                const target = new URL(anchor.getAttribute('href'), window.location.href);
+                if (target.hostname !== window.location.hostname || !/^\/search\.php\/?$/i.test(target.pathname)) return;
+                const sexes = target.searchParams.getAll('sex');
+                if (sexes.some(sex => sex === '0' || sex === '1') ||
+                    (remoteReady && wrestlerReady && blockedText(target.searchParams.get('user') || ''))) {
+                    goHome(event);
+                }
+            } catch (e) {}
+        }, true);
+
+        function buildWrestlerPatterns(urls) {
+            const exclusions = new Set(['melina', 'melina-perez', 'aj-lee', 'aj', 'becky', 'becky-lynch', 'katarina', 'jojo']);
+            const output = [];
+            const seen = new Set();
+            for (const raw of Array.isArray(urls) ? urls : []) {
+                try {
+                    const slug = decodeURIComponent(String(raw).split('/').filter(Boolean).pop() || '').toLowerCase().trim();
+                    if (!slug || exclusions.has(slug) || seen.has(slug)) continue;
+                    seen.add(slug);
+                    const words = slug.split(/[-_\s]+/).filter(Boolean);
+                    if (!words.length) continue;
+                    const escape = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    output.push(new RegExp('\\b' + words.map(escape).join('[\\s_-]+') + '\\b', 'i'));
+                } catch (e) {}
+            }
+            return output;
+        }
+
+        function setWrestlers(urls) {
+            wrestlerRegexes = buildWrestlerPatterns(urls);
+            wrestlerReady = true;
+            runPass(true);
+        }
+
+        function loadWrestlers() {
+            const done = result => setWrestlers(result?.wrestling_women_urls || []);
+            try {
+                if (typeof browser !== 'undefined' && browser.storage?.local) {
+                    Promise.resolve(browser.storage.local.get(['wrestling_women_urls']))
+                        .then(done, () => done({}));
+                    return;
+                }
+                if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+                    chrome.storage.local.get(['wrestling_women_urls'], result => {
+                        try { if (chrome.runtime?.lastError) return done({}); } catch (e) {}
+                        done(result || {});
+                    });
+                    return;
+                }
+            } catch (e) {}
+            done({});
+        }
+
+        function watchWrestlers() {
+            const storage = typeof browser !== 'undefined' && browser.storage?.onChanged
+                ? browser.storage : typeof chrome !== 'undefined' && chrome.storage?.onChanged
+                    ? chrome.storage : null;
+            if (!storage) return;
+            const listener = (changes, area) => {
+                if (area && area !== 'local') return;
+                if (!Object.prototype.hasOwnProperty.call(changes || {}, 'wrestling_women_urls')) return;
+                setWrestlers(changes.wrestling_women_urls?.newValue || []);
+            };
+            storage.onChanged.addListener(listener);
+            removeStorageListener = () => storage.onChanged.removeListener(listener);
+        }
+
+        Promise.resolve(focusMasterBlockedTermsFetchInFlight).finally(() => {
+            remoteReady = true;
+            runPass(true);
+        });
+        setTimeout(() => {
+            if (!remoteReady) { remoteReady = true; runPass(true); }
+            if (!wrestlerReady) setWrestlers([]);
+        }, 5500);
+        loadWrestlers();
+        watchWrestlers();
+        window.addEventListener(FOCUS_MASTER_BLOCKED_TERMS_UPDATED_EVENT, () => runPass(true), true);
+        window.addEventListener('popstate', () => runPass(true), true);
+        window.addEventListener('pageshow', () => { observe(); runPass(true); }, true);
+        observe();
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => runPass(), { once: true });
+        }
+        window.addEventListener('pagehide', event => {
+            if (event.persisted) return;
+            observer?.disconnect();
+            observer = null;
+            if (removeStorageListener) removeStorageListener();
+        }, true);
+        console.log('BraveFox Alastonsuomi no-glimpse filtering enabled.');
+    }
+
+    if (BRAVEFOX_IS_ALASTONSUOMI) {
+        installBraveFoxAlastonsuomiFilter();
+        return;
+    }
+
+    if (BRAVEFOX_IS_NUDOGRAPHY) {
+        installBraveFoxNudographyFilter();
+        return;
     }
 
     if (BRAVEFOX_IS_BUNKR || BRAVEFOX_IS_BALBUMS) {

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         IGCleaner
-// @version	 29.5.5
-// @date	 2026-10-22
+// @version	 29.6.1
+// @date	 2026-10-25
 // @description  Trying to make my Instagram experience tolerable.
 // @match        *://www.instagram.com/*
 // @match        *://www.instagram.com/?next=%2F/*
@@ -1627,7 +1627,7 @@ const keywordsToHide = [
 	/m1ska/i, /m1sk4/i, /Milli/i, /Niina/i, /Jasmin/i, /Saana/i, /Veera/i, /Saya Kamitani/i, /misk4/i, /misk3/i, /m1sk3/i, /m1ske/i, /m1mmuska/i, /misk33waaa/i, /vsco\.co/i,
 	/misk33wa/i, /misk3waa/i, /misk3waaa/i, /miskaawq9/i, /misk3wa/i, /Matilda/i, /Kamitani/i, /Minja/i, /Nikkita/i, /linktr\.ee/i, /misk33waa/i, /Myös Metalta/i, /mallikuva/i,
 	/Sinulle ehdotettua/i, /Sinulle ehdotettu/i, /Suggested for you/i,  /@lovable\.dev/i, /@lovable\.ai/i, /@lovable.ai/i, /lovable.ai/i, /lovable ai/i, /modeling/i, /Kelani/i,
-	/Monroe/i, /Chantel/i, /Zaria/i, /Jaida/i,
+	/Monroe/i, /Chantel/i, /Zaria/i, /Jaida/i, /Elegance Brand/i, /By Elegance/i, 
 
 	// Regex Hashtags
 	/#perse/i, /#pylly/i, /#tissit/i, /#takapuoli/i, /#takamus/i, /#boobs/i, /#boobies/i, /#boobie/i, /#booty/i, /#butt/i, /#babe/i, /#bestie/i, /#aigen/i, /#aigenerated/i, 
@@ -1637,14 +1637,14 @@ const keywordsToHide = [
 
 
 	/\bCharlotte\b/i, /\bGina\b/i, /\bGin4\b/i, /\bHer\b/i, /\bShe\b/i, /\bHer's\b/i, /\bShe's\b/i, /\bHers\b/i, /\bShes\b/i, /\bAss\b/i, /\bAlexa\b/i, /\bTiffy\b/i, /\bAI\b/i,
-	/\bHepe\b/i, /\bIris\b/i, /\bMiia\b/i, /\bMira\b/i, /\bTiia\b/i, /\bKara\b/i, /\bEllu\b/i, /\bEeva\b/i, /\bEevi\b/i, /\bEssi\b/i, /\bKira\b/i, /\bSusu\b/i, /\bLana\b/i, 
+	/\bHepe\b/i, /\bSKADI/i, /\bIris\b/i, /\bMiia\b/i, /\bMira\b/i, /\bTiia\b/i, /\bKara\b/i, /\bEllu\b/i, /\bEeva\b/i, /\bEevi\b/i, /\bEssi\b/i, /\bKira\b/i, /\bSusu\b/i,   
 	/\bNea\b/i, /\bSara\b/i, /\bAnni\b/i, /\bBra\b/i,  /\bNia\b/i, /\bJax\b/i, /\bNikki\b/i,  /\bElla\b/i, /\bElli\b/i, /\bRosa\b/i, /\bMari\b/i, /\bmotion\b/i, /\bDoll\b/i, 
 	/\bOona\b/i, /\bIra\b/i, /\bIrppa\b/i, /\bG1na\b/i, /\bNeea\b/i, /\bG!na\b/i, /\bGigi\b/i, /\bDolin\b/i, /\bSarah\b/i, /\bG1n4\b/i, /\bEmmi\b/i, /\bAI-generated\b/i, 
 	/\bKati\b/i, /\bKiia\b/i, /\bIda\b/i, /\bIida\b/i, /\bAI art\b/i, /\bVera\b/i, /\bLexi\b/i, /\bBy AI\b/i, /\bAI edited\b/i, /\bAI edit\b/i, /\bModel\b/i, /\bSexy\b/i, 
 	/\bSex\b/i, /\bAlexis\b/i, /\bHomo\b/i, /\bGay\b/i, /\bDeep\b/i, /\bFake\b/i, /\bBrie\b/i, /\bGirls\b/i, /\bGirly\b/i, /\bGirlie\b/i, /\bGirl's\b/i, /\bTorres\b/i, 
 	/\bEve WWE\b/i, /\bManna\b/i, /\bNanna\b/i, /\bAava\b/i, /\bAva\b/i, /\bRaine\b/i, /\bGrok\b/i, /\bJensku\b/i, /\bSanna\b/i, /\bHanna\b/i, /\bHenna\b/i, /\bNiina\b/i, 
 	/\bSandra\b/i, /\bMilla\b/i, /\bMirka\b/i, /\bZoey\b/i, /\bViola\b/i, /\bMinka\b/i, /\bRoosa\b/i, /\bPeppi\b/i, /\bEveliina\b/i, /\bJimi\b/i, /\bJulle\b/i, /\bNox\b/i, 
-	/\bMenni\b/i, /\bGlna\b/i, /\bvsco\b/i, /\bElon\b/i, /\bMusk\b/i,  /\bAltman\b/i, /\bTara\b/i, /\bKairi\b/i, /\bIzzi\b/i,
+	/\bLana\b/i, /\bMenni\b/i, /\bGlna\b/i, /\bvsco\b/i, /\bElon\b/i, /\bMusk\b/i,  /\bAltman\b/i, /\bTara\b/i, /\bKairi\b/i, /\bIzzi\b/i,
 
 
 	// Boundaried Regex Hashtags

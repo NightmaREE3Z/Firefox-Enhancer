@@ -351,9 +351,22 @@
                 if (typeof mainFilteringThrottled === 'function') mainFilteringThrottled();
             } catch (e) {}
         }
+        braveFoxPublishArchiveAccountScope();
         return braveFoxIsTapioAccount ? 'tapio' : 'restricted';
     }
 
+    // Archive reads only a recent, affirmative Google-account scope decision.
+    // No account addresses are stored here; unknown/ambiguous state stays restricted.
+    function braveFoxPublishArchiveAccountScope() {
+        try {
+            const storage = globalThis.browser?.storage?.local || globalThis.chrome?.storage?.local;
+            if (!storage?.set) return;
+            void storage.set({ bravefox_google_archive_scope_v1: {
+                scope: braveFoxIsTapioAccount ? 'tapio' : 'restricted',
+                checkedAt: Date.now()
+            } });
+        } catch (e) {}
+    }
     function braveFoxRefreshGoogleAccountScopeNow() {
         const emails = braveFoxExtractGoogleAccountEmails();
         return braveFoxApplyDetectedAccountScope(emails);

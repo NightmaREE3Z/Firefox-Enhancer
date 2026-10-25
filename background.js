@@ -294,7 +294,17 @@ const blockedSites = [
    "tiktok.com/search?q=alexa",
    "tiktok.com/search?q=blis",
    "tiktok.com/@katarii",
-   "instagram.com/katarii"
+   "instagram.com/katarii",
+   "xvideos.com",
+   "redtube.com",
+   "alastonsuomi.com",
+   "bunkr.cr",
+   "balbums.st",
+   "thumbzilla.com",
+   "youporn.com",
+   "pornhub.com",
+   "nudography.com",
+   "redgifs.com"
 ];
 
 const WRESTLING_CACHE_TIME_KEY = "wrestling_women_urls_time";
@@ -2605,5 +2615,42 @@ main().catch(error => {
       return true;
     }
     return operation();
+  });
+})();
+
+// === Archive -> Google rule source bridge (Firefox / Manifest V2) ===
+// Return the exact installed google.js source to Archive/XCancel only; no code eval.
+(() => {
+  'use strict';
+  const MESSAGE_TYPE = 'BRAVEFOX_ARCHIVE_GET_GOOGLE_POLICY_V1';
+  const SOURCE_PATH = 'scripts/google.js';
+  const ALLOWED_REQUEST_HOSTS = new Set([
+    'web.archive.org', 'wayback.archive.org', 'archive.org',
+    'www.archive.org', 'xcancel.com', 'www.xcancel.com'
+  ]);
+  let sourcePromise = null;
+
+  function readBundledGoogleSource() {
+    if (!sourcePromise) {
+      sourcePromise = fetch(browser.runtime.getURL(SOURCE_PATH))
+        .then(response => {
+          if (!response.ok) throw new Error(`Could not read ${SOURCE_PATH} (HTTP ${response.status})`);
+          return response.text();
+        })
+        .catch(error => { sourcePromise = null; throw error; });
+    }
+    return sourcePromise;
+  }
+
+  browser.runtime.onMessage.addListener((message, sender) => {
+    if (!message || message.type !== MESSAGE_TYPE) return undefined;
+    let host = '';
+    try { host = new URL(sender?.url || sender?.tab?.url || '').hostname.toLowerCase(); } catch (e) {}
+    if (!ALLOWED_REQUEST_HOSTS.has(host)) {
+      return Promise.resolve({ ok: false, error: 'Archive policy request from unsupported origin' });
+    }
+    return readBundledGoogleSource()
+      .then(source => ({ ok: true, source }))
+      .catch(error => ({ ok: false, error: String(error?.message || error) }));
   });
 })();
