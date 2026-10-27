@@ -289,6 +289,7 @@ const blockedSites = [
    "thorium-browser.uptodown.com",
    "thorium-browser.en.uptodown.com",
    "uptodown.com/windows/square-1-web-browser",
+   "adblock-for-y.com",
    "square-1-web-browser.uptodown.com",
    "square-1-web-browser.en.uptodown.com",
    "blocked.html?type=term&trigger=user%2F3ws1lu2bwli971gvhv28yemrm&source=https%3A%2F%2Fopen.spotify.com%2Fuser%2F3ws1lu2bwli971gvhv28yemrm&attempted=",
