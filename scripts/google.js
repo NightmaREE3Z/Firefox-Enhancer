@@ -1,7 +1,58 @@
 (function () {
     'use strict';
 
-    // google.js of BraveFox Enhancer v29.5.5
+    // google.js of BraveFox Enhancer v29.6.4
+
+    // === CHROME WEB STORE: OWN RULES (independent of Google Search) ============
+    // THIS is the only place to edit Web Store-specific ID and search-term bans.
+    // BackgroundChrome/BackgroundFF load just this section from scripts/google.js:
+    // Google Search nuclearRegex, resultHideTerms and redirectHideLite are NOT used.
+    // Add regex LITERALS, not ordinary words/strings. Multiple comma-separated
+    // regex literals may share a line. No /g or /y flags (matching must be stateless).
+    // Searches are matched against decoded /search/... text ONLY.
+    const braveFoxWebStoreOnlyRules = (() => {
+        // BRAVEFOX_WEBSTORE_RULES_BEGIN
+        const webStoreBlockedExtensionIds = [
+		'hehijbfgiekmjfkfjpbkbammjbdenadd',
+		'moffahdcgnjnglbepimcggkjacdmpojc',
+		'dkhhkjpckbmkfdicijemmdaieaagkcco',
+		'looohpideggedchhpphemdmppnmdkgfd',
+		'eainiiiddlnijgnbngaoflannicnhaoj',
+		'jlhpdjlheiegpaipcgkbampjpcdebfeo',
+		'cbjepagibeiigblminajoejhcbifmpag',
+		'ppfgedmljembchpojncdbkiflelbiofj',
+		'njbjhijidkjaiakmnbdjmolgffoankbc',
+		'aajbiffdnglkofijhbnhklmhgllaefnp',
+		'andhbbnohkibikfppaihhoehnepflmne',
+        ];
+
+
+        // === WEB STORE SEARCH TERMS ============================================
+        // Web Store-only terms. Regular and boundary-aware expressions go into
+        // this SAME array, separated by comments (not separate variables).
+        // Write multiple comma-separated /pattern/i expressions per line if desired.
+        // These do not affect Google Search's existing filters, and the Google
+        // Search filters do not feed into this Web Store search rule list.
+        const webStoreSearchRegexes = [
+	    // Regular Web Store search regexes	
+		/brows/i, /tab-/i, /-tab/i, /firefox/i, /waterfox/i, /brave/i, /vivaldi/i, /edge/i,   
+		/msedge/i, /opera/i, /IE Tab/i, /IEbridge/i, /IEability/i, /IE View/i, /mozilla/i, 
+		/agent/i, /udif/i, /epnud/i, /ep nud/i, /ndres/i, /nude/i, /nudi/i, /open in ie/i, 
+
+
+		// Boundaried Web Store search regexes
+		/\bAI\b/i, /\bIE\b/i, /\bTab\b/i, /\bGX\b/i,
+
+        ];
+
+        // BRAVEFOX_WEBSTORE_RULES_END
+        return {
+            extensionIds: new Set(webStoreBlockedExtensionIds),
+            searchRegexes: webStoreSearchRegexes
+        };
+    })();
+    // === END CHROME WEB STORE OWN RULES ========================================
+
 
     function isGoogleMapsOrEarthUrl(value = window.location.href) {
         try {

@@ -107,6 +107,42 @@
   ];
 
   const MEMORY_ENABLE_LABELS = new Set(['ota muisti käyttöön', 'enable memory']);
+  const MEMORY_SWITCH_ARIA_LABELS = new Set([
+    'ota chatgpt:n muisti käyttöön',
+    'enable chatgpt memory',
+    'enable memory',
+    'ota muisti käyttöön'
+  ]);
+  // Firefox Android still serves the original #settings/Personalization modal.
+  // Its switch buttons can be unlabelled, with the heading in a sibling element.
+  const LEGACY_MEMORY_ROW_LABELS = new Set([
+    'ota muisti käyttöön', 'enable memory', 'muisti', 'memory',
+    'viittaa tallennettuihin muistoihin', 'reference saved memories'
+  ]);
+  const VOICE_ROW_LABELS = new Set(['chatgpt voice']);
+  const SETTINGS_ROW_SELECTOR = [
+    'div[class~="@container/settings-row"]',
+    'div.border-token-border-light.flex.min-h-15.items-center.border-b',
+    'div.flex.justify-between.gap-2',
+    'div.flex.items-center.justify-between',
+    '[data-testid="settings-row"]'
+  ].join(', ');
+  const VOICE_DISABLED_ATTR = 'data-bravefox-voice-disabled';
+  const CODEX_MODE_BUTTON_SELECTOR = [
+    'button[aria-haspopup="menu"][aria-label^="Vaihda tilaa, nykyinen tila:"]',
+    'button[aria-haspopup="menu"][aria-label^="Switch mode, current mode:"]',
+    'button[aria-haspopup="menu"][aria-label^="Switch mode, current mode "]'
+  ].join(', ');
+  const CODEX_UI_HIDDEN_ATTR = 'data-bravefox-codex-hidden';
+  const MEMORY_FORCED_ON_ATTR = 'data-bravefox-memory-forced-on';
+  const MEMORY_NATIVE_ENABLE_ATTEMPTS = new WeakMap();
+  const MEMORY_NATIVE_ENABLE_IN_PROGRESS = new WeakSet();
+  const MEMORY_NATIVE_ENABLE_MAX_ATTEMPTS = 3;
+  const MEMORY_NATIVE_ENABLE_RETRY_MS = 1400;
+  // Do not hammer ChatGPT if its own settings operation is rejected. A new
+  // ON -> OFF transition is handled immediately; persistent failures back off.
+  const MEMORY_NATIVE_ENABLE_COOLDOWN_MS = 30000;
+  const MEMORY_NATIVE_ENABLE_MAX_COOLDOWN_MS = 240000;
   const MEMORY_SUMMARY_LABELS = ['muistiyhteenveto', 'memory summary', 'saved memories', 'muisti', 'memory'];
   const MANAGE_LABELS = new Set(['hallitse', 'hallinnoi', 'manage']);
   const PERSONALIZATION_MENU_LABELS = new Set([
@@ -1559,6 +1595,7 @@
   if (IS_FIREFOX_ANDROID) document.documentElement.classList.add(CHATGPT_BANNER_PREFS_LOADING_CLASS);
 
   injectStyles();
+  enforceCodexAndVoicePolicy(document);
   // Warm ChatGPT's bearer token immediately in the background. Full conversation
   // history lives behind /backend-api/conversation/{id}; having the token ready
   // keeps archive/snapshot sync API-first without delaying the DOM-fast metadata path.
@@ -1833,20 +1870,85 @@
         pointer-events: none !important;
       }
 
-      /* Hide the native "Enable memory" setting row at paint time. Support both
-       * the legacy settings shell and ChatGPT's newer full-page settings-row component. */
-      html.${PERSONALIZATION_CLASS}
-      div.border-token-border-light.flex.min-h-15.items-center.border-b:has(button[role="switch"]),
-      html.${PERSONALIZATION_CLASS}
-      div[class~="@container/settings-row"]:has(button[role="switch"][aria-label="Ota ChatGPT:n muisti käyttöön"]),
-      html.${PERSONALIZATION_CLASS}
-      div[class~="@container/settings-row"]:has(button[role="switch"][aria-label="Enable ChatGPT memory"]),
-      html.${PERSONALIZATION_CLASS}
-      div[class~="@container/settings-row"]:has(button[role="switch"][aria-label="Enable memory"]) {
+      /* Home takeover promotion supplied with the Codex HTML capture. Suppress
+       * both its artwork and its promotional card, never the entire home pane. */
+      [data-testid="homepage-takeover-background-artwork"],
+      div[class~="group/home-takeover"] {
         display: none !important;
         visibility: hidden !important;
         opacity: 0 !important;
         pointer-events: none !important;
+      }
+
+      /* BraveFox Codex opt-out. Exact destination, aria and popup structure anchors
+       * hide product entry points before paint, without touching conversation text. */
+      :is(nav, aside, header, [role="menu"]) :is(a, button)[href^="/codex"],
+      :is(nav, aside, header, [role="menu"]) :is(a, button)[href*="chatgpt.com/codex"],
+      :is(nav, aside, header, [role="menu"]) :is(a, button)[data-sidebar-destination*="codex" i],
+      :is(nav, aside, header, [role="menu"]) :is(a, button)[aria-label="Codex"],
+      :is(nav, aside, header, [role="menu"]) :is(a, button)[data-testid*="codex" i],
+      [role="tab"][value="codex"],
+      [role="tab"][data-value="codex"],
+      [role="menuitem"]:has(a[href^="/codex"], button[data-sidebar-destination*="codex" i]),
+      [role="menu"][data-radix-menu-content]:has([role="menuitem"] .text-codex-description),
+      html.${PERSONALIZATION_CLASS} div[class~="@container/settings-row"]:has(button[aria-label*="Codex" i]),
+      html.${PERSONALIZATION_CLASS} [role="dialog"] button[aria-label*="Codex" i],
+      html.${PERSONALIZATION_CLASS} div.flex.justify-between.gap-2:has(> button[aria-label*="Codex" i]),
+      [${CODEX_UI_HIDDEN_ATTR}="true"] {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+
+      /* The ChatGPT/Codex switcher stays in its ChatGPT presentation but cannot
+       * be clicked or tabbed into; the dropdown chevron is removed before paint. */
+      ${CODEX_MODE_BUTTON_SELECTOR} {
+        pointer-events: none !important;
+        cursor: default !important;
+      }
+      /* On the native desktop switcher the dropdown chevron is a direct child
+       * of ButtonInner, while the ChatGPT logo is nested deeper. This structural
+       * fallback also works if Firefox ignores :has(use[href]) on the SVG. */
+      :is(${CODEX_MODE_BUTTON_SELECTOR}) > span[class*="ButtonInner-"] > svg[aria-hidden="true"],
+      :is(${CODEX_MODE_BUTTON_SELECTOR}) svg:has(use[href*="codex-icon-chevron-down"]),
+      :is(${CODEX_MODE_BUTTON_SELECTOR}) svg[data-bravefox-codex-chevron-hidden="true"] {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+      }
+
+      /* Both the native row and the legacy Android dialog keep Voice visible
+       * but disabled. The DOM marker covers old unlabelled switches as well. */
+      html.${PERSONALIZATION_CLASS} [${VOICE_DISABLED_ATTR}="true"] {
+        pointer-events: none !important;
+      }
+      html.${PERSONALIZATION_CLASS}
+      :is(div[class~="@container/settings-row"], div.flex.justify-between.gap-2, div.flex.items-center.justify-between):has(button[role="switch"][aria-label="ChatGPT Voice"]) button[role="switch"],
+      html.${PERSONALIZATION_CLASS} [${VOICE_DISABLED_ATTR}="true"] button[role="switch"],
+      html.${PERSONALIZATION_CLASS} button[role="switch"][aria-label="ChatGPT Voice"],
+      html.${PERSONALIZATION_CLASS} button[role="switch"][aria-label="ChatGPT Voice"] *,
+      html.${PERSONALIZATION_CLASS} [${VOICE_DISABLED_ATTR}="true"] button[role="switch"] * {
+        pointer-events: none !important;
+        cursor: not-allowed !important;
+      }
+      html.${PERSONALIZATION_CLASS}
+      :is(div[class~="@container/settings-row"], div.flex.justify-between.gap-2, div.flex.items-center.justify-between):has(button[role="switch"][aria-label="ChatGPT Voice"]) button[role="switch"],
+      html.${PERSONALIZATION_CLASS} [${VOICE_DISABLED_ATTR}="true"] button[role="switch"],
+      html.${PERSONALIZATION_CLASS} button[role="switch"][aria-label="ChatGPT Voice"] {
+        opacity: .42 !important;
+        filter: grayscale(1) !important;
+      }
+
+      /* Keep the Memory row and native checked-state styling intact. A disabled-looking
+       * switch must retain ChatGPT's own accent colour (blue or theme equivalent):
+       * do not replace the track colour or manually translate the thumb. Marked
+       * legacy switches get the same muted, non-interactive treatment before paint. */
+      html.${PERSONALIZATION_CLASS}
+      button[role="switch"]:is([aria-label="Ota ChatGPT:n muisti käyttöön"], [aria-label="Enable ChatGPT memory"], [aria-label="Enable memory"], [aria-label="Ota muisti käyttöön"], [${MEMORY_FORCED_ON_ATTR}="true"]) {
+        pointer-events: none !important;
+        cursor: not-allowed !important;
+        opacity: .48 !important;
       }
 
       /* Saved Memories legacy-memory announcement. Hide the WHOLE outer wrapper
@@ -2590,7 +2692,10 @@
       } catch {
         // A malformed hash should not break the extension.
       }
-      if (normalizeText(hash).startsWith('#settings/personalization')) {
+      if (
+        normalizeText(hash).startsWith('#settings/personalization') ||
+        /^#settings\?(?:[^&]+&)*(?:tab|section|page)=personalization(?:&|$)/i.test(hash)
+      ) {
         return { key: 'personalization', path: null, title: PERSONALIZATION_PROMPT, modal: null };
       }
 
@@ -3574,6 +3679,20 @@
 
   function installInteractionGuards() {
     document.addEventListener('click', event => {
+      // A real user must not be able to turn Memory off while BraveFox is on.
+      // Allow only the extension's own one-shot native ON request to reach React.
+      const memoryToggle = getElementFromEvent(event, 'button[role="switch"]');
+      if (
+        isPersonalizationRoute() && memoryToggle &&
+        isMemoryEnableSwitch(memoryToggle, getSettingsSwitchRow(memoryToggle)) &&
+        !MEMORY_NATIVE_ENABLE_IN_PROGRESS.has(memoryToggle)
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        return;
+      }
+
       // Preserve the original trusted click from ChatGPT's portal-mounted
       // attachment menu through to Firefox/Android's native picker.
       if (isFirefoxAndroidNativeAttachmentInteraction(event.target)) return;
@@ -3755,6 +3874,17 @@
     }, true);
 
     document.addEventListener('keydown', event => {
+      if (
+        isPersonalizationRoute() &&
+        (event.key === 'Enter' || event.key === ' ') &&
+        event.target instanceof HTMLButtonElement &&
+        isMemoryEnableSwitch(event.target, getSettingsSwitchRow(event.target))
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        return;
+      }
       if (isFirefoxAndroidNativeAttachmentInteraction(event.target)) return;
       if (event.isTrusted) captureConversationSendIntentFromEvent(event);
 
@@ -5372,9 +5502,35 @@
             collapseAnalysisActivityPanels(mutation.target);
             continue;
           }
+          if (mutation.type === 'attributes' &&
+              (mutation.attributeName === 'aria-checked' || mutation.attributeName === 'disabled')) {
+            if (isPersonalizationRoute() && mutation.target instanceof HTMLButtonElement &&
+                mutation.target.getAttribute('role') === 'switch') {
+              // Reconcile real React state changes and restore the DOM lock if
+              // a different script removes the native disabled attribute.
+              enforceMemoryEnabledUi(mutation.target);
+            }
+            continue;
+          }
 
           if (mutation.type === 'characterData') {
             const parent = mutation.target?.parentElement;
+            if (parent instanceof Element && normalizeText(parent.textContent) === 'codex') {
+              const codexItem = parent.closest('[role="menuitem"], [role="tab"], a, button');
+              if (codexItem) enforceCodexAndVoicePolicy(codexItem);
+            }
+            // Legacy Android settings rows sometimes mount the switch first and
+            // write the sibling heading in a later React commit.
+            if (isPersonalizationRoute() && parent instanceof Element &&
+                (normalizeText(parent.textContent) === 'codex' ||
+                 VOICE_ROW_LABELS.has(normalizeText(parent.textContent)) ||
+                 LEGACY_MEMORY_ROW_LABELS.has(normalizeText(parent.textContent)))) {
+              const settingsRow = parent.closest(SETTINGS_ROW_SELECTOR) || parent.closest('[role="dialog"]');
+              if (settingsRow) {
+                enforceCodexAndVoicePolicy(settingsRow);
+                enforceMemoryEnabledUi(settingsRow);
+              }
+            }
             // React sometimes fills an announcement title/body after mounting
             // the shell. This also covers old Firefox Android banner wrappers.
             if (CHATGPT_PROMOTIONAL_BANNER_SUPPRESSION_ENABLED && parent instanceof Element &&
@@ -5421,6 +5577,25 @@
 
             // This existing observer runs before paint. It is the only live
             // policy hook required; do not add a page-wide timer or observer.
+            const legacySettingsDialog = isPersonalizationRoute() &&
+              (node.matches('[role="dialog"]') ? node : node.closest('[role="dialog"]'));
+            const legacySettingsSignal = legacySettingsDialog && (
+              node.matches('button[role="switch"], button[aria-label*="Codex" i]') ||
+              node.querySelector('button[role="switch"], button[aria-label*="Codex" i]') ||
+              normalizeText(node.textContent) === 'codex' ||
+              VOICE_ROW_LABELS.has(normalizeText(node.textContent)) ||
+              LEGACY_MEMORY_ROW_LABELS.has(normalizeText(node.textContent))
+            );
+            const uiPolicyRoot = node.closest(
+              `[role="menuitem"], [role="menu"], [role="tab"], ${SETTINGS_ROW_SELECTOR}`
+            ) || (legacySettingsSignal ? legacySettingsDialog : null) || node;
+            if (
+              uiPolicyRoot.matches(`button[aria-haspopup="menu"], button[role="switch"], [role="menuitem"], [role="menu"], [role="tab"], ${SETTINGS_ROW_SELECTOR}`) ||
+              uiPolicyRoot.querySelector(`button[aria-haspopup="menu"], button[role="switch"], [role="menuitem"], [role="tab"], ${SETTINGS_ROW_SELECTOR}`)
+            ) {
+              enforceCodexAndVoicePolicy(uiPolicyRoot);
+              if (isPersonalizationRoute()) enforceMemoryEnabledUi(uiPolicyRoot);
+            }
             // The old Android announcement layout has no "banner" aria-label.
             if (
               CHATGPT_PROMOTIONAL_BANNER_SUPPRESSION_ENABLED && (
@@ -5576,7 +5751,7 @@
         subtree: true,
         characterData: true,
         attributes: true,
-        attributeFilter: ['aria-expanded']
+        attributeFilter: ['aria-expanded', 'aria-checked', 'disabled']
       });
     };
 
@@ -5758,10 +5933,9 @@
   function hideSensitiveMemoryControls(scope = document) {
     if (!isPersonalizationRoute()) return;
 
-    // Base Personalization page: only hide the exact memory-enable row.
-    // Modal-only cleanup stays out of the base page so generated-class changes cannot
-    // accidentally hide the full settings content area.
-    hideMemoryEnableRows(scope);
+    // Keep Enable memory visible with its native ON colour, but muted and locked.
+    // If React exposes an OFF state, request ON through the real native handler.
+    enforceMemoryEnabledUi(scope);
 
     if (isPersonalizationMemoryModalUrl()) {
       hideSavedMemoryOverviewControls(scope);
@@ -5770,34 +5944,153 @@
     }
   }
 
-  function hideMemoryEnableRows(scope = document) {
-    // Legacy settings shell: keep its exact old row selector.
-    const legacyRowSelector =
-      'div.border-token-border-light.flex.min-h-15.items-center.border-b:has(button[role="switch"])';
+  function getSettingsSwitchRow(toggle) {
+    if (!(toggle instanceof HTMLButtonElement)) return null;
+    const nativeRow = toggle.closest(
+      'div[class~="@container/settings-row"], div.border-token-border-light.flex.min-h-15.items-center.border-b'
+    );
+    if (nativeRow) return nativeRow;
 
-    forEachMatch(scope, legacyRowSelector, row => {
-      const context = normalizeText(row.textContent);
-      if (!includesAny(context, MEMORY_ENABLE_LABELS)) return;
-      hideElement(row);
-    });
+    // Old Android variants sometimes omit every stable row class. Stay inside
+    // the settings dialog and use the smallest container with the switch and
+    // a sibling label, never the whole dialog or conversation page.
+    let candidate = toggle.parentElement;
+    for (let depth = 0; candidate instanceof Element && depth < 7; depth += 1) {
+      if (candidate.matches('[role="dialog"], main, [role="main"]')) break;
+      if (
+        candidate.querySelectorAll('button[role="switch"]').length === 1 &&
+        (settingRowHasExactLabel(candidate, LEGACY_MEMORY_ROW_LABELS) ||
+         settingRowHasExactLabel(candidate, VOICE_ROW_LABELS))
+      ) return candidate;
+      candidate = candidate.parentElement;
+    }
+    return null;
+  }
 
-    // New full-page Personalization shell: use ONLY the exact settings-row component
-    // observed in the live DOM. Never walk upward from the switch; in the 2026 shell
-    // that can reach the entire Personalization content pane.
-    const newRowSelector = 'div[class~="@container/settings-row"]';
-    forEachMatch(scope, newRowSelector, row => {
-      const toggle = row.querySelector('button[role="switch"]');
-      if (!toggle) return;
+  function settingRowHasExactLabel(row, labels) {
+    if (!(row instanceof Element)) return false;
+    return Array.from(row.querySelectorAll('label, span, div, p')).some(leaf =>
+      leaf.children.length === 0 && labels.has(normalizeText(leaf.textContent))
+    );
+  }
 
-      const aria = normalizeText(toggle.getAttribute('aria-label'));
-      const context = normalizeText(row.textContent);
-      const matchesMemoryRow =
-        aria === 'ota chatgpt:n muisti käyttöön' ||
-        aria === 'enable chatgpt memory' ||
-        aria === 'enable memory' ||
-        includesAny(context, MEMORY_ENABLE_LABELS);
+  function isMemoryEnableSwitch(toggle, row) {
+    if (!(toggle instanceof HTMLButtonElement) || toggle.getAttribute('role') !== 'switch') return false;
+    if (MEMORY_SWITCH_ARIA_LABELS.has(normalizeText(toggle.getAttribute('aria-label')))) return true;
+    return row instanceof Element && (
+      settingRowHasExactLabel(row, LEGACY_MEMORY_ROW_LABELS) ||
+      includesAny(normalizeText(row.textContent), MEMORY_ENABLE_LABELS)
+    );
+  }
 
-      if (matchesMemoryRow) hideElement(row);
+  function getNativeMemoryEnableState(toggle) {
+    let state = MEMORY_NATIVE_ENABLE_ATTEMPTS.get(toggle);
+    if (!state) {
+      state = { count: 0, retry: 0, wasOn: false, failureCycles: 0 };
+      MEMORY_NATIVE_ENABLE_ATTEMPTS.set(toggle, state);
+    }
+    return state;
+  }
+
+  function clearNativeMemoryEnableRetry(state) {
+    if (!state.retry) return;
+    window.clearTimeout(state.retry);
+    state.retry = 0;
+  }
+
+  function scheduleNativeMemoryEnableRetry(toggle, state, delay) {
+    clearNativeMemoryEnableRetry(state);
+    state.retry = window.setTimeout(() => {
+      state.retry = 0;
+      if (toggle.isConnected && isPersonalizationRoute()) enforceMemoryEnabledUi(toggle);
+    }, delay);
+  }
+
+  function requestNativeMemoryEnable(toggle, state = getNativeMemoryEnableState(toggle)) {
+    if (!(toggle instanceof HTMLButtonElement) || !toggle.isConnected || !isPersonalizationRoute()) return;
+    if (toggle.getAttribute('aria-checked') === 'true' || state.retry ||
+        MEMORY_NATIVE_ENABLE_IN_PROGRESS.has(toggle)) return;
+
+    if (state.count >= MEMORY_NATIVE_ENABLE_MAX_ATTEMPTS) {
+      // Previously, exhausting three attempts permanently exempted this DOM
+      // node from enforcement. Back off instead, without continuous requests.
+      state.failureCycles = Math.min(state.failureCycles + 1, 4);
+      state.count = 0;
+      const cooldown = Math.min(
+        MEMORY_NATIVE_ENABLE_MAX_COOLDOWN_MS,
+        MEMORY_NATIVE_ENABLE_COOLDOWN_MS * (2 ** (state.failureCycles - 1))
+      );
+      scheduleNativeMemoryEnableRetry(toggle, state, cooldown);
+      return;
+    }
+
+    state.count += 1;
+    // Ask ChatGPT's real native control to enable Memory. Never manufacture
+    // the checked state or claim that the account-side preference changed.
+    if (toggle.disabled) toggle.disabled = false;
+    if (toggle.hasAttribute('aria-disabled')) toggle.removeAttribute('aria-disabled');
+    MEMORY_NATIVE_ENABLE_IN_PROGRESS.add(toggle);
+    try {
+      toggle.click();
+    } finally {
+      MEMORY_NATIVE_ENABLE_IN_PROGRESS.delete(toggle);
+      if (toggle.getAttribute('aria-disabled') !== 'true') toggle.setAttribute('aria-disabled', 'true');
+      if (toggle.tabIndex !== -1) toggle.tabIndex = -1;
+    }
+
+    // Leave time for React/server state to settle before attempting again.
+    // Both a rejected operation and a slow response are handled with bounds.
+    if (toggle.getAttribute('aria-checked') === 'true') {
+      enforceMemoryEnabledUi(toggle);
+    } else {
+      scheduleNativeMemoryEnableRetry(toggle, state, MEMORY_NATIVE_ENABLE_RETRY_MS);
+    }
+  }
+
+  function enforceMemoryEnabledUi(scope = document) {
+    if (!isPersonalizationRoute()) return;
+
+    forEachMatch(scope, 'button[role="switch"]', toggle => {
+      const row = getSettingsSwitchRow(toggle);
+      if (!isMemoryEnableSwitch(toggle, row)) return;
+
+      row?.removeAttribute('hidden');
+      row?.classList.remove(HIDDEN_CLASS);
+      row?.style.removeProperty('display');
+      row?.style.removeProperty('visibility');
+      row?.style.removeProperty('opacity');
+      row?.style.removeProperty('pointer-events');
+
+      // Lock the real control without inventing an ON state. Native disabled
+      // keeps mouse, keyboard and accessibility activation unavailable.
+      if (toggle.getAttribute(MEMORY_FORCED_ON_ATTR) !== 'true')
+        toggle.setAttribute(MEMORY_FORCED_ON_ATTR, 'true');
+      if (toggle.getAttribute('aria-disabled') !== 'true')
+        toggle.setAttribute('aria-disabled', 'true');
+      if (toggle.tabIndex !== -1) toggle.tabIndex = -1;
+
+      const state = getNativeMemoryEnableState(toggle);
+      if (toggle.getAttribute('aria-checked') === 'true') {
+        state.wasOn = true;
+        state.count = 0;
+        state.failureCycles = 0;
+        clearNativeMemoryEnableRetry(state);
+        if (!toggle.disabled) toggle.disabled = true;
+      } else {
+        // A direct page-handler call can turn React's state OFF without using
+        // the DOM click event. Detect the subsequent native checked-state
+        // transition and reassert ON even on an already-seen switch instance.
+        if (state.wasOn) {
+          state.wasOn = false;
+          state.count = 0;
+          state.failureCycles = 0;
+          clearNativeMemoryEnableRetry(state);
+        }
+        // HTML-disabled buttons cannot dispatch our own native ON request.
+        // CSS and capture guards still prevent a user from activating them.
+        if (toggle.disabled) toggle.disabled = false;
+        if (!state.retry) requestNativeMemoryEnable(toggle, state);
+      }
     });
   }
 
@@ -7891,9 +8184,101 @@
     return true;
   }
 
+  function enforceCodexAndVoicePolicy(scope = document) {
+    forEachMatch(scope, CODEX_MODE_BUTTON_SELECTOR, button => {
+      if (!(button instanceof HTMLButtonElement)) return;
+      button.disabled = true;
+      button.setAttribute('aria-disabled', 'true');
+      button.tabIndex = -1;
+      // A few desktop builds use SVG sprite icons whose href is not matched by
+      // a CSS :has() selector. Mark the actual chevron while preserving the logo.
+      for (const svg of button.querySelectorAll('svg')) {
+        const icon = svg.querySelector('use');
+        const href = icon?.getAttribute('href') || icon?.getAttribute('xlink:href') || '';
+        if (!href.includes('codex-icon-chevron-down')) continue;
+        svg.setAttribute('data-bravefox-codex-chevron-hidden', 'true');
+        svg.style.setProperty('display', 'none', 'important');
+      }
+    });
+
+    // Preserve the ChatGPT option (and conversation text). Only the exact
+    // Codex menuitem/tab and Codex custom-instructions settings row are removed.
+    forEachMatch(scope, '[role="menuitem"], [role="tab"]', item => {
+      const labels = item.querySelectorAll('span.font-openai-sans, [data-menu-row-content] span.font-openai-sans');
+      const codexItem = Array.from(labels).some(label => normalizeText(label.textContent) === 'codex');
+      if (codexItem || normalizeText(item.textContent) === 'codex') {
+        item.setAttribute(CODEX_UI_HIDDEN_ATTR, 'true');
+        hardHideEscapeHatch(item);
+      }
+    });
+
+    // Some sidebar generations expose a text-only product destination.
+    forEachMatch(scope, 'nav a, nav button, aside a, aside button, a[data-sidebar-item], button[data-sidebar-destination]', item => {
+      if (normalizeText(item.textContent) === 'codex') {
+        item.setAttribute(CODEX_UI_HIDDEN_ATTR, 'true');
+        hardHideEscapeHatch(item);
+      }
+    });
+
+    if (!isPersonalizationRoute()) return;
+    // The legacy modal has neither the new settings-row token nor a labelled
+    // switch. Match its row heading beside the switch, not a whole dialog.
+    forEachMatch(scope, 'button[role="switch"]', toggle => {
+      const row = getSettingsSwitchRow(toggle);
+      if (
+        normalizeText(toggle.getAttribute('aria-label')) === 'chatgpt voice' ||
+        settingRowHasExactLabel(row, VOICE_ROW_LABELS)
+      ) {
+        row?.setAttribute(VOICE_DISABLED_ATTR, 'true');
+        toggle.disabled = true;
+        toggle.setAttribute('aria-disabled', 'true');
+        toggle.tabIndex = -1;
+      }
+    });
+
+    const codexSettingsLabels = new Set(['codex']);
+    forEachMatch(scope, SETTINGS_ROW_SELECTOR, row => {
+      if (
+        row.querySelector('button[aria-label*="Codex" i]') ||
+        (row.querySelectorAll('button').length <= 2 &&
+         settingRowHasExactLabel(row, codexSettingsLabels))
+      ) {
+        row.setAttribute(CODEX_UI_HIDDEN_ATTR, 'true');
+        hardHideEscapeHatch(row);
+      }
+    });
+
+    // The oldest layout can omit the row classes too. Find a Codex heading
+    // with an adjacent settings action and stop at the dialog boundary.
+    forEachMatch(scope, 'label, span, div, p', leaf => {
+      if (leaf.children.length || normalizeText(leaf.textContent) !== 'codex') return;
+      let row = leaf.parentElement;
+      for (let depth = 0; row instanceof Element && depth < 6; depth += 1) {
+        if (row.matches('[role="dialog"], main, [role="main"]')) break;
+        if (row.querySelectorAll('button').length >= 1 && row.querySelectorAll('button').length <= 2 &&
+            row !== leaf.parentElement && !row.closest('[role="menuitem"], [role="tab"]')) {
+          row.setAttribute(CODEX_UI_HIDDEN_ATTR, 'true');
+          hardHideEscapeHatch(row);
+          break;
+        }
+        row = row.parentElement;
+      }
+    });
+
+    // On older settings shells the Codex instructions tab can be a plain
+    // button/link without a role=tab attribute. Restrict this to settings.
+    forEachMatch(scope, 'button, a, [role="button"]', item => {
+      if (normalizeText(item.textContent) !== 'codex') return;
+      if (!item.closest('[role="dialog"], [role="tablist"], [data-testid*="settings" i]')) return;
+      item.setAttribute(CODEX_UI_HIDDEN_ATTR, 'true');
+      hardHideEscapeHatch(item);
+    });
+  }
+
   function applyAccountAndSettingsCleanup(scope = document) {
     if (!scope || typeof scope.querySelectorAll !== 'function') return;
 
+    enforceCodexAndVoicePolicy(scope);
     hideDeleteAccountSettingsUi(scope);
     customizeBillingSubscriptionRow(scope);
 

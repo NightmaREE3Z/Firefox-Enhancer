@@ -10,6 +10,149 @@ import { findBlockedHost, findHardBlockedHost, getHostsStatus as getFocusMasterH
 import { getTrustedSiteDescriptors } from "./blocker/trusted-sites.js";
 import { hasScopedLinkRulesForUrl, matchLink, matchTld } from "./blocker/matcher.js";
 
+// === BraveFox Web Store-only rule bridge =====================================
+// Reads only the dedicated editable ID/regex arrays in scripts/google.js.
+// This does NOT import Google Search's nuclear, soft-result or redirect lists.
+// Extension content scripts cannot reliably execute on Chrome Web Store itself.
+const BRAVEFOX_WEBSTORE_SOURCE_PATH = 'scripts/google.js';
+let braveFoxWebStoreRules = {
+    extensionIds: new Set(), searchRegexes: []
+};
+
+function braveFoxParseWebStoreRulesFromGoogle(source) {
+    const start = source.indexOf('// BRAVEFOX_WEBSTORE_RULES_BEGIN');
+    const end = source.indexOf('// BRAVEFOX_WEBSTORE_RULES_END', start + 1);
+    if (start < 0 || end <= start) throw new Error('Web Store rule block is missing in scripts/google.js');
+    const block = source.slice(start, end);
+
+    function readArray(variable) {
+        const match = new RegExp('\\bconst\\s+' + variable + '\\s*=\\s*\\[([\\s\\S]*?)\\];').exec(block);
+        if (!match) throw new Error('Missing Web Store-only array: ' + variable);
+        return match[1].split(/\r?\n/).map(line => line.trim()).filter(line => line && !line.startsWith('//'));
+    }
+
+    const ids = new Set();
+    for (const line of readArray('webStoreBlockedExtensionIds')) {
+        const match = /^['"]([a-p]{32})['"]\s*,?\s*(?:\/\/.*)?$/i.exec(line);
+        if (!match) throw new Error('Invalid Web Store extension ID line: ' + line);
+        ids.add(match[1].toLowerCase());
+    }
+
+    function readRegexes(name) {
+        // Only native regex literals, with optional comma-separated entries on
+        // each line. Comments divide regular/boundary rules for easy editing.
+        // Parse characters rather than eval'ing scripts/google.js in background.
+        const regexes = [];
+        for (const line of readArray(name)) {
+            let pos = 0;
+            while (pos < line.length) {
+                while (pos < line.length && /[\s,]/.test(line[pos])) pos++;
+                if (pos >= line.length || line.startsWith('//', pos)) break;
+                if (line[pos] !== '/') throw new Error('Expected Web Store regex literal: ' + line);
+                const start = ++pos;
+                let escaped = false;
+                let inClass = false;
+                for (; pos < line.length; pos++) {
+                    const c = line[pos];
+                    if (escaped) { escaped = false; continue; }
+                    if (c === '\\') { escaped = true; continue; }
+                    if (c === '[') { inClass = true; continue; }
+                    if (c === ']') { inClass = false; continue; }
+                    if (c === '/' && !inClass) break;
+                }
+                if (pos >= line.length) throw new Error('Unterminated Web Store regex literal: ' + line);
+                const body = line.slice(start, pos++);
+                const flagStart = pos;
+                while (pos < line.length && /[a-z]/i.test(line[pos])) pos++;
+                const flags = line.slice(flagStart, pos);
+                if (/[gy]/i.test(flags)) throw new Error('Stateful Web Store flags not supported: ' + line);
+                regexes.push(new RegExp(body, flags));
+                while (pos < line.length && /\s/.test(line[pos])) pos++;
+                if (pos < line.length && line.startsWith('//', pos)) break;
+                if (pos < line.length && line[pos] !== ',') throw new Error('Missing regex separator: ' + line);
+                if (pos < line.length) pos++;
+            }
+        }
+        return regexes;
+    }
+
+    return {
+        extensionIds: ids,
+        searchRegexes: readRegexes('webStoreSearchRegexes')
+    };
+}
+
+function braveFoxIsChromeWebStoreUrl(inputUrl) {
+    try {
+        const parsed = new URL(String(inputUrl || ''));
+        return (parsed.protocol === 'https:' || parsed.protocol === 'http:') &&
+            parsed.hostname.toLowerCase().replace(/\.$/, '') === 'chromewebstore.google.com';
+    } catch (_) { return false; }
+}
+
+function braveFoxWebStoreDecodeSearch(raw) {
+    let value = String(raw || '').replace(/\+/g, ' ');
+    // Decode once for ordinary percent-encoding, once more for double-encoded URLs.
+    for (let n = 0; n < 2; n++) {
+        try {
+            const decoded = decodeURIComponent(value);
+            if (decoded === value) break;
+            value = decoded;
+        } catch (_) { break; }
+    }
+    return value.slice(0, 4096).trim();
+}
+
+function braveFoxWebStoreBlockedReason(inputUrl, tabTitle = '') {
+    if (!braveFoxIsChromeWebStoreUrl(inputUrl)) return null;
+    try {
+        const parsed = new URL(inputUrl);
+        const path = parsed.pathname.replace(/\/{2,}/g, '/');
+        // IDs must be complete final segments of /detail/slug/ID or /detail/ID.
+        const detail = /^\/detail\/(?:[^/]+\/)*([a-p]{32})\/?$/i.exec(path);
+        if (detail && braveFoxWebStoreRules.extensionIds.has(detail[1].toLowerCase())) {
+            return { source: 'webstore-extension-id', match: detail[1].toLowerCase() };
+        }
+        // Chrome forbids content-script inspection of its Web Store DOM. The
+        // background Tabs API exposes the page's document.title instead, which
+        // normally mirrors the listing <h1>. Check that only on detail pages,
+        // using the same dedicated Web Store regexes as submitted searches.
+        if (detail && typeof tabTitle === 'string' && tabTitle.trim()) {
+            const title = tabTitle.replace(/\s+/g, ' ').trim().slice(0, 4096);
+            for (const rx of braveFoxWebStoreRules.searchRegexes) {
+                rx.lastIndex = 0;
+                if (rx.test(title)) return { source: 'webstore-detail-title-regex', match: rx.source };
+            }
+        }
+        if (!/^\/search(?:\/|$)/i.test(path)) return null;
+        const searchPath = path.replace(/^\/search\/?/i, '');
+        const query = braveFoxWebStoreDecodeSearch(searchPath ||
+            parsed.searchParams.get('q') || parsed.searchParams.get('query') || '');
+        if (!query) return null;
+        for (const rx of braveFoxWebStoreRules.searchRegexes) {
+            rx.lastIndex = 0;
+            if (rx.test(query)) return { source: 'webstore-search-regex', match: rx.source };
+        }
+    } catch (_) {}
+    return null;
+}
+
+const braveFoxWebStorePolicyReady = fetch(browser.runtime.getURL(BRAVEFOX_WEBSTORE_SOURCE_PATH))
+    .then(response => {
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        return response.text();
+    })
+    .then(source => {
+        braveFoxWebStoreRules = braveFoxParseWebStoreRulesFromGoogle(source);
+        return true;
+    })
+    .catch(error => {
+        console.warn('[BraveFox Web Store] Cannot load isolated rules:', error);
+        return false;
+    });
+
+// === END BraveFox Web Store-only rule bridge ==================================
+
 const LOG_PREFIX = "[BraveFox Background]";
 const HOSTS_META_KEY = "bravefoxHostsMetaV2";
 const HOSTS_CHUNK_PREFIX = "bravefoxHostsChunkV2";
@@ -151,6 +294,23 @@ const blockedSites = [
    "blocked.html?type=term&trigger=user%2F3ws1lu2bwli971gvhv28yemrm&source=https%3A%2F%2Fopen.spotify.com%2Fuser%2F3ws1lu2bwli971gvhv28yemrm&attempted=",
    "https://scontent-hel3-1.cdninstagram.com/v/t51.82787-15/625469698_18528894469069282_4159101025682725824_n.jpg?stp=dst-jpg_e35_tt6&_nc_cat=110&ig_cache_key=MTA5OTQzMDg5ODEzOTYxMzg0MA%3D%3D.3-ccb7-5&ccb=7-5&_nc_sid=58cdad&efg=eyJ2ZW5jb2RlX3RhZyI6IkZFRUQueHBpZHMuNDE0LnNkci5yZWd1bGFyX3Bob3RvLkMzIn0%3D&_nc_ohc=x3EmvxyyzQ0Q7kNvwEMliDa&_nc_oc=Adq47sggBK-OipwPSfQYfj4GoWNsWkDhJsyykEFLnooi21eGjYmTgOT5qcB9e2Bns-jYq6ImXYoq2zT6Gy55rrte&_nc_ad=z-m&_nc_cid=0&_nc_zt=23&_nc_ht=scontent-hel3-1.cdninstagram.com&_nc_gid=DJiKr0I4IZBECZYqwSVB-g&_nc_ss=7a22e&oh=00_AQIU1S2NemJ_ccgVGsokuNC56Xo3eRWFA3INpFXkyTusOg&oe=6ABA7AA2",
    "p/9B9pOqs0qQ",
+   "chromewebstore.google.com/search/ie%20tab",
+   "chromewebstore.google.com/search/%20browser",
+   "chromewebstore.google.com/search/browser%20",
+   "chromewebstore.google.com/search/browser",
+   "chromewebstore.google.com/search/Firefox",
+   "chromewebstore.google.com/search/tiktok",
+   "chromewebstore.google.com/search/tik%20tok",
+   "chromewebstore.google.com/detail/hehijbfgiekmjfkfjpbkbammjbdenadd",
+   "chromewebstore.google.com/detail/moffahdcgnjnglbepimcggkjacdmpojc",
+   "chromewebstore.google.com/detail/dkhhkjpckbmkfdicijemmdaieaagkcco",
+   "chromewebstore.google.com/detail/looohpideggedchhpphemdmppnmdkgfd",
+   "chromewebstore.google.com/detail/eainiiiddlnijgnbngaoflannicnhaoj",
+   "chromewebstore.google.com/detail/jlhpdjlheiegpaipcgkbampjpcdebfeo",
+   "chromewebstore.google.com/detail/cbjepagibeiigblminajoejhcbifmpag",
+   "chromewebstore.google.com/detail/ppfgedmljembchpojncdbkiflelbiofj",
+   "chromewebstore.google.com/detail/njbjhijidkjaiakmnbdjmolgffoankbc",
+   "chromewebstore.google.com/detail/aajbiffdnglkofijhbnhklmhgllaefnp",
    "uptodown.com/windows/netscape-navigator",
    "netscape-navigator.uptodown.com",
    "netscape-navigator.en.uptodown.com",
@@ -1068,7 +1228,65 @@ async function getFocusMasterTimeRuleRequestDecision(details) {
   return { redirectUrl: focusMasterTimeBlockedPage(reason, url) };
 }
 
+const braveFoxWebStoreClosingTabs = new Set();
+function braveFoxCloseWebStoreTab(tabId, url, title = '') {
+  if (!Number.isInteger(tabId) || tabId < 0 || braveFoxWebStoreClosingTabs.has(tabId) ||
+      !braveFoxWebStoreBlockedReason(url, title)) return false;
+  braveFoxWebStoreClosingTabs.add(tabId);
+  void browser.tabs.remove(tabId).catch(error => {
+    braveFoxWebStoreClosingTabs.delete(tabId);
+    console.warn('[BraveFox Web Store] Tab close failed:', error);
+  });
+  return true;
+}
+
+browser.tabs?.onCreated?.addListener(tab => {
+  braveFoxCloseWebStoreTab(tab?.id, tab?.url || tab?.pendingUrl || '');
+});
+browser.tabs?.onUpdated?.addListener((tabId, changeInfo, tab) => {
+  const url = changeInfo?.url || tab?.url || '';
+  if (braveFoxCloseWebStoreTab(tabId, url)) return;
+  // A Web Store detail title can arrive after the URL or change inside an SPA.
+  // Only trust the title when it changes, or when loading has finished.
+  if ((typeof changeInfo?.title === 'string' || changeInfo?.status === 'complete') &&
+      tab?.status === 'complete' && braveFoxIsChromeWebStoreUrl(url)) {
+    braveFoxCloseWebStoreTab(tabId, url, changeInfo?.title || tab?.title || '');
+  }
+});
+browser.tabs?.onRemoved?.addListener(tabId => braveFoxWebStoreClosingTabs.delete(tabId));
+for (const navigationName of ['onBeforeNavigate', 'onCommitted', 'onHistoryStateUpdated']) {
+  browser.webNavigation?.[navigationName]?.addListener(details => {
+    if (details?.frameId === 0) braveFoxCloseWebStoreTab(details.tabId, details.url);
+  });
+}
+void braveFoxWebStorePolicyReady.then(ok => {
+  if (!ok) return;
+  return browser.tabs.query({}).then(tabs => {
+    for (const tab of tabs) {
+      const url = tab?.url || tab?.pendingUrl || '';
+      braveFoxCloseWebStoreTab(tab?.id, url, tab?.status === 'complete' ? (tab?.title || '') : '');
+    }
+  });
+}).catch(error => console.warn('[BraveFox Web Store] Startup scan failed:', error));
+
+browser.tabs?.onActivated?.addListener(info => {
+  if (!Number.isInteger(info?.tabId)) return;
+  void browser.tabs.get(info.tabId).then(tab => {
+    if (tab?.status === 'complete') {
+      braveFoxCloseWebStoreTab(tab.id, tab.url || '', tab.title || '');
+    }
+  }).catch(() => {});
+});
+
 async function getRequestDecision(details) {
+  // Firefox can cancel a Web Store document request while it is still in flight.
+  if (details?.type === 'main_frame' && braveFoxIsChromeWebStoreUrl(details?.url)) {
+    await braveFoxWebStorePolicyReady;
+    if (braveFoxWebStoreBlockedReason(details.url)) {
+      braveFoxCloseWebStoreTab(details.tabId, details.url);
+      return { cancel: true };
+    }
+  }
   if (isGoogleMapsOrEarthUrl(details?.url)) return { cancel: false };
 
   try {
