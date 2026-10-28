@@ -134,6 +134,39 @@
     'button[aria-haspopup="menu"][aria-label^="Switch mode, current mode "]'
   ].join(', ');
   const CODEX_UI_HIDDEN_ATTR = 'data-bravefox-codex-hidden';
+  // Legacy Android home-mode switch and native-app upsell are UI-only exclusions.
+  // Keep existing Codex controls and normal ChatGPT dialogs untouched.
+  const HOME_MODE_LEGACY_HIDDEN_ATTR = 'data-bravefox-home-mode-hidden';
+  const ANDROID_APP_UPSELL_ROOT_CLASS = 'bravefox-hide-android-app-upsell';
+  const ANDROID_APP_UPSELL_HIDDEN_ATTR = 'data-bravefox-android-app-upsell-hidden';
+  // Firefox Nightly's app-install banner uses a stable beacon identifier even
+  // when its modal/overlay styling classes are regenerated.
+  const ANDROID_APP_UPSELL_BEACON_SELECTOR = '[class~="beacon-modal-auth_app_install_turn_count_banner"]';
+  // This body layout is otherwise generic; only suppress it after verifying
+  // its actual app-install wording rather than hiding every matching flex box.
+  const ANDROID_APP_UPSELL_LEGACY_PANEL_SELECTOR = 'div.flex.flex-col.text-base.leading-normal.tracking-normal.gap-0';
+  const ANDROID_APP_UPSELL_HEADINGS = [
+    'chatgpt toimii paremmin sovelluksessa',
+    'chatgpt works better in the app',
+    'chatgpt is better in the app',
+    'chatgpt works best in the app'
+  ];
+  const ANDROID_APP_UPSELL_DISMISS_TEXT = new Set([
+    'jatka selaimessa', 'jatka verkkoselaimessa', 'jatka verkossa',
+    'pysy selaimessa', 'ei kiitos', 'ei nyt', 'myöhemmin', 'ohita', 'sulje',
+    'continue in browser', 'continue on web', 'stay in browser',
+    'not now', 'maybe later', 'no thanks', 'dismiss', 'close'
+  ]);
+  const ANDROID_APP_UPSELL_DIALOG_SELECTOR = [
+    '[role="dialog"]', '[aria-modal="true"]', 'dialog[open]',
+    '[data-testid*="app-upsell" i]', '[data-testid*="app-install" i]',
+    '[data-testid*="open-in-app" i]', '[data-testid*="download-app" i]',
+    '[data-testid*="app-prompt" i]',
+    '[class*="app-upsell" i]', '[class*="app-prompt" i]',
+    ANDROID_APP_UPSELL_BEACON_SELECTOR,
+    ANDROID_APP_UPSELL_LEGACY_PANEL_SELECTOR
+  ].join(', ');
+  const ANDROID_APP_UPSELL_DISMISS_ATTEMPTS = new WeakSet();
   const MEMORY_FORCED_ON_ATTR = 'data-bravefox-memory-forced-on';
   const MEMORY_NATIVE_ENABLE_ATTEMPTS = new WeakMap();
   const MEMORY_NATIVE_ENABLE_IN_PROGRESS = new WeakSet();
@@ -411,6 +444,24 @@
       replacement: `Pahoittelut! Emme osanneet koodata tätä ominaisuutta oikein. Turvajärjestelmämme syyttää luomaamme kuvaa petoksesta tai huijauksesta. Emme ole varmoja tästä itsekkään.`
     }
   ];
+
+  // === Library item-deletion error toast ========================================
+  // Edit messageText to customize the Finnish "some items could not be deleted"
+  // notification. Set it to null to leave ChatGPT's native wording unchanged.
+  // This changes only the visible toast message, never the deletion or close action.
+  const CHATGPT_DELETE_FAILURE_TOAST_CUSTOMIZATION = {
+    enabled: true,
+    messageText: 'Emme osanneet koodata tätäkään kohtaa oikein, joten jotkut tiedostot jäivät jumiin Altmanin Amicalle.'
+  };
+
+  const CHATGPT_DELETE_FAILURE_TOAST_NATIVE_LABELS = new Set([
+    'joitakin kohteita ei voitu poistaa. yritä uudelleen.',
+    'some items could not be deleted. try again.',
+    'some items couldn’t be deleted. try again.',
+    "some items couldn't be deleted. try again."
+  ]);
+  const CHATGPT_DELETE_FAILURE_TOAST_SELECTOR =
+    'li[data-sonner-toast] [data-title] .whitespace-pre-wrap';
 
   // === Conversation-loading failure panel =======================================
   // Edit these visible labels independently. Set either messageText or retryButtonText
@@ -1593,8 +1644,11 @@
   // from painting once and then vanishing. Only closeable announcement surfaces are
   // guarded; chat turns, the sidebar and attachment controls are left alone.
   if (IS_FIREFOX_ANDROID) document.documentElement.classList.add(CHATGPT_BANNER_PREFS_LOADING_CLASS);
+  if (IS_ANDROID) document.documentElement.classList.add(ANDROID_APP_UPSELL_ROOT_CLASS);
 
   injectStyles();
+  hideLegacyHomeModeSwitch(document);
+  suppressAndroidAppUpsell(document);
   enforceCodexAndVoicePolicy(document);
   // Warm ChatGPT's bearer token immediately in the background. Full conversation
   // history lives behind /backend-api/conversation/{id}; having the token ready
@@ -1737,6 +1791,64 @@
         visibility: hidden !important;
         opacity: 0 !important;
         pointer-events: none !important;
+      }
+
+      /* Chat/Work home-mode switcher. Collapse its dedicated header wrapper at
+       * document_start, before either button or the pill background can paint.
+       * Do not hide the surrounding header or other header actions. */
+      div[class~="@container/home-mode-toggle"],
+      [data-testid="home-mode-toggle"],
+      [data-testid="home-mode-switcher"],
+      [class*="home-mode-toggle"],
+      [role="group"][aria-label="Kirjoitustila"],
+      [role="group"][aria-label="Writing mode"],
+      [role="group"][aria-label="Chat and Work"],
+      header div.inline-grid.grid-cols-2:has(> button[aria-pressed="true"]):has(> button[aria-pressed="false"]),
+      [${HOME_MODE_LEGACY_HIDDEN_ATTR}="true"] {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+
+      /* Android app-install beacon: Firefox Nightly exposes this exact stable
+       * modal type alongside a hashed overlay class and codex-dialog-overlay.
+       * Hide the entire dedicated overlay BEFORE paint, including blur and
+       * pointer interception. Never target codex-dialog-overlay by itself. */
+      html.${ANDROID_APP_UPSELL_ROOT_CLASS} ${ANDROID_APP_UPSELL_BEACON_SELECTOR},
+      html.${ANDROID_APP_UPSELL_ROOT_CLASS}
+      :is([data-radix-portal], [data-slot="dialog-portal"], [role="dialog"], [class*="beaconModal" i]):has(${ANDROID_APP_UPSELL_BEACON_SELECTOR}),
+
+      /* Other Android app prompts can mount in a Radix/dialog portal with
+       * their own blurred backdrop. The observer checks localized text-only
+       * variants before they paint. */
+      html.${ANDROID_APP_UPSELL_ROOT_CLASS} :is(
+        [data-testid*="app-upsell" i],
+        [data-testid*="app-install-modal" i],
+        [data-testid*="open-in-app-modal" i],
+        [data-testid*="app-prompt-modal" i],
+        [aria-label*="toimii paremmin sovelluksessa" i],
+        [aria-label*="works better in the app" i],
+        [${ANDROID_APP_UPSELL_HIDDEN_ATTR}="true"]
+      ),
+      html.${ANDROID_APP_UPSELL_ROOT_CLASS}
+      :is([data-radix-portal], [data-slot="dialog-portal"], [data-slot="sheet-portal"]):has(:is(
+        a[href*="com.openai.chatgpt" i],
+        a[href*="apps.apple.com/app/chatgpt" i],
+        [aria-label*="toimii paremmin sovelluksessa" i],
+        [aria-label*="works better in the app" i]
+      )),
+      html.${ANDROID_APP_UPSELL_ROOT_CLASS}
+      :is([role="dialog"], [aria-modal="true"], dialog[open]):has(:is(
+        a[href*="com.openai.chatgpt" i],
+        a[href*="apps.apple.com/app/chatgpt" i]
+      )) {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
       }
 
       /* ChatGPT home suggested prompts. Hide the complete suggestion wrapper at
@@ -5515,6 +5627,8 @@
 
           if (mutation.type === 'characterData') {
             const parent = mutation.target?.parentElement;
+            if (IS_ANDROID && parent instanceof Element) suppressAndroidAppUpsell(parent);
+            if (parent instanceof Element) hideLegacyHomeModeSwitch(parent);
             if (parent instanceof Element && normalizeText(parent.textContent) === 'codex') {
               const codexItem = parent.closest('[role="menuitem"], [role="tab"], a, button');
               if (codexItem) enforceCodexAndVoicePolicy(codexItem);
@@ -5550,6 +5664,9 @@
             if (parent instanceof Element && parent.closest(CHATGPT_HISTORY_LOAD_ERROR_SELECTOR)) {
               customizeHistoryLoadError(parent);
             }
+            if (parent instanceof Element && parent.closest('li[data-sonner-toast]')) {
+              customizeDeleteFailureToast(parent);
+            }
             if (parent instanceof Element && mayContainConversationMessage(parent)) {
               scheduleLiveConversationMetadataRefresh(parent);
             }
@@ -5567,6 +5684,10 @@
           for (const addedNode of mutation.addedNodes) {
             const node = addedNode instanceof Element ? addedNode : addedNode.parentElement;
             if (!(node instanceof Element)) continue;
+            // Both policies run during the existing MutationObserver microtask,
+            // before the newly mounted modal/backdrop can be painted.
+            if (IS_ANDROID) suppressAndroidAppUpsell(node);
+            hideLegacyHomeModeSwitch(node);
 
             // A native Android attachment popup is ChatGPT-owned. Do not touch
             // its portal DOM or run unrelated popup repair logic against it.
@@ -5615,6 +5736,13 @@
               node.closest(CHATGPT_HISTORY_LOAD_ERROR_SELECTOR) ||
               node.querySelector(CHATGPT_HISTORY_LOAD_ERROR_SELECTOR)
             ) customizeHistoryLoadError(node);
+            // Sonner toasts are portal-mounted. Rewrite this specific error in
+            // the same pre-paint observer pass instead of adding another observer.
+            if (
+              node.matches(CHATGPT_DELETE_FAILURE_TOAST_SELECTOR) ||
+              node.closest('li[data-sonner-toast]') ||
+              node.querySelector('li[data-sonner-toast]')
+            ) customizeDeleteFailureToast(node);
 
             // Library > New is portal-mounted after the pointer event. Curate that freshly
             // inserted popup from this pre-paint observer instead of relying on ChatGPT's
@@ -8182,6 +8310,126 @@
     target.textContent = replacement;
     item.setAttribute('data-bravefox-upgrade-label-customized', 'true');
     return true;
+  }
+
+  function hideLegacyHomeModeSwitch(scope = document) {
+    // Old Android UI buckets may drop @container/home-mode-toggle and the
+    // writing-mode aria-label. Confirm both button texts before marking a group.
+    const candidates = new Set();
+    const selector = [
+      '[role="group"]', '[role="tablist"]',
+      '[data-testid*="home-mode" i]', '[class*="home-mode" i]',
+      'header .inline-grid', 'header .grid-cols-2'
+    ].join(', ');
+    if (scope instanceof Element) {
+      if (scope.matches(selector)) candidates.add(scope);
+      const ancestor = scope.closest(selector);
+      if (ancestor) candidates.add(ancestor);
+    }
+    if (typeof scope?.querySelectorAll === 'function') {
+      for (const candidate of scope.querySelectorAll(selector)) candidates.add(candidate);
+    }
+    for (const candidate of candidates) {
+      if (candidate.closest('[data-message-author-role], [data-bravefox-message-turn]')) continue;
+      const buttons = candidate.querySelectorAll('button');
+      if (buttons.length !== 2) continue;
+      const labels = Array.from(buttons, button => normalizeText(button.textContent));
+      if (labels.includes('chat') && labels.includes('work')) {
+        candidate.setAttribute(HOME_MODE_LEGACY_HIDDEN_ATTR, 'true');
+      }
+    }
+  }
+
+  function suppressAndroidAppUpsell(scope = document) {
+    if (!IS_ANDROID || !scope) return false;
+
+    const candidates = new Set();
+    const addCandidate = node => {
+      if (!(node instanceof Element)) return;
+      if (node.matches(ANDROID_APP_UPSELL_DIALOG_SELECTOR)) candidates.add(node);
+      const dialog = node.closest(ANDROID_APP_UPSELL_DIALOG_SELECTOR);
+      if (dialog) candidates.add(dialog);
+    };
+
+    if (scope instanceof Element) addCandidate(scope);
+    if (typeof scope.querySelectorAll === 'function') {
+      for (const node of scope.querySelectorAll(ANDROID_APP_UPSELL_DIALOG_SELECTOR)) {
+        candidates.add(node);
+      }
+    }
+
+    // Some older Firefox Android buckets build app prompts without a dialog
+    // role. The legacy flex-column body identified by the Firefox Nightly
+    // blocker is already in the candidate set, but is text-validated below.
+    // Check a newly inserted heading's nearest fixed-position panel too,
+    // without ever treating conversation text as a popup.
+    const headingSelector = 'h1, h2, h3, [role="heading"]';
+    const checkHeading = heading => {
+      if (!(heading instanceof Element) ||
+          !ANDROID_APP_UPSELL_HEADINGS.includes(normalizeText(heading.textContent))) return;
+      if (isInsideConversationContent(heading)) return;
+      let panel = heading;
+      for (let depth = 0; panel instanceof Element && depth < 8; depth++, panel = panel.parentElement) {
+        if (panel.matches('body, main, [role="main"], [data-message-author-role]')) break;
+        if (panel.matches(ANDROID_APP_UPSELL_DIALOG_SELECTOR) ||
+            panel.matches('[class~="fixed"], [class*="modal" i], [class*="dialog" i], [class*="sheet" i]')) {
+          candidates.add(panel);
+          break;
+        }
+      }
+    };
+    if (scope instanceof Element) {
+      checkHeading(scope);
+      const parentHeading = scope.closest(headingSelector);
+      if (parentHeading) checkHeading(parentHeading);
+    }
+    if (typeof scope.querySelectorAll === 'function') {
+      for (const heading of scope.querySelectorAll(headingSelector)) checkHeading(heading);
+    }
+
+    let suppressed = false;
+    for (const dialog of candidates) {
+      if (!(dialog instanceof Element) || isInsideConversationContent(dialog)) continue;
+      const body = normalizeText(dialog.textContent);
+      if (body.length > 6000 || !ANDROID_APP_UPSELL_HEADINGS.some(value => body.includes(value))) continue;
+      // Skip our own archive modal, which can display a saved conversation
+      // discussing the same wording.
+      if (dialog.closest('#bravefox-local-chat-archive-modal')) continue;
+
+      const shell = dialog.closest(
+        '[data-radix-portal], [data-slot="dialog-portal"], [data-slot="sheet-portal"], [role="dialog"], [aria-modal="true"]'
+      );
+      // Hide only the identified app-install panel/portal. Its separately
+      // mounted beacon backdrop is hidden by CSS before the first paint.
+      (shell || dialog).setAttribute(ANDROID_APP_UPSELL_HIDDEN_ATTR, 'true');
+      dialog.setAttribute(ANDROID_APP_UPSELL_HIDDEN_ATTR, 'true');
+      suppressed = true;
+
+      if (ANDROID_APP_UPSELL_DISMISS_ATTEMPTS.has(dialog)) continue;
+      // The "continue in browser" action may live outside the text panel.
+      // Search the recognized shell, never the rest of the page.
+      const buttons = (shell || dialog).querySelectorAll('button, [role="button"]');
+      const dismiss = Array.from(buttons).find(button =>
+        ANDROID_APP_UPSELL_DISMISS_TEXT.has(normalizeText(button.textContent))
+      ) || Array.from(buttons).find(button => {
+        const label = normalizeText(button.getAttribute('aria-label') || button.getAttribute('title'));
+        return ['close', 'sulje', 'dismiss', 'ohita'].includes(label) ||
+          button.matches('[data-slot="dialog-close"], [data-testid="close-button"]');
+      });
+
+      // Clicking the genuine browser/close action lets React remove the
+      // scroll lock and backdrop. Never click the app-store/install action.
+      if (dismiss && typeof dismiss.click === 'function') {
+        ANDROID_APP_UPSELL_DISMISS_ATTEMPTS.add(dialog);
+        dismiss.click();
+      } else if (dialog instanceof HTMLDialogElement && dialog.open) {
+        ANDROID_APP_UPSELL_DISMISS_ATTEMPTS.add(dialog);
+        dialog.close();
+      }
+      // If React has not mounted its buttons yet, keep the panel hidden and
+      // allow the existing observer to retry when those buttons arrive.
+    }
+    return suppressed;
   }
 
   function enforceCodexAndVoicePolicy(scope = document) {
@@ -15371,6 +15619,27 @@
     });
   }
 
+  function customizeDeleteFailureToast(scope = document) {
+    const settings = CHATGPT_DELETE_FAILURE_TOAST_CUSTOMIZATION;
+    if (!settings.enabled || typeof settings.messageText !== 'string') return;
+
+    forEachMatch(scope, CHATGPT_DELETE_FAILURE_TOAST_SELECTOR, message => {
+      // A Sonner toast can contain several nested controls; edit only its title
+      // text node, preserving the original close button and event handlers.
+      const titleTextNode = Array.from(message.childNodes).find(child =>
+        child.nodeType === Node.TEXT_NODE && normalizeText(child.nodeValue)
+      );
+      if (!titleTextNode) return;
+
+      const text = normalizeText(titleTextNode.nodeValue);
+      if (!CHATGPT_DELETE_FAILURE_TOAST_NATIVE_LABELS.has(text) &&
+          text !== normalizeText(settings.messageText)) return;
+      if (titleTextNode.nodeValue !== settings.messageText) {
+        titleTextNode.nodeValue = settings.messageText;
+      }
+    });
+  }
+
   function getConversationLoadErrorLabelNode(container) {
     if (!(container instanceof Element)) return null;
 
@@ -15565,6 +15834,8 @@
   }
 
   function cleanChatGptUi(scope = document) {
+    hideLegacyHomeModeSwitch(scope);
+    suppressAndroidAppUpsell(scope);
     applyGoogleOnlyLoginPolicy(scope);
     applyAccountAndSettingsCleanup(scope);
     hideNewSidebarControls(scope);
@@ -15573,6 +15844,7 @@
     replaceCustomizableAssistantErrorText(scope);
     customizeConversationLoadError(scope);
     customizeHistoryLoadError(scope);
+    customizeDeleteFailureToast(scope);
     replaceCustomizableHomeHeadline(scope);
     reconcileNativeChatGptAnnouncementFilter(scope);
     replaceCustomizableChatGptBannerText(scope);
