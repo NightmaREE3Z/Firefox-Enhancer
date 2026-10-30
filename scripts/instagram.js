@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         IGCleaner
-// @version	 29.6.1
-// @date	 2026-10-25
+// @version	 29.6.7
+// @date	 2026-10-30
 // @description  Trying to make my Instagram experience tolerable.
 // @match        *://www.instagram.com/*
 // @match        *://www.instagram.com/?next=%2F/*
@@ -757,7 +757,8 @@ function ig2955TrustedHomeAuthorV326(article) {
         blockedResults: 0, lastStatus: 'closed', openedURL: '', closeReasons: {},
         avatarResults: 0, avatarFallbacks: 0, nativeFrame: null,
         frameObserver: null, framePoll: null, frameDeadline: 0, nativeReady: 0,
-        nativeFallbacks: 0 };
+        nativeFallbacks: 0, opener: null, focusRecovers: 0,
+        blockedHotkeys: 0, recoveredKeys: 0, focusRecovering: false };
 
     function ig2955SearchRailControlV330(target) {
         try {
@@ -816,8 +817,8 @@ function ig2955TrustedHomeAuthorV326(article) {
 
     function ig2955CloseSearchDrawerV330(reason = 'manual') {
         const state = IG_SEARCH_DRAWER_V330;
+        const label = typeof reason === 'string' ? reason : 'manual';
         if (state.host?.isConnected) {
-            const label = typeof reason === 'string' ? reason : 'manual';
             state.closeReasons[label] = (state.closeReasons[label] || 0) + 1;
         }
         if (state.timer !== null) { clearTimeout(state.timer); state.timer = null; }
@@ -825,11 +826,18 @@ function ig2955TrustedHomeAuthorV326(article) {
         if (state.frameObserver) { try { state.frameObserver.disconnect(); } catch {} state.frameObserver = null; }
         if (state.abort) { try { state.abort.abort(); } catch {} state.abort = null; }
         state.serial++;
-        if (state.host) { try { state.host.remove(); } catch {} }
+        const oldHost = state.host;
+        const opener = state.opener;
+        // Disarm focus recovery before removing the active Shadow DOM input.
         state.host = null; state.shadow = null; state.input = null; state.results = null;
+        state.opener = null; state.focusRecovering = false;
+        if (oldHost) { try { oldHost.remove(); } catch {} }
         state.openedURL = '';
         state.nativeFrame = null;
         state.lastStatus = 'closed';
+        if ((label === 'manual' || label === 'escape' || label === 'search-toggle') && opener?.isConnected) {
+            try { opener.focus({ preventScroll: true }); } catch {}
+        }
     }
 
     function ig2955SearchElementV330(tag, className, content) {
@@ -1103,6 +1111,12 @@ function ig2955TrustedHomeAuthorV326(article) {
                 border-right-color:#333}input{background:#333;color:#fff}.result:hover,.result:focus-visible{background:#2e2e2e}}
         `;
         shadow.appendChild(stylesheet);
+        // React/Instagram must not receive clicks or input events bubbling out
+        // of this independent Shadow DOM drawer (the controls still work normally).
+        for (const type of ['pointerdown', 'mousedown', 'mouseup', 'click',
+            'dblclick', 'touchstart', 'input', 'beforeinput', 'change']) {
+            shadow.addEventListener(type, event => event.stopPropagation());
+        }
         const panel = ig2955SearchElementV330('section', 'drawer');
         panel.setAttribute('aria-label', 'Instagram Search');
         const heading = ig2955SearchElementV330('div', 'head');
@@ -1121,6 +1135,7 @@ function ig2955TrustedHomeAuthorV326(article) {
         panel.appendChild(results); shadow.appendChild(panel);
         document.body.appendChild(host);
         state.host = host; state.shadow = shadow; state.input = input; state.results = results;
+        state.opener = control || null;
         state.openedURL = location.href;
         state.opened++; state.lastStatus = 'open';
         input.addEventListener('input', () => {
@@ -1135,7 +1150,7 @@ function ig2955TrustedHomeAuthorV326(article) {
                 ig2955SearchRequestV330(query); }, 260);
         });
         input.addEventListener('keydown', e => {
-            if (e.key === 'Escape') { e.preventDefault(); ig2955CloseSearchDrawerV330(); }
+            if (e.key === 'Escape') { e.preventDefault(); ig2955CloseSearchDrawerV330('escape'); }
         });
         input.focus({ preventScroll: true });
     }
@@ -1148,8 +1163,81 @@ function ig2955TrustedHomeAuthorV326(article) {
         ig2955OpenSearchDrawerV330(control);
     }, true);
 
-    onEvent(document, 'keydown', event => {
-        if (event.key === 'Escape' && IG_SEARCH_DRAWER_V330.host) ig2955CloseSearchDrawerV330();
+    // ===== V340: prevent Instagram keyboard shortcuts/focus traps escaping Search =====
+    // Shadow DOM retargets key events as the HOST to page-level listeners. Native
+    // Instagram shortcuts can therefore treat typing in our input as typing on
+    // the page, open DMs, and move the cursor into a background composer.
+    // Intercept at WINDOW capture, before Instagram's document handlers see it.
+    function ig2955RecoverSearchFocusV340() {
+        const state = IG_SEARCH_DRAWER_V330;
+        if (!state.host?.isConnected || !state.input?.isConnected || state.focusRecovering) return false;
+        if (document.activeElement === state.host && state.shadow?.activeElement) return true;
+        state.focusRecovering = true;
+        try {
+            state.input.focus({ preventScroll: true });
+            state.focusRecovers++;
+            return document.activeElement === state.host;
+        } catch { return false; }
+        finally { state.focusRecovering = false; }
+    }
+
+    function ig2955GuardSearchKeysV340(event) {
+        const state = IG_SEARCH_DRAWER_V330;
+        if (!state.host?.isConnected || !state.input?.isConnected) return;
+        const inside = ig2955IsSearchDrawerEventV338(event);
+        if (event.type === 'keydown' && event.key === 'Escape') {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            ig2955CloseSearchDrawerV330('escape');
+            return;
+        }
+        if (event.type === 'keydown' && event.key === 'Tab') {
+            // Keep keyboard navigation in the drawer, not a hidden DM or form.
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            const items = [...state.shadow.querySelectorAll('button:not([disabled]), input:not([disabled]), a[href]')];
+            const current = inside ? event.composedPath?.()[0] : null;
+            const index = items.indexOf(current);
+            const next = index < 0 ? state.input :
+                items[(index + (event.shiftKey ? -1 : 1) + items.length) % items.length];
+            try { next?.focus({ preventScroll: true }); } catch {}
+            return;
+        }
+        if (!inside && event.type === 'keydown') {
+            // If Instagram has already stolen focus, never deliver this key to
+            // the background message composer. Preserve a plain typed character
+            // in Search while recovering; shortcuts and IME remain untouched.
+            const printable = !event.ctrlKey && !event.metaKey && !event.altKey &&
+                !event.isComposing && event.key.length === 1;
+            event.preventDefault();
+            ig2955RecoverSearchFocusV340();
+            if (printable) {
+                try {
+                    const input = state.input;
+                    const start = input.selectionStart ?? input.value.length;
+                    const end = input.selectionEnd ?? start;
+                    input.setRangeText(event.key, start, end, 'end');
+                    input.dispatchEvent(new Event('input', { bubbles: true }));
+                    state.recoveredKeys++;
+                } catch {}
+            }
+        } else if (!inside && event.type === 'keypress') {
+            event.preventDefault();
+        }
+        // Do NOT prevent the native default for keys that originated inside
+        // Search: text editing, selection, composition, and link clicks still work.
+        event.stopImmediatePropagation();
+        state.blockedHotkeys++;
+    }
+
+    onEvent(window, 'keydown', ig2955GuardSearchKeysV340, true);
+    onEvent(window, 'keypress', ig2955GuardSearchKeysV340, true);
+    onEvent(window, 'keyup', ig2955GuardSearchKeysV340, true);
+    onEvent(window, 'focusin', event => {
+        if (!IG_SEARCH_DRAWER_V330.host?.isConnected || ig2955IsSearchDrawerEventV338(event)) return;
+        // Outside pointer actions close the drawer first; a remaining focusin
+        // is Instagram itself trying to focus a control behind an open Search.
+        ig2955RecoverSearchFocusV340();
     }, true);
 
     function ig2955IsSearchDrawerEventV338(event) {
@@ -1191,6 +1279,9 @@ function ig2955TrustedHomeAuthorV326(article) {
         pendingGraphQL: IG_SEARCH_PENDING_V337.size,
         avatarResults: IG_SEARCH_DRAWER_V330.avatarResults,
         avatarFallbacks: IG_SEARCH_DRAWER_V330.avatarFallbacks,
+        focusRecovers: IG_SEARCH_DRAWER_V330.focusRecovers,
+        blockedHotkeys: IG_SEARCH_DRAWER_V330.blockedHotkeys,
+        recoveredKeys: IG_SEARCH_DRAWER_V330.recoveredKeys,
         closeReasons: { ...IG_SEARCH_DRAWER_V330.closeReasons }
     });
     window.__IGCleanerSearchV337 = window.__IGCleanerSearchV330;

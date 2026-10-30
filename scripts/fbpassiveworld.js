@@ -1,4 +1,4 @@
-// BraveFox Enhancer 29.5.5 — passive Facebook caption observer, MAIN world.
+// BraveFox Enhancer 29.6.7 — passive Facebook caption observer, MAIN world.
 // Reads bounded feed GraphQL responses and initial Relay JSON; never changes
 // requests, cursors, response objects, post DOM, scroll position, or approvals.
 (() => {

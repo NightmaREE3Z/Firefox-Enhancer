@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BraveFox WebFilter Script
-// @version	 29.6.1
-// @date	 2026-10-25
+// @version	 29.6.7
+// @date	 2026-10-30
 // @description  Filter out stuff on the internet (Targeted Enforcer)
 // @match        *://xvideos.com/*
 // @match        *://*.xvideos.com/*
@@ -3857,11 +3857,11 @@
             if (!isSearchPage() || redirecting) return;
             try {
                 const params = new URL(window.location.href).searchParams;
-                // Block direct requests for 'Kaikki' (0) and 'Mies' (1). A submitted
-                // search without sex would default to 'Kaikki' on some site versions.
+                // Block explicitly requested 'Kaikki' (0) and 'Mies' (1) only.
+                // Native username search forms submit haku=1&user=... with no sex
+                // field; missing sex must not reject every otherwise valid search.
                 const requestedSex = params.getAll('sex');
-                if (requestedSex.some(sex => sex === '0' || sex === '1') ||
-                    (params.get('haku') === '1' && !requestedSex.length)) {
+                if (requestedSex.some(sex => sex === '0' || sex === '1')) {
                     goHome();
                     return;
                 }

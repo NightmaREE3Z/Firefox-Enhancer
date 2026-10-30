@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         FBCleaner
-// @version	 29.6.1
-// @date	 2026-10-25
+// @version	 29.6.7
+// @date	 2026-10-30
 // @description  Makes my Facebook experience less terrible.
 // @match        *://*.facebook.com/*
 // @grant        none
@@ -1172,9 +1172,23 @@ const notificationTextLooksLikePanel = (text) => {
            t.includes('see all') || t.includes('all');
 };
 
+// v88: Facebook's bottom-left "New notification" toast is NOT the top-right
+// Notifications panel. It uses role=complementary, just like the contacts rail.
+// Recognize its own heading + action/announcement signals, not arbitrary popup text.
+const isFBNotificationToastV88 = (element) => {
+    try {
+        const toast = element?.closest?.('[role="complementary"]');
+        if (!toast || toast.closest('[data-pagelet="RightRail"], [role="feed"], [role="main"]')) return false;
+        const title = fbNotifNorm(toast.querySelector('h2, [role="heading"]')?.textContent || '');
+        if (title !== 'uusi ilmoitus' && title !== 'new notification') return false;
+        return !!toast.querySelector('[role="alert"], [aria-label*="Merkitse luetuksi" i], [aria-label*="Mark as read" i]');
+    } catch (e) { return false; }
+};
+
 const isNotificationPanelElement = (element) => {
     try {
         if (!element || !element.closest) return false;
+        if (isFBNotificationToastV88(element)) return true;
 
         // Full notifications page.
         if (/\/(notifications|ilmoitukset)(?:\/|$)/i.test(location.pathname || '')) {
@@ -1214,13 +1228,13 @@ const protectNotificationSurfaces = (root = document) => {
         }
 
         if (scanRoot.nodeType === 1 && isNotificationPanelElement(scanRoot)) {
-            add(scanRoot.closest?.('[data-pagelet*="Notification" i], [aria-label*="Ilmoitukset" i], [aria-label*="Notifications" i], [role="dialog"], [role="menu"], [role="region"], [role="list"]') || scanRoot);
+            add(scanRoot.closest?.('[data-pagelet*="Notification" i], [aria-label*="Ilmoitukset" i], [aria-label*="Notifications" i], [role="dialog"], [role="menu"], [role="region"], [role="list"], [role="complementary"]') || scanRoot);
         }
 
         // The full notifications route already has one authoritative root. Avoid walking the
         // entire page again looking for nested dialog/list/region candidates inside that root.
         if (!fullNotificationsPage || scanRoot.nodeType === 1) {
-            const selector = '[data-pagelet*="Notification" i], [aria-label*="Ilmoitukset" i], [aria-label*="Notifications" i], [role="dialog"], [role="menu"], [role="region"], [role="list"]';
+            const selector = '[data-pagelet*="Notification" i], [aria-label*="Ilmoitukset" i], [aria-label*="Notifications" i], [role="dialog"], [role="menu"], [role="region"], [role="list"], [role="complementary"]';
             const candidates = scanRoot.querySelectorAll ? scanRoot.querySelectorAll(selector) : [];
             for (let i = 0; i < candidates.length && panels.length < 8; i++) {
                 const candidate = candidates[i];
@@ -2206,15 +2220,18 @@ const injectFBSafeNoGlimpseBootstrap = () => {
                hydrated contact/avatar row remains hidden until a local allow/block decision.
                Never apply this to Messenger, dialogs, the feed or Dad's account. */
             html.fb-strict-element-hiding-v37.fb-home-feed-unit-softgate-v23:not(.fb-messenger-native-v54) [data-pagelet="RightRail"]:not(.fb-contact-rail-ready-v87),
-            html.fb-strict-element-hiding-v37.fb-home-feed-unit-softgate-v23:not(.fb-messenger-native-v54) [role="complementary"]:not(:has([data-pagelet="RightRail"])):not(.fb-contact-rail-ready-v87) {
+            /* v88: only genuine contact rails get the veil. The old :not(:has(RightRail))
+               accidentally hid Facebook's unrelated bottom-left notification toast. */
+            html.fb-strict-element-hiding-v37.fb-home-feed-unit-softgate-v23:not(.fb-messenger-native-v54) [role="complementary"]:not(:has([data-pagelet="RightRail"]))[aria-label*="Yhteystiedot" i]:not(.fb-contact-rail-ready-v87),
+            html.fb-strict-element-hiding-v37.fb-home-feed-unit-softgate-v23:not(.fb-messenger-native-v54) [role="complementary"]:not(:has([data-pagelet="RightRail"]))[aria-label*="Contacts" i]:not(.fb-contact-rail-ready-v87) {
                 visibility: hidden !important;
                 opacity: 0 !important;
                 pointer-events: none !important;
             }
 
-            html.fb-strict-element-hiding-v37.fb-home-feed-unit-softgate-v23:not(.fb-messenger-native-v54) :is([data-pagelet="RightRail"], [role="complementary"]) [role="button"]:has(img, svg image, i[data-visualcompletion="css-img"]):not(:has([role="button"] img, [role="button"] svg image, [role="button"] i[data-visualcompletion="css-img"])):not(.fb-contact-rail-approved-v87):not(.fb-profile-card-approved):not(.fb-profile-card-banned):not(.fb-element-banned),
-            html.fb-strict-element-hiding-v37.fb-home-feed-unit-softgate-v23:not(.fb-messenger-native-v54) :is([data-pagelet="RightRail"], [role="complementary"]) [role="listitem"]:has(img, svg image, i[data-visualcompletion="css-img"]):not(:has([role="button"] img, [role="button"] svg image, [role="button"] i[data-visualcompletion="css-img"])):not(.fb-contact-rail-approved-v87):not(.fb-profile-card-approved):not(.fb-profile-card-banned):not(.fb-element-banned),
-            html.fb-strict-element-hiding-v37.fb-home-feed-unit-softgate-v23:not(.fb-messenger-native-v54) :is([data-pagelet="RightRail"], [role="complementary"]) a[href*="/messages/t/"]:not(.fb-contact-rail-approved-v87):not(.fb-profile-card-approved):not(.fb-profile-card-banned):not(.fb-element-banned) {
+            html.fb-strict-element-hiding-v37.fb-home-feed-unit-softgate-v23:not(.fb-messenger-native-v54) :is([data-pagelet="RightRail"], [role="complementary"]:has([data-pagelet="RightRail"]), [role="complementary"][aria-label*="Yhteystiedot" i], [role="complementary"][aria-label*="Contacts" i]) [role="button"]:has(img, svg image, i[data-visualcompletion="css-img"]):not(:has([role="button"] img, [role="button"] svg image, [role="button"] i[data-visualcompletion="css-img"])):not(.fb-contact-rail-approved-v87):not(.fb-profile-card-approved):not(.fb-profile-card-banned):not(.fb-element-banned),
+            html.fb-strict-element-hiding-v37.fb-home-feed-unit-softgate-v23:not(.fb-messenger-native-v54) :is([data-pagelet="RightRail"], [role="complementary"]:has([data-pagelet="RightRail"]), [role="complementary"][aria-label*="Yhteystiedot" i], [role="complementary"][aria-label*="Contacts" i]) [role="listitem"]:has(img, svg image, i[data-visualcompletion="css-img"]):not(:has([role="button"] img, [role="button"] svg image, [role="button"] i[data-visualcompletion="css-img"])):not(.fb-contact-rail-approved-v87):not(.fb-profile-card-approved):not(.fb-profile-card-banned):not(.fb-element-banned),
+            html.fb-strict-element-hiding-v37.fb-home-feed-unit-softgate-v23:not(.fb-messenger-native-v54) :is([data-pagelet="RightRail"], [role="complementary"]:has([data-pagelet="RightRail"]), [role="complementary"][aria-label*="Yhteystiedot" i], [role="complementary"][aria-label*="Contacts" i]) a[href*="/messages/t/"]:not(.fb-contact-rail-approved-v87):not(.fb-profile-card-approved):not(.fb-profile-card-banned):not(.fb-element-banned) {
                 visibility: hidden !important;
                 opacity: 0 !important;
                 pointer-events: none !important;
@@ -5571,7 +5588,7 @@ FB_HYPHEN_AI_PATTERN_V309, /-AI(?![\p{L}\p{N}])/iu, /(?<![\p{L}\p{N}])AI-suck(?!
 	/\bLadies\b/i, /\bLadys\b/i, /\bMarie\b/i, /\bKairi\b/i, /\bAsuka\b/i, /\bB-Fab\b/i, /\bTiffany\b/i, /\bStratton\b/i, /\bPerez\b/i, /\bPerze\b/i, /\bHavok\b/i, /\bJillian\b/i, /\bTiff\b/i,
 	/\bMickie\b/i, /\bFlair\b/i, /\bMeltzer\b/i, /\bLayla\b/i, /\bBlake\b/i, /\bRipley\b/i, /\bKatie\b/i, /\bLady\b/i,  /\bKeibler\b/i, /\bMaryse\b/i, /\bStacy\b/i, /\bTrish\b/i, /\bSarray\b/i, 
 	/\bXia\b/i, /\bRonda\b/i, /\bNattie\b/i, /\bBayley\b/i, /\bGiulia\b/i, /\bFallon\b/i, /\bMichin\b/i, /\bStratus\b/i, /\bKelly\b/i, /\bKarr\b/i, /\bFallon\b/i, /\bDeonna\b/i, /\bErika\b/i, 
-	/\bLeRae\b/i, /\bTamina\b/i, /\bNaomi\b/i, /\bMarie\b/i, /\bKanellis/i, /\bSKADI/i,
+	/\bLeRae\b/i, /\bTamina\b/i, /\bNaomi\b/i, /\bKanellis/i, /\bSKADI/i,
 ];
 
 // v32: Dynamic wrestler names from wrestling.js/background storage.
@@ -5580,20 +5597,12 @@ FB_HYPHEN_AI_PATTERN_V309, /-AI(?![\p{L}\p{N}])/iu, /(?<![\p{L}\p{N}])AI-suck(?!
 const FB_DYNAMIC_WRESTLER_FALLBACK_URLS = [
     // v36: local fallback mirrors the important SmackDownHotel manual bans so FB search
     // still has useful wrestler-name coverage before extension storage arrives.
-    '/wrestlers/pj-vasa',
-    '/wrestlers/lainey-reid', '/wrestlers/kellyanne', '/wrestlers/kellyanne-english',
-    '/wrestlers/nikita-naridian', '/wrestlers/riho', '/wrestlers/thekla',
-    '/wrestlers/dani-sekelsky', '/wrestlers/kelly-kelly', '/wrestlers/alba-fyre',
-    '/roster/wwe2k26/alundra-blayze', '/wrestlers/roxxi', '/wrestlers/zelina-vega',
-    '/wrestlers/rosita', '/wrestlers/lita', '/wrestlers/chyna', '/wrestlers/maryse',
-    '/wrestlers/aksana', '/wrestlers/kaitlyn', '/wrestlers/layla', '/wrestlers/tamina',
-    '/wrestlers/jacqueline', '/wrestlers/odb', '/wrestlers/asya',
-    '/wrestlers/debra', '/wrestlers/lana', '/wrestlers/sable', '/wrestlers/tori',
-    '/wrestlers/carmella', '/wrestlers/raquel', '/wrestlers/kamille', '/wrestlers/maxine',
-    '/wrestlers/cherry', '/wrestlers/sarita', '/wrestlers/shaniqua', '/wrestlers/francine',
-    '/wrestlers/trinity', '/wrestlers/ivy-nile', '/wrestlers/mia-yim',
-    '/wrestlers/gail-kim', '/wrestlers/eve-torres', '/wrestlers/dawn-marie', '/wrestlers/joy-giovanni',
-    '/wrestlers/cora-jade', '/wrestlers/taya-valkyrie', '/wrestlers/brie-bella', '/wrestlers/su-yung'
+	'/wrestlers/pj-vasa', '/wrestlers/lainey-reid', '/wrestlers/kellyanne', '/wrestlers/kellyanne-english', '/wrestlers/nikita-naridian', '/wrestlers/riho', '/wrestlers/thekla', '/wrestlers/raquel',
+	'/wrestlers/chyna', '/wrestlers/dani-sekelsky', '/wrestlers/kelly-kelly', '/wrestlers/alba-fyre','/roster/wwe2k26/alundra-blayze', '/wrestlers/roxxi', '/wrestlers/kamille',  '/wrestlers/rosita', 
+	'/wrestlers/lita', '/wrestlers/maryse', '/wrestlers/aksana', '/wrestlers/kaitlyn', '/wrestlers/su-yung', '/wrestlers/tamina', '/wrestlers/jacqueline', '/wrestlers/odb', '/wrestlers/zelina-vega',
+	'/wrestlers/debra', '/wrestlers/lana', '/wrestlers/sable', '/wrestlers/tori', '/wrestlers/carmella', '/wrestlers/mia-yim', '/wrestlers/asya', '/wrestlers/francine', '/wrestlers/trinity', 
+	'/wrestlers/cherry', '/wrestlers/sarita', '/wrestlers/shaniqua', '/wrestlers/ivy-nile', '/wrestlers/gail-kim', '/wrestlers/eve-torres', '/wrestlers/dawn-marie', '/wrestlers/joy-giovanni', 
+	'/wrestlers/cora-jade', '/wrestlers/taya-valkyrie', '/wrestlers/brie-bella', '/wrestlers/layla',
 ];
 let fbDynamicWrestlerRegexes = [];
 let fbDynamicWrestlerRegexSources = new Set();
@@ -5991,7 +6000,9 @@ const allowedWords = [
 	"Vice City", "Liberty City", "San Andreas", "North Yankton", "Yankton", "Rockstar", "North", "South", "West", "East", "Johanna", "Jojo", "Lääkäri", "Lääke", "Lääkis", "Koulu", "Oppilaitos", "Sairaanhoitaja",
 	"Tohtori", "Professori", "Yliopisto", "Perho", "Perhon", "Perhonjokilaakso", "Jokilaakso", "Talouskauppa", "Ikiliikku", "KPO", "S-Market", "K-Market", "Tikkari", "Valkeinen", "OP", "Osuuspankki", "Pankki",
 	"Sairaus", "Sairas", "Sairastaa", "Sairastu", "Sairastuin", "Sairastuimme", "Korona", "Koronavirus", "Covid-19", "SARS-COV", "SARS-COV2", "Koronatesti", "Koronatestit", "Testi", "Testata", "Testissä", "Testit",
-	"Veikonkone", "Euromarket", "Taloustalo", "Kipakka", "Rautakauppa", "Kauppa", "Google", "Naamakirja", "Veispuuk", "Veispuukki", "naama kirja", "Lärvikirja", "Lärvi kirja",
+	"Veikonkone", "Euromarket", "Taloustalo", "Kipakka", "Rautakauppa", "Kauppa", "Google", "Naamakirja", "Veispuuk", "Veispuukki", "naama kirja", "Lärvikirja", "Lärvi kirja", "Grilli", "Grilla", "Klaara", "Klara",
+	"Kappeli", "Botnia", "Makkara", "Makkaro", "Mauste", "Mausta", "Sipuli", "Valkosipuli", "Dippi", "Dippejä", "Dipit", "Dipata", "Dippaaminen", "Dippaus",  "K-Market", "S-Market", "KMarket", "SMarket", "Market",
+	"KPO", "Kesko", "Kuluttaja", "Tarjous", "Tarjoukset", "Etuus", "Osuus", "Pankki",
  ];
 
 const restrictedPhrases = [
@@ -12828,7 +12839,8 @@ const scrubBlockedFriendAndContactCards = (root = document) => {
 
         // v25.4.23: Facebook's right-side contacts can render as plain text/button rows before
         // useful /messages/t/ hrefs appear. Scan individual rows only, scoped to Haukkis strict account.
-        const rightRailRoots = Array.from(queryIncludingRoot('[data-pagelet="RightRail"], [role="complementary"]'));
+        const rightRailRoots = Array.from(queryIncludingRoot('[data-pagelet="RightRail"], [role="complementary"]'))
+            .filter(isFBContactRailRootV88);
         rightRailRoots.forEach((rail) => {
             try {
                 rail.querySelectorAll('[role="button"], [role="listitem"], [role="row"], a[href*="/messages/t/"], a[href*="profile.php?id="], a[href*="facebook.com/"]').forEach((seed) => {
@@ -12880,13 +12892,29 @@ const isFBContactRailScopeV87 = () => {
     } catch (e) { return false; }
 };
 
+// v88: complementary is a generic accessible role, not proof of a contact rail.
+// Require a real RightRail pagelet or contact-specific structure before scanning.
+const isFBContactRailRootV88 = (rail) => {
+    try {
+        if (!rail?.matches || isNotificationPanelElement(rail)) return false;
+        if (rail.matches('[data-pagelet="RightRail"]')) return true;
+        if (!rail.matches('[role="complementary"]') ||
+            rail.closest('[role="dialog"], [role="menu"], [role="feed"], [role="main"]')) return false;
+        if (rail.matches('[aria-label*="Yhteystiedot" i], [aria-label*="Contacts" i]')) return true;
+        return !!rail.querySelector([
+            'a[href*="/messages/t/"]', 'a[href*="messenger.com/t/"]',
+            '[aria-label*="Yhteystiedot" i]', '[aria-label*="Contacts" i]'
+        ].join(',')) || /^(?:yhteystiedot|contacts)$/i.test(
+            String(rail.querySelector('h2, h3, [role="heading"]')?.textContent || '').trim());
+    } catch (e) { return false; }
+};
+
 const getFBContactRailRootsV87 = () => {
     try {
         const pageletRails = Array.from(document.querySelectorAll('[data-pagelet="RightRail"]'));
-        if (pageletRails.length) return pageletRails.slice(0, 3);
+        if (pageletRails.length) return pageletRails.filter(isFBContactRailRootV88).slice(0, 3);
         return Array.from(document.querySelectorAll('[role="complementary"]'))
-            .filter(rail => !rail.closest('[role="dialog"], [role="menu"], [role="feed"], [role="main"]'))
-            .slice(0, 3);
+            .filter(isFBContactRailRootV88).slice(0, 3);
     } catch (e) { return []; }
 };
 
@@ -13036,16 +13064,17 @@ const processFBContactRailMutationBatchV87 = (mutations) => {
             const target = m.target?.nodeType === 1 ? m.target : m.target?.parentElement;
             const currentRail = target?.closest?.('[data-pagelet="RightRail"], [role="complementary"]');
             // Already-observed rails have their own focused observer. Avoid duplicate scans.
-            if (currentRail && !__fbContactRailObserversV87.has(currentRail)) {
+            if (currentRail && isFBContactRailRootV88(currentRail) && !__fbContactRailObserversV87.has(currentRail)) {
                 syncFBContactRailNoGlimpseV87();
                 return;
             }
             for (const node of m.addedNodes || []) {
                 if (node?.nodeType !== 1) continue;
-                if (node.matches?.('[data-pagelet="RightRail"], [role="complementary"]') ||
+                if (isFBContactRailRootV88(node) ||
                     (!__fbContactRailObserversV87.size &&
                      !node.matches?.('[role="feed"], [role="article"], [data-pagelet^="FeedUnit_"]') &&
-                     node.querySelector?.('[data-pagelet="RightRail"], [role="complementary"]'))) {
+                     Array.from(node.querySelectorAll?.('[data-pagelet="RightRail"], [role="complementary"]') || [])
+                         .some(isFBContactRailRootV88))) {
                     syncFBContactRailNoGlimpseV87();
                     return;
                 }
@@ -13271,7 +13300,8 @@ const isFBNotificationIdentityImmuneV57 = (element) => {
     try {
         const node = element?.nodeType === 1 ? element : element?.parentElement;
         if (!node?.closest) return false;
-        if (node.closest('.fb-notifications-protected, [data-pagelet*="Notification" i], [aria-label*="Notifications" i], [aria-label*="Ilmoitukset" i]')) return true;
+        if (node.closest('.fb-notifications-protected, [data-pagelet*="Notification" i], [aria-label*="Notifications" i], [aria-label*="Ilmoitukset" i]') ||
+            isFBNotificationToastV88(node)) return true;
         const popup = node.closest('[role="dialog"], [role="menu"], [role="list"], [role="region"]');
         return !!(popup && isNotificationPanelElement(node));
     } catch (e) {
