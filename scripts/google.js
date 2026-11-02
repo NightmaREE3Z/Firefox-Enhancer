@@ -1,7 +1,7 @@
 (function () {
     'use strict';
 
-    // google.js of BraveFox Enhancer v29.6.4
+    // google.js of BraveFox Enhancer v29.7.0
 
     // === CHROME WEB STORE: OWN RULES (independent of Google Search) ============
     // THIS is the only place to edit Web Store-specific ID and search-term bans.
@@ -1107,20 +1107,51 @@
     }
 
     // --- Keyword arrays ---
+    // === DISTINCTIVE / CONTEXTUAL AI NUCLEAR SIGNATURES ===
+    // Shared across Chrome, Firefox desktop and Firefox Nightly Android.
+    // Keep recognizable AI terms aggressive, but avoid blanket matches on
+    // ordinary words (model, object, generator, diffusion). Nuclear still wins
+    // before searchAllowTerms and all result URL allowances.
+    const aiNuclearRegex = [
+        // Distinctive variants, including spaced/hyphenated/underscored spellings.
+        /deep[\s._-]*fak/i, /deep[\s._-]*nud/i, /deep[\s._-]*feik/i, /diip[\s._-]*feik/i,
+        /\b(?:midjourney|deepseek|anthropic|civitai|runcomfy|hugging[\s._-]*face|nightcafe|leonardo[\s._-]*ai)\b/i,
+        /\b(?:stable[\s._-]*diffusion|dall[\s._-]*e(?:[\s._-]*[23])?|automatic[\s._-]*1111)\b/i,
+
+        // Named AI techniques; standalone scientific "diffusion" remains ordinary.
+        /\b(?:artificial[\s._-]*intelligence|generative[\s._-]*ai|machine[\s._-]*learning|deep[\s._-]*learning|neural[\s._-]*networks?|natural[\s._-]*language[\s._-]*processing|large[\s._-]*language[\s._-]*models?|llms?)\b/i,
+        /teko[\s._-]*[äa]ly/i,
+        /\b(?:ai|llm|language|generative|diffusion|deepfake|machine[ -]?learning|image[ -]?generation|text[ -]?to[ -]?image)[\s._-]+models?\b/i,
+        /\bmodels?\s+(?:for\s+)?(?:ai|llm|deepfake|machine[ -]?learning|language[ -]?generation|face[ -]?swap|image[ -]?generation)\b/i,
+
+        // Generative media: do not block electrical/physical generators.
+        /\bgenerativ(?:e|ely|ity)\b/i,
+        /\b(?:image|photo|picture|video|text|music|voice|art)[\s._-]*generat(?:e|es|ed|ing|or|ors|ion|ions)\b/i,
+        /\b(?:text|prompt)[\s._-]*(?:to|2)[\s._-]*(?:image|video|audio|music|speech)\b/i,
+        /\b(?:image|photo|picture|video)[\s._-]*(?:to|2)[\s._-]*(?:image|video|gif)\b/i,
+        /\b(?:ai|ml|neural)[\s._-]*(?:image|photo|video|text|art|music|voice|content)[\s._-]*(?:generat|creat|edit|enhanc|model)/i,
+
+        // Object removal/editing, not ordinary JS objects or object-oriented code.
+        /\bobjects?[\s._-]*(?:remov(?:e|al|er|ing)|eras(?:e|er|ing)|delet(?:e|ion|er|ing))\b/i,
+        /\b(?:remov(?:e|ing)|eras(?:e|ing)|delet(?:e|ing))[\s._-]+(?:an?[\s._-]+)?objects?[\s._-]+(?:from|in|on)[\s._-]+(?:an?[\s._-]+)?(?:photos?|images?|pictures?|pics?)\b/i,
+        /\b(?:ai|photo|image|pic|picture)[\s._-]*(?:object[\s._-]*(?:remov|eras|delet)|(?:remov|eras|delet)[\s._-]*objects?)/i,
+    ];
+
     // NUCLEAR Regexes
     	const nuclearRegex = [
-        /deepnude/i, /deepfake/i, /lex bl/i, /livmorgan/i, /zelina/i, /roxanne/i, /raquel/i, /stephanie/i, /woman/i, /women/i, /ladies/i, /ladye/i, /girls/i, /girly/i, /girli/i, 
-	/pussy/i, /vagin/i, /vagen/i, /vegane/i, /pussie/i, /deepn/i, /deepf/i, /deeph/i, /deeps/i, /deepm/i, /deepb/i, /deept/i, /deepa/i, /nudi/i, /nude/i, /naked/i, /undre/i, 
-	/nude app/i, /dress/i, /deepnude/i, /face swap/i, /Stacy/i, /Staci/i, /Keibler/i, /generat/i, /inpaint/i, /art intel/i, /birpp/i,  /ismartta/i, /image enhanced/i, /palge/i, 
+        ...aiNuclearRegex,
+        /lex bl/i, /livmorgan/i, /zelina/i, /roxanne/i, /raquel/i, /stephanie/i, /woman/i, /women/i, /ladies/i, /ladye/i, /girls/i, /girly/i, /girli/i, 
+	/pussy/i, /vagin/i, /vagen/i, /vegane/i, /pussie/i, /deepn/i, /deeph/i, /deeps/i, /deepm/i, /deepb/i, /deept/i, /deepa/i, /nudi/i, /nude/i, /naked/i, /undre/i, 
+	/nude app/i, /dress/i, /face swap/i, /Stacy/i, /Staci/i, /Keibler/i, /inpaint/i, /art intel/i, /birpp/i,  /ismartta/i, /image enhanced/i, /palge/i, 
 	/deppn/i, /depenu/i, /depeni/i, /deipn/i, /diepn/i, /artifi/i, /artin/i, /iconicto/i, /-tool/i, /d3ppn/i, /d3penu/i, /d3p3nu/i, /dep3nu/i, /depeni/i,  /d3p3ni/i, /d3p3n1/i, 
 	/d3p3n!/i, /dep3n1/i, /dep3n!/i, /d3pen1/i, /d3pen!/i, /Br1tt/i, /Br!tt/i, /Sweee/i, /posing/i, /image enhancing/i, /virtual touchup/i, /ndif/i, /ndfy/i, /nd1f/i, /skirr/i, 
 	/nd!f/i, /ndlf/i, /shag/i, /d3peni/i, /edgin/i, /edgyi/i, /dreamstime/i, /Torrl/i, /wilson/i, /Kitty WWE/, /Dawn Marie/i, /soulgen/i, /soulgyn/i, /soulkyn/i, /Massaro/i, 
 	/fapif/i, /fappif/i, /skitr/i, /edgy1/i, /3dgy1/i, /3dgin/i, /edg1n/i, /edg1i/i, /edgi1/i, /3dg1i/i, /3dgi1/i, /edgiy/i, /edgye/i, /stripp/i, /strips/i, /stripz/i, /stripi/i, 
 	/striper/i, /stripes/i, /shetakeoff/i, /takeoffher/i, /takesoffher/i, /shetakesoff/i, /takingoff/i, /tookoffher/i, /shetookoff/i, /baring/i, /bares/i, /bliswwe/i, /retouch/i, 
 	/touchup/i, /touch up/i, /tush/i, /lex bl/i, /image ai/i, /edit ai/i, /deviant/i, /Lex Cabr/i, /Lex Carb/i, /Lex Kauf/i, /Lex Man/i, /nudecrawler/i, /unc1oth/i, /photo AI/i, 
-	/pict AI/i, /pics app/i, /picsart/i, /enhance image/i, /erootti/i, /vegi/i, /vegen/i, /faceswap/i, /DeepSeek/i, /deepnude ai/i, /deepnude-ai/i, /object/i, /Roxan/i, /Perez/i, 
-	/Mickie/i, /Micky/i, /vagena/i, /birppis/i, /aitool/i, /Lana Perry/i, /Del Rey/i, /Tiffa/i, /Stratt/i, /puzz/i, /vulv/i, /clito/i, /clita/i, /cl1t/i, /cloth/i, /uncloth/i, 
-	/decloth/i, /rem cloth/i, /del cloth/i, /babyg/i, /eras cloth/i, /Bella/i, /Tiffy/i, /vagi/i, /vagene/i, /Del Ray/i, /CJ Lana/i, /generator/i, /Liv org/i, /Stee/i, /playboy/i, 
+	/pict AI/i, /pics app/i, /picsart/i, /enhance image/i, /erootti/i, /vegi/i, /vegen/i, /faceswap/i, /DeepSeek/i, /deepnude ai/i, /deepnude-ai/i, /Roxan/i, /Perez/i, 
+	/Mickie/i, /Micky/i, /vagena/i, /birppis/i, /aitool/i, /Lana Perry/i, /Del Rey/i, /Tiffa/i, /Stratt/i, /puzzy/i, /vulv/i, /clito/i, /clita/i, /cl1t/i, /cloth/i, /uncloth/i, 
+	/decloth/i, /rem cloth/i, /del cloth/i, /babyg/i, /eras cloth/i, /Bella/i, /Tiffy/i, /StaphMc/i, /vagi/i, /vagene/i, /Del Ray/i, /CJ Lana/i, /Liv org/i, /playboy/i, 
 	/Stewart/i, /off pant/i, /rem pant/i, /Kristen Stewart/i, /Steward/i, /Brit Bake/i,  /pantie/i, /panty/i, /pants/i, /poses/i, /Sydnee/i, /del pant/i, /eras pant/i, /her pant/i, 
 	/she pant/i, /pussy/i, /Babe/i, /content adult/i, /porn/i, /editing/i, /AI Tool/i, /Chelsey/i, /Zel Veg/i, /Ch3l/i, /Sweeney/i, /input face/i, /upload face/i, /editor/i, /Twat/i,
 	/editation/i, /CJ Perry/i, /Lana WWE/i, /Lana Del Rey/i, /CJ WWE/i, /image app/i, /picture app/i, /edit app/i, /pic app/i, /photo app/i, /Perry WWE/i, /application/i, /Sxuel/i, 
@@ -1128,13 +1159,13 @@
 	/enhanced image/i, /joinface/i, /orrga/i, /orrgaa/i, /orgaa/i, /origas/i, /depn/i, /d3pn/i, /b0oth/i, /b0o7h/i, /bo07h/i, /b007h/i, /b00th/i, /booo/i, /b0oo/i, /bo0o/i, /skirt/i,
 	/boo0/i, /b000/i, /n000/i, /n00d/i, /no0d/i, /n0od/i, /Derriere/i, /Backside/i, /xray/i, /sheer/i, /clothes remover/i, /nsfw/i, /not safe for work/i, /AI unblur/i, /deblur/i, 
 	/nsfwgen/i, /scanner/i, /bliswwe/i, /play boy/i, /uncensor app/i, /clothes remover/i, /nsfw/i, /not safe for work/i, /sexx/i, /sexual/i, /image enhancer/i, /skin view/i, /female/i,
-	/Fantasy AI/i, /fantasy edit/i, /AI recreation/i, /synthetic model/i, /Margot/i, /Robbie/i, /Ana de Armas/i, /Ratajkowski/i, /Generated/i, /vaatepoisto/i, /Emily/i, /Doja Cat/i, 
+	/Fantasy AI/i, /fantasy edit/i, /AI recreation/i, /synthetic model/i, /Margot/i, /Robbie/i, /Ana de Armas/i, /Ratajkowski/i, /vaatepoisto/i, /Emily/i, /Doja Cat/i, 
 	/Madelyn/i, /Salma Hayek/i, /Megan Fox/i, /Addison/i, /Emma Watson/i, /Taylor/i, /Nicki/i, /artificial model/i, /Minaj/i, /next-gen face/i, /smooth body/i, /TitsAI/i, /photo trick/i, 
 	/edit for fun/i, /realistic AI/i, /dream girl/i, /banned app/i, /filmora/i, /uncover/i, /Micki/i, /Stratusfaction/i, /m471c/i, /mat1c/i, /fisting/i, /pleasi/i, /Blendface/i, 
 	/pleasu/i, /herself/i, /her self/i, /delet bg/i, /fuck/i, /eras bg/i, /delet bg/i, /erase bg/i, /erasing bg/i, /bg delet/i, /bg erasing/i, /bg erase/i, /Blend face/i, /Steph/i, 
 	/morphi/i, /Blender face/i, /morfi/i, /fappi/i, /skin viewer/i, /skinviewer/i,  /cloth/i, /clothing/i, /clothes/i, /AI model$/i, /trained model$/i, /Reface/i, /DeepAI/i, /GFPGAN/i, 
-	/RestoreFormer/i, /FaceMagic/i, /desnudador/i, /des nudador/i, /pixary/i, /GAN-based/i, /diffusion/i, /latent/i, /prompt ex/i, /txt2img/i, /image to image/i, /image 2 image/i, 
-	/model/i, /imagetoimage/i, /image2image/i, /girl/i, /woman/i, /women/i, /babe/i, /waifu/i, /wife/i, /spouse/i, /celeb/i, /celebrit/i, /img2img/i, /boobs/i, /Comfy-UI/i, /ComfyAI/i, 
+	/RestoreFormer/i, /FaceMagic/i, /desnudador/i, /des nudador/i, /pixary/i, /GAN-based/i, /latent/i, /prompt ex/i, /txt2img/i, /image to image/i, /image 2 image/i, 
+	/imagetoimage/i, /image2image/i, /girl/i, /woman/i, /women/i, /babe/i, /waifu/i, /wife/i, /spouse/i, /celeb/i, /celebrit/i, /img2img/i, /boobs/i, /Comfy-UI/i, /ComfyAI/i, 
 	/Comfy-AI/i, /CoAi/i, /ComAi/i, /ComfAi/i, /ComfoAi/i, /ComforAi/i, /ComfortAi/i, /Midjourney/i, /LTheory/i, /LuTheory/i, /edit pose/i, /Face Magic/i, /ex prompt/i, /example prompt/i, 
 	/prompt example/i, /toniwwe/i, /tonywwe/i, /fotor/i, /vercel/i, /venoi/i, /venic/i, /nsfw gen/i, /removebg/i, /remove bg/i, /Shiri/i, /remov bg/i, /removal bg/i, /ia onl/i, /cunt/i, 
 	/removalbg/i, /rembg/i, /rem background/i, /removbg/i, /del background/i, /eras background/i, /erase background/i, /erasing background/i, /butth/i, /buttc/i, /background eras/i, 
@@ -1192,7 +1223,7 @@
 	/OpensHerLegs/i, /SpreadLeg/i, /SpreadHerLeg/i, /cunnn/i, /strips/i, /SpreadsLeg/i, /SpreadsHerLeg/i, /HerThig/i, /HerLeg/i, /HerThic/i, /SheThig/i, /SheLeg/i, /SheThic/i, /HerLeg/i, /HerThic/i, 
 	/LegShe/i, /LegsShe/i, /Thicc/i, /ThickShe/i, /fondl/i, /bdsm/i, /censor/i, /reveals all/i, /reveali/i, /revealing/i, /stripp/i, /strips/i, /stripz/i, /stripi/i, /striper/i, /stripes/i, /striped/i, 
 	/shetakeoff/i, /takeoffher/i, /takesoffher/i, /shetakesoff/i, /takingoff/i, /tookoffher/i, /shetookoff/i, /baring/i, /bares/i, /artintel/i, /Zendaya/i, /AIZuck/i, /Stratu/i, /Kairi/i, /artintel/i, 
-	/RemovingAI/i, /bjob/i, /StaphMc/i, /machinelearning/i, /sweee/i, /AI Fake/i, /F4k3/i, /Fak3/i, /F4ke/i, /Mondomonger/i, /Mondo monger/i,
+	/RemovingAI/i, /bjob/i, /machinelearning/i, /sweee/i, /AI Fake/i, /F4k3/i, /Fak3/i, /F4ke/i, /Mondomonger/i, /Mondo monger/i, 
 	 
 
 
@@ -1235,7 +1266,7 @@
         
 
     // Special Nuclear regexes
-        /deep\s*[-_ ]?\s*nude/i,
+        
 	/deep.*(nude|naked|fake|job|ai)/i,
         /nudif(?:y|ier|ying|ication|ications)?/i, /undress(?:ing|ify|ifying|ified|ed)?/i,
         /un\s*[-_ ]?\s*cloth(?:e|es|ing|ed)?/i, /decloth(?:e|es|ing|ed)?/i,
@@ -1246,7 +1277,7 @@
         /(?:ai|deep|text\s*2|text\s*to)\s*[-_ ]?\s*(?:nude|nudify|undress|uncloth|decloth)/i,
         /x\s*[-_ ]?\s*ray\s*[-_ ]?\s*(?:cloth|clothes|body|image|photo)/i,
         /see\s*[-_ ]?\s*through\s*[-_ ]?\s*(?:cloth|clothes|clothing|image|photo)/i,
-        /deep\s*[-_ ]?\s*fake/i,
+	/\bstable[\s_-]*diffu/i,        
         /syv[aä]\s*[-_ ]?\s*v[aä][aä]renn[oö]s/i,
         /diip\s*[-_ ]?\s*feik/i,
         /face\s*[-_ ]?\s*(?:swap|morph|fusion|replace|replacement|merge|blend|join|remap)/i,
@@ -1272,8 +1303,6 @@
 	/\b(?:tiktok|tik[\s._-]?tok)\b/i,
 	/^(?=[\s\S]*\b(?:instagram|insta|ig|snapchat|snap)\b)(?=[\s\S]*\b(?:story|stories|tarina(?:n|t|a)?|tarinoita)\b)(?=[\s\S]*\b(?:view(?:er|ing)?|watch(?:er|ing)?|download(?:er|ing)?|sav(?:e|er|ing)|anonymous(?:ly)?|katso(?:a)?|lataa|tallenn(?:a|us))\b)/i,
 	/(?:stories?(?:ig|insta)|(?:ig|insta)(?:story|stories)(?:viewer|saver|downloader)?|(?:anon|anonymous)(?:story|stories)(?:viewer|saver)?|(?:story|stories)(?:viewer|saver|downloader))/i,
-
-    
 ];
 
 
@@ -1395,7 +1424,7 @@
     const specialRedirectRegexes = [
         /gr[a4][i1l]n(?:[\s_\-\/.]{0,3}(?:re(?:mov(?:e|al|ing)?|m)|(?:delet(?:e|ing|ion)?|del)|eras(?:e|ing)?|(?:ph(?:o|0)?t(?:o|0)?|pic(?:t(?:ure|ures)?)?|image|img)))|(?:re(?:mov(?:e|al|ing)?|m)|(?:delet(?:e|ing|ion)?|del)|eras(?:e|ing)?|fix|denois(?:e|er|ing)?)(?:[\s_\-\/.]{0,3}(?:ph(?:o|0)?t(?:o|0)?|pic(?:t(?:ure|ures)?)?|image|img))?(?:[\s_\-\/.]{0,3}gr[a4][i1l]n)|gr[a4][i1l]n(?:[\s_\-\/.]{0,3}(?:ph(?:o|0)?t(?:o|0)?|pic|image|img))|(?:ph(?:o|0)?t(?:o|0)?|pic|image|img)(?:[\s_\-\/.]{0,3}fix)/i, /lex.*bl/i, /liv.*morgan/i, /saad.*pipar/i, /s4ad.*pipar/i, /s44d.*pipar/i, /sa4d.*pipar/i, /rint.*pois/i, /dress.*remov/i,
         /(?:n(?:o|0)ise(?:[\s_\-\/.]{0,3}(?:re(?:mov(?:e|al|ing)?|m|duc(?:e|ed|ing|tion)?)|(?:delet(?:e|ing|ion)?|del)|eras(?:e|ing)?|fix|filter(?:ing)?))|(?:re(?:mov(?:e|al|ing)?|m|duc(?:e|ed|ing|tion)?)|(?:delet(?:e|ing|ion)?|del)|eras(?:e|ing)?|fix|filter(?:ing)?)(?:[\s_\-\/.]{0,3})n(?:o|0)ise|de[\s_\-\.]?n(?:o|0)is(?:e|er|ing)?)/i, /make.*(move|gif|video)/i, /photo.*(move|gif|video)/i, /image.*(move|gif|video)/i, /pic.*(move|gif|video)/i, /img.*(move|gif|video)/i, /booty/i, /ass.*(animat|ai|move)/i, /twerk/i, /twerking/i, /jiggle/i, /bounce.*(ai|gif)/i, /booty.*(ai|gif|video|animat)/i, /ass.*(ai|gif|video|animat)/i, /mangoanimat/i, /deepnude/i, /undress/i, /strip.*ai/i, /nude.*ai/i, /clothes.*remove/i, /remove.*(clothes|clothing|dress)/i, /face.*(swap|deepfake|replace)/i, /vaat.*pois/i, /hous.*pois/i, /pait.*pois/i, /pait.*pois/i, /liiv.*pois/i, /alushous.*pois/i, /alkkarit.*pois/i, /alusvaat.*pois/i, /clothing.*remove/i, 
-/alexa.*(wwe|wrest|ras|NXT|pro)/i, /blis.*(wwe|wrest|ras|NXT|pro)/i, /lexa.*(wwe|wrest|ras|NXT|pro)/i, /lexi.*(wwe|wrest|ras|NXT|pro)/i, /blis.*(wwe|wrest|ras|NXT|pro)/i, /bils.*(wwe|wrest|ras|NXT|pro)/i, /lex.*(kauf|cabr|carb)/i, /model.*(mach|langu)/i, /robe.*(wwe|tna|aew|njpw|wrestl|rasll|rasslin)/i,
+/alexa.*(wwe|wrest|ras|NXT|pro)/i, /blis.*(wwe|wrest|ras|NXT|pro)/i, /lexa.*(wwe|wrest|ras|NXT|pro)/i, /lexi.*(wwe|wrest|ras|NXT|pro)/i, /blis.*(wwe|wrest|ras|NXT|pro)/i, /bils.*(wwe|wrest|ras|NXT|pro)/i, /lex.*(kauf|cabr|carb)/i, /\bmodels?\s+(?:for\s+)?(?:machine[ -]?learning|language[ -]?generation)\b/i, /robe.*(wwe|tna|aew|njpw|wrestl|rasll|rasslin)/i,
 /robe.*(malf|func)/i, /ring gear|trunk|pant|shirt|jacket.*(malf|func)/i, /malfunc.*(wwe|tna|aew|njpw|wrestl|rasll|rasslin|ring)/i, 
 
     ];
@@ -4588,145 +4617,37 @@
         return testRegexList(redirectHideLite, text);
     }
 
-    // === AI-BOUNDARY FUNCTION (USED FOR QUERIES ETC.) ===
+    // === CONTEXT-AWARE AI TOKEN CHECKER (USED FOR QUERIES AND RESULTS) ===
+    // Match the standalone AI abbreviation and recognizable AI compounds only.
+    // The old "starts/ends with ai" fallback treated AIR, AIO, AIDA64, Thai,
+    // and other unrelated words as Nuclear AI hits, hiding legitimate results.
+    // Explicit harmful terms and named AI products remain covered separately
+    // by nuclearRegex, so this checker does not replace those hard rules.
     function containsAiBoundary(text) {
         if (!text) return false;
 
-        function escapeRegExp(s) {
-            if (typeof s !== 'string') s = String(s);
-            return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        }
-
-        // -- Sexual/AI keywords regexes --
-        const AIRegexes = [
-	/sex/i, /porn/i, /nud/i, /naked/i, /nsfw/i, /oral/i, /blow/i, /fell/i, /tit/i, /boob/i, /pussy/i, /vag/i, /veg/i, /cock/i, /trap/i, /boinking/i, /lesbian/i,
-	/dick/i, /cum/i, /penis/i, /fuck/i, /suck/i, /mast/i, /jerk/i, /fap/i, /ass/i, /butt/i, /boot/i, /bra/i, /bro/i, /pant/i, /strip/i, /stripping/i, /raping/i,
-	/head/i, /give/i, /giving/i, /her/i, /she/i, /him/i, /his/i, /woman/i, /women/i, /fem/i, /male/i, /girl/i, /rassling/i, /gril/i, /cumshots/i, /picture/i,
-	/boy/i, /lady/i, /ladi/i, /guy/i, /gal/i, /g4l/i, /tush/i, /anal/i, /penet/i, /anim/i, /mode/i, /LLM/i, /MLM/i, /deep/i, /visuals/i, /visualis/i, /open/i,
-	/learn/i, /learning/i, /diff/i, /diffuse/i, /diffusion/i, /cloth/i, /clothing/i, /clothes/i, /wwe/i, /aew/i, /tna/i, /njpw/i, /ajpw/i, /allelite/i, /gene/i,
-	/wrestl/i, /wrestle/i, /wrestles/i, /wrestling/i, /rassl/i, /rassle/i, /anal/i, /suck/i, /sucking/i, /sucks/i, /spread/i, /spreads/i, /spreading/i, /generates/i,
-	/opens/i, /opening/i, /hole/i, /thigh/i, /leg/i, /legs/i, /toe/i, /toes/i, /pen/i, /penly/i, /pens/i, /pencil/i, /pic/i, /photo/i, /generated/i, /generati/i,
-	/imag/i, /img/i, /graph/i, /graphs/i, /graphic/i, /graphics/i, /journey/i, /journal/i, /new/i, /list/i, /listof/i, /lists/i, /listsof/i, /about/i, /fella/i,
-	/gf/i, /friend/i, /friends/i, /buddy/i, /buddi/i, /buddies/i, /mate/i, /mates/i, /panty/i, /pantys/i, /panti/i, /panties/i, /ladies/i, /ladys/i, /booby/i,
-	/tool/i, /tools/i, /find/i, /finding/i, /finder/i, /twerk/i, /twerks/i, /twerking/i, /jerking/i, /jerks/i, /wank/i, /wanker/i, /wanks/i, /fapp/i, /seksikäs/i,
-	/faps/i, /faping/i, /fapping/i, /fappening/i, /leak/i, /leaks/i, /talk/i, /leaked/i, /leaking/i, /leakings/i, /edit/i, /editing/i, /editation/i, /lesbians/i,
-	/pictures/i, /photos/i, /image/i, /images/i, /imgs/i, /photograph/i, /photographs/i, /visual/i, /visualiz/i, /visualization/i, /visualize/i, /raped/i, /rape/i,
-	/visualisation/i, /visualise/i, /visualic/i, /visualication/i, /visualice/i, /speech/i, /gen/i, /gener/i, /genera/i, /generat/i, /generate/i, /nipple/i, /horny/i, 
-	/generativ/i, /generative/i, /vid/i, /vide/i, /vidu/i, /video/i, /tube/i, /tubes/i, /bf/i, /blows/i, /blowing/i, /titti/i, /tittie/i, /titties/i, /hornier/i,
-	/fellat/i, /fellati/i, /fellatio/i, /fellation/i, /tits/i, /titty/i, /tittys/i, /tittyes/i, /boob/i, /boobs/i, /boobi/i, /boobie/i, /boobies/i, /handjob/i,
-	/boobye/i, /boobyes/i, /pus/i, /puss/i, /pussy/i, /pussi/i, /pussie/i, /pussies/i, /vag/i, /vagi/i, /vagin/i, /vagina/i, /vaginal/i, /vaginall/i, /peeping/i,
-	/vaginally/i, /vaginaly/i, /vega/i, /vegana/i, /vegane/i, /vagane/i, /vagene/i, /vagena/i, /anall/i, /anally/i, /analli/i, /anaali/i, /seksi/i, /spanking/i,
-	/seksikkyys/i, /masturbate/i, /masturbation/i, /masturbating/i, /jizz/i, /ejaculate/i, /ejaculated/i, /ejaculating/i, /blowjob/i, /blowjobs/i, /underwear/i,
-	/stripper/i, /strippers/i, /erotic/i, /erotica/i, /kink/i, /kinky/i, /fetish/i, /fetishes/i, /bdsm/i, /bondage/i, /domination/i, /submission/i, /sexcapade/i,
-	/gay/i, /gays/i, /queer/i, /bi/i, /bisexual/i, /trans/i, /transgender/i, /transexual/i, /intersex/i, /nonbinary/i, /genderfluid/i, /ladyboy/i, /fondling/i,
-	/screwing/i, /fucking/i, /fuckin/i, /fucks/i, /orgasm/i, /orgasms/i, /threesome/i, /foursome/i, /gangbang/i, /voyeur/i, /voyeurism/i, /peep/i, /cumshot/i,
-	/nipples/i, /clit/i, /clitoris/i, /labia/i, /labial/i, /sexed/i, /sexes/i, /sexting/i, /porned/i, /fondled/i, /porning/i, /fetishize/i, /fetishized/i, 
-	/spanked/i, /touch/i, /touching/i, /touched/i, /suck/i, /sucks/i, /sucking/i, /lick/i, /licked/i, /licking/i, /panty/i, /panties/i, /briefs/i, /spank/i, 
-	/lingerie/i, /bra/i, /bras/i, /corset/i, /corsets/i, /thong/i, /thongs/i, /gstring/i, /gstrings/i, /erot/i, /erotic/i, /erotica/i, /vibrator/i, /scrotum/i,
-	/horniest/i, /moan/i, /moaned/i, /moaning/i, /moans/i, /grope/i, /groped/i, /groping/i, /sexually/i, /sensual/i, /seduce/i, /seduced/i, /seducing/i, /mast/i,
-	/sexcapades/i, /nudephoto/i, /nudephotos/i, /nudes/i, /bare/i, /barely/i, /bareback/i, /naught/i, /naughty/i, /kissing/i, /kissed/i, /fondle/i, /handjobs/i,
-	/thrust/i, /thrusted/i, /thrusting/i, /penetrate/i, /penetrated/i, /penetrating/i, /balls/i, /testicle/i, /testicles/i, /vibrators/i, /spit/i, /spitting/i,
-	/squirting/i, /squirt/i, /bdsm/i, /dom/i, /sub/i, /voyeur/i, /exhibitionist/i, /masturb/i, /art/i, /arts/i, /artsy/i, /arti/i, /artis/i, /artist/i, /artisan/i, 
-	/creat/i, /creati/i, /creatio/i, /creation/i, /creatin/i, /creating/i, /create/i, /creates/i, /make/i, /makes/i, /maki/i, /makin/i, /making/i, /site/i, /off/i, 
-	/app/i, /apps/i, /application/i, /applications/i, /applic/i, /work/i, /works/i, /working/i, /worked/i, /job/i, /jobs/i, /chat/i, /chatt/i, /chatte/i, /chatter/i,
-	/anima/i, /animat/i, /animate/i, /animates/i, /animati/i, /animatio/i, /animation/i, /animations/i, /sora/i, /gemini/i, /claude/i, /cunt/i, /twat/i, /dress/i,  
-	/pillu/i, /pimppi/i, /pinppi/i, /vittu/i, /pano/i, /pane/i, /ban/i, /mua/i, /mut/i, /riisu/i, /riisua/i, /riisumis/i, /poist/i, /poiso/i, /poistaa/i, /poistam/i, 
-	/poistami/i, /poistamis/i, /poistamine/i, /poistamen/i, /sovellus/i, /applikaatio/i, /kuva/i, /kuvia/i, /kuvien/i, /käsittely/i, /käsitellä/i, /banned/i, /pers/i, 
-	/bans/i, /perse/i, /persaus/i, /persvako/i, /persevako/i, /persreikä/i, /persereikä/i, /trans/i, /transf/i, /transfo/i, /transfor/i, /transform/i, /transformi/i, 
-       	/animated/i, /transforming/i, /transforms/i, /transformings/i, /transformed/i, /convert/i, /converted/i, /convers/i, /conversi/i, /conversio/i, /conversion/i,
-        /slut/i, /sluts/i, /slutt/i, /slutti/i, /sluttin/i, /slutting/i, /reveal/i, /skin/i, /body/i, /belly/i, /backside/i, /frontside/i, /belf/i, /belfie/i, /bottom/i, 
-        /front/i, /frontal/i, /perc/i, /perv/i, /pervert/i, /perverted/i, /strip/i, /strips/i, /stripz/i, /stripe/i, /stripp/i, /takeoff/i, /takesoff/i, /takesoff/i,
-        /shap/i, /shape/i, /shapes/i, /shapeing/i, /shaping/i, /POS/i, /position/i, /adjust/i, /change/i, /replaces/i, /replacing/i, /replacement/i, /replac/i, /replace/i,
-        /adjustment/i,/adjusted/i, /adjustin/i, /adjusting/i, /change/i, /changes/i, /changin/i, /changing/i, /mod/i, /modify/i, /modif/i, /modification/i, /mods/i, /mode/i,
-        /modifyin/i, /modifying/i, /tweak/i, /tweakin/i, /tweaking/i, /back/i, /front/i, /legging/i, /leggings/i, /cloth/i, /clothy/i, /clothes/i, /clothing/i, /clothying/i,
-        /\bAI\b/i, /page/i, /pages/i, /site/i, /mango/i, /mangos/i, /mangoing/i, /icegirl/i, /wank/i, /jerk/i, /icegirls/i, /ismartta/i, /ismart/i, /ismartt/i, /gasm/i, /org/i,
-        /\bIA\b/i, /stuffed/i, /stuffing/i, /around/i, /spin/i, /spins/i, /spun/i, /spinned/i, /spinning/i, /online/i, /on-line/i, /machinelearn/i, /tekoäly/i, /sivu/i, /sites/i,
-        /-/i, /=/i, /\+/i, /_/i, 
-        ];
-
-
-        const finnishWordsList = [
-	//finnish names list:
-        /nen/i, /lampi/i, /lehti/i, /mäki/i, /maki/i, /lahti/i, /järvi/i, /jarvi/i, /koski/i, /kallio/i, /niemi/i, /aho/i, /aho/i, /salo/i, /kari/i, /oja/i, /pelto/i, /luoto/i, 
-        /saari/i, /ranta/i, /virta/i, /keto/i, /vaara/i, /lä/i, /la/i, /maa/i,  /kosken/i, /pää/i, /paa/i, /mäen/i, /mae/i, /sivu/i, /vieri/i, /kaarto/i, /kaarre/i, /aito/i, /aira/i, 
-        /man/i, /hauki/i, /rauma/i, /liite/i, /laine/i, /salmi/i, /harju/i, /kangas/i, /vuori/i, /korpi/i, /suo/i, /tal[oö]/i, /nius/i, /kuiva/i, /timo/i, /olli/i, /nyman/i, /nylund/i, 
-        /nygard/i, /aine/i, /nygård/i, /raunio/i, /mies/i, /nainen/i, /aitto/i, /jylhä/i, /anoai/i, /aitto/i, /aino/i, /kaija/i, /anneli/i, /kata/i, /kati/i, /katarina/i, /katariina/i, 
-
-
-	//Finnish words list
-	/aika/i, /aikuinen/i, /saippua/i, /aisti/i, /aivo/i, /tilaisuus/i, /aikuiskoulutus/i, /paikka/i, /saippua/i, /aivast/i, /hais/i, /mais/i, /kais/i, /tais/i, /raiska/i, /raippa/i, 
-	/pais/i, /alainen/i, /koululainen/i, /Kuinka/i, /Miten/i, /Miksi/i, /Milloin/i, /Milloin/i, /Miksei/i, /aita/i, /aidan/i, /maailma/i, /avoin/i, /avaim/i, /avain/i, /aivan/i,
-        /maanantai/i, /tiistai/i, /torstai/i, /perjantai/i, /lauantai/i, /sunnuntai/i, /rutto/i, /ruton/i, /oire/i, /oireet/i,
-        ];
-
-
-        function isFinnishLike(word) {
-            const w = word.toLowerCase();
-            return finnishWordsList.some(rx => rx.test(w));
-        }
-
-        let tokens = [];
+        // Keep punctuation and underscores as separators (AI-Tool, AI_Image, etc.),
+        // but retain embedded letters/numbers as part of each word (AIR903Max).
+        const normalized = String(text).normalize('NFKC');
+        let tokens;
         try {
-            const re = /\p{L}+/gu;
-            let m;
-            while ((m = re.exec(text)) !== null) tokens.push(m[0]);
+            tokens = normalized.match(/[\p{L}\p{N}]+/gu) || [];
         } catch (e) {
-            const re2 = /[A-Za-z]+/g;
-            let m2;
-            while ((m2 = re2.exec(text)) !== null) tokens.push(m2[0]);
+            tokens = normalized.match(/[A-Za-z0-9]+/g) || [];
         }
-        if (tokens.length === 0) tokens = [text];
 
-        for (let tok of tokens) {
-            if (!tok || tok.length < 1) continue;
+        // Require an AI-related word after/before "AI" when joined without a
+        // separator. These intentionally avoid short fragments such as R, O, D,
+        // M, L and S, which are common in real product names and ordinary words.
+        const aiPrefixCompound = /^ai(?:app|application|art|artist|artwork|assistant|avatar|bot|chat|companion|content|creator|deepfake|draw|edit|enhanc|face|filter|friend|generat|generator|gen|girlfriend|boyfriend|graphic|image|img|language|learn|model|motion|music|nud|photo|picture|pic|portrait|power|prompt|render|remov|search|swap|text|tool|uncloth|undress|upscal|video|virtual|voice|writ)[a-z0-9]*$/i;
+        const aiSuffixCompound = /^(?:app|art|artist|avatar|bot|chat|companion|creator|draw|editor|face|filter|generator|gen|girlfriend|graphic|image|img|model|motion|music|photo|picture|pic|portrait|prompt|render|search|swap|text|tool|video|voice|writer)ai$/i;
 
-            // OpenAI is intentionally allowed. Skip only this literal brand token; any other
-            // Nuclear term elsewhere in the same query/result still wins normally.
-            if (/^OpenAI$/i.test(tok)) continue;
-
-            if (/^AI[\.,!?]?$/.test(tok)) {
-                return 'AI';
-            }
-
-            if (tok.length < 2) continue;
-
-            const originalIsFinnish = isFinnishLike(tok);
-
-            const hasAIAtStart = /^ai[-_]?/i.test(tok);
-            const hasAIAtEnd   = /[-_]?ai$/i.test(tok);
-    
-            if (originalIsFinnish) {
-                continue;
-            }
-
-            if (hasAIAtStart || hasAIAtEnd) {
-                let root = tok;
-                if (hasAIAtStart) root = root.replace(/^ai[-_]?/i, '');
-                if (hasAIAtEnd) root = root.replace(/[-_]?ai$/i, '');
-
-                if (!root) return 'AI';
-
-                for (let r of AIRegexes) {
-                    try {
-                        if (r.test(root)) return 'AI';
-                    } catch (e) {}
-                }
-            }
-
-            if (!hasAIAtStart && !hasAIAtEnd) {
-                continue;
-            }
-
-            let root2 = tok;
-            if (hasAIAtStart) root2 = root2.replace(/^ai[-_]?/i, '');
-            if (hasAIAtEnd)   root2 = root2.replace(/[-_]?ai$/i, '');
-            if (!root2) return 'AI';
-
-            const rootIsFinnish = isFinnishLike(root2);
-
-            if (rootIsFinnish && (hasAIAtStart || hasAIAtEnd)) return 'AI';
-            if (originalIsFinnish && !rootIsFinnish) continue;
-            if (!rootIsFinnish && (hasAIAtStart || hasAIAtEnd)) return 'AI';
+        for (const token of tokens) {
+            // Preserve the existing narrow OpenAI brand exception. Any other
+            // blocked word elsewhere in the result is evaluated independently.
+            if (/^openai$/i.test(token)) continue;
+            if (/^ai$/i.test(token)) return 'AI';
+            if (aiPrefixCompound.test(token) || aiSuffixCompound.test(token)) return 'AI';
         }
         return false;
     }
@@ -4971,6 +4892,97 @@
         };
 
         const tests = [
+            // AI consolidation regression coverage: ordinary words and meaningful AI terms.
+            {
+                name: 'Portable electricity generator is not generative AI',
+                decision: decideQueryPolicy('portable electric generator'),
+                expectedNotAction: POLICY_ACTION.REDIRECT
+            },
+            {
+                name: 'Finnish electric generator remains available',
+                decision: decideQueryPolicy('sähkögeneraattori'),
+                expectedNotAction: POLICY_ACTION.REDIRECT
+            },
+            {
+                name: 'Generated electricity does not imply AI',
+                decision: decideQueryPolicy('electricity generated by hydroelectric dam'),
+                expectedNotAction: POLICY_ACTION.REDIRECT
+            },
+            {
+                name: 'JavaScript objects do not imply AI removal',
+                decision: decideQueryPolicy('JavaScript object properties'),
+                expectedNotAction: POLICY_ACTION.REDIRECT
+            },
+            {
+                name: 'Physics diffusion does not imply AI diffusion',
+                decision: decideQueryPolicy('diffusion of oxygen molecules'),
+                expectedNotAction: POLICY_ACTION.REDIRECT
+            },
+            {
+                name: 'Ordinary generator result card is not Nuclear',
+                decision: withTapioState(false, () => decideResultPolicy('https://example.com/power/generator', 'Portable electric generator specifications', false)),
+                expectedNotAction: POLICY_ACTION.HIDE
+            },
+            {
+                name: 'Deep fake with a separator remains Nuclear',
+                decision: decideQueryPolicy('deep fake creation'),
+                expectedAction: POLICY_ACTION.REDIRECT,
+                expectedReason: 'nuclearRegex'
+            },
+            {
+                name: 'Deep faking with underscore remains Nuclear',
+                decision: decideQueryPolicy('deep_faking'),
+                expectedAction: POLICY_ACTION.REDIRECT,
+                expectedReason: 'nuclearRegex'
+            },
+            {
+                name: 'Generative AI remains Nuclear',
+                decision: decideQueryPolicy('generative AI'),
+                expectedAction: POLICY_ACTION.REDIRECT,
+                expectedReason: 'nuclearRegex'
+            },
+            {
+                name: 'Image generator remains Nuclear',
+                decision: decideQueryPolicy('AI image generator'),
+                expectedAction: POLICY_ACTION.REDIRECT,
+                expectedReason: 'nuclearRegex'
+            },
+            {
+                name: 'Deep learning remains Nuclear',
+                decision: decideQueryPolicy('deep learning models'),
+                expectedAction: POLICY_ACTION.REDIRECT,
+                expectedReason: 'nuclearRegex'
+            },
+            {
+                name: 'Text to image remains Nuclear',
+                decision: decideQueryPolicy('text to image'),
+                expectedAction: POLICY_ACTION.REDIRECT,
+                expectedReason: 'nuclearRegex'
+            },
+            {
+                name: 'Photo object removal remains Nuclear',
+                decision: decideQueryPolicy('remove object from photo'),
+                expectedAction: POLICY_ACTION.REDIRECT,
+                expectedReason: 'nuclearRegex'
+            },
+            {
+                name: 'Object eraser remains Nuclear',
+                decision: decideQueryPolicy('object eraser'),
+                expectedAction: POLICY_ACTION.REDIRECT,
+                expectedReason: 'nuclearRegex'
+            },
+            {
+                name: 'Image result with stable diffusion remains hidden',
+                decision: withTapioState(false, () => decideResultPolicy('https://example.com/gallery', 'Stable Diffusion art', true)),
+                expectedAction: POLICY_ACTION.HIDE,
+                expectedReason: 'nuclearRegex'
+            },
+            {
+                name: 'Hugging Face result remains hidden',
+                decision: withTapioState(false, () => decideResultPolicy('https://example.com/article', 'Hugging Face neural network', false)),
+                expectedAction: POLICY_ACTION.HIDE,
+                expectedReason: 'nuclearRegex'
+            },
             {
                 name: 'nuclear overrides a query allow term',
                 decision: decideQueryPolicy('deepnude RuneScape'),
@@ -4982,6 +4994,93 @@
                 decision: decideQueryPolicy('DeepSeek RuneScape'),
                 expectedAction: POLICY_ACTION.REDIRECT,
                 expectedReason: 'nuclearRegex'
+            },
+            {
+                name: 'AIR 903 Max query is not mistaken for AI',
+                decision: decideQueryPolicy('Montech AIR 903 Max PC Case'),
+                expectedNotAction: POLICY_ACTION.REDIRECT
+            },
+            {
+                name: 'AIR 903 Max search card is not hidden by AI detection',
+                decision: withTapioState(false, () => decideResultPolicy('https://example.com/montech/air-903-max', 'Montech AIR 903 MAX PC Case', false)),
+                expectedNotAction: POLICY_ACTION.HIDE
+            },
+            {
+                name: 'AIO cooler and AIDA64 are not AI terms',
+                decision: decideQueryPolicy('AIO cooler AIDA64 benchmark'),
+                expectedNotAction: POLICY_ACTION.REDIRECT
+            },
+            {
+                name: 'Other ordinary AI-letter words are not AI terms',
+                decision: decideQueryPolicy('hair dryer samurai Thai food'),
+                expectedNotAction: POLICY_ACTION.REDIRECT
+            },
+            {
+                name: 'A PC case model number is not a Nuclear model hit',
+                decision: decideQueryPolicy('Montech AIR 903 MAX case model number'),
+                expectedNotAction: POLICY_ACTION.REDIRECT
+            },
+            {
+                name: 'Tesla Model Y is not a Nuclear model hit',
+                decision: decideQueryPolicy('Tesla Model Y specifications'),
+                expectedNotAction: POLICY_ACTION.REDIRECT
+            },
+            {
+                name: 'A scale model is not an AI model',
+                decision: decideQueryPolicy('scale model railway'),
+                expectedNotAction: POLICY_ACTION.REDIRECT
+            },
+            {
+                name: 'Ordinary hardware result with model number stays visible',
+                decision: withTapioState(false, () => decideResultPolicy('https://example.com/hardware/air-903-max', 'Montech AIR 903 MAX case model specifications', false)),
+                expectedNotAction: POLICY_ACTION.HIDE
+            },
+            {
+                name: 'Unrelated machine words after a product model stay allowed',
+                decision: decideQueryPolicy('Tesla Model Y washing machine'),
+                expectedNotAction: POLICY_ACTION.REDIRECT
+            },
+            {
+                name: 'Language model remains a Nuclear AI-related term',
+                decision: decideQueryPolicy('language model'),
+                expectedAction: POLICY_ACTION.REDIRECT,
+                expectedReason: 'nuclearRegex'
+            },
+            {
+                name: 'AI model remains Nuclear',
+                decision: decideQueryPolicy('AI model'),
+                expectedAction: POLICY_ACTION.REDIRECT,
+                expectedReason: 'nuclearRegex'
+            },
+            {
+                name: 'Machine learning models remain Nuclear',
+                decision: decideQueryPolicy('machine learning models'),
+                expectedAction: POLICY_ACTION.REDIRECT,
+                expectedReason: 'nuclearRegex'
+            },
+            {
+                name: 'Image-generation model results remain blocked',
+                decision: withTapioState(false, () => decideResultPolicy('https://example.com/article', 'image generation model', false)),
+                expectedAction: POLICY_ACTION.HIDE,
+                expectedReason: 'nuclearRegex'
+            },
+            {
+                name: 'Standalone AI remains Nuclear',
+                decision: decideQueryPolicy('AI'),
+                expectedAction: POLICY_ACTION.REDIRECT,
+                expectedReason: 'nuclear-ai-boundary'
+            },
+            {
+                name: 'Joined AI photo compound remains Nuclear',
+                decision: decideQueryPolicy('AIphoto'),
+                expectedAction: POLICY_ACTION.REDIRECT,
+                expectedReason: 'nuclear-ai-boundary'
+            },
+            {
+                name: 'Joined photo AI suffix remains Nuclear',
+                decision: decideQueryPolicy('PhotoAI'),
+                expectedAction: POLICY_ACTION.REDIRECT,
+                expectedReason: 'nuclear-ai-boundary'
             },
             {
                 name: 'OpenAI literal is explicitly allowed',
@@ -5122,7 +5221,7 @@
                     'https://www.google.com/goto?url=https%3A%2F%2Ftiktok.com%2Fvideo%2F123',
                     'TikTok video', false)),
                 expectedAction: POLICY_ACTION.HIDE,
-                expectedReason: 'priority-blocked-result-url'
+                expectedReason: 'nuclearRegex'
             },
             {
                 name: 'plain chatgpt.com entry allows www and scheme variants',
@@ -5412,30 +5511,24 @@
         } catch (e) {}
     }
 
+    // Shared compiled selector. Google has many nested elements, so one closest()
+    // lookup is cheaper than testing every ancestor against every selector.
+    const GOOGLE_SUGGESTION_SELECTORS = [
+        '#fprsl', '#fprs', '.QRYxYe', '.NNMgCf', '.spell_orig', '.gL9Hy', 'div.y6Uyqe',
+        'span.gL9Hy', 'a.spell', 'p.spell_orig', '.KDCVqf', '.card-section.p64x9c',
+        '[aria-label*="Did you mean"]', '[aria-label*="Showing results for"]',
+        '[aria-label*="Tarkoititko"]', '[aria-label*="Näytetään tulokset haulla"]',
+    ];
+    const GOOGLE_SUGGESTION_SELECTOR = GOOGLE_SUGGESTION_SELECTORS.join(',');
     function getSuggestionSelectors() {
-        const base = [
-            '#fprsl', '#fprs', '.QRYxYe', '.NNMgCf', '.spell_orig', '.gL9Hy', 'div.y6Uyqe',
-            'span.gL9Hy', 'a.spell', 'p.spell_orig', '.KDCVqf', '.card-section.p64x9c',
-            '[aria-label*="Did you mean"]', '[aria-label*="Showing results for"]',
-            '[aria-label*="Tarkoititko"]', '[aria-label*="Näytetään tulokset haulla"]',
-        ];
-        if (isFirefoxAndroid) {
-            return base;
-        }
-        return base;
+        return GOOGLE_SUGGESTION_SELECTORS;
     }
 
     function isWithinSuggestionNode(node) {
         try {
-            if (!node) return false;
-            const selectors = getSuggestionSelectors();
-            let n = node;
-            while (n && n !== document.documentElement) {
-                for (let i = 0; i < selectors.length; ++i) {
-                    if (n.matches && n.matches(selectors[i])) return true;
-                }
-                n = n.parentElement;
-            }
+            const element = node?.nodeType === 1 ? node : node?.parentElement;
+            return !!(element && element !== document.documentElement &&
+                element.closest && element.closest(GOOGLE_SUGGESTION_SELECTOR));
         } catch (e) {}
         return false;
     }
@@ -5558,9 +5651,17 @@
 
     if (preflightRedirectIfBanned()) return;
 
+let googleLastUrlSanitizerInput = '';
 function cleanGoogleUrl() {
-    if (isFirefox) return; 
-    if (isGoogleImageSearch()) return; 
+    if (isFirefox) return;
+    // The body observer can fire hundreds of times while the URL stays the same.
+    // No reason to reparse it or run Image Search DOM detection on every mutation.
+    const currentHref = window.location.href;
+    if (currentHref === googleLastUrlSanitizerInput) return;
+    // Do not memoize an Image Search DOM that Google may later rehydrate into Web
+    // mode without a URL change. That transition still needs the original check.
+    if (isGoogleImageSearch()) return;
+    googleLastUrlSanitizerInput = currentHref;
 
     // 1. Bulletproof Gemini Abort
     if (window.location.hostname.includes('gemini')) return;
@@ -5591,6 +5692,7 @@ function cleanGoogleUrl() {
             const cleanedUrl = `${window.location.origin}${window.location.pathname}${url.searchParams.toString() ? '?' + url.searchParams.toString() : ''}`;
             if (cleanedUrl !== window.location.href) {
                 window.history.replaceState({}, '', cleanedUrl);
+                googleLastUrlSanitizerInput = window.location.href;
             }
         }
     } catch (e) {}
@@ -7167,14 +7269,13 @@ function swapSearchTabs() {
     }
 
     function hasForbiddenSuggestionText() {
-        const suggestionSelectors = getSuggestionSelectors();
-        for (let s = 0; s < suggestionSelectors.length; ++s) {
-            const elements = document.querySelectorAll(suggestionSelectors[s]);
-            for (let i = 0; i < elements.length; ++i) {
-                if (isPromoBannerNode(elements[i])) continue;
-                const txt = elements[i].textContent || '';
-                if (getSuggestionForbiddenMatch(txt)) return true;
-            }
+        // This is checked twice around overlay release. One combined selector
+        // preserves the same matched nodes without 16 separate DOM queries.
+        const elements = document.querySelectorAll(GOOGLE_SUGGESTION_SELECTOR);
+        for (let i = 0; i < elements.length; ++i) {
+            if (isPromoBannerNode(elements[i])) continue;
+            const txt = elements[i].textContent || '';
+            if (getSuggestionForbiddenMatch(txt)) return true;
         }
         return false;
     }
@@ -7564,6 +7665,13 @@ function swapSearchTabs() {
                 try { removeGoogleImagesRelatedSearchBlocks(); } catch (e) {}
             }
             if (mutationTouchesOnlyOpenImagePreview(mutations)) return;
+            // Deleting an already-vetted card/banner cannot introduce new content.
+            // Avoid an expensive recursive full-page scan triggered solely by our
+            // own removals. Mixed remove+insert, text, and attribute changes still
+            // take the normal fail-closed filtering path.
+            if (mutations.length && mutations.every(mutation =>
+                mutation.type === 'childList' &&
+                mutation.addedNodes.length === 0 && mutation.removedNodes.length > 0)) return;
             if (googleOrdinaryRescanTimer !== null) return;
             googleOrdinaryRescanTimer = setTimeout(() => {
                 googleOrdinaryRescanTimer = null;

@@ -716,6 +716,14 @@
   const THINKING_EFFORT_PRO_CUTOFF = 0.75;
   const THINKING_EFFORT_VISUAL_INSTANT_CUTOFF = 0.30;
   let thinkingEffortVisualRepairing = false;
+  // A native-style two-stop track. ChatGPT still owns the actual model state.
+  // The original 0/1/2 slider stays mounted but cannot be reached by the user.
+  const BRAVEFOX_TWO_STOP_ATTR = 'data-bravefox-two-stop';
+  const BRAVEFOX_TWO_STOP_NATIVE_ATTR = 'data-bravefox-two-stop-native';
+  const BRAVEFOX_WORK_BRANCH_HIDDEN_ATTR = 'data-bravefox-work-branch-hidden';
+  const braveFoxTwoStopSelections = new WeakMap();
+  const braveFoxTwoStopNativeHeadings = new WeakMap();
+
 
   // === Plugins vault ============================================================
   // The supplied + button uses this sprite fragment. A card showing that + is an
@@ -885,6 +893,9 @@
   let conversationLiveMetadataFrame = 0;
   const conversationLiveMetadataScopes = new Set();
   let conversationArchiveDbPromise = null;
+  // Initialized before archive startup: the Downloads dock reads this synchronously.
+  let conversationArchiveHtmlExportJob = null;
+  let conversationArchiveDownloadDockOpen = false;
   let conversationArchiveDomCaptureTimer = 0;
   let conversationArchivePostStreamTimer = 0;
   let conversationArchiveUiRefreshTimer = 0;
@@ -1658,6 +1669,8 @@
   installNavigationGuards();
   installInteractionGuards();
   installThinkingEffortEdgeLock();
+  braveFoxEnhanceTwoStopControls(document);
+  braveFoxHideWorkBranchItems(document);
   installEscapeHatchObserver();
   scheduleConversationSelectionFastRefresh();
   startConversationArchiveSystem();
@@ -1736,6 +1749,194 @@
       }
 
       .${HIDDEN_CLASS} {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+
+      /* The native three-stop ChatGPT reasoning control is never paintable.
+       * BraveFox renders one two-stop native-style track (Medium / High) beside
+       * the still-mounted native state source. Unknown slider versions retain
+       * their old edge guard rather than gaining unverified fake controls. */
+      [data-reasoning-slider="true"]:has([role="slider"][aria-valuemin="0"][aria-valuemax="2"]):not([${BRAVEFOX_TWO_STOP_NATIVE_ATTR}]) {
+        visibility: hidden !important;
+        pointer-events: none !important;
+      }
+      [${BRAVEFOX_TWO_STOP_NATIVE_ATTR}="true"] {
+        position: absolute !important;
+        inset: 0 auto auto 0 !important;
+        width: 100% !important;
+        max-height: 44px !important;
+        overflow: hidden !important;
+        opacity: 0 !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+      }
+      [data-bravefox-two-stop-host="true"] { position: relative !important; }
+      /* Lock only the identified reasoning popup, not every ChatGPT menu.
+       * ChatGPT can initially mount a narrow popover, then resize its wrapper
+       * after the first selection. Give this particular popup its final width
+       * from the first paint and clamp to the available mobile viewport. */
+      [data-bravefox-two-stop-popup="true"] {
+        box-sizing: border-box !important;
+        width: min(324px, calc(100vw - 20px)) !important;
+        min-width: 0 !important;
+        max-width: calc(100vw - 20px) !important;
+      }
+      /* A visually native two-stop track: only Medium/High, never Instant/Pro.
+       * Keep the original ChatGPT slider mounted invisibly as our state source.
+       * Center around the native holder even if that holder is narrow. */
+      [${BRAVEFOX_TWO_STOP_ATTR}="true"] {
+        display: flex !important;
+        position: relative;
+        left: 50%;
+        transform: translateX(-50%);
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        box-sizing: border-box;
+        width: min(316px, calc(100vw - 32px));
+        min-width: 0;
+        max-width: none;
+        padding: 0 8px 2px;
+        color: inherit;
+        font: inherit;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+      [${BRAVEFOX_TWO_STOP_ATTR}="true"] [data-bravefox-effort-heading] {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        min-height: 18px;
+        margin: 0 0 2px;
+        color: var(--text-primary, #151515);
+        font-size: 14px;
+        font-weight: 600;
+        line-height: 20px;
+        text-align: center;
+        white-space: nowrap;
+      }
+      [${BRAVEFOX_TWO_STOP_ATTR}="true"] [data-bravefox-effort-rail] {
+        display: block;
+        position: relative;
+        box-sizing: border-box;
+        /* Always use the expanded ~300px rail; never sample an unfinished
+         * popup width. The surrounding 8px widget padding keeps it inset. */
+        width: 100%;
+        max-width: none;
+        height: 24px;
+        border-radius: 999px;
+        /* Medium: Classic Midnight Blue (RGB 25, 25, 112), fully opaque. */
+        background: rgba(25, 25, 112, 1.00);
+        border: 1px solid rgba(25, 25, 112, .16);
+        cursor: pointer;
+        outline: none;
+        touch-action: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+      [${BRAVEFOX_TWO_STOP_ATTR}="true"][data-bravefox-selected="high"] [data-bravefox-effort-rail] {
+        /* High: Electric Midnight Blue (RGB 32, 32, 176), fully opaque. */
+        background: rgba(32, 32, 176, 1.00);
+      }
+      /* The native heading stays clickable. Shift the visible model label to
+       * compensate for its trailing chevron and center it over the effort label. */
+      [data-bravefox-model-title="true"] {
+        transform: translateX(5px);
+      }
+      [${BRAVEFOX_TWO_STOP_ATTR}="true"] [data-bravefox-model-title-fallback] {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        min-height: 18px;
+        margin: 0 0 1px;
+        transform: translateX(5px);
+        color: var(--text-primary, #151515);
+        font-size: 14px;
+        font-weight: 600;
+      }
+      [${BRAVEFOX_TWO_STOP_ATTR}="true"] [data-bravefox-model-title-fallback]::after {
+        /* The mockup uses a clean model label without a second chevron. */
+        content: none;
+        margin-left: 0;
+        font-size: 17px;
+        font-weight: 400;
+        color: var(--text-tertiary, #999);
+      }
+      /* The native heading remains a clickable button; only its small arrow art
+       * is suppressed to match the user's plain model-name mockup. */
+      [data-bravefox-model-heading-button="true"] [data-bravefox-model-chevron="true"],
+      [data-bravefox-model-heading-button="true"] svg {
+        display: none !important;
+      }
+      [${BRAVEFOX_TWO_STOP_ATTR}="true"] [data-bravefox-effort-fill] {
+        position: absolute;
+        inset: -1px auto -1px -1px;
+        width: 0;
+        border-radius: 999px;
+        background: rgba(32, 32, 176, 1.00);
+        transition: none;
+        pointer-events: none;
+      }
+      [${BRAVEFOX_TWO_STOP_ATTR}="true"][data-bravefox-selected="high"] [data-bravefox-effort-fill] { width: calc(100% + 2px); }
+      [${BRAVEFOX_TWO_STOP_ATTR}="true"] [data-bravefox-effort-stop] {
+        position: absolute;
+        top: 50%;
+        width: 4px;
+        height: 4px;
+        border-radius: 50%;
+        background: rgba(255,255,255,.55);
+        transform: translate(-50%, -50%);
+        pointer-events: none;
+      }
+      [${BRAVEFOX_TWO_STOP_ATTR}="true"] [data-bravefox-effort-stop="medium"] { left: 12px; }
+      [${BRAVEFOX_TWO_STOP_ATTR}="true"] [data-bravefox-effort-stop="high"] { left: calc(100% - 12px); }
+      [${BRAVEFOX_TWO_STOP_ATTR}="true"][data-bravefox-selected="high"] [data-bravefox-effort-stop] { background: rgba(255,255,255,.42); }
+      [${BRAVEFOX_TWO_STOP_ATTR}="true"] [data-bravefox-effort-thumb] {
+        position: absolute;
+        top: 50%;
+        left: 12px;
+        width: 28px;
+        height: 28px;
+        box-sizing: border-box;
+        border-radius: 50%;
+        border: 1px solid #d4d4d4;
+        background: var(--main-surface-primary, #fff);
+        box-shadow: 0 1px 2px rgba(0,0,0,.09);
+        transform: translate(-50%, -50%);
+        transition: none;
+        pointer-events: none;
+      }
+      [${BRAVEFOX_TWO_STOP_ATTR}="true"][data-bravefox-selected="high"] [data-bravefox-effort-thumb] { left: calc(100% - 12px); }
+      /* On the first mount, the native state dictates the thumb position immediately.
+       * Only deliberate user input enables the short native-style animation.
+       * This prevents the initial left-to-right "catch-up" when High is active. */
+      [${BRAVEFOX_TWO_STOP_ATTR}="true"][data-bravefox-user-interacted="true"] [data-bravefox-effort-thumb] {
+        transition: left 125ms ease;
+      }
+      [${BRAVEFOX_TWO_STOP_ATTR}="true"][data-bravefox-user-interacted="true"] [data-bravefox-effort-fill] {
+        transition: width 125ms ease;
+      }
+      [${BRAVEFOX_TWO_STOP_ATTR}="true"] [data-bravefox-effort-rail]:focus-visible {
+        outline: 2px solid rgb(32, 32, 176);
+        outline-offset: 4px;
+      }
+      [${BRAVEFOX_TWO_STOP_ATTR}="true"][data-bravefox-dragging="true"] [data-bravefox-effort-thumb],
+      [${BRAVEFOX_TWO_STOP_ATTR}="true"][data-bravefox-dragging="true"] [data-bravefox-effort-fill] {
+        transition: none;
+      }
+      [${BRAVEFOX_TWO_STOP_ATTR}="true"][data-bravefox-dragging="true"] [data-bravefox-effort-thumb] {
+        left: var(--bravefox-drag-left, 12px) !important;
+      }
+      [${BRAVEFOX_TWO_STOP_ATTR}="true"][data-bravefox-dragging="true"] [data-bravefox-effort-fill] {
+        width: var(--bravefox-drag-fill, 0px) !important;
+      }
+      [data-bravefox-old-effort-label="true"],
+      [data-bravefox-forbidden-model-choice="true"] { display: none !important; }
+      [${BRAVEFOX_WORK_BRANCH_HIDDEN_ATTR}="true"] {
         display: none !important;
         visibility: hidden !important;
         opacity: 0 !important;
@@ -4271,6 +4472,510 @@
     return hidden;
   }
 
+  // === Two visible reasoning stops, while preserving ChatGPT's native selection ===
+  function braveFoxTwoStopValue(control) {
+    if (!(control instanceof Element)) return null;
+    const state = control.matches?.('[role="slider"][aria-valuenow], input[type="range"]') ?
+      control : control.querySelector('[role="slider"][aria-valuenow], input[type="range"]');
+    if (!(state instanceof Element)) return null;
+    const raw = state instanceof HTMLInputElement ? state.value : state.getAttribute('aria-valuenow');
+    const value = Number(raw);
+    return Number.isFinite(value) ? value : null;
+  }
+
+  function braveFoxTwoStopNativeType(control) {
+    if (!(control instanceof Element)) return '';
+    // Exact ChatGPT control: 0 = Instant, 1 = Medium, 2 = High.
+    if (control.matches(THINKING_EFFORT_EXACT_CONTROL_SELECTOR) &&
+        control.querySelector(THINKING_EFFORT_EXACT_STATE_SELECTOR)) return 'exact';
+    // Older Firefox Android uses range/ARIA variants within a reasoning popup.
+    const state = control.matches(THINKING_EFFORT_SLIDER_SELECTOR) ? control : null;
+    const range = state && readThinkingEffortRange(state);
+    if (range && range.min === 0 && (range.max === 2 || range.max === 3) &&
+        isThinkingEffortSlider(state)) return 'range';
+    return '';
+  }
+
+  function braveFoxTwoStopNativeSelect(control, type, tier) {
+    if (!(control instanceof Element) || !control.isConnected) return false;
+    const desired = tier === 'high' ? 2 : 1;
+    if (type === 'exact') {
+      const state = getExactReasoningState(control);
+      if (!(state instanceof HTMLElement)) return false;
+      const current = braveFoxTwoStopValue(control);
+      if (current === desired) return true;
+      // React's native slider remains authoritative. One input, not a barrage of
+      // timers/clicks that competes with the native slider animation.
+      const key = current !== null && current > desired ? 'ArrowLeft' : 'ArrowRight';
+      const steps = current === null ? 1 : Math.min(2, Math.abs(desired - current));
+      for (let index = 0; index < steps; index += 1) {
+        state.dispatchEvent(new KeyboardEvent('keydown', {
+          key, code: key, bubbles: true, cancelable: true, composed: true
+        }));
+        state.dispatchEvent(new KeyboardEvent('keyup', {
+          key, code: key, bubbles: true, cancelable: true, composed: true
+        }));
+      }
+      return true;
+    }
+    if (type === 'range') {
+      const slider = control;
+      if (slider instanceof HTMLInputElement && slider.type === 'range') {
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+        if (setter) setter.call(slider, String(desired));
+        else slider.value = String(desired);
+        slider.dispatchEvent(new Event('input', { bubbles: true }));
+        slider.dispatchEvent(new Event('change', { bubbles: true }));
+        return true;
+      }
+      if (!(slider instanceof HTMLElement) || slider.getAttribute('role') !== 'slider') return false;
+      const current = braveFoxTwoStopValue(slider);
+      if (current === desired) return true;
+      const key = current !== null && current > desired ? 'ArrowLeft' : 'ArrowRight';
+      const steps = current === null ? 1 : Math.min(2, Math.abs(desired - current));
+      for (let index = 0; index < steps; index += 1) {
+        slider.dispatchEvent(new KeyboardEvent('keydown', {
+          key, code: key, bubbles: true, cancelable: true, composed: true
+        }));
+        slider.dispatchEvent(new KeyboardEvent('keyup', {
+          key, code: key, bubbles: true, cancelable: true, composed: true
+        }));
+      }
+      return true;
+    }
+    if (type === 'visual') {
+      return dispatchThinkingEffortTrackPoint(control, desired === 2 ? 0.96 : 0.50);
+    }
+    return false;
+  }
+
+  // The reasoning-effort composer pill often exposes only "Päättelypanostus".
+  // Check actual model-choice controls before trusting cached selection or the URL.
+  // Keep this read-only and limited to headers/model controls, never message text.
+  function braveFoxTwoStopVisibleModelSlug() {
+    const selectedChoices = document.querySelectorAll([
+      '[role="menuitemradio"][aria-checked="true"]',
+      '[role="option"][aria-selected="true"]',
+      '[role="radio"][aria-checked="true"]',
+      '[data-model-picker] [data-state="checked"]'
+    ].join(', '));
+    const modelControls = document.querySelectorAll([
+      'button[data-testid*="model-switcher" i]',
+      'button[data-testid*="model-selector" i]',
+      'button[data-testid*="model-picker" i]',
+      '[data-selected-model]',
+      'header button[aria-haspopup="menu"]',
+      'header [role="button"][aria-haspopup="menu"]',
+      'nav button[aria-haspopup="menu"]',
+      'form button[aria-haspopup="menu"]'
+    ].join(', '));
+    for (const element of [...modelControls, ...selectedChoices]) {
+      if (!(element instanceof Element) ||
+          element.closest('[' + BRAVEFOX_TWO_STOP_ATTR + ']')) continue;
+      if (element.matches('button, [role="button"]') && !isElementActuallyVisible(element)) continue;
+      const candidates = [
+        element.getAttribute('data-selected-model'),
+        element.getAttribute('data-model-slug'),
+        element.getAttribute('data-model'),
+        element.getAttribute('aria-label'),
+        element.getAttribute('title'),
+        element.textContent
+      ];
+      for (const candidate of candidates) {
+        const raw = String(candidate || '').trim();
+        if (!raw || raw.length > 100) continue;
+        const inferred = inferConversationModelSlugFromText(raw);
+        if (inferred) return inferred;
+      }
+    }
+    return '';
+  }
+
+  // Never hardcode GPT-6: the model can differ across conversations and tabs.
+  function braveFoxTwoStopCurrentModelLabel() {
+    let model = '';
+    try { model = readLiveConversationModelSlugFromComposer(); } catch {}
+    if (!model) {
+      try { model = braveFoxTwoStopVisibleModelSlug(); } catch {}
+    }
+    if (!model) model = conversationLastSelectedModelSlug || '';
+    if (!model) {
+      try { model = new URL(location.href).searchParams.get('model') || ''; } catch {}
+    }
+    // The latest assistant's own model metadata is a last-resort hint for a
+    // conversation with no visible model selector (especially the older mobile UI).
+    if (!model) {
+      const recent = document.querySelectorAll('[data-message-model-slug]');
+      for (let index = recent.length - 1; index >= 0; index -= 1) {
+        const candidate = String(recent[index].getAttribute('data-message-model-slug') || '').trim();
+        if (inferConversationModelSlugFromText(candidate)) { model = candidate; break; }
+      }
+    }
+    if (!model) {
+      // Reuse the existing conversation-aware fallback (including assistant
+      // metadata when the composer offers no model name). No network request.
+      try { model = readCurrentConversationModelSlugForSend(); } catch {}
+    }
+    const slug = normalizeChatGptModelSlug(model);
+    if (!slug) return 'Model';
+    const formatted = formatConversationModelLabel(slug);
+    return formatted ? (/^gpt-/i.test(slug) ? 'GPT-' + formatted : formatted) : 'Model';
+  }
+
+  function braveFoxTwoStopFitRailToPopup(control, widget) {
+    if (!(control instanceof Element) || !(widget instanceof Element)) return;
+    // Never read a transitioning popup's geometry and persist a temporary size.
+    // Only an actual menu/dialog/popover surface receives the stable width.
+    // The track itself is sized by CSS, including on narrow Android viewports.
+    const popup = control.closest([
+      '[role="menu"]', '[role="dialog"]', '[role="listbox"]',
+      '[data-slot="popover-content"]', '[data-radix-menu-content]'
+    ].join(', '));
+    if (popup instanceof HTMLElement) {
+      if (popup.getAttribute('data-bravefox-two-stop-popup') !== 'true') {
+        popup.setAttribute('data-bravefox-two-stop-popup', 'true');
+      }
+    }
+  }
+
+  function braveFoxTwoStopUpdateModelTitle(control, widget) {
+    if (!(control instanceof Element) || !(widget instanceof Element)) return;
+    const label = braveFoxTwoStopCurrentModelLabel();
+    let saved = braveFoxTwoStopNativeHeadings.get(control);
+    if (!saved?.node?.parentElement?.isConnected) saved = null;
+    if (!saved) {
+      // Only rewrite a standalone native effort heading immediately preceding
+      // this slider. Never mutate model choices, chat content, or React structure.
+      const popup = control.closest(THINKING_EFFORT_POPUP_SELECTOR);
+      if (popup) {
+        const candidates = popup.querySelectorAll('button, [role="button"], [role="menuitem"], span, div, p');
+        for (const element of candidates) {
+          if (element === control || element.contains(control) ||
+              element.closest('[' + BRAVEFOX_TWO_STOP_ATTR + ']') ||
+              !(element.compareDocumentPosition(control) & Node.DOCUMENT_POSITION_FOLLOWING)) continue;
+          const text = normalizeText(element.textContent);
+          if (!/^(?:korkea|keskitaso|high|medium|instant|välitön|valiton)(?:\s*[›>])?$/.test(text)) continue;
+          // A native header typically has a text node (sometimes nested in a span)
+          // alongside a chevron. Change only that text node; its click handler stays.
+          const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+          let textNode;
+          while ((textNode = walker.nextNode())) {
+            if (!/^\s*(?:korkea|keskitaso|high|medium|instant|välitön|valiton)\s*$/i.test(textNode.nodeValue || '')) continue;
+            // Don't capture a static scale label from the original three-stop track.
+            if (textNode.parentElement?.closest(THINKING_EFFORT_EXACT_CONTROL_SELECTOR + ', [data-model-picker-power-slider]')) continue;
+            saved = {node: textNode};
+            braveFoxTwoStopNativeHeadings.set(control, saved);
+            textNode.parentElement?.setAttribute('data-bravefox-model-title', 'true');
+            const headingButton = textNode.parentElement?.closest('button, [role="button"]');
+            if (headingButton && popup.contains(headingButton)) {
+              headingButton.setAttribute('data-bravefox-model-heading-button', 'true');
+              for (const arrow of headingButton.querySelectorAll('span')) {
+                if (/[›>⌄⌃]/.test(String(arrow.textContent || '').trim()) &&
+                    arrow.children.length === 0) {
+                  arrow.setAttribute('data-bravefox-model-chevron', 'true');
+                }
+              }
+            }
+            break;
+          }
+          if (saved) break;
+        }
+      }
+    }
+    if (saved) {
+      if (saved.node.nodeValue !== label) saved.node.nodeValue = label;
+      const fallback = widget.querySelector('[data-bravefox-model-title-fallback]');
+      if (fallback) fallback.remove();
+    } else {
+      let fallback = widget.querySelector('[data-bravefox-model-title-fallback]');
+      if (!fallback) {
+        fallback = document.createElement('div');
+        fallback.setAttribute('data-bravefox-model-title-fallback', 'true');
+        widget.insertBefore(fallback, widget.firstChild);
+      }
+      if (fallback.textContent !== label) fallback.textContent = label;
+    }
+  }
+
+  // The custom track has two native-style stops (0=Medium, 1=High), while
+  // ChatGPT's underlying 0/1/2 state remains authoritative and safely hidden.
+  function braveFoxTwoStopPaint(widget, tier) {
+    if (!(widget instanceof Element)) return;
+    const selected = tier === 'high' ? 'high' : 'medium';
+    const finnish = widget.getAttribute('data-bravefox-finnish') === 'true';
+    const label = selected === 'high' ? (finnish ? 'Korkea' : 'High') : (finnish ? 'Keskitaso' : 'Medium');
+    if (widget.getAttribute('data-bravefox-selected') !== selected) widget.setAttribute('data-bravefox-selected', selected);
+    const heading = widget.querySelector('[data-bravefox-effort-heading]');
+    if (heading && heading.textContent !== label) heading.textContent = label;
+    const rail = widget.querySelector('[data-bravefox-effort-rail]');
+    if (rail) {
+      rail.setAttribute('aria-valuenow', selected === 'high' ? '1' : '0');
+      rail.setAttribute('aria-valuetext', label);
+    }
+  }
+
+  function braveFoxTwoStopRefresh(control) {
+    if (!(control instanceof Element)) return;
+    const widget = braveFoxTwoStopSelections.get(control);
+    if (!(widget instanceof Element) || !widget.isConnected) return;
+    braveFoxTwoStopUpdateModelTitle(control, widget);
+    braveFoxTwoStopFitRailToPopup(control, widget);
+    if (widget.getAttribute('data-bravefox-native-type') === 'visual') {
+      // Legacy visual tracks have no reliable readable native state. Keep the
+      // last explicitly chosen safe tier; never infer from all three labels.
+      return;
+    }
+    const value = braveFoxTwoStopValue(control);
+    if (value === 1 || value === 2) {
+      // While a synthetic user commit is settling, retain its requested tier;
+      // otherwise native changes should paint directly at the correct stop.
+      const nativeTier = value === 2 ? 'high' : 'medium';
+      if (widget.getAttribute('data-bravefox-selected') !== nativeTier) {
+        widget.removeAttribute('data-bravefox-user-interacted');
+      }
+      braveFoxTwoStopPaint(widget, nativeTier);
+    }
+  }
+
+  function braveFoxTwoStopCreate(control, type) {
+    if (!(control instanceof Element) || !control.isConnected) return false;
+    const existing = braveFoxTwoStopSelections.get(control);
+    if (existing?.isConnected) {
+      braveFoxTwoStopRefresh(control);
+      return true;
+    }
+    const parent = control.parentElement;
+    if (!(parent instanceof HTMLElement)) return false;
+    const finnish = isFinnishThinkingEffortUi(control.closest(THINKING_EFFORT_POPUP_SELECTOR));
+    const widget = document.createElement('div');
+    widget.setAttribute(BRAVEFOX_TWO_STOP_ATTR, 'true');
+    widget.setAttribute('data-bravefox-native-type', type);
+    widget.setAttribute('data-bravefox-finnish', String(finnish));
+    widget.setAttribute('role', 'group');
+    widget.setAttribute('aria-label', finnish ? 'Päättelypanostus' : 'Thinking effort');
+
+    const heading = document.createElement('div');
+    heading.setAttribute('data-bravefox-effort-heading', 'true');
+    widget.appendChild(heading);
+
+    const rail = document.createElement('div');
+    rail.setAttribute('data-bravefox-effort-rail', 'true');
+    rail.setAttribute('role', 'slider');
+    rail.setAttribute('tabindex', '0');
+    rail.setAttribute('aria-label', finnish ? 'Päättelypanostus' : 'Thinking effort');
+    rail.setAttribute('aria-orientation', 'horizontal');
+    rail.setAttribute('aria-valuemin', '0');
+    rail.setAttribute('aria-valuemax', '1');
+    for (const name of ['fill', 'medium', 'high', 'thumb']) {
+      const part = document.createElement('span');
+      if (name === 'medium' || name === 'high') part.setAttribute('data-bravefox-effort-stop', name);
+      else part.setAttribute('data-bravefox-effort-' + name, 'true');
+      part.setAttribute('aria-hidden', 'true');
+      rail.appendChild(part);
+    }
+    widget.appendChild(rail);
+
+    let pendingTier = null;
+    let dragRect = null;
+    let dragStartTier = null;
+    const commit = tier => {
+      if (!rail.isConnected || !control.isConnected) return;
+      const desired = tier === 'high' ? 2 : 1;
+      // Enable animation only after an actual user gesture. Initial native-state
+      // synchronisation (including late React hydration) must never animate.
+      widget.setAttribute('data-bravefox-user-interacted', 'true');
+      braveFoxTwoStopPaint(widget, tier);
+      if (!braveFoxTwoStopNativeSelect(control, type, tier)) {
+        braveFoxTwoStopRefresh(control);
+        return;
+      }
+      // One bounded fallback only for the exact native React variant.
+      window.setTimeout(() => {
+        if (!control.isConnected) return;
+        if (type === 'exact' && braveFoxTwoStopValue(control) !== desired) {
+          const root = getExactReasoningPowerRoot(control);
+          if (root) dispatchThinkingEffortTrackPoint(root, tier === 'high' ? 0.96 : 0.50);
+        }
+        window.setTimeout(() => braveFoxTwoStopRefresh(control), 90);
+      }, 65);
+    };
+    const fromX = clientX => {
+      const rect = dragRect || rail.getBoundingClientRect();
+      return clientX < rect.left + rect.width / 2 ? 'medium' : 'high';
+    };
+    const dragToX = clientX => {
+      if (!dragRect) return;
+      // Direct thumb movement under the pointer; native selection happens only
+      // on release, so pointermove never hammers React or its model API.
+      const left = Math.max(12, Math.min(dragRect.width - 12, clientX - dragRect.left));
+      widget.style.setProperty('--bravefox-drag-left', left + 'px');
+      widget.style.setProperty('--bravefox-drag-fill', (left + 1) + 'px');
+    };
+    const clearDrag = () => {
+      pendingTier = null;
+      dragRect = null;
+      dragStartTier = null;
+      widget.removeAttribute('data-bravefox-dragging');
+      widget.style.removeProperty('--bravefox-drag-left');
+      widget.style.removeProperty('--bravefox-drag-fill');
+    };
+
+    rail.addEventListener('pointerdown', event => {
+      if (event.button !== 0 && event.pointerType === 'mouse') return;
+      event.stopPropagation();
+      dragRect = rail.getBoundingClientRect();
+      dragStartTier = widget.getAttribute('data-bravefox-selected');
+      pendingTier = fromX(event.clientX);
+      widget.setAttribute('data-bravefox-dragging', 'true');
+      dragToX(event.clientX);
+      try { rail.setPointerCapture(event.pointerId); } catch {}
+    });
+    rail.addEventListener('pointermove', event => {
+      if (!widget.hasAttribute('data-bravefox-dragging') || pendingTier === null) return;
+      event.stopPropagation();
+      pendingTier = fromX(event.clientX);
+      dragToX(event.clientX);
+    });
+    rail.addEventListener('pointerup', event => {
+      if (!widget.hasAttribute('data-bravefox-dragging')) return;
+      event.stopPropagation();
+      const tier = fromX(event.clientX);
+      clearDrag();
+      try { rail.releasePointerCapture(event.pointerId); } catch {}
+      commit(tier);
+    });
+    rail.addEventListener('pointercancel', () => {
+      const previous = dragStartTier;
+      clearDrag();
+      if (previous) braveFoxTwoStopPaint(widget, previous);
+      braveFoxTwoStopRefresh(control);
+    });
+    // Keyboard offers the same two safe stops; never forward edge keys to the
+    // hidden native slider (which would allow Instant/Pro).
+    rail.addEventListener('keydown', event => {
+      let tier = null;
+      if (event.key === 'ArrowRight' || event.key === 'ArrowUp' || event.key === 'End') tier = 'high';
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowDown' || event.key === 'Home') tier = 'medium';
+      if (!tier) return;
+      event.preventDefault();
+      event.stopPropagation();
+      commit(tier);
+    });
+
+    parent.setAttribute('data-bravefox-two-stop-host', 'true');
+    control.setAttribute(BRAVEFOX_TWO_STOP_NATIVE_ATTR, 'true');
+    control.setAttribute('aria-hidden', 'true');
+    // Keep React's original control in the document as the authoritative state
+    // source, but prevent keyboard users from tabbing into its hidden 3 stops.
+    const nativeSlider = control.matches?.('[role="slider"]') ? control : control.querySelector('[role="slider"], input[type="range"]');
+    if (nativeSlider instanceof HTMLElement) nativeSlider.tabIndex = -1;
+    control.insertAdjacentElement('afterend', widget);
+    braveFoxTwoStopSelections.set(control, widget);
+    braveFoxTwoStopUpdateModelTitle(control, widget);
+    braveFoxTwoStopFitRailToPopup(control, widget);
+    const initial = braveFoxTwoStopValue(control);
+    braveFoxTwoStopPaint(widget, initial === 2 ? 'high' : 'medium');
+    const syncFromNative = () => queueMicrotask(() => braveFoxTwoStopRefresh(control));
+    const stateInput = control.matches?.('input[type="range"], [role="slider"]') ? control :
+      control.querySelector('input[type="range"], [role="slider"]');
+    if (stateInput) {
+      stateInput.addEventListener('input', syncFromNative);
+      stateInput.addEventListener('change', syncFromNative);
+    }
+    // The hidden native control must never remain on an edge tier after mount.
+    if (type === 'exact' && initial === 0) queueMicrotask(() => enforceExactReasoningFloor(control));
+    if (type === 'range' && (initial === 0 || (initial === 3 && readThinkingEffortRange(control)?.max === 3))) {
+      queueMicrotask(() => braveFoxTwoStopNativeSelect(control, type, 'medium'));
+    }
+    return true;
+  }
+
+  function braveFoxEnhanceTwoStopControls(scope = document) {
+    const selectors = THINKING_EFFORT_EXACT_CONTROL_SELECTOR + ', [role="slider"][aria-valuemin="0"][aria-valuemax="2"], [role="slider"][aria-valuemin="0"][aria-valuemax="3"], input[type="range"]';
+    const candidates = [];
+    if (scope instanceof Element && scope.matches?.(selectors)) candidates.push(scope);
+    if (typeof scope?.querySelectorAll === 'function') candidates.push(...scope.querySelectorAll(selectors));
+    for (const control of candidates) {
+      // A nested role=slider belongs to its exact parent, not a second widget.
+      if (control.closest?.(THINKING_EFFORT_EXACT_CONTROL_SELECTOR) !== null &&
+          !control.matches(THINKING_EFFORT_EXACT_CONTROL_SELECTOR)) continue;
+      const type = braveFoxTwoStopNativeType(control);
+      if (!type) continue;
+      if (type === 'range' && !control.closest(THINKING_EFFORT_POPUP_SELECTOR)) continue;
+      braveFoxTwoStopCreate(control, type);
+    }
+  }
+
+  // The old Firefox Android UI sometimes has an unlabelled visual track rather
+  // than an ARIA slider. Handle it only inside a small identified effort popup.
+  function braveFoxEnhanceLegacyVisualTwoStop(target) {
+    if (!(target instanceof Element)) return false;
+    let popup = findThinkingEffortVisualPopup(target, false);
+    if (!popup) {
+      // React often inserts the entire portal subtree as one ancestor node.
+      // Inspect only its small popup descendants, never the full conversation.
+      for (const candidate of target.querySelectorAll?.('[role="menu"], [role="dialog"], [role="listbox"]') || []) {
+        popup = findThinkingEffortVisualPopup(candidate, false);
+        if (popup) break;
+      }
+    }
+    if (!popup || popup.querySelector('[' + BRAVEFOX_TWO_STOP_ATTR + ']') ||
+        popup.querySelector(THINKING_EFFORT_EXACT_CONTROL_SELECTOR + ', [role="slider"], input[type="range"]')) return false;
+    const track = findThinkingEffortVisualTrack(popup, target);
+    if (!(track instanceof HTMLElement)) return false;
+    if (getThinkingEffortPopupTier(popup) === 'instant') {
+      dispatchThinkingEffortTrackPoint(track, 0.50);
+    }
+    if (!braveFoxTwoStopCreate(track, 'visual')) return false;
+    popup.setAttribute('data-bravefox-visual-two-stop-root', 'true');
+    for (const leaf of popup.querySelectorAll('span, div, p')) {
+      if (leaf.children.length || leaf.closest('[' + BRAVEFOX_TWO_STOP_ATTR + ']')) continue;
+      if (/^(?:instant|välitön|valiton|medium|keskitaso|high|korkea)$/i.test(normalizeText(leaf.textContent))) {
+        leaf.setAttribute('data-bravefox-old-effort-label', 'true');
+      }
+    }
+    return true;
+  }
+
+  function braveFoxHideForbiddenModelChoices(scope = document) {
+    const nodes = [];
+    const selector = '[role="menuitem"], [role="option"], [role="radio"]';
+    if (scope instanceof Element && scope.matches?.(selector)) nodes.push(scope);
+    if (scope?.querySelectorAll) nodes.push(...scope.querySelectorAll(selector));
+    for (const item of nodes) {
+      const label = normalizeText(String(item.textContent || '').split('\n')[0]);
+      // Only model/mode picker entries, never billing or unrelated Pro buttons.
+      const forbidden = /^(?:instant|välitön|valiton|pro|gpt[- ]?(?:5(?:\.5|\.6)?|6(?:\.\d+)?)[ -](?:instant|pro))$/.test(label);
+      if (!forbidden) continue;
+      const popup = item.closest('[role="menu"], [role="listbox"], [role="dialog"]');
+      if (!popup) continue;
+      const text = normalizeText(popup.textContent);
+      const picker = popup.querySelector(THINKING_EFFORT_EXACT_CONTROL_SELECTOR + ', [role="slider"]') ||
+        /(?:medium|keskitaso|high|korkea|thinking|päättelypanostus|paattelypanostus)/.test(text);
+      if (!picker) continue;
+      item.setAttribute('data-bravefox-forbidden-model-choice', 'true');
+      item.setAttribute('aria-hidden', 'true');
+      item.setAttribute('tabindex', '-1');
+    }
+  }
+
+  function braveFoxHideWorkBranchItems(scope = document) {
+    braveFoxHideForbiddenModelChoices(scope);
+    const nodes = [];
+    if (scope instanceof Element && scope.matches?.('[role="menuitem"]')) nodes.push(scope);
+    if (scope?.querySelectorAll) nodes.push(...scope.querySelectorAll('[role="menuitem"]'));
+    for (const item of nodes) {
+      const label = normalizeText(item.textContent);
+      const workBranch = /^(?:luo|tee|haaroita|create|branch|fork)/.test(label) &&
+        /(?:haara|haarau|branch|fork)/.test(label) &&
+        /(?:work[ -]?tilaan|work mode|work-tilaan|into work|to work|in work)/.test(label);
+      if (!workBranch) continue;
+      item.setAttribute(BRAVEFOX_WORK_BRANCH_HIDDEN_ATTR, 'true');
+      item.setAttribute('aria-hidden', 'true');
+      item.setAttribute('tabindex', '-1');
+    }
+  }
+
   function getExactReasoningControl(target = null, allowGlobalFallback = true) {
     if (target instanceof Element) {
       const direct = target.closest(THINKING_EFFORT_EXACT_CONTROL_SELECTOR);
@@ -4350,18 +5055,19 @@
 
   function dispatchExactReasoningArrow(control, key) {
     if (!(control instanceof HTMLElement) || !control.isConnected) return false;
-
-    try { control.focus({ preventScroll: true }); } catch { try { control.focus(); } catch {} }
+    // Keyboard events belong on the native ARIA thumb, not only its wrapper.
+    const target = getExactReasoningState(control) || control;
+    try { target.focus({ preventScroll: true }); } catch { try { target.focus(); } catch {} }
 
     try {
-      control.dispatchEvent(new KeyboardEvent('keydown', {
+      target.dispatchEvent(new KeyboardEvent('keydown', {
         key,
         code: key,
         bubbles: true,
         cancelable: true,
         composed: true
       }));
-      control.dispatchEvent(new KeyboardEvent('keyup', {
+      target.dispatchEvent(new KeyboardEvent('keyup', {
         key,
         code: key,
         bubbles: true,
@@ -4461,10 +5167,21 @@
         if (mutation.type === 'attributes') {
           const state = mutation.target;
           if (!(state instanceof Element)) continue;
-          if (!state.matches(THINKING_EFFORT_EXACT_STATE_SELECTOR)) continue;
-          const control = state.closest(THINKING_EFFORT_EXACT_CONTROL_SELECTOR);
-          if (control instanceof Element && isExactReasoningInstant(control)) {
-            queueMicrotask(() => enforceExactReasoningFloor(control));
+          if (state.matches(THINKING_EFFORT_EXACT_STATE_SELECTOR)) {
+            const control = state.closest(THINKING_EFFORT_EXACT_CONTROL_SELECTOR);
+            if (control instanceof Element) {
+              braveFoxEnhanceTwoStopControls(control);
+              braveFoxTwoStopRefresh(control);
+              if (isExactReasoningInstant(control)) queueMicrotask(() => enforceExactReasoningFloor(control));
+            }
+          } else if (state.matches('[role="slider"]') &&
+                     state.hasAttribute(BRAVEFOX_TWO_STOP_NATIVE_ATTR)) {
+            // Old Firefox/Android ARIA sliders can expose both forbidden edges.
+            // React state changes are observed once; no extra pointermove scans.
+            braveFoxTwoStopRefresh(state);
+            if (isThinkingEffortInstant(state) || isThinkingEffortPro(state)) {
+              queueMicrotask(() => enforceThinkingEffortSliderEdges(state));
+            }
           }
           continue;
         }
@@ -4474,7 +5191,10 @@
           const control = node.matches?.(THINKING_EFFORT_EXACT_CONTROL_SELECTOR)
             ? node
             : node.querySelector?.(THINKING_EFFORT_EXACT_CONTROL_SELECTOR);
-          if (control instanceof Element) queueMicrotask(() => enforceExactReasoningFloor(control));
+          if (control instanceof Element) {
+            braveFoxEnhanceTwoStopControls(control);
+            queueMicrotask(() => enforceExactReasoningFloor(control));
+          }
         }
       }
     });
@@ -4536,6 +5256,9 @@
   function installThinkingEffortEdgeLock() {
     installExactReasoningStateObserver();
 
+    const fromTwoStopWidget = event => event.target instanceof Element &&
+      Boolean(event.target.closest('[' + BRAVEFOX_TWO_STOP_ATTR + ']'));
+
     const cancelBlockedEdgeInteraction = event => {
       try { event.preventDefault(); } catch {}
       try { event.stopPropagation(); } catch {}
@@ -4554,6 +5277,7 @@
     };
 
     document.addEventListener('pointerdown', event => {
+      if (fromTwoStopWidget(event)) return;
       if (!isFirefoxAndroidReasoningInteraction(event.target)) return;
       if (thinkingEffortVisualRepairing) return;
 
@@ -4597,6 +5321,7 @@
     }, true);
 
     document.addEventListener('pointermove', event => {
+      if (fromTwoStopWidget(event)) return;
       if (!activeExactReasoningControl && !activeThinkingEffortSlider &&
           !isFirefoxAndroidReasoningInteraction(event.target)) return;
       const exactControl = activeExactReasoningControl;
@@ -4623,6 +5348,7 @@
     }, true);
 
     const finishPointerInteraction = event => {
+      if (fromTwoStopWidget(event)) return;
       if (!activeExactReasoningControl && !activeThinkingEffortSlider &&
           !isFirefoxAndroidReasoningInteraction(event.target)) return;
       const exactControl = activeExactReasoningControl;
@@ -4652,6 +5378,13 @@
     document.addEventListener('pointercancel', finishPointerInteraction, true);
 
     document.addEventListener('click', event => {
+      if (fromTwoStopWidget(event)) return;
+      const forbiddenWorkBranch = event.target instanceof Element ?
+        event.target.closest('[' + BRAVEFOX_WORK_BRANCH_HIDDEN_ATTR + '="true"]') : null;
+      if (forbiddenWorkBranch) { cancelBlockedEdgeInteraction(event); return; }
+      const forbiddenModelChoice = event.target instanceof Element ?
+        event.target.closest('[data-bravefox-forbidden-model-choice="true"]') : null;
+      if (forbiddenModelChoice) { cancelBlockedEdgeInteraction(event); return; }
       if (!isFirefoxAndroidReasoningInteraction(event.target)) return;
       if (thinkingEffortVisualRepairing) return;
 
@@ -4703,6 +5436,7 @@
     }, true);
 
     document.addEventListener('keydown', event => {
+      if (fromTwoStopWidget(event)) return;
       if (!isFirefoxAndroidReasoningInteraction(event.target)) return;
       const exactControl = getExactReasoningControl(event.target, false);
       if (exactControl) {
@@ -4783,6 +5517,7 @@
 
     for (const eventName of ['input', 'change', 'focusin']) {
       document.addEventListener(eventName, event => {
+        if (fromTwoStopWidget(event)) return;
         if (!isFirefoxAndroidReasoningInteraction(event.target)) return;
         const exactControl = getExactReasoningControl(event.target, false);
         if (exactControl && isExactReasoningInstant(exactControl)) {
@@ -5230,6 +5965,12 @@
 
   function isThinkingEffortInstant(slider) {
     if (!isThinkingEffortSlider(slider)) return false;
+    if (slider.hasAttribute(BRAVEFOX_TWO_STOP_NATIVE_ATTR) ||
+        slider.closest('[' + BRAVEFOX_TWO_STOP_NATIVE_ATTR + ']')) {
+      // Trust native numeric state even if an old ARIA label hasn't hydrated.
+      const range = readThinkingEffortRange(slider);
+      if (range) return range.now === range.min;
+    }
     const label = getThinkingEffortLabel(slider);
     if (label === 'instant') return true;
     if (label === 'medium' || label === 'high' || label === 'pro') return false;
@@ -5240,6 +5981,11 @@
 
   function isThinkingEffortPro(slider) {
     if (!isThinkingEffortSlider(slider)) return false;
+    if (slider.hasAttribute(BRAVEFOX_TWO_STOP_NATIVE_ATTR) ||
+        slider.closest('[' + BRAVEFOX_TWO_STOP_NATIVE_ATTR + ']')) {
+      const range = readThinkingEffortRange(slider);
+      if (range) return range.max >= 3 && range.now === range.max;
+    }
     const label = getThinkingEffortLabel(slider);
     if (label === 'pro') return true;
     if (label === 'instant' || label === 'medium' || label === 'high') return false;
@@ -5627,6 +6373,9 @@
 
           if (mutation.type === 'characterData') {
             const parent = mutation.target?.parentElement;
+            if (parent instanceof Element && parent.closest('[role="menuitem"]')) {
+              braveFoxHideWorkBranchItems(parent.closest('[role="menuitem"]'));
+            }
             if (IS_ANDROID && parent instanceof Element) suppressAndroidAppUpsell(parent);
             if (parent instanceof Element) hideLegacyHomeModeSwitch(parent);
             if (parent instanceof Element && normalizeText(parent.textContent) === 'codex') {
@@ -5688,6 +6437,15 @@
             // before the newly mounted modal/backdrop can be painted.
             if (IS_ANDROID) suppressAndroidAppUpsell(node);
             hideLegacyHomeModeSwitch(node);
+            if (node.matches?.('[role="menuitem"], [role="menu"], [role="dialog"]') ||
+                node.querySelector?.('[role="menuitem"], [role="menu"], [role="dialog"]')) {
+              braveFoxHideWorkBranchItems(node);
+              braveFoxEnhanceLegacyVisualTwoStop(node);
+            }
+            if (node.matches?.(THINKING_EFFORT_EXACT_CONTROL_SELECTOR + ', [role="slider"], input[type="range"]') ||
+                node.querySelector?.(THINKING_EFFORT_EXACT_CONTROL_SELECTOR + ', [role="slider"], input[type="range"]')) {
+              braveFoxEnhanceTwoStopControls(node);
+            }
 
             // A native Android attachment popup is ChatGPT-owned. Do not touch
             // its portal DOM or run unrelated popup repair logic against it.
@@ -5810,6 +6568,9 @@
               node.matches?.('[role="dialog"], [role="menu"], [role="listbox"], [data-state="open"]') ||
               node.querySelector?.('[role="dialog"], [role="menu"], [role="listbox"], [data-state="open"]')
             ) {
+              // Legacy Android's text-only reasoning control gets the same two
+              // visible stops; no unfiltered Instant/Pro stop is exposed.
+              braveFoxEnhanceLegacyVisualTwoStop(node);
               window.setTimeout(() => enforceThinkingEffortVisualPopup(node, false), 0);
             }
 
@@ -13623,7 +14384,6 @@
 
   // The Downloads dock reports the *same job* used by HTML export; it never
   // performs independent fetches or starts another file download.
-  let conversationArchiveDownloadDockOpen = false;
 
   function ensureConversationArchiveDownloadDock() {
     const diagnostics = document.getElementById('bravefox-reliability-root');
@@ -13805,7 +14565,6 @@
         'Finishing the same export. No additional HTML download will be started.');
   }
 
-  let conversationArchiveHtmlExportJob = null;
 
   function archiveHtmlExportLockRoot() {
     return document.documentElement;
@@ -15852,6 +16611,18 @@
     polishSidebarNavigation();
     maintainSidebarStageReveal(scope);
     removePluginFeaturedPromo(scope);
+    braveFoxEnhanceTwoStopControls(scope);
+    // A fully mounted legacy mobile menu may predate the observer's startup.
+    // Scope to small popups only; never scan unrelated chat-message sliders.
+    const legacyEffortPopups = [];
+    if (scope instanceof Element && scope.matches?.('[role="menu"], [role="dialog"], [role="listbox"]')) {
+      legacyEffortPopups.push(scope);
+    }
+    if (typeof scope?.querySelectorAll === 'function') {
+      legacyEffortPopups.push(...scope.querySelectorAll('[role="menu"], [role="dialog"], [role="listbox"]'));
+    }
+    for (const popup of legacyEffortPopups) braveFoxEnhanceLegacyVisualTwoStop(popup);
+    braveFoxHideWorkBranchItems(scope);
     enforceAllExactReasoningControls(scope);
     enforceThinkingEffortEdges(scope);
     forEachMatch(scope, 'div[role="menuitem"]', item => {
