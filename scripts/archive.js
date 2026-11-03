@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CleanArchives
-// @version      29.6.1
-// @date	 2026-10-25
+// @version      29.7.2
+// @date	 2026-11-02
 // @description  Redirects specific archive pages (and xcancel.com search) to the appropriate front page when banned terms are detected.
 // @match        *://web.archive.org/*
 // @match        *://archive.org/*
@@ -780,10 +780,10 @@
         // Boundaried nuclear regexes (standalone short terms)
         /\bBrie\b/i, /\bpusy\b/i, /\bpusi\b/i, /\bnud3\b/i, /\bgay\b/i, /\b1fy\b/i, /\blfy\b/i, /\bde3p\b/i, /\bd33p\b/i, /\b3ip\b/i, /\bfuck\b/i, 
 	/\br34\b/i, /\br_34\b/i, /\bRul\b/i, /\bRuca\b/i, /\bifan\b/i, /\bshag\b/i, /\bfake\b/i, /\bBlis\b/i, /\bpant\b/i, /\bF4NS\b/i, /\bnsfw\b/i, 
-	/\bporn\b/i, /\bxxx\b/i, /\bF4N5\b/i, /\bFAN5\b/i, /\bv1ds\b/i, /\bm4ny\b/i, /\bv1d5\b/i, /\bLGBT\b/i, /\bonl1\b/i, /\b0nl1\b/i, /\b0nli\b/i, 
-	/\bJazz\b/i, /\bLexi\b/i, /\bYuka\b/i, /\bAEW\b/i, /\bcam4\b/i, /\bd3ep\b/i, /\blinq\b/i, /\bfukk\b/i, /\bfukc\b/i, /\bnudy\b/i, /\b0nly\b/i,
-        /\bnakd\b/i, /\bs3x\b/i, /\bseks\b/i, /\bNSFL\b/i, /\bhomo\b/i, /\bndue\b/i, /\bdick\b/i, /\bcock\b/i, /\bassh\b/i, /\b0rg4\b/i, /\borg4\b/i, 
-	/\bd1ck\b/i, /\bdlck\b/i, /\bblog\b/i, /\bw4nk\b/i, /\bsexy\b/i,
+	/\bxxx\b/i, /\bF4N5\b/i, /\bFAN5\b/i, /\bv1ds\b/i, /\bm4ny\b/i, /\bv1d5\b/i, /\bLGBT\b/i, /\bonl1\b/i, /\b0nl1\b/i, /\b0nli\b/i, /\bJazz\b/i, 
+	/\bLexi\b/i, /\bYuka\b/i, /\bAEW\b/i, /\bcam4\b/i, /\bd3ep\b/i, /\blinq\b/i, /\bfukk\b/i, /\bfukc\b/i, /\bnudy\b/i, /\b0nly\b/i, /\bnakd\b/i, 
+	/\bs3x\b/i, /\bseks\b/i, /\bNSFL\b/i, /\bhomo\b/i, /\bndue\b/i, /\bdick\b/i, /\bcock\b/i, /\bassh\b/i, /\b0rg4\b/i, /\borg4\b/i, /\bd1ck\b/i, 
+	/\bdlck\b/i, /\bblog\b/i, /\bw4nk\b/i, /\bsexy\b/i,
 
 
         // Special nuclear regexes

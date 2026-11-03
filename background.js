@@ -422,6 +422,8 @@ const blockedSites = [
    "facebook.com/profile.php?id=100000639309471",
    "irc-galleria.net/user/irpp4/album?page=0",
    "irc-galleria.net/user/irpp4/album?page=1",
+   "irc-galleria.net/user/irpp4",
+   "irc-galleria.net/irpp4",
    "instagram.com/accounts/hide_story_and_live",
    "www.reddit.com/user/birppis/comments/",
    "www.reddit.com/user/birppis/submitted/",

@@ -463,6 +463,21 @@
   const CHATGPT_DELETE_FAILURE_TOAST_SELECTOR =
     'li[data-sonner-toast] [data-title] .whitespace-pre-wrap';
 
+  // === Generic action-failure error toast ========================================
+  // Edit messageText to customize the native Finnish error notification:
+  // "Toiminnon suorittaminen ei onnistunut. Yritä uudelleen."
+  // Set messageText to null to keep ChatGPT's original wording.
+  // Only its visible message changes; the toast, close button and actions stay native.
+  const CHATGPT_ACTION_FAILURE_TOAST_CUSTOMIZATION = {
+    enabled: true,
+    messageText: 'Eihän tämä paska taaskaan toiminut.. Yritä joskus uusiks jos huvittaa.'
+  };
+
+  const CHATGPT_ACTION_FAILURE_TOAST_NATIVE_LABELS = new Set([
+    'toiminnon suorittaminen ei onnistunut. yritä uudelleen.',
+    'something went wrong. please try again.'
+  ]);
+
   // === Conversation-loading failure panel =======================================
   // Edit these visible labels independently. Set either messageText or retryButtonText
   // to null to keep ChatGPT's native label. When messageText is customized, the
@@ -6415,6 +6430,7 @@
             }
             if (parent instanceof Element && parent.closest('li[data-sonner-toast]')) {
               customizeDeleteFailureToast(parent);
+              customizeActionFailureToast(parent);
             }
             if (parent instanceof Element && mayContainConversationMessage(parent)) {
               scheduleLiveConversationMetadataRefresh(parent);
@@ -6500,7 +6516,10 @@
               node.matches(CHATGPT_DELETE_FAILURE_TOAST_SELECTOR) ||
               node.closest('li[data-sonner-toast]') ||
               node.querySelector('li[data-sonner-toast]')
-            ) customizeDeleteFailureToast(node);
+            ) {
+              customizeDeleteFailureToast(node);
+              customizeActionFailureToast(node);
+            }
 
             // Library > New is portal-mounted after the pointer event. Curate that freshly
             // inserted popup from this pre-paint observer instead of relying on ChatGPT's
@@ -16399,6 +16418,26 @@
     });
   }
 
+  function customizeActionFailureToast(scope = document) {
+    const settings = CHATGPT_ACTION_FAILURE_TOAST_CUSTOMIZATION;
+    if (!settings.enabled || typeof settings.messageText !== 'string') return;
+
+    forEachMatch(scope, CHATGPT_DELETE_FAILURE_TOAST_SELECTOR, message => {
+      // Match the exact native title, never unrelated warnings or toast controls.
+      const titleTextNode = Array.from(message.childNodes).find(child =>
+        child.nodeType === Node.TEXT_NODE && normalizeText(child.nodeValue)
+      );
+      if (!titleTextNode) return;
+
+      const text = normalizeText(titleTextNode.nodeValue);
+      if (!CHATGPT_ACTION_FAILURE_TOAST_NATIVE_LABELS.has(text) &&
+          text !== normalizeText(settings.messageText)) return;
+      if (titleTextNode.nodeValue !== settings.messageText) {
+        titleTextNode.nodeValue = settings.messageText;
+      }
+    });
+  }
+
   function getConversationLoadErrorLabelNode(container) {
     if (!(container instanceof Element)) return null;
 
@@ -16604,6 +16643,7 @@
     customizeConversationLoadError(scope);
     customizeHistoryLoadError(scope);
     customizeDeleteFailureToast(scope);
+    customizeActionFailureToast(scope);
     replaceCustomizableHomeHeadline(scope);
     reconcileNativeChatGptAnnouncementFilter(scope);
     replaceCustomizableChatGptBannerText(scope);

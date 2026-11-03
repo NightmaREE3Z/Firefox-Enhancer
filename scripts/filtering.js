@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BraveFox WebFilter Script
-// @version	 29.6.7
-// @date	 2026-10-30
+// @version	 29.7.2
+// @date	 2026-11-02
 // @description  Filter out stuff on the internet (Targeted Enforcer)
 // @match        *://xvideos.com/*
 // @match        *://*.xvideos.com/*
@@ -32,6 +32,8 @@
 // @match        *://*.nudography.com/*
 // @match        *://tenor.com/*
 // @match        *://*.tenor.com/*
+// @match        *://namethatporn.com/*
+// @match        *://*.namethatporn.com/*
 // @grant        none
 // @run-at       document-start
 // ==/UserScript==
@@ -55,6 +57,8 @@
     const BRAVEFOX_FILTERING_HOST = String(window.location.hostname || '')
         .toLowerCase()
         .replace(/\.$/, '');
+    const BRAVEFOX_IS_NAMETHATPORN = BRAVEFOX_FILTERING_HOST === 'namethatporn.com' ||
+        BRAVEFOX_FILTERING_HOST.endsWith('.namethatporn.com');
     const BRAVEFOX_IS_XVIDEOS = BRAVEFOX_FILTERING_HOST === 'xvideos.com' ||
         BRAVEFOX_FILTERING_HOST.endsWith('.xvideos.com');
     const BRAVEFOX_IS_ALASTONSUOMI = BRAVEFOX_FILTERING_HOST === 'alastonsuomi.com' ||
@@ -86,7 +90,7 @@
     if (!BRAVEFOX_IS_XVIDEOS && !BRAVEFOX_IS_TENOR && !BRAVEFOX_IS_REDTUBE &&
         !BRAVEFOX_IS_NUDOGRAPHY && !BRAVEFOX_IS_ALASTONSUOMI &&
         !BRAVEFOX_IS_REDGIFS && !BRAVEFOX_IS_PORNHUB && !BRAVEFOX_IS_YOUPORN &&
-        !BRAVEFOX_IS_THUMBZILLA && !BRAVEFOX_IS_BUNKR && !BRAVEFOX_IS_BALBUMS) return;
+        !BRAVEFOX_IS_THUMBZILLA && !BRAVEFOX_IS_BUNKR && !BRAVEFOX_IS_BALBUMS && !BRAVEFOX_IS_NAMETHATPORN) return;
 
     // Only bunkr.cr's actual homepage redirects to Balbums. /a/, /f/, /v/ and
     // every other Bunkr path continue to load normally for their hosted content.
@@ -317,7 +321,7 @@
 	/Nikki/i, /Hulk/i, /lex[\s_-]*bl/i, /leks[\s_-]*bl/i, /Lexi/i, /Hogan/i, /Tiffy/i, /Transg/i, /Transv/i, /Bliss/i, /Marg[\s_-]+Robb/i, /Margo/i, /Robbie/i, 
 	/Elyna/i, /Elyina/i, /Eliyna/i, /Eliyina/i, /Dua[\s_-]*Lipa/i, /Kamitani/i, /Katie/i, /Nikkita/i, /Alicy/i, /gay/i, /pride/i, /Crowley/i, /shemale/i, /Appli/i,
 	/Lisa[\s_-]+Marie/i, /Lisa[\s_-]+Varon/i, /Marie[\s_-]+Varon/i, /Takaichi/i, /Sakurai/i, /Arrivederci/i, /Alice/i, /Alici/i, /Arisu[\s_-]+Endo/i, /Ruca/i,
-	/Ruby[\s_-]+Soho/i, /Castillo/i, /Monica/i, /Matsumoto/i, /Shino[\s_-]+Suzuki/i, /Lily[\s_-]+Adam/i, /Lana/i, /Blake/i, /Bailey/i, /Bayley/i, /Naomi/i,  
+	/Ruby[\s_-]+Soho/i, /Castillo/i, /Monica/i, /Matsumoto/i, /Shino[\s_-]+Suzuki/i, /Lana/i, /Blake/i, /Bailey/i, /Bayley/i, /Naomi/i,  
 	/Irving/i, /nudi AI/i, /Monroe/i, /Del[\s_-]+Rey/i, /McMahon/i, /CJ[\s_-]+Perry/i, /Stratton/i, /Lola[\s_-]+Vice/i, /shirakawa/i, /Belts[\s_-]+Mone/i, 
 	/Amanda[\s_-]+Huber/i, /AEW/i, /TNA/i, /WWE/i, /NJPW/i, /LGBT/i, /Trans/i, /playboy/i, /Arab/i, /deviant[\s_-]*art/i, /r[\s_-]*34/i, /Sol/i, /Femdom/i, 
 	/Transsexual/i, /Animat/i, /AI Porn/i, /AI Nude/i, /AI Pussy/i, /AI Anal/i, /AI Sex/i, /guy-guy/i, /homo/i, /grandpa/i, /grandma/i, /aunty/i, /Russia/i,  
@@ -339,6 +343,270 @@
         createFocusMasterFetchedTermsMatcher(),
 
     ];;
+    }
+
+    // === NameThatPorn targeted, no-glimpse filtering =============================
+    // Inserted into the original filtering.js IIFE after the shared blocklist setup.
+    function installBraveFoxNameThatPornFilter() {
+        if (window.__braveFoxNameThatPornFilterInstalled) return;
+        window.__braveFoxNameThatPornFilterInstalled = true;
+
+        const ROOT_CLASS = 'bravefox-ntp-filtering-active';
+        const URL_PENDING_CLASS = 'bravefox-ntp-url-pending';
+        const CARD_STATE = 'data-bravefox-ntp-card-state';
+        const UI_STATE = 'data-bravefox-ntp-ui-state';
+        const CARD_SELECTOR = 'a.nsw_r_w';
+        const UI_SELECTOR = 'div.sdbrttl, div.mmenu';
+        const HOME_URL = 'https://namethatporn.com/';
+        const blockedRegexWords = createStaticBlockedRegexWords();
+        const cardTextCache = new WeakMap();
+        let remoteReady = false;
+        let redirecting = false;
+
+        // CSS-first. Pending cards/menus occupy their layout space for lazy loading,
+        // but never render pixels or receive input before a verdict. Blocked cards
+        // collapse completely. This stylesheet is installed at document-start.
+        const root = document.documentElement;
+        if (root) root.classList.add(ROOT_CLASS);
+        const style = document.createElement('style');
+        style.id = 'bravefox-ntp-no-glimpse';
+        style.textContent = `
+            html.${ROOT_CLASS}.${URL_PENDING_CLASS} body {
+                visibility: hidden !important;
+                pointer-events: none !important;
+            }
+            html.${ROOT_CLASS} ${CARD_SELECTOR}:not([${CARD_STATE}="clean"]),
+            html.${ROOT_CLASS} ${UI_SELECTOR}:not([${UI_STATE}="clean"]) {
+                visibility: hidden !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
+                animation: none !important;
+                transition: none !important;
+            }
+            html.${ROOT_CLASS} ${CARD_SELECTOR}[${CARD_STATE}="blocked"],
+            html.${ROOT_CLASS} ${UI_SELECTOR}[${UI_STATE}="blocked"],
+            html.${ROOT_CLASS} li[data-tn="shemale"],
+            html.${ROOT_CLASS} li[data-tn="gay"] {
+                display: none !important;
+                visibility: hidden !important;
+                opacity: 0 !important;
+                height: 0 !important;
+                max-height: 0 !important;
+                min-height: 0 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                overflow: hidden !important;
+                pointer-events: none !important;
+                animation: none !important;
+                transition: none !important;
+            }
+            /* Known sponsored menu markup is hidden even before JS classifies it. */
+            html.${ROOT_CLASS} .mmenu:has(.sdbrmi[onclick*="xvideos.red"]),
+            html.${ROOT_CLASS} .mmenu:has(.sdbrmi[onclick*="aftrk3.com"]) {
+                display: none !important;
+            }
+        `;
+        (document.head || root).appendChild(style);
+
+        const containsBlocked = value => {
+            const text = String(value || '').trim();
+            return !!text && blockedRegexWords.some(regex => regexMatches(regex, text));
+        };
+
+        const getSearchQueryFromUrl = () => {
+            try {
+                const url = new URL(window.location.href);
+                if (!/^\/search\.html\/?$/i.test(url.pathname)) return [];
+                return url.searchParams.getAll('q').map(value => String(value || '').trim()).filter(Boolean);
+            } catch (e) { return []; }
+        };
+
+        const redirectHome = () => {
+            if (redirecting) return;
+            redirecting = true;
+            document.documentElement?.classList.add(URL_PENDING_CLASS);
+            try { window.location.replace(HOME_URL); }
+            catch (e) { window.location.href = HOME_URL; }
+        };
+
+        const checkSearchRoute = () => {
+            const queries = getSearchQueryFromUrl();
+            if (!queries.length) {
+                document.documentElement?.classList.remove(URL_PENDING_CLASS);
+                return false;
+            }
+            if (!remoteReady) document.documentElement?.classList.add(URL_PENDING_CLASS);
+            if (queries.some(containsBlocked)) {
+                redirectHome();
+                return true;
+            }
+            if (remoteReady) document.documentElement?.classList.remove(URL_PENDING_CLASS);
+            return false;
+        };
+
+        // Activate URL no-glimpse before any page result or image is painted.
+        checkSearchRoute();
+
+        function getCardSearchableText(card) {
+            const values = [];
+            const push = value => {
+                const text = String(value || '').replace(/\s+/g, ' ').trim();
+                if (text) values.push(text);
+            };
+            push(card.querySelector('.nsw_r_tit')?.textContent);
+            push(card.querySelector('.nsw_r_desc')?.textContent);
+            push(card.querySelector('.nsw_r_athr')?.textContent);
+            push(card.getAttribute('title'));
+            push(card.getAttribute('aria-label'));
+            card.querySelectorAll('img[alt], img[title]').forEach(img => {
+                push(img.getAttribute('alt'));
+                push(img.getAttribute('title'));
+            });
+            try {
+                const slug = new URL(card.getAttribute('href') || '', location.origin)
+                    .pathname.split('/').filter(Boolean).pop() || '';
+                push(decodeURIComponent(slug).replace(/[-_+]+/g, ' '));
+            } catch (e) {}
+            return values.join(' ').trim();
+        }
+
+        function classifyCard(card, force = false) {
+            if (!card?.matches?.(CARD_SELECTOR)) return;
+            if (!remoteReady) return; // Pending CSS keeps it invisible until terms settle.
+            const text = getCardSearchableText(card);
+            if (!text) return; // An incomplete card cannot be safely shown yet.
+            if (!force && cardTextCache.get(card) === text &&
+                card.getAttribute(CARD_STATE) === 'clean') return;
+            cardTextCache.set(card, text);
+            const blocked = containsBlocked(text);
+            card.setAttribute(CARD_STATE, blocked ? 'blocked' : 'clean');
+            if (blocked) card.setAttribute('aria-hidden', 'true');
+            else card.removeAttribute('aria-hidden');
+        }
+
+        function classifySidebar(element) {
+            if (!element?.matches?.(UI_SELECTOR)) return;
+            let blocked = false;
+            if (element.matches('div.sdbrttl')) {
+                blocked = /^exclusive\s+offers$/i.test(String(element.textContent || '').trim());
+            } else {
+                blocked = !!element.querySelector(
+                    '.sdbrmi[onclick*="xvideos.red"], .sdbrmi[onclick*="aftrk3.com"], ' +
+                    '[rel="sponsored"], .sdbrmi[onclick*="track."]'
+                );
+            }
+            element.setAttribute(UI_STATE, blocked ? 'blocked' : 'clean');
+            if (blocked) element.setAttribute('aria-hidden', 'true');
+            else element.removeAttribute('aria-hidden');
+        }
+
+        function scanSubtree(node, force = false) {
+            const element = node?.nodeType === 1 ? node : node?.parentElement;
+            if (!element) return;
+            const card = element.closest?.(CARD_SELECTOR);
+            const sidebar = element.closest?.(UI_SELECTOR);
+            if (card) classifyCard(card, force);
+            if (sidebar) classifySidebar(sidebar);
+            if (element.matches?.(CARD_SELECTOR)) classifyCard(element, force);
+            if (element.matches?.(UI_SELECTOR)) classifySidebar(element);
+            element.querySelectorAll?.(CARD_SELECTOR).forEach(child => classifyCard(child, force));
+            element.querySelectorAll?.(UI_SELECTOR).forEach(classifySidebar);
+        }
+
+        const scanAll = force => {
+            if (redirecting || checkSearchRoute()) return;
+            scanSubtree(document.documentElement, force);
+        };
+
+        const blockSubmittedQuery = (query, event) => {
+            if (!containsBlocked(query)) return false;
+            if (event) {
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                event.stopPropagation();
+            }
+            redirectHome();
+            return true;
+        };
+
+        const getSearchForm = element => {
+            const form = element?.closest?.('form');
+            if (!form) return null;
+            if (form.id === 'nhirsw') return form;
+            try {
+                const action = new URL(form.getAttribute('action') || '', location.href);
+                if (action.origin === location.origin && /^\/search\.html\/?$/i.test(action.pathname)) return form;
+            } catch (e) {}
+            return null;
+        };
+
+        const getFormQuery = form => form?.querySelector?.('input[name="q"]')?.value || '';
+
+        // Capture listeners still work if a site hides its submit button or submits via Enter.
+        document.addEventListener('submit', event => {
+            const form = getSearchForm(event.target);
+            if (form) blockSubmittedQuery(getFormQuery(form), event);
+        }, true);
+        document.addEventListener('keydown', event => {
+            if (event.key !== 'Enter') return;
+            const form = getSearchForm(event.target);
+            if (form) blockSubmittedQuery(getFormQuery(form), event);
+        }, true);
+        document.addEventListener('click', event => {
+            const button = event.target?.closest?.('input[type="submit"], button[type="submit"], #nsw_f_sbmt, #nhsb');
+            const form = getSearchForm(button);
+            if (form) blockSubmittedQuery(getFormQuery(form), event);
+        }, true);
+
+        // Observe only this host. Recheck changed card text within the MutationObserver
+        // microtask, before the next paint, to avoid flashes on recycled result cards.
+        const observer = new MutationObserver(records => {
+            for (const record of records) {
+                scanSubtree(record.target);
+                if (record.type === 'childList') {
+                    record.addedNodes.forEach(node => scanSubtree(node));
+                }
+            }
+        });
+        observer.observe(document.documentElement, {
+            childList: true,
+            subtree: true,
+            characterData: true,
+            attributes: true,
+            attributeFilter: ['href', 'alt', 'title', 'onclick', 'aria-label', 'data-dyn']
+        });
+
+        // Covers same-document routing, browser back/forward and updated remote terms.
+        ['pushState', 'replaceState'].forEach(method => {
+            try {
+                const original = history[method];
+                if (typeof original !== 'function') return;
+                history[method] = function () {
+                    const result = original.apply(this, arguments);
+                    checkSearchRoute();
+                    return result;
+                };
+            } catch (e) {}
+        });
+        window.addEventListener('popstate', () => { checkSearchRoute(); scanAll(true); }, true);
+        window.addEventListener('pageshow', () => { checkSearchRoute(); scanAll(true); }, true);
+        window.addEventListener(FOCUS_MASTER_BLOCKED_TERMS_UPDATED_EVENT, () => scanAll(true), true);
+
+        // Shared fetch already started earlier in filtering.js. Failures resolve with
+        // the last in-memory terms (possibly empty), never a secret local fallback.
+        Promise.resolve(refreshFocusMasterBlockedTerms()).then(() => {
+            remoteReady = true;
+            if (!checkSearchRoute()) scanAll(true);
+        }, () => {
+            remoteReady = true;
+            if (!checkSearchRoute()) scanAll(true);
+        });
+        scanAll(false);
+    }
+
+    if (BRAVEFOX_IS_NAMETHATPORN) {
+        installBraveFoxNameThatPornFilter();
+        return;
     }
 
     function installBraveFoxTenorSearchGuard() {
@@ -997,7 +1265,6 @@
             }
             return values.join(' ').replace(/\s+/g, ' ').trim();
         }
-
         function getRedTubeCategorySearchText(category) {
             if (!category || !category.querySelector) return '';
 
@@ -8773,3 +9040,4 @@ ${searchableValue}`);
     startupHydrationDelays.forEach(delay => scheduleSpaFollowUp(delay, startupGeneration));
 
 })();
+

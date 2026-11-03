@@ -1,7 +1,7 @@
 (function () {
     'use strict';
 
-    // google.js of BraveFox Enhancer v29.7.0
+    // google.js of BraveFox Enhancer v29.7.2
 
     // === CHROME WEB STORE: OWN RULES (independent of Google Search) ============
     // THIS is the only place to edit Web Store-specific ID and search-term bans.
@@ -1153,7 +1153,7 @@
 	/Mickie/i, /Micky/i, /vagena/i, /birppis/i, /aitool/i, /Lana Perry/i, /Del Rey/i, /Tiffa/i, /Stratt/i, /puzzy/i, /vulv/i, /clito/i, /clita/i, /cl1t/i, /cloth/i, /uncloth/i, 
 	/decloth/i, /rem cloth/i, /del cloth/i, /babyg/i, /eras cloth/i, /Bella/i, /Tiffy/i, /StaphMc/i, /vagi/i, /vagene/i, /Del Ray/i, /CJ Lana/i, /Liv org/i, /playboy/i, 
 	/Stewart/i, /off pant/i, /rem pant/i, /Kristen Stewart/i, /Steward/i, /Brit Bake/i,  /pantie/i, /panty/i, /pants/i, /poses/i, /Sydnee/i, /del pant/i, /eras pant/i, /her pant/i, 
-	/she pant/i, /pussy/i, /Babe/i, /content adult/i, /porn/i, /editing/i, /AI Tool/i, /Chelsey/i, /Zel Veg/i, /Ch3l/i, /Sweeney/i, /input face/i, /upload face/i, /editor/i, /Twat/i,
+	/she pant/i, /pussy/i, /Babe/i, /content adult/i, /porno/i, /editing/i, /AI Tool/i, /Chelsey/i, /Zel Veg/i, /Ch3l/i, /Sweeney/i, /input face/i, /upload face/i, /editor/i, /Twat/i,
 	/editation/i, /CJ Perry/i, /Lana WWE/i, /Lana Del Rey/i, /CJ WWE/i, /image app/i, /picture app/i, /edit app/i, /pic app/i, /photo app/i, /Perry WWE/i, /application/i, /Sxuel/i, 
 	/Sxual/i, /Sxu3l/i, /5xu3l/i, /5xuel/i, /5xu4l/i, /5xual/i, /dre4m/i, /dr34m/i, /bo0th/i, /izzi dame/i, /adult content/i, /penetration/i, /arxiv/i, /AI edit/i, /AI fantasy/i,   
 	/enhanced image/i, /joinface/i, /orrga/i, /orrgaa/i, /orgaa/i, /origas/i, /depn/i, /d3pn/i, /b0oth/i, /b0o7h/i, /bo07h/i, /b007h/i, /b00th/i, /booo/i, /b0oo/i, /bo0o/i, /skirt/i,
