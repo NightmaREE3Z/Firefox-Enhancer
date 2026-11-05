@@ -355,11 +355,21 @@
         const URL_PENDING_CLASS = 'bravefox-ntp-url-pending';
         const CARD_STATE = 'data-bravefox-ntp-card-state';
         const UI_STATE = 'data-bravefox-ntp-ui-state';
-        const CARD_SELECTOR = 'a.nsw_r_w';
+        // Listing tiles use a separate masonry layout from search results and sidebar cards.
+        // Match the actual post tiles, not unrelated site widgets sharing the .item class.
+        const CARD_SELECTOR = 'a.nsw_r_w, article.sbitm:not(.sbitm_custom), a.pstg_lstitm, a.id_tag, div.item:has(> a.item_media)';
+        const SPONSORED_SELECTOR = 'article.sbitm.sbitm_custom';
         const UI_SELECTOR = 'div.sdbrttl, div.mmenu';
         const HOME_URL = 'https://namethatporn.com/';
         const blockedRegexWords = createStaticBlockedRegexWords();
         const cardTextCache = new WeakMap();
+        const cardSelectors = CARD_SELECTOR.split(', ');
+        const pendingCardCSS = cardSelectors.map(selector =>
+            `html.${ROOT_CLASS} ${selector}:not([${CARD_STATE}="clean"])`
+        ).join(',\n');
+        const blockedCardCSS = cardSelectors.map(selector =>
+            `html.${ROOT_CLASS} ${selector}[${CARD_STATE}="blocked"]`
+        ).join(',\n');
         let remoteReady = false;
         let redirecting = false;
 
@@ -375,7 +385,7 @@
                 visibility: hidden !important;
                 pointer-events: none !important;
             }
-            html.${ROOT_CLASS} ${CARD_SELECTOR}:not([${CARD_STATE}="clean"]),
+            ${pendingCardCSS},
             html.${ROOT_CLASS} ${UI_SELECTOR}:not([${UI_STATE}="clean"]) {
                 visibility: hidden !important;
                 opacity: 0 !important;
@@ -383,8 +393,9 @@
                 animation: none !important;
                 transition: none !important;
             }
-            html.${ROOT_CLASS} ${CARD_SELECTOR}[${CARD_STATE}="blocked"],
+            ${blockedCardCSS},
             html.${ROOT_CLASS} ${UI_SELECTOR}[${UI_STATE}="blocked"],
+            html.${ROOT_CLASS} ${SPONSORED_SELECTOR},
             html.${ROOT_CLASS} li[data-tn="shemale"],
             html.${ROOT_CLASS} li[data-tn="gay"] {
                 display: none !important;
@@ -413,6 +424,31 @@
             return !!text && blockedRegexWords.some(regex => regexMatches(regex, text));
         };
 
+        // The readable part of a local link is searchable; avoid matching generic URL
+        // components and random image IDs against very broad custom blocked terms.
+        const getReadableSlug = href => {
+            try {
+                let slug = new URL(href, window.location.origin)
+                    .pathname.split('/').filter(Boolean).pop() || '';
+                slug = focusMasterSafeDecode(slug)
+                    .replace(/\.[a-z0-9]{2,5}$/i, '')
+                    .replace(/^[a-z0-9]{10,18}_/i, '')
+                    .replace(/^\d+-/, '');
+                return slug.replace(/[-_+]+/g, ' ').trim();
+            } catch (e) { return ''; }
+        };
+
+        // Profile, tag and individual post URLs must also be filtered when opened
+        // directly, not just when linked from a listing or search page.
+        const getGuardedRouteTerms = () => {
+            try {
+                const path = new URL(window.location.href).pathname;
+                if (!/^\/(?:pornstars|tag|post)\/[^/]+\/?$/i.test(path)) return [];
+                const slug = getReadableSlug(path);
+                return slug ? [slug] : [];
+            } catch (e) { return []; }
+        };
+
         const getSearchQueryFromUrl = () => {
             try {
                 const url = new URL(window.location.href);
@@ -430,7 +466,7 @@
         };
 
         const checkSearchRoute = () => {
-            const queries = getSearchQueryFromUrl();
+            const queries = getSearchQueryFromUrl().concat(getGuardedRouteTerms());
             if (!queries.length) {
                 document.documentElement?.classList.remove(URL_PENDING_CLASS);
                 return false;
@@ -456,17 +492,21 @@
             push(card.querySelector('.nsw_r_tit')?.textContent);
             push(card.querySelector('.nsw_r_desc')?.textContent);
             push(card.querySelector('.nsw_r_athr')?.textContent);
+            push(card.querySelector('.sbitm_ttl')?.textContent);
+            // Main listing/masonry cards show the identifiable name in the solved-answer
+            // text, not necessarily in the title. Scan both before revealing the whole tile.
+            push(card.querySelector('.item_title')?.textContent);
+            card.querySelectorAll('.item_answer .ia_text').forEach(answer => push(answer.textContent));
+            if (card.matches('a.pstg_lstitm, a.id_tag')) push(card.textContent);
             push(card.getAttribute('title'));
             push(card.getAttribute('aria-label'));
-            card.querySelectorAll('img[alt], img[title]').forEach(img => {
+            card.querySelectorAll('img').forEach(img => {
                 push(img.getAttribute('alt'));
                 push(img.getAttribute('title'));
+                push(getReadableSlug(img.getAttribute('data-dyn') || img.getAttribute('src') || ''));
             });
-            try {
-                const slug = new URL(card.getAttribute('href') || '', location.origin)
-                    .pathname.split('/').filter(Boolean).pop() || '';
-                push(decodeURIComponent(slug).replace(/[-_+]+/g, ' '));
-            } catch (e) {}
+            const links = card.matches('a[href]') ? [card] : card.querySelectorAll('a[href]');
+            for (const link of links) push(getReadableSlug(link.getAttribute('href')));
             return values.join(' ').trim();
         }
 
@@ -503,6 +543,10 @@
         function scanSubtree(node, force = false) {
             const element = node?.nodeType === 1 ? node : node?.parentElement;
             if (!element) return;
+            // Permanently discard the sponsored AI-generation card, including its iframe.
+            const sponsored = element.closest?.(SPONSORED_SELECTOR);
+            if (sponsored) { sponsored.remove(); return; }
+            element.querySelectorAll?.(SPONSORED_SELECTOR).forEach(ad => ad.remove());
             const card = element.closest?.(CARD_SELECTOR);
             const sidebar = element.closest?.(UI_SELECTOR);
             if (card) classifyCard(card, force);
@@ -9040,4 +9084,3 @@ ${searchableValue}`);
     startupHydrationDelays.forEach(delay => scheduleSpaFollowUp(delay, startupGeneration));
 
 })();
-

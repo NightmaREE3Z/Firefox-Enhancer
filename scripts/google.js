@@ -1,7 +1,7 @@
 (function () {
     'use strict';
 
-    // google.js of BraveFox Enhancer v29.7.2
+    // google.js of BraveFox Enhancer v29.7.5
 
     // === CHROME WEB STORE: OWN RULES (independent of Google Search) ============
     // THIS is the only place to edit Web Store-specific ID and search-term bans.
@@ -41,7 +41,7 @@
 
 
 		// Boundaried Web Store search regexes
-		/\bAI\b/i, /\bIE\b/i, /\bTab\b/i, /\bGX\b/i,
+		/\bAI\b/i, /\bIE\b/i, /\bTab\b/i, /\bTOR\b/i, /\bGX\b/i,
 
         ];
 
@@ -85,9 +85,34 @@
 
     if (initialGoogleHostname === 'gemini.google.com' ||
         initialGoogleHostname.startsWith('translate.google.') ||
+        (/^(?:www\.)?google\.(?:[a-z]{2,3}|[a-z]{2,3}\.[a-z]{2})$/i.test(initialGoogleHostname) &&
+            window.location.pathname === '/goto') ||
         isGoogleMapsOrEarthUrl()) {
         return;
     }
+
+    // === GOOGLE SHORT VIDEOS SEARCH TAB: DOCUMENT-START REMOVAL ===
+    // Hide the complete "Short videos" navigation item before it paints, including
+    // variants inserted later by Google's client-side navigation.
+    (function installGoogleShortVideosTabHider() {
+        try {
+            const styleId = 'googlejs-hide-short-videos-tab';
+            if (document.getElementById(styleId)) return;
+
+            const style = document.createElement('style');
+            style.id = styleId;
+            style.textContent = `
+                div[role="listitem"]:has(> a[href*="udm=short_vids"]),
+                div[role="listitem"] > a[href*="udm=short_vids"] {
+                    display: none !important;
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                }
+            `;
+            (document.head || document.documentElement).appendChild(style);
+        } catch (e) {}
+    })();
 
     // === GOOGLE PAGINATION CSS SAFETY NET ===
     // Google embeds its pagination rules inside ordinary .MjjYud result wrappers on some
@@ -567,20 +592,18 @@
     const redirectHideLite = [
 
     // Regular redirectHideRegexes
-	/Virtual laatikko/i, /Virtuaali laatikko/i, /Virtuaalilaatikko/i, /Virtuaalibox/i, /virtualmachine/i, /virtual machine/i, /kuvankäsittely/i, /waterf0x/i,  
+	/Virtual laatikko/i, /Virtuaali laatikko/i, /Virtuaalilaatikko/i, /Virtuaalibox/i, /virtualmachine/i, /virtual machine/i, /kuvankäsittely/i, /OracleVM/i,
 	/virtuaali kone/i, /virtuaali tietokone/i, /virtuaalitietokone/i, /hyper-v/i, /hyper v/i, /virtuaalimasiina/i, /virtuaali masiina/i, /virtuaalimasiini/i, 
 	/virtuaali masiini/i, /virtuaali workstation/i, /virtual workstation/i, /virtualworkstation/i, /vrbox/i, /vibox/i, /virtuaaliworkstation/i, /hypervisor/i,   
 	/virbox/i, /virtbox/i, /vir box/i, /virt box/i, /virtual box/i, /vi-machine/i, /vi machine/i, /virmachine/i, /vir-machine/i, /virbox virtual/i, /v-machine/i, 
 	/hyper visor/i, /vibox virtual/i, /vbox virtual/i, /vmachine/i, /v machine/i, /vimachine/i, /vir machine/i, /virt machine/i,/virtmachine/i, /p1p4r/i, /VMWare/i,
 	/virtumachine/i, /virtu-machine/i, /virtu machine/i, /diiva/i, /virtuamachine/i, /virtua-machine/i, /virtua machine/i, /vi mach/i, /vir mach/i, /virt mach/i, 
-	/VM Ware/i, /Virtualbox/i, /Virtual box/i, /Brave/i, /Browser/i, /Selain/i, /TOR-Selain/i, /MS Edge/i, /TOR-browser/i, /Opera/i, /Opera GX/i, /waterfox/i, 
-	/Browsi/i, /Browse/i, /safari/i, /Opera Browser/i, /Mozilla/i, /Firefox/i, /Firefux/i, /water fox/i, /waterfux/i, /water fux/i, /chr0m/i, /m1um/i, /vbox/i,
-	/hyperv/i, /virtbox virtual/i, /Virtual Machine/i, /virtu mach/i, /virt-machine/i, /virtuaalikone/i, /OracleVM/i, /VM Ware/i, /water f0x/i, /Machiine/i, 
-	/Macheine/i, /Machiene/i, /#/i, /##/i, /###/i, /@@/i, /#\*/i, /\*#/i, /@\*/i, /\*@/i, /#@/i, /@#/i,       
+	/VM Ware/i, /Virtualbox/i, /Virtual box/i,/Machiine/i, /Macheine/i, /Machiene/i, /#/i, /##/i, /###/i, /@@/i, /#\*/i, /\*#/i, /@\*/i, /\*@/i, /#@/i, /@#/i,   
+	/vbox/i, /hyperv/i, /virtbox virtual/i, /vbox/i, /Virtual Machine/i, /virtu mach/i, /virt-machine/i, /virtuaalikone/i, /VM Ware/i,  
 
 
     // Boundaried redirectHide regexes
-	/\bSol\b/i, /\bGemini\b/i, /\bClaude\b/i, /\bSonnet\b/i, /\bCopilot\b/i, /\bDALL[-\s]?E\b/i, /\bSora\b/i, /\bMidjourney\b/i, /\bGrok\b/i, /\bG!na\b/i, /\bGen\b/i, 
+	/\bSol\b/i, /\bGemini\b/i, /\bClaude\b/i, /\bSonnet\b/i, /\bDALL[-\s]?E\b/i, /\bSora\b/i, /\bMidjourney\b/i, /\bGrok\b/i, /\bG!na\b/i, /\bGen\b/i, 
 	/\bStable[ -]?Diffusion\b/i, /\bComfy(?:UI|AI)\b/i, /\bmachine learning\b/i, /\bneural networks?\b/i, /\bMistral(?:[ -]?AI)?\b/i, /\bLlama(?:[ -]?[0-9.]+)?\b/i,
 	/\bteko[äa]ly\b/i, /\bLLMs?\b/i, /\bartificial intelligence\b/i, /\bgenerative AI\b/i, /\bPerplexity[ -]?AI\b/i, /\bMeta[ -]?AI\b/i, /\bAdobe[ -]?Firefly\b/i,
 	/\bRunComfy\b/i, /\bDeepSeek\b/i, /\bGrok\b/i, /\bAnthropic\b/i, /\bHugging[ -]?Face\b/i, /\bVM\b/i, /\bVMs\b/i, /\b5h3\b/i, /\bedit\b/i, /\bphotor\b/i, /\bGin4\b/i, 
@@ -1137,35 +1160,53 @@
         /\b(?:ai|photo|image|pic|picture)[\s._-]*(?:object[\s._-]*(?:remov|eras|delet)|(?:remov|eras|delet)[\s._-]*objects?)/i,
     ];
 
+    // === DISTINCTIVE / CONTEXTUAL BROWSER NUCLEAR SIGNATURES ===
+    // Browser intent is Nuclear, but plain words and file-browser searches are not.
+    // Match browser brands with browser/selain context, plus distinctive full product names.
+    const browserNuclearRegex = [
+        // Brave browser / Brave-selain / Bravebrowser, and equivalent brand combinations.
+        /\b(?:brave|tor|opera(?:[\s._-]*gx)?|water[\s._-]*f(?:o|0|u)x|safari|mozilla(?:[\s._-]*firef(?:o|u)x)?|firef(?:o|u)x|chr0m\p{L}*|m1um|chrom(?:e|ium)|(?:ms|microsoft)[\s._-]*edge)[\s._-]*(?:(?:web|internet|netti)[\s._-]*)?(?:brows(?:er|ers|ing|e|i\p{L}*)|selai(?:n|m)\p{L}*)(?![\p{L}\p{N}])/iu,
+
+        // Browser Firefox / selain Brave: browser type before the brand.
+        /\b(?:brows(?:er|ers)|selai(?:n|m)\p{L}*)[\s._-]+(?:brave|tor|opera(?:[\s._-]*gx)?|water[\s._-]*f(?:o|0|u)x|safari|vivaldi|mozilla(?:[\s._-]*firef(?:o|u)x)?|firef(?:o|u)x|chr0m\p{L}*|m1um|chrom(?:e|ium)|(?:ms|microsoft)[\s._-]*edge)\b/iu,
+
+        // Internet selain / internetselaimet / web browser / nettiselain.
+        /\b(?:internet|netti|web)[\s._-]*(?:brows(?:er|ers|ing|e|i\p{L}*)|selai(?:n|m)\p{L}*)(?![\p{L}\p{N}])/iu,
+
+        // Distinctive full names are browser-specific even without an added browser word.
+        /\b(?:google[\s._-]*chrome|mozilla[\s._-]*firef(?:o|u)x|microsoft[\s._-]*edge|ms[\s._-]*edge|opera|vivaldi[\s._-]*gx|tor[\s._-]*browser)\b/iu,
+    ];
+
     // NUCLEAR Regexes
     	const nuclearRegex = [
         ...aiNuclearRegex,
-        /lex bl/i, /livmorgan/i, /zelina/i, /roxanne/i, /raquel/i, /stephanie/i, /woman/i, /women/i, /ladies/i, /ladye/i, /girls/i, /girly/i, /girli/i, 
-	/pussy/i, /vagin/i, /vagen/i, /vegane/i, /pussie/i, /deepn/i, /deeph/i, /deeps/i, /deepm/i, /deepb/i, /deept/i, /deepa/i, /nudi/i, /nude/i, /naked/i, /undre/i, 
-	/nude app/i, /dress/i, /face swap/i, /Stacy/i, /Staci/i, /Keibler/i, /inpaint/i, /art intel/i, /birpp/i,  /ismartta/i, /image enhanced/i, /palge/i, 
+        ...browserNuclearRegex,
+        /lex bl/i, /livmorgan/i, /zelina/i, /roxanne/i, /raquel/i, /stephanie/i, /woman/i, /women/i, /ladies/i, /ladye/i, /girls/i, /girly/i, /girli/i, /pussy/i, /vagin/i, /vagen/i, 
+	/vegane/i, /pussie/i, /deepn/i, /deeph/i, /deeps/i, /deepm/i, /deepb/i, /deept/i, /deepa/i, /nudi/i, /nude/i, /naked/i, /undre/i, /nude app/i, /dress/i, /face swap/i, /Stacy/i, 
+	/Staci/i, /Keibler/i, /inpaint/i, /art intel/i, /birpp/i,  /ismartta/i, /image enhanced/i, /palge/i, /RemovingAI/i, /bjob/i, /machinelearning/i, /sweee/i, /AI Fake/i, /F4k3/i, 
 	/deppn/i, /depenu/i, /depeni/i, /deipn/i, /diepn/i, /artifi/i, /artin/i, /iconicto/i, /-tool/i, /d3ppn/i, /d3penu/i, /d3p3nu/i, /dep3nu/i, /depeni/i,  /d3p3ni/i, /d3p3n1/i, 
 	/d3p3n!/i, /dep3n1/i, /dep3n!/i, /d3pen1/i, /d3pen!/i, /Br1tt/i, /Br!tt/i, /Sweee/i, /posing/i, /image enhancing/i, /virtual touchup/i, /ndif/i, /ndfy/i, /nd1f/i, /skirr/i, 
 	/nd!f/i, /ndlf/i, /shag/i, /d3peni/i, /edgin/i, /edgyi/i, /dreamstime/i, /Torrl/i, /wilson/i, /Kitty WWE/, /Dawn Marie/i, /soulgen/i, /soulgyn/i, /soulkyn/i, /Massaro/i, 
 	/fapif/i, /fappif/i, /skitr/i, /edgy1/i, /3dgy1/i, /3dgin/i, /edg1n/i, /edg1i/i, /edgi1/i, /3dg1i/i, /3dgi1/i, /edgiy/i, /edgye/i, /stripp/i, /strips/i, /stripz/i, /stripi/i, 
 	/striper/i, /stripes/i, /shetakeoff/i, /takeoffher/i, /takesoffher/i, /shetakesoff/i, /takingoff/i, /tookoffher/i, /shetookoff/i, /baring/i, /bares/i, /bliswwe/i, /retouch/i, 
 	/touchup/i, /touch up/i, /tush/i, /lex bl/i, /image ai/i, /edit ai/i, /deviant/i, /Lex Cabr/i, /Lex Carb/i, /Lex Kauf/i, /Lex Man/i, /nudecrawler/i, /unc1oth/i, /photo AI/i, 
-	/pict AI/i, /pics app/i, /picsart/i, /enhance image/i, /erootti/i, /vegi/i, /vegen/i, /faceswap/i, /DeepSeek/i, /deepnude ai/i, /deepnude-ai/i, /Roxan/i, /Perez/i, 
+	/pict AI/i, /pics app/i, /picsart/i, /enhance image/i, /erootti/i, /vegi/i, /vegen/i, /faceswap/i, /DeepSeek/i, /deepnude ai/i, /deepnude-ai/i, /Roxan/i, /Perez/i, /female/i,
 	/Mickie/i, /Micky/i, /vagena/i, /birppis/i, /aitool/i, /Lana Perry/i, /Del Rey/i, /Tiffa/i, /Stratt/i, /puzzy/i, /vulv/i, /clito/i, /clita/i, /cl1t/i, /cloth/i, /uncloth/i, 
-	/decloth/i, /rem cloth/i, /del cloth/i, /babyg/i, /eras cloth/i, /Bella/i, /Tiffy/i, /StaphMc/i, /vagi/i, /vagene/i, /Del Ray/i, /CJ Lana/i, /Liv org/i, /playboy/i, 
+	/decloth/i, /rem cloth/i, /del cloth/i, /babyg/i, /eras cloth/i, /Bella/i, /Tiffy/i, /StaphMc/i, /vagi/i, /vagene/i, /Del Ray/i, /CJ Lana/i, /playboy/i, /tor-selain/i, /Liv org/i,
 	/Stewart/i, /off pant/i, /rem pant/i, /Kristen Stewart/i, /Steward/i, /Brit Bake/i,  /pantie/i, /panty/i, /pants/i, /poses/i, /Sydnee/i, /del pant/i, /eras pant/i, /her pant/i, 
 	/she pant/i, /pussy/i, /Babe/i, /content adult/i, /porno/i, /editing/i, /AI Tool/i, /Chelsey/i, /Zel Veg/i, /Ch3l/i, /Sweeney/i, /input face/i, /upload face/i, /editor/i, /Twat/i,
 	/editation/i, /CJ Perry/i, /Lana WWE/i, /Lana Del Rey/i, /CJ WWE/i, /image app/i, /picture app/i, /edit app/i, /pic app/i, /photo app/i, /Perry WWE/i, /application/i, /Sxuel/i, 
 	/Sxual/i, /Sxu3l/i, /5xu3l/i, /5xuel/i, /5xu4l/i, /5xual/i, /dre4m/i, /dr34m/i, /bo0th/i, /izzi dame/i, /adult content/i, /penetration/i, /arxiv/i, /AI edit/i, /AI fantasy/i,   
 	/enhanced image/i, /joinface/i, /orrga/i, /orrgaa/i, /orgaa/i, /origas/i, /depn/i, /d3pn/i, /b0oth/i, /b0o7h/i, /bo07h/i, /b007h/i, /b00th/i, /booo/i, /b0oo/i, /bo0o/i, /skirt/i,
 	/boo0/i, /b000/i, /n000/i, /n00d/i, /no0d/i, /n0od/i, /Derriere/i, /Backside/i, /xray/i, /sheer/i, /clothes remover/i, /nsfw/i, /not safe for work/i, /AI unblur/i, /deblur/i, 
-	/nsfwgen/i, /scanner/i, /bliswwe/i, /play boy/i, /uncensor app/i, /clothes remover/i, /nsfw/i, /not safe for work/i, /sexx/i, /sexual/i, /image enhancer/i, /skin view/i, /female/i,
-	/Fantasy AI/i, /fantasy edit/i, /AI recreation/i, /synthetic model/i, /Margot/i, /Robbie/i, /Ana de Armas/i, /Ratajkowski/i, /vaatepoisto/i, /Emily/i, /Doja Cat/i, 
+	/nsfwgen/i, /bliswwe/i, /play boy/i, /uncensor app/i, /Mondomonger/i, /Mondo monger/i, /clothes remover/i, /nsfw/i, /not safe for work/i, /sexx/i, /sexual/i, /image enhancer/i,  
+	/Fantasy AI/i, /fantasy edit/i, /AI recreation/i, /synthetic model/i, /Margot/i, /Robbie/i, /Ana de Armas/i, /Ratajkowski/i, /vaatepoisto/i, /Emily/i, /Doja Cat/i, /skin view/i,
 	/Madelyn/i, /Salma Hayek/i, /Megan Fox/i, /Addison/i, /Emma Watson/i, /Taylor/i, /Nicki/i, /artificial model/i, /Minaj/i, /next-gen face/i, /smooth body/i, /TitsAI/i, /photo trick/i, 
 	/edit for fun/i, /realistic AI/i, /dream girl/i, /banned app/i, /filmora/i, /uncover/i, /Micki/i, /Stratusfaction/i, /m471c/i, /mat1c/i, /fisting/i, /pleasi/i, /Blendface/i, 
 	/pleasu/i, /herself/i, /her self/i, /delet bg/i, /fuck/i, /eras bg/i, /delet bg/i, /erase bg/i, /erasing bg/i, /bg delet/i, /bg erasing/i, /bg erase/i, /Blend face/i, /Steph/i, 
 	/morphi/i, /Blender face/i, /morfi/i, /fappi/i, /skin viewer/i, /skinviewer/i,  /cloth/i, /clothing/i, /clothes/i, /AI model$/i, /trained model$/i, /Reface/i, /DeepAI/i, /GFPGAN/i, 
-	/RestoreFormer/i, /FaceMagic/i, /desnudador/i, /des nudador/i, /pixary/i, /GAN-based/i, /latent/i, /prompt ex/i, /txt2img/i, /image to image/i, /image 2 image/i, 
-	/imagetoimage/i, /image2image/i, /girl/i, /woman/i, /women/i, /babe/i, /waifu/i, /wife/i, /spouse/i, /celeb/i, /celebrit/i, /img2img/i, /boobs/i, /Comfy-UI/i, /ComfyAI/i, 
+	/RestoreFormer/i, /FaceMagic/i, /desnudador/i, /des nudador/i, /pixary/i, /GAN-based/i, /latent/i, /prompt ex/i, /txt2img/i, /image to image/i, /image 2 image/i, /Fak3/i, /F4ke/i,
+	/imagetoimage/i, /image2image/i, /girl/i, /woman/i, /women/i, /babe/i, /waifu/i, /wife/i, /spouse/i, /celeb/i, /celebrit/i, /img2img/i, /boobs/i, /Comfy-UI/i, /ComfyAI/i, /TOR-/i,
 	/Comfy-AI/i, /CoAi/i, /ComAi/i, /ComfAi/i, /ComfoAi/i, /ComforAi/i, /ComfortAi/i, /Midjourney/i, /LTheory/i, /LuTheory/i, /edit pose/i, /Face Magic/i, /ex prompt/i, /example prompt/i, 
 	/prompt example/i, /toniwwe/i, /tonywwe/i, /fotor/i, /vercel/i, /venoi/i, /venic/i, /nsfw gen/i, /removebg/i, /remove bg/i, /Shiri/i, /remov bg/i, /removal bg/i, /ia onl/i, /cunt/i, 
 	/removalbg/i, /rembg/i, /rem background/i, /removbg/i, /del background/i, /eras background/i, /erase background/i, /erasing background/i, /butth/i, /buttc/i, /background eras/i, 
@@ -1223,7 +1264,6 @@
 	/OpensHerLegs/i, /SpreadLeg/i, /SpreadHerLeg/i, /cunnn/i, /strips/i, /SpreadsLeg/i, /SpreadsHerLeg/i, /HerThig/i, /HerLeg/i, /HerThic/i, /SheThig/i, /SheLeg/i, /SheThic/i, /HerLeg/i, /HerThic/i, 
 	/LegShe/i, /LegsShe/i, /Thicc/i, /ThickShe/i, /fondl/i, /bdsm/i, /censor/i, /reveals all/i, /reveali/i, /revealing/i, /stripp/i, /strips/i, /stripz/i, /stripi/i, /striper/i, /stripes/i, /striped/i, 
 	/shetakeoff/i, /takeoffher/i, /takesoffher/i, /shetakesoff/i, /takingoff/i, /tookoffher/i, /shetookoff/i, /baring/i, /bares/i, /artintel/i, /Zendaya/i, /AIZuck/i, /Stratu/i, /Kairi/i, /artintel/i, 
-	/RemovingAI/i, /bjob/i, /machinelearning/i, /sweee/i, /AI Fake/i, /F4k3/i, /Fak3/i, /F4ke/i, /Mondomonger/i, /Mondo monger/i, 
 	 
 
 
@@ -1232,7 +1272,7 @@
 
 
     // Boundaried Nuclear regexes
-	/\bgirl\b/i, /\blady\b/i, /\bshe\b/i, /\bher\b/i, /\banal\b/i, /\bsex\b/i, /\bbra\b/i, /\bass\b/i, /\bmorph\b/i, /\bVega\b/i, /\bSlut\b/i, /\bFap\b/i, /\bTor\b/i, /\bBoob\b/i, 
+	/\bgirl\b/i, /\blady\b/i, /\bshe\b/i, /\bher\b/i, /\banal\b/i, /\bsex\b/i, /\bbra\b/i, /\bass\b/i, /\bmorph\b/i, /\bVega\b/i, /\bSlut\b/i, /\bFap\b/i, /\bBoob\b/i, /\bTOR\b/i, 
 	/\bAMX\b/i, /\bAnal-\b/i, /\bAlexa\b/i, /\bAleksa\b/i, /\bADM\b/i, /\bADMX\b/i, /\bAis\b/i, /\b5he\b/i, /\b0rg\b/i, /\bg45m\b/i, /\bSX\b/i, /\bNud\b/i, /\bdpnod\b/i, /\bdp nod\b/i, 
 	/\bsh3\b/i, /\bGrils\b/i, /\bIzzi\b/i, /\bDame\b/i, /\bNox\b/i, /\bLiv\b/i, /\bEmma\b/i, /\bRiho\b/i, /\bJaida\b/i, /\bCum\b/i, /\bAnal\b/i, /\bTay\b/i, /\balexa wwe\b/i, /\bazz\b/i, 
 	/\bLana\b/i, /\bFuku\b/i, /\bMina\b/i, /\bMachaine\b/i, /\bjaida\b/i, /\bRembg\b/i, /\bRem bg\b/i, /\bDel bg\b/i, /\bDelbg\b/i, /\bMorf\b/i, /\bTits\b/i, /\bChaturbate\b/i, /\bToni\b/i, 
@@ -1299,6 +1339,8 @@
         /(?:pillu|pimppi|tuhero|em[aä]tin|tussu|r[oö]mps[aä]|kyrp[aä]|kulli|kikkeli)/i,
         /(?:boob|boobs|tits|titty|pussy|vagina|cock|dick|penis|blowjob|handjob|titjob|assjob)/i,
 	/(?:poista|poisto|poistaminen|poistamis)[ -]?(?:vaatteet|vaatteiden)/i,
+	/(?:nud|naked|nakde|n4ked|nak3d|n4k3d|AI|Artificial)[ -]?(?:scan|app)/i,
+	/(?:AI|Art|Intel)[ -]?(?:nude|nudi|naked|nakde)/i,
 	/see[- ]?through/i,
 	/vaat.*pois/i,
 	/\b(?:tiktok|tik[\s._-]?tok)\b/i,
@@ -1329,20 +1371,17 @@
 	/5hag/i, /5h4g/i, /sh4g/i, /3dg1n/i, /ed!t/i, /edi7/i, /3d!7/i, /pa!g/i, /3d!t/i, /P4IG3/i, /Paig3/i, /P4ige/i, /pa1g/i, /3dit/i, /ed1t/i, /Tw4t/i, /Brltt/i, /St3ph/i, 
 	/her0/i, /h3r0/i, /h3ro/i, /pr0mpt/i, /pr0mp7/i, /Chel5/i, /3d1t/i, /5k1r/i, /m4tic/i, /wuhmans/i, /wahmans/i, /wehmans/i, /Torr1/i, /Torr!/i, /0rig4/i, /per5 aukko/i, 
 	/il0tyttø/i, /pa!g/i, /iløtalo/i, /0rga5m/i, /m47ic/i, /m471c/i, /ma71c/i, /0rig@/i, /Aut0/i, /ed!7/i, /5xuel/i, /n00d/i, /gr4m/i, /4ppli/i, /war3/i, /0rg@5m/i, /d1ck/i,
-	/ed17/i, /p!llu/i, /blowj0b/i, /3d17/i, /promp7/i, /wee3e/i, /5yvä/i, /v1de/i, /!mag/i, /!m4g/i, /palg3/i, /M0uth-job/i, 
+	/ed17/i, /p!llu/i, /blowj0b/i, /3d17/i, /promp7/i, /wee3e/i, /5yvä/i, /v1de/i, /!mag/i, /!m4g/i, /palg3/i, /M0uth-job/i,
+
+
+	// Boundaried link result regexes
+	/\bSuck\b/i, /\bSucks\b/i,
     ];
 
 
 
 
 
-    // The soft tier is authoritative for exact VM/image-processing patterns. CurrentSystem had
-    // a handful of exact duplicates in Nuclear; keep the soft tier authoritative for those exact patterns.
-    const softResultHideSources = new Set(resultHideTerms.map(rx => String(rx.source || '').toLowerCase()));
-    for (let i = nuclearRegex.length - 1; i >= 0; i--) {
-        const source = String(nuclearRegex[i]?.source || '').toLowerCase();
-        if (softResultHideSources.has(source)) nuclearRegex.splice(i, 1);
-    }
 
     // --- NEW: DYNAMIC WRESTLER BANS FROM WRESTLING.JS ---
     function applyDynamicWrestlerBans() {
@@ -1476,8 +1515,16 @@
 	/480hz/i, /air cooler/i, /CPU cooler/i, /liquid cooler/i, /water cooling/i, /AIO/i, /radiator/i, /heatsink/i, /heat sink/i, /thermal paste/i, /thermal pad/i, /fan curve/i, /PWM/i, /cooler/i, /Bluetooth/i, /Wi-Fi/i, 
 	/WiFi 5/i, /WiFi 6/i, /Wi-Fi 6/i, /WiFi 6E/i, /Wi-Fi 6E/i, /WiFi 7/i, /Wi-Fi 7/i, /RJ45/i, /2\.5GbE/i, /5GbE/i, /10GbE/i, /DHCP/i, /NAT/i, /charg/i, /IP address/i, /IPv4/i, /IPv6/i, /AV1/i, /H\.264/i, /H\.265/i, /HEVC/i,
 	/USB-C/i, /USB Type-C/i, /Thunderbolt/i, /DisplayPort Cable/i, /DP cable/i, /Windows/i, /Linux/i, /Ubuntu/i, /Debian/i, /Fedora/i, /macOS/i, /iOS/i, /ChromeOS/i, /Steam/i, /Epic Games/i, /GOG/i, /Battle\.net/i, /Discord/i, 
-	/Snapdragon/i, /Exynos/i, /Dimensity/i, /Qualcomm/i, /ChatGPT/i, /GPT-4o/i, /GPT-5.1/i, /GPT-5.4/i, /GPT-5.5/i, /GPT-5.6/i, /GPT-5.6 SOL/i, /Sonnet/i, /black friday/i, /SmackDown/i, /search/i, /GPT-5.4/i, /GPT-5.5/i, 
-	/archive/i, /machine/i, /GitHub CoPilot/i, /github/i, /hub/i, /git/i, /artifact/i,
+	/Snapdragon/i, /Exynos/i, /Qualcomm/i,  /Dimensity/i, /ChatGPT/i, /GPT-4o/i, /GPT-5.1/i, /GPT-5.4/i, /GPT-5.5/i, /GPT-5.6/i, /GPT-5.6 SOL/i, /GPT-6/i, /Sonnet/i, /black friday/i, /SmackDown/i, /search/i, /GPT-/i, /GPT-5.5/i, 
+	/archive/i, /machine/i, /GitHub CoPilot/i, /github/i, /hub/i, /git/i, /artifact/i, /malwarebytes/i, /secure/i, /securi/i, /skanne/i, /skanna/i, /tutka/i, /-secur/i, /malware/i, /trojan/i, /keylog/i, /byte/i, /fsecur/i,
+	
+	
+
+
+	// Tech combo terms
+
+
+	/(?:virus|viruses|viirus)[ -]?(?:scan|skanneri|tutka|turva|sovellus|poisto|ohjelma)/i, /(?:poista|poisto|skan|scan)[ -]?(?:virus|viruk|viiruk|tuote|kampanja|tarjous|turva|ohjelma)/i,
 
 
     	// English Medical Terms
@@ -1553,6 +1600,9 @@
 	/albumiini/i, /elektrolyytti/i, /natrium/i, /kalium/i, /kalsium/i, /B12-vitamiini/i, /ferritiini/i, /sydänfilmi/i, /magneettikuvaus/i, /tietokonetomografia/i, /ultraääni/i, /röntgen/i, /angiografia/i, /sydämen ultraääni/i, 
 	/tähystys/i, /gastroskopia/i, /kolonoskopia/i, /koepala/i, /patologia/i, /histologia/i, /sytologia/i, /radiologia/i, /radiologi/i, /patologi/i, /lääke/i, /lääkitys/i, /resepti/i, /annostus/i, /annos/i, /tabletti/i, /kapseli/i, 
 	/infuusio/i, /suonensisäinen/i, /kipulääke/i, /opioidi/i, /statiini/i, /antikoagulaatio/i, /sisätaudit/i, /gastroenterologia/i, /anestesiologia/i, /oramorfiini/i, /morfiini/i, /rutto/i, /ruton/i, /oire/i, /oireet/i,
+
+
+	//
 
 
 	// Boundaried search regexes (mixed languages)
@@ -2592,8 +2642,11 @@
         /chromewebstore\.google\.com\/detail\/tor-selain\/eaoamcgoidmhaficdbmcbamiedeklfol/i,
         /www\.opera\.com/i,
         /www\.bing\.com/i,
+        /aka\.ms/i,
         /microsoft\.com\/en-us\/edge\//i,
         /microsoft\.com\/fi-fi\/edge\//i,
+        /explore\.microsoft\.com/i,
+        /github\.com\/microsoftedge/i,
         /brave\.com/i,
         /aitoolfor\.org/i,
         /aitoolfor\./i,
@@ -5956,89 +6009,9 @@ function swapSearchTabs() {
         }
     }
 
-    // Google sometimes serves an opaque /goto token while publishing a complete destination
-    // URL inside the organic result's own <cite>. Restore normal direct links only when the
-    // displayed address is COMPLETE. Never reconstruct a clipped breadcrumb or turn an
-    // arbitrary deep result into a homepage link.
-    function getGoogleWebResultDirectDestination(link) {
-        try {
-            if (!isGoogleWebPrimaryResultLink(link)) return '';
-            const current = new URL(link.href);
-            if (!/^(?:[a-z0-9-]+\.)*google\.(?:[a-z]{2,3}|[a-z]{2,3}\.[a-z]{2})$/i.test(current.hostname) ||
-                current.pathname !== '/goto') return '';
-
-            // Modern /goto?url=CAES... values are opaque, not base64-encoded addresses.
-            // When Google actually includes a plain URL, use that as the authoritative target.
-            const supplied = current.searchParams.get('url') || '';
-            let candidate = /^https?:\/\//i.test(supplied) ? supplied : '';
-
-            if (!candidate) {
-                const cite = link.querySelector('.CA5RN cite[role="text"], cite[role="text"]');
-                if (!cite) return '';
-                const printed = String(cite.textContent || '').trim();
-                // Breadcrumbs and ellipses indicate the full path is not known.
-                if (!printed || /[›…]|\.\.\.|\s/.test(printed)) return '';
-                if (/^https?:\/\//i.test(printed)) candidate = printed;
-                else if (/^(?:[a-z0-9-]+\.)+[a-z]{2,63}(?:\/[\w%+~.-]*)?\/?$/i.test(printed)) {
-                    candidate = 'https://' + printed;
-                } else return '';
-            }
-
-            const target = new URL(candidate);
-            if (!['http:', 'https:'].includes(target.protocol) ||
-                target.username || target.password ||
-                !target.hostname ||
-                target.hostname === current.hostname && target.pathname === '/goto') return '';
-            return target.href;
-        } catch (e) { return ''; }
-    }
-
-    function restoreGoogleWebResultDirectLink(link) {
-        const original = getGoogleWebResultDirectDestination(link);
-        if (!original) {
-            // Google can recycle an anchor for a new result. Never keep a stale override.
-            if (link?.getAttribute?.('data-googlejs-direct-destination') &&
-                link.href !== link.getAttribute('data-googlejs-direct-destination')) {
-                link.removeAttribute('data-googlejs-direct-destination');
-            }
-            return false;
-        }
-        try {
-            link.setAttribute('href', original);
-            link.setAttribute('data-googlejs-direct-destination', original);
-            // No Google click-tracking ping for a recovered direct result link.
-            link.removeAttribute('ping');
-
-            if (link.getAttribute('data-googlejs-direct-handler') !== '1') {
-                link.setAttribute('data-googlejs-direct-handler', '1');
-                for (const eventType of ['click', 'auxclick', 'mousedown']) {
-                    link.addEventListener(eventType, event => {
-                        const stored = link.getAttribute('data-googlejs-direct-destination');
-                        if (!stored) return;
-                        if (link.href !== stored) {
-                            // Never resurrect an old target if Google repurposed this card.
-                            const refreshed = getGoogleWebResultDirectDestination(link);
-                            if (!refreshed) {
-                                link.removeAttribute('data-googlejs-direct-destination');
-                                return;
-                            }
-                            link.setAttribute('href', refreshed);
-                            link.setAttribute('data-googlejs-direct-destination', refreshed);
-                        }
-                        // Document-level safety listeners still receive the event during
-                        // capture. Prevent only subsequent Google delegated click handling.
-                        if (eventType !== 'mousedown') event.stopPropagation();
-                    }, true);
-                }
-            }
-            return true;
-        } catch (e) { return false; }
-    }
-
     function getGoogleWebResultCard(link) {
         try {
             if (!isGoogleWebPrimaryResultLink(link)) return null;
-            restoreGoogleWebResultDirectLink(link);
             const boundary = link.closest('#search, #rso, #res');
             if (!boundary) return null;
 
@@ -6296,8 +6269,11 @@ function swapSearchTabs() {
                     });
                 if (!rootDenied) continue;
                 const brand = parts[0].replace(/[-_]/g, '').toLowerCase();
+                // Multiple denied domains may share one publisher badge (e.g. threads.com
+                // and threads.net). All candidates reaching here were independently denied
+                // at their homepages, so keep one as the blocking witness rather than
+                // treating another denied TLD as an ambiguous/unblocked publisher.
                 if (!lookup.has(brand)) lookup.set(brand, candidate);
-                else if (lookup.get(brand) !== candidate) lookup.set(brand, '');
             }
         }
         googleBlockedPublisherLookup = lookup;
