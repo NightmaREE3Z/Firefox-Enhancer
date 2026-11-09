@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         IGCleaner
-// @version	 29.6.7
-// @date	 2026-10-30
+// @version	 29.8.0
+// @date	 2026-11-09
 // @description  Trying to make my Instagram experience tolerable.
 // @match        *://www.instagram.com/*
 // @match        *://www.instagram.com/?next=%2F/*
@@ -78,6 +78,7 @@ const IG_PRIVATE_ACCOUNT_REDIRECT = 0;
 const IG_TRUSTED_FRIEND_ACCOUNTS = [
     'tielaakariksi', 'torssone'
 ];
+
 // These IDs identify DM conversations, NOT the owners of content shared in them.
 // Media opened inside these chats may show normally regardless of who authored it.
 const IG_TRUSTED_DM_THREADS = [
@@ -220,6 +221,23 @@ function ig2955TrustedHomeAuthorV326(article) {
                     transform: none !important;
                     transition: none !important;
                 }
+
+                /* V342: gate only IDENTIFIABLE account cards. The old V341 rule
+                   also concealed unresolved/placeholder rows forever while they
+                   continued to reserve virtual-list space. Wait for an actual
+                   profile identity anchor, then screen before it can paint. */
+                :is([role="dialog"], [aria-modal="true"]) div.x1qnrgzn.x1cek8b2.xb10e19.x19rwo8q.x1lliihq.x193iq5w.xh8yej3:has(a[role="link"][href^="/"] img[alt], a[role="link"].notranslate[href^="/"]):not([data-ig-account-list-approved-v341="1"]):not([data-ig-account-list-banned]),
+                :is([role="dialog"], [aria-modal="true"]) div.x1qnrgzn.x1cek8b2.xb10e19.x19rwo8q.x1lliihq.x193iq5w.xh8yej3[data-ig-account-list-banned] {
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                    transition: none !important;
+                    animation: none !important;
+                }
+                /* V343: banned cards keep their ORIGINAL list-slot geometry.
+                   IG can virtualize/paginate against slot positions: display:none,
+                   height:0 or negative margins can desynchronize its scroll range.
+                   The row is visually suppressed by the visibility rule above. */
 
                 /* Search/Haku and Explore/Tutki remain usable in the left rail.
                    Restore the real nav control, not the search-result listbox. */
@@ -4032,7 +4050,7 @@ function isElementProtected(element) {
 
 function buildSearchBanCSS() {
     try {
-        const scope = '[role="listbox"]';
+        const scope = '[role="listbox"]:not(:has(div.x1qnrgzn.x1cek8b2.xb10e19.x19rwo8q))';
         const rules = instagramAccountsToHideLower.map(acc => {
             const p = `${scope} a[href="/${acc}/"], ${scope} a[href="/${acc}"]`;
             return `
@@ -4056,6 +4074,8 @@ ${p}, ${p} * {
 }
 
     function isSearchSurfacePresent() {
+        // V341: Followers/Following has a Hae field, but is not the Search drawer.
+        if (ig2955HasAccountListDialogV341()) return false;
         return !!(
             document.querySelector('form[role="search"]') ||
             document.querySelector('input[placeholder*="Search"], input[placeholder*="Haku"], input[placeholder*="Hae"], input[aria-label*="Search"]') ||
@@ -4067,6 +4087,7 @@ ${p}, ${p} * {
         const rootsSet = new Set();
         document.querySelectorAll('[role="listbox"]').forEach(el => rootsSet.add(el));
         document.querySelectorAll('[role="dialog"], section[role="dialog"], div[aria-modal="true"]').forEach(d => {
+            if (ig2955IsAccountListDialogV341(d)) return;
             if (d.querySelector('form[role="search"], input[placeholder*="Search"], input[placeholder*="Haku"], input[placeholder*="Hae"], input[aria-label*="Search"]')) {
                 rootsSet.add(d);
             }
@@ -4202,6 +4223,7 @@ ${p}, ${p} * {
 
     function hideInstagramSearchResults() {
         if (!location.hostname.includes('instagram.com')) return;
+        if (ig2955HasAccountListDialogV341()) return;
 
         const anchorSet = new Set(Array.from(document.querySelectorAll('[role="listbox"] a[href]')));
         const roots = getSearchRoots();
@@ -4755,11 +4777,11 @@ const injectInlineCSS = () => {
         `;
 
         const approveGateCSS = `
-[role="listbox"] [role="option"]:not([${IG_SEARCH_APPROVE_ATTR}="1"]),
-[role="listbox"] li:not([${IG_SEARCH_APPROVE_ATTR}="1"]),
-[role="listbox"] a[role="link"]:not([${IG_SEARCH_APPROVE_ATTR}="1"]),
-[role="listbox"] a._a6hd:not([${IG_SEARCH_APPROVE_ATTR}="1"]),
-[role="listbox"] a.x1i10hfl:not([${IG_SEARCH_APPROVE_ATTR}="1"]) {
+[role="listbox"]:not(:has(div.x1qnrgzn.x1cek8b2.xb10e19.x19rwo8q)) [role="option"]:not([${IG_SEARCH_APPROVE_ATTR}="1"]),
+[role="listbox"]:not(:has(div.x1qnrgzn.x1cek8b2.xb10e19.x19rwo8q)) li:not([${IG_SEARCH_APPROVE_ATTR}="1"]),
+[role="listbox"]:not(:has(div.x1qnrgzn.x1cek8b2.xb10e19.x19rwo8q)) a[role="link"]:not([${IG_SEARCH_APPROVE_ATTR}="1"]),
+[role="listbox"]:not(:has(div.x1qnrgzn.x1cek8b2.xb10e19.x19rwo8q)) a._a6hd:not([${IG_SEARCH_APPROVE_ATTR}="1"]),
+[role="listbox"]:not(:has(div.x1qnrgzn.x1cek8b2.xb10e19.x19rwo8q)) a.x1i10hfl:not([${IG_SEARCH_APPROVE_ATTR}="1"]) {
 display: none !important;
 visibility: hidden !important;
 opacity: 0 !important;
@@ -4782,7 +4804,7 @@ overflow: visible !important;
 }
 `;
 
-        const safeSuffix = `:not(:has(nav)):not(:has(footer)):not(:has(svg[aria-label="Lisää"])):not(:has(svg[aria-label="Asetukset"])):not(:has(svg[aria-label="More"])):not(:has(a[href*="about.instagram.com"])):not(:has(article)):not(:has(a[href*="instagram.com/direct"]))`;
+        const safeSuffix = `:not(:is([role="dialog"], [aria-modal="true"], [role="dialog"] *, [aria-modal="true"] *)):not(:has([role="dialog"], [aria-modal="true"])):not(:has(nav)):not(:has(footer)):not(:has(svg[aria-label="Lisää"])):not(:has(svg[aria-label="Asetukset"])):not(:has(svg[aria-label="More"])):not(:has(a[href*="about.instagram.com"])):not(:has(article)):not(:has(a[href*="instagram.com/direct"]))`;
         const overlayGuardedSelectors = selectorsToHide.map(s => `html:not(.ig-overlay-open) ${s}${safeSuffix}`).join(',\n');
 
         style.textContent = `
@@ -4834,9 +4856,10 @@ overflow: visible !important;
             overflow: hidden !important;
         }
 
-        /* 1. PUSH THE RIGHT SIDEBAR PROFILE DOWN & KILL THE GHOST GAP */
-        div[style*="--x-width: 100%;"]:has(a[role="link"]),
-        div[style*="--x-width:100%"]:has(a[role="link"]) {
+        /* 1. PUSH THE RIGHT SIDEBAR PROFILE DOWN & KILL THE GHOST GAP.
+           Never apply this layout adjustment inside a native modal. */
+        div[style*="--x-width: 100%;"]:not(:is([role="dialog"] *, [aria-modal="true"] *)):not(:has([role="dialog"], [aria-modal="true"])):has(a[role="link"]),
+        div[style*="--x-width:100%"]:not(:is([role="dialog"] *, [aria-modal="true"] *)):not(:has([role="dialog"], [aria-modal="true"])):has(a[role="link"]) {
             margin-top: 26px !important; 
             gap: 0px !important; 
             transition: none !important;
@@ -4909,21 +4932,14 @@ overflow: visible !important;
             transform-origin: left center !important;
         }
 
-        /* Persistent followed/following-row hiding. */
-        [data-ig-account-list-banned] {
-            display: none !important;
+        /* V344: keep virtual-list geometry native. This marker is only for the
+           dedicated Followers/Following cards, never arbitrary DOM descendants. */
+        :is([role="dialog"], [aria-modal="true"]) div.x1qnrgzn.x1cek8b2.xb10e19.x19rwo8q[data-ig-account-list-banned] {
             visibility: hidden !important;
             opacity: 0 !important;
             pointer-events: none !important;
-            width: 0 !important;
-            min-width: 0 !important;
-            max-width: 0 !important;
-            height: 0 !important;
-            min-height: 0 !important;
-            max-height: 0 !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            overflow: hidden !important;
+            transition: none !important;
+            animation: none !important;
         }
 
         ${searchBanCSS}
@@ -5917,6 +5933,9 @@ injectInlineCSS();
     }
 
     function collapseElement(element) {
+        // V341: Followers/Following popups are native territory. Only the
+        // dedicated exact-account scanner may collapse their row containers.
+        if (ig2955IsAccountListSurfaceElementV341(element)) return;
         // V333: native search account rows are owned by the exact identity
         // scanner. Broad keyword hiders must not leave non-restorable inline
         // styles on avatar/name descendants when Instagram recycles the card.
@@ -6194,7 +6213,9 @@ injectInlineCSS();
             return;
         }
 
-        if (location.hostname.includes('instagram.com') && location.pathname.match(/\/(followers|following)/)) {
+        if (location.hostname.includes('instagram.com') &&
+            (location.pathname.match(/\/(followers|following)/) || ig2955HasAccountListDialogV341())) {
+            hideInstagramAccountsFromList();
             return;
         }
 
@@ -6249,80 +6270,410 @@ injectInlineCSS();
         return false;
     }
 
-    function findInstagramAccountListRow(anchor) {
+    // ===== V341: native Followers/Following account cards (modal on profile URLs) =====
+    // The old /followers and /following route test missed modern IG dialogs.
+    // Search's Hae input then accidentally enlisted these rows in the generic
+    // search scanner. Keep this path separate and never rewrite React's markup.
+    const IG_ACCOUNT_LIST_CARD_SELECTOR_V341 = 'div.x1qnrgzn.x1cek8b2.xb10e19.x19rwo8q.x1lliihq.x193iq5w.xh8yej3';
+    const IG_ACCOUNT_LIST_DIALOG_SELECTOR_V341 = '[role="dialog"], [aria-modal="true"]';
+    const IG_ACCOUNT_LIST_TITLE_V341 = /^(?:followers|following|seuraajat|seurataan|seurattavat|seuratut|seuraamasi)$/i;
+
+    function ig2955IsAccountListDialogV341(dialog) {
         try {
-            if (!anchor || anchor.nodeType !== 1) return null;
-
-            let node = anchor;
-            for (let depth = 0; node && depth < 14; depth++, node = node.parentElement) {
-                if (node.tagName === 'MAIN' || node.tagName === 'BODY') break;
-
-                const links = node.querySelectorAll?.('a[href^="/"]') || [];
-                const avatar = node.querySelector?.('div[role="button"] img[alt*="profiilikuva" i], div[role="button"] img[alt*="profile picture" i], div[role="button"] img[alt*="profile photo" i]');
-
-                // A real user row has the target profile link plus its avatar
-                // branch. Avoid climbing into the entire dialog/list container.
-                if (avatar && links.length <= 4) {
-                    return node;
+            if (!dialog?.matches?.(IG_ACCOUNT_LIST_DIALOG_SELECTOR_V341)) return false;
+            if (dialog.querySelector('article, [data-testid="post"]')) return false;
+            const label = String(dialog.getAttribute('aria-label') || '').trim();
+            if (IG_ACCOUNT_LIST_TITLE_V341.test(label)) return true;
+            // Some versions put the title in a span/div instead of h2. Look at
+            // a bounded set of short *direct* text nodes, not all account names.
+            const labels = dialog.querySelectorAll('h1,h2,h3,[role="heading"],span,div');
+            for (let i = 0; i < labels.length && i < 110; i++) {
+                const el = labels[i];
+                if (el.matches?.(IG_ACCOUNT_LIST_CARD_SELECTOR_V341) || el.closest?.(IG_ACCOUNT_LIST_CARD_SELECTOR_V341)) continue;
+                if (el.childElementCount === 0 && IG_ACCOUNT_LIST_TITLE_V341.test((el.textContent || '').trim())) return true;
+                for (const child of el.childNodes) {
+                    if (child.nodeType === 3 && IG_ACCOUNT_LIST_TITLE_V341.test((child.nodeValue || '').trim())) return true;
                 }
             }
+            // Older IG can omit a readable title but keeps this unique card
+            // shape and a search field inside an actual dialog on a profile.
+            return !!dialog.querySelector(IG_ACCOUNT_LIST_CARD_SELECTOR_V341) &&
+                /^\/[A-Za-z0-9._]+\/?$/.test(location.pathname || '') &&
+                !!dialog.querySelector('input[placeholder*="Hae" i], input[placeholder*="Search" i]');
+        } catch { return false; }
+    }
+
+    function ig2955GetAccountListDialogsV341() {
+        try {
+            return Array.from(document.querySelectorAll(IG_ACCOUNT_LIST_DIALOG_SELECTOR_V341))
+                .filter(dialog => !dialog.parentElement?.closest?.(IG_ACCOUNT_LIST_DIALOG_SELECTOR_V341) &&
+                    ig2955IsAccountListDialogV341(dialog)).slice(0, 6);
+        } catch { return []; }
+    }
+
+    function ig2955HasAccountListDialogV341() {
+        return ig2955GetAccountListDialogsV341().length > 0;
+    }
+
+    function ig2955IsAccountListSurfaceElementV341(element) {
+        try {
+            if (!element || element.nodeType !== 1) return false;
+            const modal = element.closest?.(IG_ACCOUNT_LIST_DIALOG_SELECTOR_V341);
+            if (modal && ig2955IsAccountListDialogV341(modal)) return true;
+            // Never collapse a container that owns the entire modal either.
+            const nested = element.querySelector?.(IG_ACCOUNT_LIST_DIALOG_SELECTOR_V341);
+            return !!nested && ig2955IsAccountListDialogV341(nested);
+        } catch { return false; }
+    }
+
+    function findInstagramAccountListRow(anchor) {
+        try {
+            const row = anchor?.closest?.(IG_ACCOUNT_LIST_CARD_SELECTOR_V341);
+            if (!row || !row.querySelector('a[role="link"][href^="/"] img[alt], a[role="link"].notranslate[href^="/"]')) return null;
+            return row;
+        } catch { return null; }
+    }
+
+    function ig2955AccountListUsernameV341(row) {
+        try {
+            const anchors = row.querySelectorAll('a[role="link"][href^="/"]');
+            let identity = '';
+            for (const anchor of anchors) {
+                const href = String(anchor.getAttribute('href') || '');
+                const m = href.match(/^\/([A-Za-z0-9._]{1,30})\/?(?:[?#].*)?$/);
+                if (!m) continue;
+                // V344: React may update the avatar and username anchors in separate
+                // commits while recycling the SAME row. Do not approve either identity
+                // until both available identity links agree; an unresolved row stays
+                // in Instagram's native layout without receiving an old approval.
+                if (!anchor.querySelector('img[alt]') && !anchor.classList.contains('notranslate')) continue;
+                const next = normalizeInstagramStoryUsername(m[1]);
+                if (!next) continue;
+                if (identity && identity !== next) return '';
+                identity = next;
+            }
+            return identity;
         } catch {}
-        return anchor.parentElement || null;
+        return '';
+    }
+
+    function ig2955ReleaseLegacyAccountRowHidingV341(row) {
+        // The old generic Search scanner could stamp data-ig-row on avatar/name
+        // anchors and hide them independently. Release only its own markers.
+        try {
+            const links = row.querySelectorAll('a[data-ig-row], a[data-ig-approve], a[data-ig-search-hidden-reason]');
+            for (const link of links) {
+                if (link.hasAttribute(IG_SEARCH_HIDDEN_ATTR)) {
+                    for (const prop of ['display','visibility','opacity','height','width','position',
+                        'left','top','pointer-events']) link.style.removeProperty(prop);
+                    hiddenElements.delete(link);
+                }
+                link.removeAttribute(IG_SEARCH_HIDDEN_ATTR);
+                link.removeAttribute(IG_SEARCH_ROW_ATTR);
+                link.removeAttribute(IG_SEARCH_APPROVE_ATTR);
+            }
+        } catch {}
+    }
+
+    // ===== V344: React-owned Followers/Following list lifecycle =====
+    // The general non-Home observer watches only child additions. Instagram can
+    // recycle an already-mounted row by changing the avatar/name href, or replace
+    // a text node without adding a new element. Watch ONLY recognized account
+    // dialogs and identity-relevant mutations; never edit virtual-list spacers,
+    // scrollTop, scrollHeight, row order, or the dialog's own layout styles.
+    const __igAccountListWatchersV344 = new Map();
+
+    function ig2955WatchAccountListDialogV344(dialog) {
+        try {
+            if (!dialog?.isConnected || __igAccountListWatchersV344.has(dialog)) return;
+            const observer = trackObserver(new MutationObserver(mutations => {
+                try {
+                    if (!dialog.isConnected) {
+                        observer.disconnect();
+                        __igAccountListWatchersV344.delete(dialog);
+                        __observers.delete(observer);
+                        return;
+                    }
+                    if (!mutations.some(mutation => mutation.type === 'childList' ||
+                        mutation.type === 'characterData' ||
+                        (mutation.type === 'attributes' &&
+                            (mutation.attributeName === 'href' || mutation.attributeName === 'alt')))) return;
+                    // Runs in the MutationObserver microtask, before normal paint.
+                    // The decisions below only set data attributes on account cards;
+                    // those attributes are deliberately NOT in this watcher's filter.
+                    hideInstagramAccountsFromList();
+                } catch {}
+            }));
+            observer.observe(dialog, { childList: true, subtree: true, characterData: true,
+                attributes: true, attributeFilter: ['href', 'alt'] });
+            __igAccountListWatchersV344.set(dialog, observer);
+        } catch {}
+    }
+
+    function ig2955PruneAccountListWatchersV344(dialogs) {
+        try {
+            const active = new Set(dialogs);
+            for (const [dialog, observer] of __igAccountListWatchersV344) {
+                if (dialog.isConnected && active.has(dialog)) continue;
+                observer.disconnect();
+                __igAccountListWatchersV344.delete(dialog);
+                __observers.delete(observer);
+            }
+        } catch {}
+    }
+
+    // ===== V345: visual-only gap packing in native Followers/Following rows =====
+    // Instagram's virtualizer owns real row boxes and top/bottom padding. Never
+    // display:none, remove/reparent nodes, use negative margins, resize a scroll
+    // host, or alter padding/scrollTop. Only the VISUAL position of approved rows
+    // after a known banned row shifts upward; their original box/scroll extent
+    // remains untouched for React pagination and recycling.
+    const IG_ACCOUNT_LIST_VISUAL_SHIFT_V345 = 'data-ig-account-list-visual-shift-v345';
+    const __igAccountListVisualShiftSavedV345 = new WeakMap();
+    const IG_ACCOUNT_LIST_MAX_VISUAL_SHIFT_V345 = 600; // fail-safe for huge banned batches
+
+    function ig2955RestoreAccountListVisualShiftV345(row) {
+        try {
+            const saved = __igAccountListVisualShiftSavedV345.get(row);
+            if (!saved && row.hasAttribute(IG_ACCOUNT_LIST_VISUAL_SHIFT_V345)) {
+                // An Instagram-cloned card can carry our inline style/marker
+                // without carrying the WeakMap entry. Clear that orphaned shift.
+                const existing = row.style.getPropertyValue('translate');
+                const marked = Number(row.getAttribute(IG_ACCOUNT_LIST_VISUAL_SHIFT_V345));
+                if (Number.isFinite(marked) && marked > 0 &&
+                    existing === `0px -${marked}px`) row.style.removeProperty('translate');
+            }
+            if (saved) {
+                // Do not overwrite a newer native React-owned translate value.
+                if (row.style.getPropertyValue('translate') === saved.applied) {
+                    if (saved.value) row.style.setProperty('translate', saved.value, saved.priority);
+                    else row.style.removeProperty('translate');
+                }
+                __igAccountListVisualShiftSavedV345.delete(row);
+            }
+            row.removeAttribute(IG_ACCOUNT_LIST_VISUAL_SHIFT_V345);
+        } catch {}
+    }
+
+    function ig2955ApplyAccountListVisualShiftV345(row, shiftPx) {
+        try {
+            const pixels = Math.round(Math.max(0, Math.min(shiftPx, IG_ACCOUNT_LIST_MAX_VISUAL_SHIFT_V345)));
+            if (!pixels) { ig2955RestoreAccountListVisualShiftV345(row); return; }
+            let saved = __igAccountListVisualShiftSavedV345.get(row);
+            if (!saved) {
+                if (row.hasAttribute(IG_ACCOUNT_LIST_VISUAL_SHIFT_V345))
+                    ig2955RestoreAccountListVisualShiftV345(row);
+                const current = row.style.getPropertyValue('translate');
+                // Never override a row whose positioning Instagram already owns.
+                if (current) return;
+                saved = { value: current, priority: row.style.getPropertyPriority('translate'), applied: '' };
+                __igAccountListVisualShiftSavedV345.set(row, saved);
+            }
+            const desired = `0px -${pixels}px`;
+            if (row.style.getPropertyValue('translate') !== saved.applied && saved.applied) {
+                // React claimed the property after our previous paint adjustment.
+                ig2955RestoreAccountListVisualShiftV345(row);
+                return;
+            }
+            if (saved.applied !== desired || row.style.getPropertyPriority('translate') !== 'important') {
+                row.style.setProperty('translate', desired, 'important');
+                // CSSOM canonicalizes zero-length values (0 -> 0px). Store the
+                // *actual* property string so recycling can restore it reliably.
+                saved.applied = row.style.getPropertyValue('translate');
+            }
+            if (row.getAttribute(IG_ACCOUNT_LIST_VISUAL_SHIFT_V345) !== String(pixels))
+                row.setAttribute(IG_ACCOUNT_LIST_VISUAL_SHIFT_V345, String(pixels));
+        } catch {}
+    }
+
+    function ig2955PackAccountListVisualGapsV345(dialog, rows) {
+        try {
+            // Cards in the captured modal are direct children of a flex-column
+            // virtual-list canvas. Never apply this to other Instagram layouts.
+            const groups = new Map();
+            for (const row of rows) {
+                const parent = row.parentElement;
+                if (!parent) continue;
+                if (!groups.has(parent)) groups.set(parent, []);
+                groups.get(parent).push(row);
+            }
+            const changes = [];
+            for (const [parent, cards] of groups) {
+                const flex = getComputedStyle(parent);
+                const eligible = cards.length >= 2 && flex.display === 'flex' &&
+                    flex.flexDirection === 'column' && cards.every(row => row.parentElement === parent) &&
+                    cards.every(row => ['static', 'relative'].includes(getComputedStyle(row).position));
+                if (!eligible) {
+                    for (const row of cards) changes.push([row, 0]);
+                    continue;
+                }
+                const gap = Number.parseFloat(flex.rowGap) || 0;
+                let hiddenHeight = 0;
+                for (const row of cards) {
+                    if (row.hasAttribute('data-ig-account-list-banned')) {
+                        // Even a visibility-hidden row retains offsetHeight.
+                        // Read native geometry before applying any translations.
+                        const style = getComputedStyle(row);
+                        const nativeHeight = row.offsetHeight;
+                        if (nativeHeight > 0 && nativeHeight < 300) {
+                            hiddenHeight += nativeHeight + (Number.parseFloat(style.marginTop) || 0) +
+                                (Number.parseFloat(style.marginBottom) || 0) + gap;
+                        }
+                        changes.push([row, 0]);
+                    } else {
+                        changes.push([row, hiddenHeight]);
+                    }
+                }
+            }
+            // Writes are separate from reads to avoid layout thrash during scroll.
+            for (const [row, shift] of changes) {
+                if (shift > 0) ig2955ApplyAccountListVisualShiftV345(row, shift);
+                else ig2955RestoreAccountListVisualShiftV345(row);
+            }
+        } catch {}
+    }
+
+    // V342 historical compact implementation retained for compatibility/reversal.
+    // V343 deliberately never calls it: Instagram owns all modal/list sizing.
+    const IG_ACCOUNT_LIST_COMPACT_ATTR_V342 = 'data-ig-account-list-compact-v342';
+    const __igAccountListCompactV342 = new WeakMap();
+
+    function ig2955ResetAccountListCompactV342(dialog) {
+        try {
+            const previous = __igAccountListCompactV342.get(dialog);
+            if (!previous) return;
+            for (const [node, styles] of previous.saved) {
+                if (!node?.isConnected) continue;
+                for (const [prop, value, priority] of styles) {
+                    if (value) node.style.setProperty(prop, value, priority);
+                    else node.style.removeProperty(prop);
+                }
+            }
+            dialog.removeAttribute(IG_ACCOUNT_LIST_COMPACT_ATTR_V342);
+            __igAccountListCompactV342.delete(dialog);
+        } catch {}
+    }
+
+    function ig2955CompactResolvedAccountListV342(dialog, rows) {
+        try {
+            const cards = Array.from(rows);
+            const prior = __igAccountListCompactV342.get(dialog);
+            if (cards.length < 2 || cards.length > 15 || cards.some(card =>
+                !card.hasAttribute('data-ig-account-list-approved-v341') &&
+                !card.hasAttribute('data-ig-account-list-banned')) ||
+                dialog.querySelector('[role="progressbar"], [aria-busy="true"], [data-visualcompletion="loading-state"]')) {
+                ig2955ResetAccountListCompactV342(dialog);
+                return;
+            }
+            const approved = cards.filter(card => card.getAttribute('data-ig-account-list-approved-v341') === '1');
+            if (!approved.length) { ig2955ResetAccountListCompactV342(dialog); return; }
+            let host = approved[0].parentElement;
+            while (host && host !== dialog) {
+                const css = getComputedStyle(host);
+                if (/(?:auto|scroll)/.test(css.overflowY) && host.clientHeight >= 180) break;
+                host = host.parentElement;
+            }
+            if (!host || host === dialog) { ig2955ResetAccountListCompactV342(dialog); return; }
+            // Re-evaluate on new list data or a new logical scroll range, but do not
+            // undo our own max-height on the next MutationObserver callback.
+            if (prior?.host === host) {
+                if (prior.count === cards.length && host.scrollTop < 5 &&
+                    host.scrollHeight <= prior.naturalScrollHeight + 80) return;
+                ig2955ResetAccountListCompactV342(dialog);
+                return;
+            }
+            if (prior) ig2955ResetAccountListCompactV342(dialog);
+            const r = host.getBoundingClientRect();
+            const lastBottom = Math.max(...approved.map(card => card.getBoundingClientRect().bottom));
+            const end = host.scrollTop + lastBottom - r.top;
+            // Do not reinterpret virtualized padding as removable whitespace.
+            if (host.scrollTop > 4 || end < 160 || host.scrollHeight > host.clientHeight + 24 ||
+                host.clientHeight - (lastBottom - r.top) < 150 || end > host.clientHeight - 80) return;
+            const target = Math.ceil(Math.max(180, end + 16));
+            const saved = [];
+            const saveStyle = (element, props) => saved.push([element,
+                props.map(prop => [prop, element.style.getPropertyValue(prop), element.style.getPropertyPriority(prop)])]);
+            saveStyle(host, ['height', 'min-height', 'max-height', 'flex-grow', 'flex-shrink', 'flex-basis']);
+            const naturalScrollHeight = host.scrollHeight;
+            host.style.setProperty('height', `${target}px`, 'important');
+            host.style.setProperty('min-height', '0px', 'important');
+            host.style.setProperty('max-height', `${target}px`, 'important');
+            host.style.setProperty('flex-grow', '0', 'important');
+            host.style.setProperty('flex-shrink', '0', 'important');
+            host.style.setProperty('flex-basis', 'auto', 'important');
+            // The dialog itself is resizable ONLY when it is the actual narrow,
+            // opaque card (never a full-screen transparent portal/backdrop).
+            const rect = dialog.getBoundingClientRect();
+            const bg = getComputedStyle(dialog).backgroundColor;
+            const dialogTarget = Math.ceil(lastBottom - rect.top + 24);
+            const canResizeDialog = rect.width > 250 && rect.width < Math.min(760, window.innerWidth * 0.94) &&
+                bg !== 'transparent' && bg !== 'rgba(0, 0, 0, 0)' &&
+                dialogTarget >= 240 && rect.height - dialogTarget > 140 &&
+                !Array.from(dialog.querySelectorAll('input, button, [role="button"]')).some(control =>
+                    !control.closest?.(IG_ACCOUNT_LIST_CARD_SELECTOR_V341) &&
+                    control.getBoundingClientRect().top > lastBottom + 8 &&
+                    getComputedStyle(control).display !== 'none');
+            if (canResizeDialog) {
+                saveStyle(dialog, ['height', 'min-height', 'max-height']);
+                dialog.style.setProperty('height', `${dialogTarget}px`, 'important');
+                dialog.style.setProperty('min-height', '0px', 'important');
+                dialog.style.setProperty('max-height', 'calc(100dvh - 24px)', 'important');
+            }
+            __igAccountListCompactV342.set(dialog, {host, saved, count: cards.length, naturalScrollHeight});
+            dialog.setAttribute(IG_ACCOUNT_LIST_COMPACT_ATTR_V342, '1');
+        } catch {}
     }
 
     function hideInstagramAccountsFromList(root = document) {
         try {
-            if (!location.hostname.includes('instagram.com')) return 0;
-            if (!location.pathname.match(/\/(followers|following)/)) return 0;
-            if (isReelsPage()) return 0;
-
-            const scope = root && root.nodeType === 1 ? root : document;
-            const anchors = [];
-            const selector = 'a[data-ig-row="1"][href^="/"]';
-
-            const addAnchor = (el) => {
-                if (el && el.nodeType === 1 && !anchors.includes(el)) anchors.push(el);
-            };
-
-            if (scope.matches?.(selector)) addAnchor(scope);
-            scope.querySelectorAll?.(selector).forEach(addAnchor);
-
-            // Fallback for a row whose data marker is absent but still has a
-            // profile-style href. Only use this inside followers/following.
-            if (!anchors.length) {
-                scope.querySelectorAll?.('[role="dialog"] a[href^="/"] , main a[href^="/"]')
-                    .forEach(addAnchor);
-            }
-
+            if (location.hostname !== 'www.instagram.com') return 0;
+            const dialogs = ig2955GetAccountListDialogsV341();
+            ig2955PruneAccountListWatchersV344(dialogs);
+            if (!dialogs.length) return 0;
             let hidden = 0;
-            const seenRows = new Set();
-
-            for (const anchor of anchors) {
-                const href = anchor.getAttribute('href') || '';
-                const match = href.match(/^\/([^/?#]+)\/?(?:[?#].*)?$/);
-                if (!match) continue;
-
-                const reserved = new Set([
-                    'p', 'reel', 'tv', 'stories', 'explore', 'reels', 'accounts',
-                    'direct', 'about', 'help', 'legal', 'privacy', 'terms', 'web'
-                ]);
-                const username = normalizeInstagramStoryUsername(match[1]);
-                if (!username || reserved.has(username)) continue;
-                if (!isInstagramAccountUsernameBanned(username)) continue;
-
-                const row = findInstagramAccountListRow(anchor);
-                if (!row || seenRows.has(row)) continue;
-                seenRows.add(row);
-
-                row.setAttribute('data-ig-account-list-banned', username);
-                collapseElement(row);
-                hidden++;
+            for (const dialog of dialogs) {
+                ig2955WatchAccountListDialogV344(dialog);
+                const rows = dialog.querySelectorAll(IG_ACCOUNT_LIST_CARD_SELECTOR_V341);
+                for (const row of rows) {
+                    const username = ig2955AccountListUsernameV341(row);
+                    if (!username) {
+                        // V344: stale approvals must not survive a recycled row whose
+                        // identity is incomplete or whose avatar/name hrefs disagree.
+                        row.removeAttribute('data-ig-account-list-key-v341');
+                        row.removeAttribute('data-ig-account-list-approved-v341');
+                        row.removeAttribute('data-ig-account-list-banned');
+                        continue; // no layout changes to native loading placeholders
+                    }
+                    ig2955ReleaseLegacyAccountRowHidingV341(row);
+                    const banned = isInstagramAccountUsernameBanned(username);
+                    const previous = row.getAttribute('data-ig-account-list-key-v341') || '';
+                    if (previous !== username) {
+                        // React may recycle row nodes for a different account.
+                        row.removeAttribute('data-ig-account-list-banned');
+                        row.removeAttribute('data-ig-account-list-approved-v341');
+                        if (hiddenElements.has(row)) {
+                            for (const prop of ['display','visibility','opacity','position','left',
+                                'top','height','width','pointer-events']) row.style.removeProperty(prop);
+                            hiddenElements.delete(row);
+                        }
+                    }
+                    row.setAttribute('data-ig-account-list-key-v341', username);
+                    if (banned) {
+                        row.removeAttribute('data-ig-account-list-approved-v341');
+                        row.setAttribute('data-ig-account-list-banned', username);
+                        hidden++;
+                    } else {
+                        row.removeAttribute('data-ig-account-list-banned');
+                        row.setAttribute('data-ig-account-list-approved-v341', '1');
+                    }
+                }
+                // V345: visual packing only. Original row boxes, virtual padding,
+                // scrollTop and pagination sentinel geometry stay unchanged.
+                ig2955ResetAccountListCompactV342(dialog);
+                ig2955PackAccountListVisualGapsV345(dialog, rows);
             }
-
             return hidden;
-        } catch {
-            return 0;
-        }
+        } catch { return 0; }
     }
 
     function hideInstagramBannedContent() {
@@ -6437,7 +6788,7 @@ injectInlineCSS();
     function hideUnfollowRowInProfileDialog() {
         try {
             const dlg = document.querySelector('[role="dialog"]');
-            if (!dlg) return;
+            if (!dlg || ig2955IsAccountListDialogV341(dlg)) return;
             dlg.querySelectorAll('button, div[role="button"][tabindex]').forEach(btn => {
                 const txt = (btn.textContent || '').trim().toLowerCase();
                 if (txt === 'unfollow' || txt === 'lopeta seuraaminen' || txt === 'estä' || txt === 'block') {
@@ -7580,6 +7931,11 @@ injectInlineCSS();
         injectHomeFeedHybridGateCSS();
         watchForInstagramStoryTrayV2955();
         handleRedirectionsAndContentHiding();
+        if (ig2955HasAccountListDialogV341()) {
+            hideInstagramAccountsFromList();
+            updateOverlayState();
+            return;
+        }
         if (isReelsPage()) {
             updateOverlayState();
             return;
@@ -7647,6 +8003,10 @@ injectInlineCSS();
             updateOverlayState();
             makeOverlayLikesClickable(); 
             if (!isReelsPage() && !document.hidden) {
+                if (ig2955HasAccountListDialogV341()) {
+                    hideInstagramAccountsFromList();
+                    return;
+                }
                 hideUnwantedUIButtons();
                 hideIGAccountEditSectionsV43();
                 hideProfileThreadsTags();
@@ -9359,6 +9719,12 @@ injectInlineCSS();
     function observerCallback(mutationsList) {
         const isHomeFeed = isMetaManglerHomeFeedPath();
         if (document.hidden) return;
+        // V341: React mounts these overlays on profile URLs. Classify synchronously
+        // during the MutationObserver microtask, before their first visible paint.
+        if (!isHomeFeed && ig2955HasAccountListDialogV341()) {
+            hideInstagramAccountsFromList();
+            return;
+        }
 
         if (isHomeFeed) {
             // The dedicated coordinator observer is the sole Home-feed discovery owner.

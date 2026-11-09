@@ -128,6 +128,29 @@
     '[data-testid="settings-row"]'
   ].join(', ');
   const VOICE_DISABLED_ATTR = 'data-bravefox-voice-disabled';
+  // The PWA can render the composer Voice launcher for a frame before general
+  // UI cleanup. These exact semantics are CSS-blocked from document_start.
+  // Never include Start dictation, microphone inputs, or message Read Aloud.
+  const VOICE_LAUNCH_BUTTON_SELECTOR = [
+    'button[aria-label="Start Voice" i]',
+    'button[aria-label="Start voice mode" i]',
+    'button[aria-label="Start voice chat" i]',
+    'button[aria-label="Open voice mode" i]',
+    'button[aria-label="Use voice mode" i]',
+    'button[aria-label="Aloita puhetila" i]',
+    'button[aria-label="Aloita äänikeskustelu" i]',
+    'button[aria-label="Aloita ääni" i]',
+    'button[title="Start Voice" i]',
+    'button[title="Aloita puhetila" i]',
+    'button[data-testid="composer-voice-button"]',
+    'button[data-testid="voice-mode-button"]',
+    'button[data-testid="start-voice-button"]',
+    'button[data-testid="composer-voice-mode-button"]',
+    ':is(form, [data-testid*="composer" i], [class*="composer"]) button[aria-label="Voice" i]',
+    ':is(form, [data-testid*="composer" i], [class*="composer"]) button[aria-label="Voice mode" i]',
+    ':is(form, [data-testid*="composer" i], [class*="composer"]) button[aria-label="Puhetila" i]',
+    ':is(form, [data-testid*="composer" i], [class*="composer"]) button[aria-label="Äänitila" i]'
+  ].join(', ');
   const CODEX_MODE_BUTTON_SELECTOR = [
     'button[aria-haspopup="menu"][aria-label^="Vaihda tilaa, nykyinen tila:"]',
     'button[aria-haspopup="menu"][aria-label^="Switch mode, current mode:"]',
@@ -710,7 +733,7 @@
   const THINKING_EFFORT_SLIDER_SELECTOR = '[role="slider"], input[type="range"]';
   const THINKING_EFFORT_EXACT_CONTROL_SELECTOR = '[data-reasoning-slider="true"]';
   const THINKING_EFFORT_EXACT_ROOT_SELECTOR = '[data-model-picker-power-slider]';
-  const THINKING_EFFORT_EXACT_STATE_SELECTOR = '[role="slider"][aria-valuemin="0"][aria-valuemax="2"]';
+  const THINKING_EFFORT_EXACT_STATE_SELECTOR = '[role="slider"][aria-valuemin="0"]:is([aria-valuemax="2"], [aria-valuemax="3"])';
   const THINKING_EFFORT_POPUP_SELECTOR = [
     '[role="dialog"]',
     '[role="menu"]',
@@ -735,6 +758,11 @@
   // The original 0/1/2 slider stays mounted but cannot be reached by the user.
   const BRAVEFOX_TWO_STOP_ATTR = 'data-bravefox-two-stop';
   const BRAVEFOX_TWO_STOP_NATIVE_ATTR = 'data-bravefox-two-stop-native';
+  const BRAVEFOX_NATIVE_TWO_STOP_READY_ATTR = 'data-bravefox-native-two-stop-ready';
+  const BRAVEFOX_NATIVE_TWO_STOP_VIEWPORT_ATTR = 'data-bravefox-native-two-stop-viewport';
+  const BRAVEFOX_NATIVE_TWO_STOP_STEPS_ATTR = 'data-bravefox-native-two-stop-steps';
+  const BRAVEFOX_NATIVE_TWO_STOP_SELECTED_ATTR = 'data-bravefox-native-selected';
+  const BRAVEFOX_NATIVE_TWO_STOP_DRAG_ATTR = 'data-bravefox-native-dragging';
   const BRAVEFOX_WORK_BRANCH_HIDDEN_ATTR = 'data-bravefox-work-branch-hidden';
   const braveFoxTwoStopSelections = new WeakMap();
   const braveFoxTwoStopNativeHeadings = new WeakMap();
@@ -1770,23 +1798,118 @@
         pointer-events: none !important;
       }
 
-      /* The native three-stop ChatGPT reasoning control is never paintable.
-       * BraveFox renders one two-stop native-style track (Medium / High) beside
-       * the still-mounted native state source. Unknown slider versions retain
-       * their old edge guard rather than gaining unverified fake controls. */
-      [data-reasoning-slider="true"]:has([role="slider"][aria-valuemin="0"][aria-valuemax="2"]):not([${BRAVEFOX_TWO_STOP_NATIVE_ATTR}]) {
+      /* PWA + desktop + Firefox Nightly legacy composer: Voice launchers must
+       * never paint once, then disappear. Keep speech dictation separate. */
+      ${VOICE_LAUNCH_BUTTON_SELECTOR} {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+
+      /* Restore the actual React-owned ChatGPT reasoning slider, not the
+       * earlier BraveFox replacement rail. Keep the native track invisible
+       * until its 0=Instant state has been advanced to 1=Medium. CSS is
+       * installed at document_start so even a fast PWA first paint is safe. */
+      [data-reasoning-slider="true"]:has(${THINKING_EFFORT_EXACT_STATE_SELECTOR}):not([${BRAVEFOX_NATIVE_TWO_STOP_READY_ATTR}="true"]) {
         visibility: hidden !important;
         pointer-events: none !important;
       }
       [${BRAVEFOX_TWO_STOP_NATIVE_ATTR}="true"] {
-        position: absolute !important;
-        inset: 0 auto auto 0 !important;
-        width: 100% !important;
-        max-height: 44px !important;
-        overflow: hidden !important;
-        opacity: 0 !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+      }
+      [${BRAVEFOX_TWO_STOP_NATIVE_ATTR}="true"]:not([${BRAVEFOX_NATIVE_TWO_STOP_READY_ATTR}="true"]) {
         visibility: hidden !important;
         pointer-events: none !important;
+      }
+      /* Preserve ChatGPT's native pointer capture and React-owned values.
+       * Radix (and HTML range inputs) already inset a 28px thumb by 14px.
+       * Account for that native inset when moving Medium to the left edge and
+       * High to the right; Instant and optional Pro remain out of view. */
+      [${BRAVEFOX_NATIVE_TWO_STOP_VIEWPORT_ATTR}="true"] {
+        clip-path: inset(-24px 0 -24px 0) !important;
+        min-width: 0 !important;
+      }
+      /* The real Radix/HTML slider handles the gestures. Extending the root
+       * to the left (and, for four stops, to the right) moves its native
+       * Medium and High tick marks to the visible ends. Only those two marks
+       * are within the clipped viewport; there is no replacement thumb. */
+      [${BRAVEFOX_TWO_STOP_NATIVE_ATTR}="true"] [data-model-picker-power-slider] > [data-orientation="horizontal"] {
+        cursor: pointer !important;
+      }
+      [${BRAVEFOX_TWO_STOP_NATIVE_ATTR}="true"][${BRAVEFOX_NATIVE_TWO_STOP_STEPS_ATTR}="3"]
+      [data-model-picker-power-slider] > [data-orientation="horizontal"] {
+        position: relative !important;
+        width: calc(200% - 28px) !important;
+        max-width: none !important;
+        left: calc(-100% + 28px) !important;
+        touch-action: none !important;
+      }
+      [${BRAVEFOX_TWO_STOP_NATIVE_ATTR}="true"][${BRAVEFOX_NATIVE_TWO_STOP_STEPS_ATTR}="4"]
+      [data-model-picker-power-slider] > [data-orientation="horizontal"] {
+        position: relative !important;
+        width: calc(300% - 56px) !important;
+        max-width: none !important;
+        left: calc(-100% + 28px) !important;
+        touch-action: none !important;
+      }
+      /* Let ChatGPT retain direct, no-lag thumb dragging. Only keyboard- or
+       * state-driven jumps get a brief native-feeling glide when the browser
+       * exposes the thumb position as an inline left style. Respect reduced
+       * motion and never animate while the actual slider is pressed. */
+      @media (prefers-reduced-motion: no-preference) {
+        [${BRAVEFOX_TWO_STOP_NATIVE_ATTR}="true"] [data-model-picker-power-slider]
+        > [data-orientation="horizontal"] :is([role="slider"][style*="left"], [style*="left"]:has(> [role="slider"])) {
+          transition: left 130ms ease-out !important;
+        }
+        [${BRAVEFOX_TWO_STOP_NATIVE_ATTR}="true"][${BRAVEFOX_NATIVE_TWO_STOP_DRAG_ATTR}="true"]
+        [data-model-picker-power-slider] :is([role="slider"][style*="left"], [style*="left"]:has(> [role="slider"])) {
+          transition: none !important;
+        }
+      }
+      /* Radix's native filled-range segment starts at Instant, even though
+       * Instant is no longer visible. On Medium, that otherwise leaves a blue
+       * sliver to the left of the thumb. Hide only the FILL, not the track,
+       * thumb, stop indicators or any part of the native interaction surface. */
+      [${BRAVEFOX_TWO_STOP_NATIVE_ATTR}="true"][${BRAVEFOX_NATIVE_TWO_STOP_SELECTED_ATTR}="medium"]
+      [data-model-picker-power-slider] [data-slot="slider-range"],
+      [${BRAVEFOX_TWO_STOP_NATIVE_ATTR}="true"][${BRAVEFOX_NATIVE_TWO_STOP_SELECTED_ATTR}="medium"]
+      [data-model-picker-power-slider] [data-radix-slider-range],
+      [${BRAVEFOX_TWO_STOP_NATIVE_ATTR}="true"][${BRAVEFOX_NATIVE_TWO_STOP_SELECTED_ATTR}="medium"]
+      [data-model-picker-power-slider] > [data-orientation="horizontal"] > [data-orientation="horizontal"] > [data-orientation="horizontal"] {
+        opacity: 0 !important;
+      }
+      /* At High the original native blue range fills the entire visible rail;
+       * the hidden Instant->Medium half remains outside the clipped viewport. */
+      @media (prefers-reduced-motion: no-preference) {
+        [${BRAVEFOX_TWO_STOP_NATIVE_ATTR}="true"] [data-model-picker-power-slider]
+        :is([data-slot="slider-range"], [data-radix-slider-range]) {
+          transition: opacity 130ms ease-out !important;
+        }
+      }
+      /* Older Firefox Android still uses an actual range input on some
+       * layouts. Keep it native and crop its unused outer stop the same way. */
+      [${BRAVEFOX_TWO_STOP_NATIVE_ATTR}="true"][${BRAVEFOX_NATIVE_TWO_STOP_STEPS_ATTR}="3"]:is(input[type="range"], [data-bravefox-legacy-visual-track="true"]) {
+        width: calc(200% - 28px) !important;
+        max-width: none !important;
+        margin-left: calc(-100% + 28px) !important;
+        touch-action: none !important;
+      }
+      [${BRAVEFOX_TWO_STOP_NATIVE_ATTR}="true"][${BRAVEFOX_NATIVE_TWO_STOP_STEPS_ATTR}="4"]:is(input[type="range"], [data-bravefox-legacy-visual-track="true"]) {
+        width: calc(300% - 56px) !important;
+        max-width: none !important;
+        margin-left: calc(-100% + 28px) !important;
+        touch-action: none !important;
+      }
+      /* Old Firefox Nightly native HTML range: do not leave a filled sliver
+       * between the offscreen Instant stop and the visible Medium endpoint. */
+      [${BRAVEFOX_TWO_STOP_NATIVE_ATTR}="true"][${BRAVEFOX_NATIVE_TWO_STOP_SELECTED_ATTR}="medium"]:is(input[type="range"])::-moz-range-progress {
+        background: transparent !important;
+      }
+      [${BRAVEFOX_TWO_STOP_NATIVE_ATTR}="true"][${BRAVEFOX_NATIVE_TWO_STOP_SELECTED_ATTR}="medium"]:is(input[type="range"])::-webkit-slider-runnable-track {
+        background-image: none !important;
       }
       [data-bravefox-two-stop-host="true"] { position: relative !important; }
       /* Lock only the identified reasoning popup, not every ChatGPT menu.
@@ -4487,7 +4610,7 @@
     return hidden;
   }
 
-  // === Two visible reasoning stops, while preserving ChatGPT's native selection ===
+  // === Two native reasoning stops, while preserving ChatGPT's own model selection ===
   function braveFoxTwoStopValue(control) {
     if (!(control instanceof Element)) return null;
     const state = control.matches?.('[role="slider"][aria-valuenow], input[type="range"]') ?
@@ -4731,6 +4854,24 @@
 
   function braveFoxTwoStopRefresh(control) {
     if (!(control instanceof Element)) return;
+    if (control.getAttribute(BRAVEFOX_TWO_STOP_NATIVE_ATTR) === 'true') {
+      const value = braveFoxTwoStopValue(control);
+      if (value === 1 || value === 2) {
+        const selected = value === 2 ? 'high' : 'medium';
+        if (control.getAttribute(BRAVEFOX_NATIVE_TWO_STOP_SELECTED_ATTR) !== selected) {
+          control.setAttribute(BRAVEFOX_NATIVE_TWO_STOP_SELECTED_ATTR, selected);
+        }
+        control.setAttribute(BRAVEFOX_NATIVE_TWO_STOP_READY_ATTR, 'true');
+      } else {
+        // Unavailable native edge states must never paint on the visible track.
+        control.removeAttribute(BRAVEFOX_NATIVE_TWO_STOP_READY_ATTR);
+        control.removeAttribute(BRAVEFOX_NATIVE_TWO_STOP_SELECTED_ATTR);
+        if (control.matches(THINKING_EFFORT_EXACT_CONTROL_SELECTOR)) {
+          queueMicrotask(() => enforceExactReasoningFloor(control));
+        }
+      }
+      return;
+    }
     const widget = braveFoxTwoStopSelections.get(control);
     if (!(widget instanceof Element) || !widget.isConnected) return;
     braveFoxTwoStopUpdateModelTitle(control, widget);
@@ -4905,6 +5046,67 @@
     return true;
   }
 
+  // Native 2-stop presentation. This ONLY changes layout/visibility and
+  // prevents forbidden values; every selection still belongs to ChatGPT.
+  function braveFoxExposeNativeTwoStop(control, type) {
+    if (!(control instanceof HTMLElement) || !control.isConnected) return false;
+    const value = braveFoxTwoStopValue(control);
+    if (type === 'visual') {
+      const popup = control.closest(THINKING_EFFORT_POPUP_SELECTOR);
+      if (!popup || !findThinkingEffortVisualPopup(control, false)) return false;
+    }
+    const range = type === 'exact'
+      ? { min: 0, max: Number(getExactReasoningState(control)?.getAttribute('aria-valuemax') || 2) }
+      : readThinkingEffortRange(control);
+    const steps = type === 'visual' ? 3 : (range?.max === 3 ? 4 : 3);
+    const viewport = type === 'exact'
+      ? control.querySelector('[data-model-picker-power-slider]')
+      : control.parentElement;
+    if (!(viewport instanceof HTMLElement)) return false;
+    if (type === 'exact' && !(getExactReasoningPowerRoot(control) instanceof HTMLElement)) return false;
+    // Old role=slider-only builds do not guarantee that the ARIA thumb is the
+    // entire rail; keep their native DOM unmodified rather than stretch a thumb.
+    if (type === 'range' && !(control instanceof HTMLInputElement)) {
+      enforceThinkingEffortSliderEdges(control);
+      return false;
+    }
+    viewport.setAttribute(BRAVEFOX_NATIVE_TWO_STOP_VIEWPORT_ATTR, 'true');
+    control.setAttribute(BRAVEFOX_TWO_STOP_NATIVE_ATTR, 'true');
+    control.setAttribute(BRAVEFOX_NATIVE_TWO_STOP_STEPS_ATTR, String(steps));
+    if (type === 'visual') control.setAttribute('data-bravefox-legacy-visual-track', 'true');
+    if (type === 'range' && control instanceof HTMLInputElement &&
+        control.getAttribute('data-bravefox-native-state-listener') !== 'true') {
+      control.setAttribute('data-bravefox-native-state-listener', 'true');
+      const syncNativeRange = () => queueMicrotask(() => braveFoxTwoStopRefresh(control));
+      control.addEventListener('input', syncNativeRange);
+      control.addEventListener('change', syncNativeRange);
+    }
+    const allowed = type === 'visual'
+      ? getThinkingEffortPopupTier(control.closest(THINKING_EFFORT_POPUP_SELECTOR)) !== 'instant'
+      : (value === 1 || value === 2);
+    if (allowed) {
+      control.setAttribute(BRAVEFOX_NATIVE_TWO_STOP_READY_ATTR, 'true');
+      if (value === 1 || value === 2) {
+        control.setAttribute(BRAVEFOX_NATIVE_TWO_STOP_SELECTED_ATTR, value === 2 ? 'high' : 'medium');
+      }
+    } else {
+      control.removeAttribute(BRAVEFOX_NATIVE_TWO_STOP_READY_ATTR);
+      control.removeAttribute(BRAVEFOX_NATIVE_TWO_STOP_SELECTED_ATTR);
+    }
+    // Suppress the leftover native Instant caption only INSIDE this identified
+    // picker. Do not rename unrelated model choices or conversation text.
+    for (const leaf of control.querySelectorAll('span, p, div')) {
+      if (!leaf.children.length && THINKING_EFFORT_INSTANT_LABELS.has(normalizeText(leaf.textContent))) {
+        leaf.setAttribute('data-bravefox-old-effort-label', 'true');
+      }
+    }
+    if (type === 'exact' && (value === 0 || value === 3)) queueMicrotask(() => enforceExactReasoningFloor(control));
+    if (type === 'range' && (value === 0 || value === 3)) {
+      queueMicrotask(() => enforceThinkingEffortSliderEdges(control));
+    }
+    return true;
+  }
+
   function braveFoxEnhanceTwoStopControls(scope = document) {
     const selectors = THINKING_EFFORT_EXACT_CONTROL_SELECTOR + ', [role="slider"][aria-valuemin="0"][aria-valuemax="2"], [role="slider"][aria-valuemin="0"][aria-valuemax="3"], input[type="range"]';
     const candidates = [];
@@ -4917,7 +5119,7 @@
       const type = braveFoxTwoStopNativeType(control);
       if (!type) continue;
       if (type === 'range' && !control.closest(THINKING_EFFORT_POPUP_SELECTOR)) continue;
-      braveFoxTwoStopCreate(control, type);
+      braveFoxExposeNativeTwoStop(control, type);
     }
   }
 
@@ -5064,8 +5266,27 @@
     const right = rect.right - 13;
     const usable = Math.max(1, right - left);
     const fraction = Math.max(0, Math.min(1, (clientX - left) / usable));
-    const nearestStop = Math.round(fraction * 2);
+    const max = Number(getExactReasoningState(control)?.getAttribute('aria-valuemax') || 2);
+    const nearestStop = Math.round(fraction * (max === 3 ? 3 : 2));
     return nearestStop === 0;
+  }
+
+  function exactReasoningPointerTargetsPro(control, clientX, target = null) {
+    if (!(control instanceof Element) || !Number.isFinite(clientX)) return false;
+    const max = Number(getExactReasoningState(control)?.getAttribute('aria-valuemax') || 2);
+    if (max !== 3) return false;
+    const root = getExactReasoningPowerRoot(control);
+    if (!(root instanceof HTMLElement)) return false;
+    if (target instanceof Element && !root.contains(target) && target !== root) return false;
+    const rect = root.getBoundingClientRect?.();
+    if (!rect || rect.width <= 30 || rect.height <= 0) return false;
+    const fraction = Math.max(0, Math.min(1, (clientX - rect.left - 13) / Math.max(1, rect.width - 26)));
+    return Math.round(fraction * 3) === 3;
+  }
+
+  function exactReasoningPointerTargetsForbidden(control, clientX, target = null) {
+    return exactReasoningPointerTargetsInstant(control, clientX, target) ||
+      exactReasoningPointerTargetsPro(control, clientX, target);
   }
 
   function dispatchExactReasoningArrow(control, key) {
@@ -5095,14 +5316,15 @@
     }
   }
 
-  function clickExactReasoningMediumStop(control) {
+  function clickExactReasoningSafeStop(control, value = 1) {
     const root = getExactReasoningPowerRoot(control);
     if (!(root instanceof HTMLElement) || !root.isConnected) return false;
 
     const rect = root.getBoundingClientRect?.();
     if (!rect || rect.width <= 0 || rect.height <= 0) return false;
 
-    const clientX = rect.left + (rect.width / 2);
+    const max = Number(getExactReasoningState(control)?.getAttribute('aria-valuemax') || 2);
+    const clientX = rect.left + (rect.width * (value / (max === 3 ? 3 : 2)));
     const clientY = rect.top + (rect.height / 2);
     const init = {
       bubbles: true,
@@ -5141,22 +5363,29 @@
   }
 
   function enforceExactReasoningFloor(control) {
-    if (!(control instanceof Element) || !control.isConnected || !isExactReasoningInstant(control)) {
-      return false;
-    }
+    if (!(control instanceof Element) || !control.isConnected) return false;
+    const forbidden = () => {
+      const value = readExactReasoningValue(control);
+      const max = Number(getExactReasoningState(control)?.getAttribute('aria-valuemax') || 2);
+      return value === 0 || (max === 3 && value === 3);
+    };
+    if (!forbidden()) return false;
     if (exactReasoningRepairing.has(control)) return true;
 
     exactReasoningRepairing.add(control);
-    dispatchExactReasoningArrow(control, 'ArrowRight');
+    const startValue = readExactReasoningValue(control);
+    const desired = startValue === 3 ? 2 : 1;
+    const direction = startValue === 3 ? 'ArrowLeft' : 'ArrowRight';
+    dispatchExactReasoningArrow(control, direction);
 
     window.setTimeout(() => {
-      if (!control.isConnected || !isExactReasoningInstant(control)) return;
-      clickExactReasoningMediumStop(control);
+      if (!control.isConnected || !forbidden()) return;
+      clickExactReasoningSafeStop(control, desired);
     }, 24);
 
     window.setTimeout(() => {
-      if (!control.isConnected || !isExactReasoningInstant(control)) return;
-      dispatchExactReasoningArrow(control, 'ArrowRight');
+      if (!control.isConnected || !forbidden()) return;
+      dispatchExactReasoningArrow(control, direction);
     }, 70);
 
     window.setTimeout(() => exactReasoningRepairing.delete(control), 140);
@@ -5187,7 +5416,9 @@
             if (control instanceof Element) {
               braveFoxEnhanceTwoStopControls(control);
               braveFoxTwoStopRefresh(control);
-              if (isExactReasoningInstant(control)) queueMicrotask(() => enforceExactReasoningFloor(control));
+              if ([0, 3].includes(readExactReasoningValue(control))) {
+                queueMicrotask(() => enforceExactReasoningFloor(control));
+              }
             }
           } else if (state.matches('[role="slider"]') &&
                      state.hasAttribute(BRAVEFOX_TWO_STOP_NATIVE_ATTR)) {
@@ -5303,11 +5534,12 @@
         if (exactRoot && target && (exactRoot === target || exactRoot.contains(target))) {
           activeExactReasoningControl = exactControl;
           activeExactReasoningPointerId = Number.isFinite(event.pointerId) ? event.pointerId : null;
-          if (exactReasoningPointerTargetsInstant(exactControl, event.clientX, target)) {
+          if (exactReasoningPointerTargetsForbidden(exactControl, event.clientX, target)) {
             cancelBlockedEdgeInteraction(event);
             enforceExactReasoningFloor(exactControl);
             return;
           }
+          exactControl.setAttribute(BRAVEFOX_NATIVE_TWO_STOP_DRAG_ATTR, 'true');
         }
       }
 
@@ -5345,7 +5577,7 @@
           activeExactReasoningPointerId === null ||
           event.pointerId === activeExactReasoningPointerId
         ) {
-          if (exactReasoningPointerTargetsInstant(exactControl, event.clientX)) {
+          if (exactReasoningPointerTargetsForbidden(exactControl, event.clientX)) {
             cancelBlockedEdgeInteraction(event);
             enforceExactReasoningFloor(exactControl);
             return;
@@ -5370,11 +5602,12 @@
       if (
         exactControl?.isConnected &&
         Number.isFinite(event.clientX) &&
-        exactReasoningPointerTargetsInstant(exactControl, event.clientX)
+        exactReasoningPointerTargetsForbidden(exactControl, event.clientX)
       ) {
         cancelBlockedEdgeInteraction(event);
         enforceExactReasoningFloor(exactControl);
       }
+      exactControl?.removeAttribute?.(BRAVEFOX_NATIVE_TWO_STOP_DRAG_ATTR);
       activeExactReasoningControl = null;
       activeExactReasoningPointerId = null;
 
@@ -5412,7 +5645,7 @@
           target &&
           (exactRoot === target || exactRoot.contains(target)) &&
           Number.isFinite(event.clientX) &&
-          exactReasoningPointerTargetsInstant(exactControl, event.clientX, target)
+          exactReasoningPointerTargetsForbidden(exactControl, event.clientX, target)
         ) {
           cancelBlockedEdgeInteraction(event);
           enforceExactReasoningFloor(exactControl);
@@ -5459,6 +5692,12 @@
         const key = String(event.key || '');
 
         if (key === 'Home') {
+          cancelBlockedEdgeInteraction(event);
+          enforceExactReasoningFloor(exactControl);
+          return;
+        }
+        if (Number(getExactReasoningState(exactControl)?.getAttribute('aria-valuemax')) === 3 &&
+            (key === 'End' || ((key === 'ArrowRight' || key === 'ArrowUp' || key === 'PageUp') && value >= 2))) {
           cancelBlockedEdgeInteraction(event);
           enforceExactReasoningFloor(exactControl);
           return;
@@ -5789,7 +6028,10 @@
   function getThinkingEffortVisualTrackRectForEvent(event) {
     const target = event?.target instanceof Element ? event.target : null;
     const popup = findThinkingEffortVisualPopup(target, false);
-    if (!popup) return null;
+    if (!popup || popup.querySelector('[' + BRAVEFOX_TWO_STOP_NATIVE_ATTR + '="true"]')) return null;
+    // Once a real native slider is mapped to Medium/High, the older visual
+    // heuristic must not treat its legitimate left stop as Instant.
+
     const track = findThinkingEffortVisualTrack(popup, target);
     if (!(track instanceof HTMLElement)) return null;
     const rect = track.getBoundingClientRect?.();
@@ -5887,6 +6129,7 @@
       allowGlobalFallback
     );
     if (!popup) return false;
+    if (popup.querySelector('[' + BRAVEFOX_TWO_STOP_NATIVE_ATTR + '="true"]')) return false;
 
     const tier = getThinkingEffortPopupTier(popup);
     repairThinkingEffortPopupLocalization(popup);

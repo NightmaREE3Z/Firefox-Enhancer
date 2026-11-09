@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         IGCleaner's Main World Script
-// @version	 29.6.7
-// @date	 2026-10-30
+// @version	 29.8.0
+// @date	 2026-11-09
 // @description  Trying to make my Instagram experience tolerable.
 // @match        *://www.instagram.com/*
 // @match        *://www.instagram.com/?next=%2F/*

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         FBCleaner
-// @version	 29.6.7
-// @date	 2026-10-30
+// @version	 29.8.0
+// @date	 2026-11-09
 // @description  Makes my Facebook experience less terrible.
 // @match        *://*.facebook.com/*
 // @grant        none
@@ -10,6 +10,88 @@
 
 (() => {
 'use strict';
+
+// v321: actual document-start navigation prehide for refresh and SPA hydration.
+// F5 creates a fresh document even while staying on the same URL. The normal
+// v37 CSS waits for account detection and for its style node to be injected;
+// Facebook can paint these native shortcuts in that interval. Pre-hide ONLY
+// the exact global Friends shortcut, and only on the home feed the left-nav
+// Friends/Meta AI bookmarks, before React creates either control.
+const FB_EARLY_NAV_STYLE_V321 = 'fb-early-nav-prehide-style-v321';
+const FB_EARLY_NAV_STRICT_ID_V321 = '100005050653554';
+let __fbEarlyNavIdentityTimedOutV321 = false;
+const syncFBEarlyNavPrehideV321 = (accountId = '') => {
+    try {
+        const html = document.documentElement;
+        if (!html) return false;
+        let style = document.getElementById(FB_EARLY_NAV_STYLE_V321);
+        if (!style) {
+            style = document.createElement('style');
+            style.id = FB_EARLY_NAV_STYLE_V321;
+            style.textContent = `
+                /* Top navigation: the exact Friends shortcut, including its LI shell.
+                   Never suppress other friends links in posts or profile headers. */
+                html.fb-nav-early-prehide-v321 li:has(> span > div > a[role="link"][href="/friends/"][aria-label="Kaverit"]),
+                html.fb-nav-early-prehide-v321 li:has(> span > div > a[role="link"][href="/friends/"][aria-label="Friends"]),
+                html.fb-nav-early-prehide-v321 li:has(> span > div > a[role="link"][href="/friends/"]),
+                /* Home feed only: captured left navigation bookmark rows. */
+                html.fb-nav-early-prehide-v321.fb-nav-early-home-v321 li.html-li:has(> div > div > div > a[href="https://www.facebook.com/friends/"]),
+                html.fb-nav-early-prehide-v321.fb-nav-early-home-v321 li.html-li:has(> div > div > div > a[href^="https://www.meta.ai/"][href*="facebook_bookmarks"]),
+                /* v322: Meta AI may rehydrate a different link wrapper or temporarily
+                   drop the bookmark query string. Keep the *bookmark LI* hidden,
+                   never arbitrary Meta AI links inside posts/notifications. */
+                html.fb-nav-early-prehide-v321.fb-nav-early-home-v321 li.html-li:has(a[href*="meta.ai"][href*="facebook_bookmarks"]),
+                html.fb-nav-early-prehide-v321.fb-nav-early-home-v321 li.html-li:has(> div > div > div > a[href^="https://www.meta.ai/"][target="_blank"]),
+                html.fb-nav-early-prehide-v321.fb-nav-early-home-v321 li.html-li:has(> div > div > a[href^="https://www.meta.ai/"][target="_blank"]),
+                /* v322: captured 36px Meta AI bookmark sprite before href hydration.
+                   Require both its icon asset AND zero-offset frame; other native
+                   shortcuts and all non-feed/profile/notification surfaces are safe. */
+                html.fb-nav-early-prehide-v321.fb-nav-early-home-v321 li.html-li:has(i[data-visualcompletion="css-img"][style*="GROEnPFit1s.webp"][style*="background-position:0 0"][style*="width:36px"][style*="height:36px"]),
+                html.fb-nav-early-prehide-v321.fb-nav-early-home-v321 li.html-li:has(i[data-visualcompletion="css-img"][style*="GROEnPFit1s.webp"][style*="background-position: 0px 0px"][style*="width: 36px"][style*="height: 36px"]) {
+                    display: none !important;
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                    content-visibility: hidden !important;
+                    transition: none !important;
+                    animation: none !important;
+                }
+            `;
+            (document.head || html).appendChild(style);
+        }
+        const path = (location.pathname || '/').toLowerCase();
+        const messenger = /^\/(?:messages|messenger)(?:\/|$)/.test(path);
+        const home = path === '/' || path === '/home.php';
+        const cookieId = String(document.cookie || '').match(/(?:^|;\s*)c_user=(\d+)/)?.[1] || '';
+        const id = String(accountId || cookieId);
+        // v326: the exact top-nav Friends LI also needs hiding on Messenger.
+        // Messenger's old anchor-only rule hid the SVG but left a blank LI + tooltip.
+        // Preserve strict-account prehide and the bounded unknown-identity fallback;
+        // the home-only bookmark selectors still cannot affect Messenger.
+        const hide = id === FB_EARLY_NAV_STRICT_ID_V321 ||
+            (!id && !__fbEarlyNavIdentityTimedOutV321);
+        html.classList.toggle('fb-nav-early-prehide-v321', hide);
+        html.classList.toggle('fb-nav-early-home-v321', home && !messenger);
+        return true;
+    } catch (e) { return false; }
+};
+if (!syncFBEarlyNavPrehideV321()) {
+    try {
+        const fbNavRootObserverV321 = new MutationObserver((_, observer) => {
+            if (syncFBEarlyNavPrehideV321()) observer.disconnect();
+        });
+        fbNavRootObserverV321.observe(document, { childList: true });
+    } catch (e) {}
+}
+setTimeout(() => {
+    try {
+        // Account identity can arrive only in Facebook's hydrated bootstrap data.
+        const id = typeof getEarlyLoggedInFacebookAccountFbid === 'function'
+            ? getEarlyLoggedInFacebookAccountFbid() : '';
+        if (!id) __fbEarlyNavIdentityTimedOutV321 = true;
+        syncFBEarlyNavPrehideV321(id);
+    } catch (e) {}
+}, 3500);
 
 // v313 diagnostic console entry: define this before the main startup routine.
 // The audit remains read-only; initialization failures must not erase its entry point.
@@ -37,10 +119,40 @@ const syncFBEarlyFeedGateV311 = () => {
             .some(page => path === page || path.startsWith(page + '/'));
         html.classList.toggle('fb-early-home-feed-v311', home);
         html.classList.toggle('fb-early-supported-page-v311', supported);
+        // v318: own-profile PYMK must be suppressed before Facebook's first paint.
+        // This class is deliberately account + route scoped; Dad's account stays native.
+        const ownProfile = path === '/haukkis' || path === '/100005050653554' ||
+            (path === '/profile.php' && new URLSearchParams(location.search).get('id') === '100005050653554');
+        let ownAccount = false;
+        try { ownAccount = /(?:^|;\s*)c_user=100005050653554(?:;|$)/.test(document.cookie || ''); }
+        catch (e) {}
+        // Once account bootstrap is available, accept the existing cached identity too.
+        // Document-start itself still relies on the cookie; never expose Dad's profile UI.
+        if (!ownAccount) {
+            try { ownAccount = getEarlyLoggedInFacebookAccountFbid() === '100005050653554'; }
+            catch (e) {}
+        }
+        html.classList.toggle('fb-early-own-pymk-v318', ownProfile && ownAccount);
         if (document.getElementById(FB_EARLY_FEED_GATE_STYLE_V311)) return true;
         const style = document.createElement('style');
         style.id = FB_EARLY_FEED_GATE_STYLE_V311;
         style.textContent = `
+            /* v318: Captured own-profile PYMK has an h2 heading, NOT an aria-label.
+               Match its precise outer carousel shell, not generic profile classes. */
+            html.fb-early-own-pymk-v318 [role="main"] div.x1exxf4d.xpv9jar.x1nb4dca.x1nmn18.x1obq294.x5a5i1n.xde0f50.x15x8krk.x13fuv20.x18b5jzi.x1q0q8m5.x1t7ytsu.x178xt8z.x1lun4ml.xso031l.xpilrb4.xev17xk.x1xmf6yo,
+            html.fb-strict-element-hiding-v37 [role="main"] div.x1exxf4d.xpv9jar.x1nb4dca.x1nmn18.x1obq294.x5a5i1n.xde0f50.x15x8krk.x13fuv20.x18b5jzi.x1q0q8m5.x1t7ytsu.x178xt8z.x1lun4ml.xso031l.xpilrb4.xev17xk.x1xmf6yo {
+                display: none !important;
+                visibility: hidden !important;
+                pointer-events: none !important;
+            }
+            /* Hide the captured PYMK *feed carousel* before classification; JS then
+               bans the whole FeedUnit and collapses its safe one-post slot. */
+            html.fb-early-home-feed-v311 [role="feed"] div[data-pagelet^="FeedUnit_"]:has([role="region"][aria-label="Ihmisiä, jotka saatat tuntea"]),
+            html.fb-early-home-feed-v311 [role="feed"] div[data-pagelet^="FeedUnit_"]:has([role="region"][aria-label="People You May Know"]) {
+                visibility: hidden !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
+            }
             /* Only feed post units, never header, search, comments, dialogs or chat. */
             html.fb-early-home-feed-v311 :is([role="feed"] div[aria-posinset], [role="feed"] > [role="article"], div[data-pagelet^="FeedUnit_"], div[data-pagelet^="TimelineFeedUnit_"]):not(.fb-post-approved):not(.fb-feed-unit-approved):not(.fb-post-banned):not(.fb-element-banned):not([data-fb-v25-scan-complete="1"]):not(:has(.fb-post-approved, .fb-feed-unit-approved)):is(:not(:has([data-visualcompletion="loading-state"])), :has([data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"])),
             html.fb-early-supported-page-v311 :is([role="feed"] div[aria-posinset], [role="feed"] > [role="article"], div[data-pagelet^="FeedUnit_"], div[data-pagelet^="TimelineFeedUnit_"]):not(.fb-post-approved):not(.fb-feed-unit-approved):not(.fb-post-banned):not(.fb-element-banned):not([data-fb-v25-scan-complete="1"]):not(:has(.fb-post-approved, .fb-feed-unit-approved)):is(:not(:has([data-visualcompletion="loading-state"])), :has([data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"])),
@@ -871,6 +983,7 @@ const isCurrentSpecificUrlSurface = (inputUrl = window.location.href) => {
 const refreshFBElementHidingAccountScope = () => {
     try {
         __fbElementHidingAccountEnabled = isFBStrictElementAccount();
+        syncFBEarlyNavPrehideV321(getEarlyLoggedInFacebookAccountFbid());
         if (document.documentElement) {
             const messengerNative = isFBMessengerPath(window.location.href);
             document.documentElement.classList.toggle('fb-messenger-native-v54', messengerNative);
@@ -1189,6 +1302,15 @@ const isNotificationPanelElement = (element) => {
     try {
         if (!element || !element.closest) return false;
         if (isFBNotificationToastV88(element)) return true;
+
+        // v318: some notification rows hydrate before their outer popup gets its
+        // Finnish/English aria-label. Their intrinsic notification permalink is enough
+        // to protect them; do not give general feed links the same exemption.
+        const notificationRow = element.closest('[role="listitem"]');
+        if (notificationRow && !notificationRow.closest('[role="feed"]') &&
+            notificationRow.querySelector('a[href*="notif_id="], a[href*="notif_t="], a[href*="ref=notif"]')) return true;
+        if (element.matches?.('a[href*="notif_id="], a[href*="notif_t="], a[href*="ref=notif"]') &&
+            !element.closest('[role="feed"]')) return true;
 
         // Full notifications page.
         if (/\/(notifications|ilmoitukset)(?:\/|$)/i.test(location.pathname || '')) {
@@ -1640,6 +1762,47 @@ const getFBProfileKeysFromUrl = (inputUrl = window.location.href) => {
     return keys;
 };
 
+// v319: profile-post author screening, driven by the existing content / identity rules.
+// Read ONLY the first profile link in the post's author heading, not the second
+// profile (timeline recipient), mentioned users, links in captions, or comments.
+// Optional exact author preferences use opaque normalized-profile fingerprints.
+const FB_BLOCKED_POST_AUTHOR_FINGERPRINTS_V319 = new Set([
+    '8184e681e2e620d2'
+]);
+
+const getFBPrimaryAuthorFingerprintV319 = (profileKey) => {
+    try {
+        let hash = 0xcbf29ce484222325n;
+        const key = normalizeFBProfileKey(profileKey);
+        if (!key) return '';
+        // Profile keys are ASCII in the captured layout; TextEncoder handles other aliases.
+        for (const byte of new TextEncoder().encode(key)) {
+            hash = BigInt.asUintN(64, (hash ^ BigInt(byte)) * 0x100000001b3n);
+        }
+        return hash.toString(16).padStart(16, '0');
+    } catch (e) { return ''; }
+};
+
+const isFBBlockedPrimaryPostAuthorV319 = (post) => {
+    try {
+        if (!post?.querySelector || isNotificationPanelElement(post) || isFBCommentSurfaceElement(post)) return false;
+        const heading = post.querySelector('[data-ad-rendering-role="profile_name"] :is(h2, h3)');
+        const authorLink = heading?.querySelector('a[href]');
+        if (!authorLink) return false;
+        const authorHref = authorLink.getAttribute('href') || '';
+        const authorName = (authorLink.textContent || '').trim();
+        // Reuse the same blocked terms, URL and FBID tests as the main scanner.
+        if (authorName && matchesAnyActiveRegex(authorName)) return true;
+        if (matchesAnyBlockedFbid(authorHref) || matchesBlockedUrlCandidates(authorHref) ||
+            isFBBlockedProfileAliasUrl(authorHref)) return true;
+        if (!isFBStrictElementAccount()) return false;
+        for (const key of getFBProfileKeysFromUrl(authorHref)) {
+            if (FB_BLOCKED_POST_AUTHOR_FINGERPRINTS_V319.has(getFBPrimaryAuthorFingerprintV319(key))) return true;
+        }
+    } catch (e) {}
+    return false;
+};
+
 // v57: explicit high-risk/specific surfaces must never be promoted into the
 // learned trusted-profile pool. This is intentionally key-based as well as route-based so
 // /posts and /timeline subroutes cannot inherit a stale trusted alias from storage.
@@ -1951,9 +2114,13 @@ const releaseFBTrustedTimelinePosts = (root = document) => {
         if (!isFBTrustedProfileTimelineSurface()) return false;
         document.documentElement?.classList.add('fb-trusted-profile-timeline-v50');
         const scanRoot = root?.querySelectorAll ? root : document;
+        scrubFBBlockedStandaloneProfileAuthorsV325(scanRoot, 80);
         const selector = [
             'div[data-pagelet^="FeedUnit_"]:not(.fb-trusted-profile-post-v50)',
             'div[data-pagelet^="TimelineFeedUnit_"]:not(.fb-trusted-profile-post-v50)',
+            // Author identity can hydrate after trust approval: inspect its first header link.
+            'div[data-pagelet^="TimelineFeedUnit_"].fb-trusted-profile-post-v50:has([data-ad-rendering-role="profile_name"] h2 a[href], [data-ad-rendering-role="profile_name"] h3 a[href])',
+            'div[data-pagelet^="FeedUnit_"].fb-trusted-profile-post-v50:has([data-ad-rendering-role="profile_name"] h2 a[href], [data-ad-rendering-role="profile_name"] h3 a[href])',
             '[role="feed"] > [role="article"]:not(.fb-trusted-profile-post-v50)',
             '[role="feed"] .fb-post-screening-v47',
             '[role="feed"] .fb-post-resume-screening-v60',
@@ -1969,6 +2136,14 @@ const releaseFBTrustedTimelinePosts = (root = document) => {
                 const post = getFBFeedUnitWrapper(seed) || seed;
                 if (!post || seen.has(post)) return;
                 seen.add(post);
+                // Blocked post-author rules win even on otherwise trusted timelines.
+                // Do not release an already banned unit or reapprove it on every mutation.
+                if (isFBBlockedPrimaryPostAuthorV319(post)) {
+                    if (!post.classList.contains('fb-post-banned')) {
+                        banPostAfterScan(post, 'blocked primary post author v319 (trusted timeline)');
+                    }
+                    return;
+                }
                 const alreadyClean = post.classList?.contains('fb-trusted-profile-post-v50') &&
                     post.getAttribute?.('data-fb-v25-scan-complete') === 'trusted-profile-v50' &&
                     !post.matches?.('.fb-post-banned, .fb-element-banned, .fb-post-screening-v47, .fb-post-pending, .fb-post-scanning, .fb-post-expanding');
@@ -2117,6 +2292,17 @@ const isFBHomeFeedSurface = () => {
     }
 };
 
+// v322: Dad receives ONLY the front-page outsider Page/Group header CTA rule.
+// His trusted timelines, group pages, notifications and all other sites/routes
+// must never inherit the strict account's cosmetic/identity filters.
+const FB_DAD_HOME_FEED_CTA_ACCOUNT_IDS_V322 = new Set(['1267550854']);
+const isFBDadHomeFeedCTAPolicyV322 = () => {
+    try {
+        return isFBHomeFeedSurface() && !isFBMessengerPath(window.location.href) &&
+            FB_DAD_HOME_FEED_CTA_ACCOUNT_IDS_V322.has(getEarlyLoggedInFacebookAccountFbid());
+    } catch (e) { return false; }
+};
+
 // v60: returning from a background tab gets a bounded recovery lane before the
 // normal zero-glimpse screening gate rechecks recycled FeedUnits.
 let __fbFeedResumeRecoveryActiveV60 = false;
@@ -2136,6 +2322,7 @@ const updateFBHomeFeedGateClass = () => {
     try {
         if (!document.documentElement) return;
         syncFBEarlyFeedGateV311();
+        syncFBEarlyNavPrehideV321(getEarlyLoggedInFacebookAccountFbid());
         document.documentElement.classList.toggle('fb-home-feed-unit-softgate-v23', isFBHomeFeedSurface());
 
         // v50: trusted own/Dad/friend timelines are native territory. They never enter
@@ -2181,12 +2368,10 @@ const injectFBSafeNoGlimpseBootstrap = () => {
         }
 
         style.textContent = `
-            /* Zero-glimpse for the Friends/Kaverit left-nav button, but scoped to actual friend links. */
-            html.fb-strict-element-hiding-v37 a[aria-label="Kaverit"][href*="/friends"],
-            html.fb-strict-element-hiding-v37 a[aria-label="Friends"][href*="/friends"],
-            html.fb-strict-element-hiding-v37 a[href="/friends/"],
-            html.fb-strict-element-hiding-v37 a[href^="/friends/"],
-            html.fb-strict-element-hiding-v37 a[href*="facebook.com/friends"],
+            /* v322: only hide navigation shortcut rows. Facebook notification links
+               can point to /friends/?notif_id=... and MUST remain fully native. */
+            html.fb-strict-element-hiding-v37 li:has(> span > div > a[role="link"][href="/friends/"]),
+            html.fb-strict-element-hiding-v37 li.html-li:has(> div > div > div > a[href="https://www.facebook.com/friends/"]),
             html.fb-strict-element-hiding-v37 li:has(> div a[aria-label="Kaverit"][href*="/friends"]),
             html.fb-strict-element-hiding-v37 li:has(> div a[aria-label="Friends"][href*="/friends"]),
             html.fb-strict-element-hiding-v37 li:has(> div a[href^="/friends/"]),
@@ -2315,17 +2500,41 @@ releaseFBFriendsSoftGateV2Soon();
     } catch (e) {}
 }, delay));
 
-// v43: one authoritative classifier for reaction/likes dialogs.
-// Notifications and comments can also contain profile links and the word "like";
-// require row-list/message/reaction controls before enabling the softgate.
+// v320: recognize native reactions lists, including the single-visible-person
+// variant whose row offers "Add Friend" instead of "Message". Do NOT recognize
+// dialogs just because somebody's name appears with the word "like": notifications
+// and comments share those signals. A reaction-badge-on-avatar row is distinct.
+const FB_REACTION_AVATAR_LINK_SELECTOR_V320 =
+    'div[data-visualcompletion="ignore-dynamic"] > [aria-disabled] a[href*="facebook.com/"][aria-label]';
+const FB_REACTION_ROW_SELECTOR_V320 =
+    'div[data-visualcompletion="ignore-dynamic"]:has(> [aria-disabled]):has(a[href*="facebook.com/"][aria-label] img[width="16"][height="16"])';
+
+const isFBCapturedReactionAvatarV320 = (link) => {
+    try {
+        if (!link?.matches?.('a[href*="facebook.com/"][aria-label]')) return false;
+        // Reaction badge is the small icon rendered inside this person's avatar link.
+        if (!link.querySelector('img[width="16"][height="16"]')) return false;
+        const label = normalizeFBText(link.getAttribute('aria-label') || '').toLowerCase();
+        return /(?:\breacted\b|\bliked\b|\bloved\b|\bcare\b|\baha\b|\bwow\b|\bangry\b|\bsad\b|\bihastui\b|\btykk[aä]si\b|\breagoi\b|\bh[aä]mm[aä]styi\b|\bsuuttui\b|\bnauroi\b)/i.test(label);
+    } catch (e) { return false; }
+};
+
+// v43/v320: authoritative reaction/likes dialog classifier.
 const isFBLikesOverlayDialog = (dialog) => {
     try {
         if (!dialog || !dialog.isConnected || !dialog.querySelectorAll) return false;
         if (isNotificationPanelElement(dialog) || isFBActiveCommentOverlay(dialog)) return false;
 
         const profileLinks = dialog.querySelectorAll('a[href*="facebook.com/"]');
-        if (profileLinks.length < 2) return false;
+        if (!profileLinks.length) return false;
 
+        // Strong positive signature of the captured React reaction row, including
+        // one-person dialogs with no Message button or human-readable heading.
+        for (const link of dialog.querySelectorAll(FB_REACTION_AVATAR_LINK_SELECTOR_V320)) {
+            if (isFBCapturedReactionAvatarV320(link)) return true;
+        }
+
+        if (profileLinks.length < 2) return false;
         const hasMessageAction = !!dialog.querySelector('[aria-label="Viesti"], [aria-label="Message"], [role="button"][aria-label*="viesti" i], [role="button"][aria-label*="message" i]');
         const hasReactionControl = !!dialog.querySelector('[aria-label*="reaction" i], [aria-label*="reaktio" i], [aria-label*="like" i], [aria-label*="tykkä" i]');
         const headingText = Array.from(dialog.querySelectorAll('[role="heading"], h1, h2, h3'))
@@ -2370,6 +2579,18 @@ const injectFBLikesOverlaySoftGateCSS = () => {
         }
 
         style.textContent = `
+            /* v320: zero-glimpse for the reaction-avatar row captured in the popup.
+               This structural gate is present at document-start, BEFORE the dialog gets
+               a JS marker. Notifications lack the [aria-disabled] avatar + 16px badge
+               combination, so no notification list or whole dialog is concealed. */
+            [role="dialog"] ${FB_REACTION_ROW_SELECTOR_V320}:not(.fb-likes-overlay-row-approved):not(.fb-likes-overlay-row-banned):not(.fb-element-banned) {
+                visibility: hidden !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
+                transition: none !important;
+                animation: none !important;
+            }
+
             html.fb-likes-overlay-softgate-v5 [role="dialog"].fb-likes-overlay-dialog-v43 div[data-visualcompletion="ignore-dynamic"]:has(a[href*="facebook.com/"]):not(.fb-likes-overlay-row-approved):not(.fb-likes-overlay-row-banned):not(.fb-element-banned) {
                 visibility: hidden !important;
                 opacity: 0 !important;
@@ -2585,7 +2806,7 @@ const injectInlineCSS = () => {
         html.fb-strict-element-hiding-v37 a[href="/Meta AI/"],
         html.fb-strict-element-hiding-v37 li:has(a[aria-label="Kaverit"][href*="/friends"]),
         html.fb-strict-element-hiding-v37 li:has(a[aria-label="Friends"][href*="/friends"]),
-        html.fb-strict-element-hiding-v37 a[href="/friends/"],
+        html.fb-strict-element-hiding-v37 li:has(> span > div > a[role="link"][href="/friends/"]),
         html.fb-strict-element-hiding-v37 div.x1cy8zhl.x78zum5.xl56j7k.x1fns5xo:has(> img[width="24"][height="24"][aria-hidden="true"][src^="data:image/svg+xml"][src*="M12 2.5a9.5"]),
         html.fb-strict-element-hiding-v37 div.x1cy8zhl.x78zum5.xl56j7k.x1fns5xo:has(> img[width="24"][height="24"][aria-hidden="true"][src^="data:image/svg+xml"][src*="M12%202.5a9.5"]),
         html.fb-strict-element-hiding-v37 a[aria-label="Näytä kaikki"] > span.x193iq5w.xeuugli.x13faqbe,
@@ -2602,8 +2823,8 @@ const injectInlineCSS = () => {
         html.fb-strict-element-hiding-v37 a[href*="/messages/t/36327,2227039302/"],
         html.fb-strict-element-hiding-v37 a[href*="messages/t/36327"],
         /* Friends-related links */
-        html.fb-strict-element-hiding-v37 a[href*="meta.ai"], html.fb-strict-element-hiding-v37 a[href="/Meta AI/"], html.fb-strict-element-hiding-v37 a[href="/friends/"],
-        html.fb-strict-element-hiding-v37 a[role="link"][href="/friends/"], html.fb-strict-element-hiding-v37 a[role="link"][aria-label="Kaverit"], html.fb-strict-element-hiding-v37 a[role="link"][aria-label="Friends"],
+        html.fb-strict-element-hiding-v37 li.html-li:has(> div > div > div > a[href*="meta.ai"]), html.fb-strict-element-hiding-v37 a[href="/Meta AI/"], html.fb-strict-element-hiding-v37 li:has(> span > div > a[role="link"][href="/friends/"]),
+        html.fb-strict-element-hiding-v37 li:has(> span > div > a[role="link"][href="/friends/"]), html.fb-strict-element-hiding-v37 li:has(> span > div > a[role="link"][aria-label="Kaverit"]), html.fb-strict-element-hiding-v37 li:has(> span > div > a[role="link"][aria-label="Friends"]),
         html.fb-strict-element-hiding-v37 img[src*="w5I9ktz_3Ib.png"],
         html.fb-strict-element-hiding-v37 li.x1iyjqo2.xmlsiyf.x1hxoosp.x1l38jg0.x1awlv9s.x1i64zmx.x1gz44f,
         html.fb-strict-element-hiding-v37 .x1us19tq > div:nth-child(1) > div:nth-child(1) > ul:nth-child(1) > li:nth-child(2) > div:nth-child(1) > a:nth-child(1),
@@ -2644,7 +2865,7 @@ const injectInlineCSS = () => {
             overflow: hidden !important;
         }
         /* Additional aggressive hiding for persistent elements */
-        html.fb-strict-element-hiding-v37 a[href="/friends/"],
+        html.fb-strict-element-hiding-v37 li:has(> span > div > a[role="link"][href="/friends/"]),
         html.fb-strict-element-hiding-v37 a[aria-label="Meta AI"],
         html.fb-strict-element-hiding-v37 div[aria-label="Meta AI"] {
             visibility: hidden !important;
@@ -2751,10 +2972,12 @@ const injectInlineCSS = () => {
             animation: revert !important;
         }
 
-        html.fb-messenger-native-v54 [role="banner"] a[href="/friends/"],
-        html.fb-messenger-native-v54 [role="banner"] a[href*="facebook.com/friends/"],
-        html.fb-messenger-native-v54 [role="banner"] a[aria-label="Kaverit"][href*="/friends"],
-        html.fb-messenger-native-v54 [role="banner"] a[aria-label="Friends"][href*="/friends"] {
+        /* v326: Messenger top-nav only. Hide the complete native Friends tile,
+           including its LI, hover target and tooltip — never conversation links.
+           The document-start v321 selector already handles the same exact LI. */
+        html.fb-messenger-native-v54.fb-nav-early-prehide-v321 [role="banner"] li:has(> span > div > a[role="link"][href="/friends/"][aria-label="Kaverit"]),
+        html.fb-messenger-native-v54.fb-nav-early-prehide-v321 [role="banner"] li:has(> span > div > a[role="link"][href="/friends/"][aria-label="Friends"]),
+        html.fb-messenger-native-v54.fb-nav-early-prehide-v321 [role="banner"] li:has(> span > div > a[role="link"][href="/friends/"]) {
             display: none !important;
             visibility: hidden !important;
             opacity: 0 !important;
@@ -2937,7 +3160,7 @@ const injectInlineCSS = () => {
         try {
             const styleTag = document.createElement('style');
             styleTag.id = 'fb-inline-style-fallback';
-            styleTag.textContent = `html.fb-strict-element-hiding-v37 a[aria-label="Kaverit"][href*="/friends"], html.fb-strict-element-hiding-v37 a[aria-label="Friends"][href*="/friends"], html.fb-strict-element-hiding-v37 a[href="/friends/"] { display: none !important; }`;
+            styleTag.textContent = `html.fb-strict-element-hiding-v37 li:has(> span > div > a[role="link"][href="/friends/"]), html.fb-strict-element-hiding-v37 li.html-li:has(> div > div > div > a[href="https://www.facebook.com/friends/"]) { display: none !important; }`;
             (document.head || document.documentElement).appendChild(styleTag);
             devLog('Fallback CSS injected (safe append)');
         } catch (e) {
@@ -2961,6 +3184,15 @@ const injectFBRefreshPrehideCSS = () => {
             style.id = 'fb-refresh-prehide-style-v28';
         }
         style.textContent = `
+            /* v321: pre-reload old-document shortcuts before the new document mounts. */
+            html.fb-strict-element-hiding-v37.fb-refresh-prehide-v28 li:has(> span > div > a[role="link"][href="/friends/"]),
+            html.fb-strict-element-hiding-v37.fb-refresh-prehide-v28.fb-nav-early-home-v321 li.html-li:has(> div > div > div > a[href="https://www.facebook.com/friends/"]),
+            html.fb-strict-element-hiding-v37.fb-refresh-prehide-v28.fb-nav-early-home-v321 li.html-li:has(> div > div > div > a[href^="https://www.meta.ai/"][href*="facebook_bookmarks"]) {
+                display: none !important;
+                visibility: hidden !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
+            }
             html.fb-strict-element-hiding-v37.fb-refresh-prehide-v28 [role="feed"],
             html.fb-strict-element-hiding-v37.fb-refresh-prehide-v28 [data-pagelet="ProfileTimeline"],
             html.fb-strict-element-hiding-v37.fb-refresh-prehide-v28 div[data-pagelet^="FeedUnit_"],
@@ -3215,7 +3447,7 @@ const hideCriticalElements = () => {
         selectors.forEach((selector) => {
             document.querySelectorAll(selector).forEach((el) => {
                 if (isProbablyNativeTopSearchDropdownNodeEarly(el)) return;
-                if (isProbablyProfileHeaderSafeElement(el)) return;
+                if (isProbablyProfileHeaderSafeElement(el) || isNotificationPanelElement(el)) return;
                 if (!el.classList.contains('fb-element-banned')) {
                     el.classList.add('fb-element-banned');
                     el.style.setProperty('display', 'none', 'important');
@@ -3302,6 +3534,7 @@ try {
         protectFBCommentSurfaces(el.closest?.('[role="dialog"], [role="main"], [role="article"]') || el);
         return;
     }
+    if (isNotificationPanelElement(el)) return;
 } catch (e) {}
 
 el.classList.add('fb-element-banned');
@@ -3764,7 +3997,9 @@ const getFBFeedSlotWrapper = (seed) => {
 
 const collapseFBFeedSlot = (seed, preferredShell = null) => {
     try {
-        if (isFBTrustedProfileTimelineSurface()) return null;
+        // Trusted timelines normally never collapse. A blocked primary AUTHOR
+        // is the only exception; other trusted posts remain untouched.
+        if (isFBTrustedProfileTimelineSurface() && !isFBBlockedPrimaryPostAuthorV319(seed)) return null;
         const unit = getFBFeedUnitWrapper(seed) || seed;
         if (!unit?.classList) return null;
 
@@ -4484,13 +4719,15 @@ const installFBLateHeaderCTATextWatchV295 = () => {
 
 const hasFBUnconnectedFeedHeaderCTAV77 = (seed) => {
     try {
-        // Use exact timestamp-adjacent Follow/Join controls in normal feed posts,
-        // including supported Pages; retain shared-PC cosmetic account scope so
-        // Dad's home feed is not given an unsolicited separate CTA rule.
+        // v322: Dad gets this exact timestamp-adjacent outsider CTA check ONLY
+        // inside a real front-page [role=feed] post. No normal cosmetics on Dad's
+        // profile/group/Page/search/notification surfaces.
+        const dadHomeCTA = isFBDadHomeFeedCTAPolicyV322();
         if (isFBNoPostScanUrl() || isFBMessengerPath(window.location.href) ||
-            isFBTrustedProfileTimelineSurface() || !isFBCosmeticElementHidingAllowed()) return false;
+            isFBTrustedProfileTimelineSurface() ||
+            (!dadHomeCTA && !isFBCosmeticElementHidingAllowed())) return false;
         const unit = getFBFeedUnitWrapper(seed) || seed;
-        if (!unit?.querySelectorAll) return false;
+        if (!unit?.querySelectorAll || (dadHomeCTA && !unit.closest?.('[role="feed"]'))) return false;
         // v295: isProbablyHomeFeedUnit() and isProfileHeaderProtectedArea() also
         // inspect DESCENDANTS. A normal feed post containing an h1 or a photo
         // permalink was therefore treated as a protected profile header, even
@@ -4518,6 +4755,10 @@ const hasFBUnconnectedFeedHeaderCTAV77 = (seed) => {
 
 const hasRestrictedFeedCTAOrReels = (seed) => {
     try {
+        // Dad's account: never inherit AI/Reels/recommendation/loose CTA scans.
+        // The only valid signal is an exact timestamp-adjacent Join/Follow button
+        // on a canonical post in the front-page feed.
+        if (isFBDadHomeFeedCTAPolicyV322()) return hasFBUnconnectedFeedHeaderCTAV77(seed);
         if (!isFBCosmeticElementHidingAllowed()) return false;
         const unit = getFBFeedUnitWrapper(seed) || seed;
         if (!unit || !isProbablyHomeFeedUnit(unit)) return false;
@@ -4601,7 +4842,7 @@ const hideFBFeedUnitHard = (seed, reason = 'restricted feed unit') => {
 
 const scrubRestrictedFeedUnits = () => {
     try {
-        if (!isFBCosmeticElementHidingAllowed()) return;
+        if (!isFBCosmeticElementHidingAllowed() && !isFBDadHomeFeedCTAPolicyV322()) return;
         updateFBHomeFeedGateClass();
         if (!isFBHomeFeedSurface()) return;
 
@@ -4803,6 +5044,7 @@ const isolatedFbids = [
 	'8065217176842846',
 	'895381147159854',
 	'100000837807327',
+	'100010956817436',
 	'100000658481983',
 	'100000767754620',
 	'1080918508606116',
@@ -5566,15 +5808,15 @@ const globalRegex = [
 	/Sakura/i, /Penelope Ford/i, /Julia Hart/i, /Kamifuku/i, /Elayna/i, /Juliette/i, /Juliana/i, /Julianna/i, /Henley/i, /Saya Kamitani/i, /AJ Lee's/i, /Nikkita Lyons/i, /Lisa Varon/i, 
 	/Marie Varon/i, /Irving/i, /Belts Mone/i, /Amanda Huber/i, /Megan Bayne/i, /Wren Sinclair/i, /Bella Twins/i, /Britt Baker/i, /Sexxy/i, /Xia Li/i, /Kairii/i, /Kairi's/i, /Sexx/i, 
 	/Sexi/i, /Monroe/i, /Girlfriend/i, /Girl's/i, /Women's/i, /Woman's/i, /Lady's/i, /Ladies'/i, /Toni Harsunen/i, /Wikman/i, /Vikman/i, /Jaida Parker/i, /Kiana/i, /suositukset/i, 
-	/ehdotukset/i, /Kamitani/i, /Mira Immo/i, /Serrano/i, /Nina Immo/i, /Heli Kupa/i, /20\. heinäkuu klo/i, /Sisältö ei ole käytettävissä tällä hetkellä/i, /sinulle ehdotettu/i, 
-	/Jessika WWE/i, /Fallon Henley/i, /QTCinderella/i, /KaliArmstrong/i, /Kali Armstrong/i, /#Kali/i, /#KaliArmstrong/i, /DeepSeek/i, /kendal.*(grey|gray)/i, /leila.*(grey|gray)/i,  
-	/Gail Kim/i, /CJ Perry/i, /Elegance Brand/i, /By Elegance/i, 
+	/ehdotukset/i, /Kamitani/i, /Mira Immo/i, /Serrano/i, /Nina Immo/i, /heli kupa/i, /eikk turp/i, /20\. heinäkuu klo/i, /Jessika WWE/i, /Fallon Henley/i, /kendal.*(grey|gray)/i, 
+	/QTCinderella/i, /KaliArmstrong/i, /Kali Armstrong/i, /#Kali/i, /#KaliArmstrong/i, /DeepSeek/i, /Gail Kim/i, /leila.*(grey|gray)/i, /CJ Perry/i, /Elegance Brand/i, /By Elegance/i, 
+	/Jada Stone/i, /Sisältö ei ole käytettävissä tällä hetkellä/i, /sinulle ehdotettu/i, 
 	
 
      // AI-handling/regexes
 FB_HYPHEN_AI_PATTERN_V309, /-AI(?![\p{L}\p{N}])/iu, /(?<![\p{L}\p{N}])AI-suck(?![\p{L}\p{N}])/iu, /(?<![\p{L}\p{N}])AIsuck(?![\p{L}\p{N}])/iu, /(?<![\p{L}\p{N}])AI-suck(?![\p{L}\p{N}])/iu, /(?<![\p{L}\p{N}])AI creative(?![\p{L}\p{N}])/iu, /(?<![\p{L}\p{N}])AI created(?![\p{L}\p{N}])/iu, /(?<![\p{L}\p{N}])Artificial(?![\p{L}\p{N}])/iu, /Powered by AI(?![\p{L}\p{N}])/iu, /(?<![\p{L}\p{N}])AI made(?![\p{L}\p{N}])/iu, /(?<![\p{L}\p{N}])AI creation(?![\p{L}\p{N}])/iu, /(?<![\p{L}\p{N}])gener(?:at|o(?:i|it))/iu, 
 	/(?<![\p{L}\p{N}])AI create(?![\p{L}\p{N}])/iu, /DeepSeek AI(?![\p{L}\p{N}])/iu, /Artificial Intelligence(?![\p{L}\p{N}])/iu, /Tekoäly/i, /Teko äly/i, /Teko-äly/i, /Teko_äly/i, /generoiva/i, /generoitu/i, /(?<![\p{L}\p{N}])generated(?![\p{L}\p{N}])/iu, /(?<![\p{L}\p{N}])generative(?![\p{L}\p{N}])/iu, /(?<![\p{L}\p{N}])generation(?![\p{L}\p{N}])/iu, 
-	/lantaaa/i, /lantaai/i, /Meta AI(?![\p{L}\p{N}])/iu, /(?<![\p{L}\p{N}])RemovingAI(?![\p{L}\p{N}])/iu, /(?<![\p{L}\p{N}])AIblow(?![\p{L}\p{N}])/iu, /Meta AI(?![\p{L}\p{N}])/iu, /\bBy AI(?![\p{L}\p{N}])/iu, /(?<![\p{L}\p{N}])Ais(?![\p{L}\p{N}])/iu, 
+	 /Meta AI(?![\p{L}\p{N}])/iu, /(?<![\p{L}\p{N}])RemovingAI(?![\p{L}\p{N}])/iu, /(?<![\p{L}\p{N}])AIblow(?![\p{L}\p{N}])/iu, /Meta AI(?![\p{L}\p{N}])/iu, /\bBy AI(?![\p{L}\p{N}])/iu, /(?<![\p{L}\p{N}])Ais(?![\p{L}\p{N}])/iu, 
 
 
      // Boundaried regexes (separated for clarity)
@@ -5744,6 +5986,8 @@ const refreshAccountScopedFilters = () => {
         __fbLastWrestlerVersion = fbDynamicWrestlerVersion;
         __fbStrictAccountEnabled = nextStrictScope;
         __fbElementHidingAccountEnabled = __fbStrictAccountEnabled;
+        syncFBEarlyNavPrehideV321(getEarlyLoggedInFacebookAccountFbid());
+        syncFBEarlyFeedGateV311();
         try {
             if (document.documentElement) {
                 const messengerNative = isFBMessengerPath(window.location.href);
@@ -8325,7 +8569,8 @@ const deleteBlockedElements = () => {
         let deletedCount = 0;
 
         elements.forEach(element => {
-            if (!element || element.closest?.('[role="feed"]') || isSafeElement(element) || isTopLeftSearchDropdownElement(element) || isInsideComment(element)) return;
+            if (!element || element.closest?.('[role="feed"]') || isNotificationPanelElement(element) ||
+                isSafeElement(element) || isTopLeftSearchDropdownElement(element) || isInsideComment(element)) return;
             const approvedPost = element.closest?.('.fb-post-approved[data-fb-v25-scan-complete="1"]');
             if (approvedPost && !approvedPost.classList.contains('fb-post-banned') && !approvedPost.classList.contains('fb-element-banned')) return;
 
@@ -8367,7 +8612,8 @@ const deleteBlockedElements = () => {
                     element.closest('div') ||
                     element;
 
-                if (elementToDelete && !elementToDelete.closest('[role="banner"]') && !elementToDelete.closest('[role="navigation"]')) {
+                if (elementToDelete && !isNotificationPanelElement(elementToDelete) &&
+                    !elementToDelete.closest('[role="banner"]') && !elementToDelete.closest('[role="navigation"]')) {
                     hideElementHard(elementToDelete, 'fb-element-banned');
                     deletedCount++;
                 }
@@ -9413,6 +9659,22 @@ const getFBCanonicalPostV65 = (seed) => {
     } catch (e) { return null; }
 };
 
+// v318: Facebook recommendation carousels may be approved after their internals
+// are cosmetically hidden, creating the captured blank white FeedUnit. Recognize
+// ONLY the carousel's own region/heading inside a home-feed post.
+const isFBPeopleYouMayKnowFeedUnitV318 = (post) => {
+    try {
+        if (!post?.querySelector || !isFBHomeFeedSurface()) return false;
+        if (post.querySelector('[role="region"][aria-label="Ihmisiä, jotka saatat tuntea"], [role="region"][aria-label="People You May Know"]')) return true;
+        const headings = post.querySelectorAll('h2, h3');
+        for (let i = 0; i < headings.length && i < 8; i++) {
+            const title = String(headings[i].textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+            if (title === 'ihmisiä, jotka saatat tuntea' || title === 'people you may know') return true;
+        }
+    } catch (e) {}
+    return false;
+};
+
 const isFBPostScannerSafeCandidateV65 = (post) => {
     try {
         if (!post?.isConnected || !post.classList) return false;
@@ -9470,9 +9732,28 @@ const screenFBCanonicalPostNowV65 = (seed, forceRecheck = false, expectedGenerat
         const post = getFBCanonicalPostV65(seed);
         if (!isFBPostScannerSafeCandidateV65(post)) return false;
 
+        // v319: check an blocked primary-author signals BEFORE trusted-timeline release,
+        // cached approvals and terminal-approved shortcuts. Do not block a post just
+        // because this person appears as a recipient, commenter or link elsewhere.
+        if (isFBBlockedPrimaryPostAuthorV319(post)) {
+            if (!post.classList.contains('fb-post-banned')) {
+                banPostAfterScan(post, 'blocked primary post author v319');
+            }
+            __fbPostScanRetryCountV65.delete(post);
+            return true;
+        }
+
         if (isFBTrustedProfileTimelineSurface()) {
             releaseFBNativeHydrationSlotV53(post);
             releaseFBTrustedTimelinePosts(post);
+            return true;
+        }
+
+        // v318: check BEFORE the terminal-approved shortcut, so a carousel that
+        // was prematurely approved loses its entire shell instead of leaving a gap.
+        if (isFBPeopleYouMayKnowFeedUnitV318(post)) {
+            banPostAfterScan(post, 'People You May Know carousel (whole FeedUnit) v318');
+            __fbPostScanRetryCountV65.delete(post);
             return true;
         }
 
@@ -9831,9 +10112,11 @@ const banPostAfterScan = (post, reason = 'blocked post content') => {
         noteFBPassiveTimingTerminalV315(post, 'banned');
         __fbUserExpandedPostsV312.delete(post);
         forgetFBNativeSkeletonSnapshotV81(post);
-        post.classList.remove('fb-post-approved', 'fb-feed-unit-approved', 'fb-post-pending', 'fb-post-scanning', 'fb-post-expanding', 'fb-post-screening-v47', 'fb-post-resume-screening-v60', 'fb-native-skeleton-visible-v65');
+        // A trusted timeline's unconditional reveal CSS must not resurrect an
+        // explicitly banned author after React has stamped trusted approval.
+        post.classList.remove('fb-post-approved', 'fb-feed-unit-approved', 'fb-trusted-profile-post-v50', 'fb-post-pending', 'fb-post-scanning', 'fb-post-expanding', 'fb-post-screening-v47', 'fb-post-resume-screening-v60', 'fb-native-skeleton-visible-v65');
         post.querySelectorAll?.('[role="article"]').forEach(article => {
-            try { article.classList.remove('fb-post-approved'); } catch (e) {}
+            try { article.classList.remove('fb-post-approved', 'fb-trusted-profile-post-v50'); } catch (e) {}
         });
         post.setAttribute('data-fb-v25-scan-complete', '1');
         post.removeAttribute('data-fb-v47-screen-start');
@@ -9849,6 +10132,78 @@ const banPostAfterScan = (post, reason = 'blocked post content') => {
         collapseFBFeedSlot(post);
         devLog('🚫 Post hidden by v25.4.25 scanner: ' + reason);
     } catch (e) {}
+};
+
+// v326: conservative author-only lane for standalone timeline cards.
+// The former :has(profile_name) selector could identify an ancestor wrapping
+// several posts. Never ban anything without proving this is a SINGLE complete
+// post and its OWN first heading link is an exact blocked-profile fingerprint.
+const FB_STANDALONE_AUTHOR_CARD_SELECTOR_V325 =
+    'div.html-div.x8cjs6t.x3sou0m.x80vd3b.x12u81az';
+
+const isFBSingleStandalonePostWithBlockedAuthorV326 = (card) => {
+    try {
+        if (!card?.matches?.(FB_STANDALONE_AUTHOR_CARD_SELECTOR_V325)) return false;
+        if (card.closest?.('[role="dialog"], [role="menu"], [role="listbox"], [role="tooltip"], [role="navigation"]') ||
+            isNotificationPanelElement(card) || isFBCommentSurfaceElement(card)) return false;
+        // A shared timeline container or nested story wrapper must FAIL OPEN.
+        if (card.querySelector?.('[role="feed"], [data-pagelet^="FeedUnit_"], [data-pagelet^="TimelineFeedUnit_"]') ||
+            card.querySelector?.(FB_STANDALONE_AUTHOR_CARD_SELECTOR_V325)) return false;
+        const headings = card.querySelectorAll('[data-ad-rendering-role="profile_name"] :is(h2, h3)');
+        if (headings.length !== 1) return false;
+        const stories = card.querySelectorAll('[data-ad-rendering-role="story_message"]');
+        if (stories.length !== 1) return false;
+        // A post timestamp/permalink anchors the heading to one actual story.
+        const timestamp = card.querySelector('a[href*="/permalink.php?story_fbid="], a[href*="/posts/"]');
+        if (!timestamp) return false;
+        const authorHref = headings[0].querySelector('a[href]')?.getAttribute('href') || '';
+        if (!authorHref) return false;
+        const keys = getFBProfileKeysFromUrl(authorHref);
+        if (!keys.size) return false;
+        for (const key of keys) {
+            if (FB_BLOCKED_POST_AUTHOR_FINGERPRINTS_V319.has(getFBPrimaryAuthorFingerprintV319(key))) return true;
+        }
+    } catch (e) {}
+    return false;
+};
+
+const scrubFBBlockedStandaloneProfileAuthorsV325 = (root = document, limit = 32) => {
+    try {
+        if (!isFBStrictElementAccount() || isFBMessengerPath() ||
+            isFBNoPostScanUrl() || isFBHomeFeedSurface() || isFBSearchPagePath()) return 0;
+        const path = (location.pathname || '/').toLowerCase();
+        const profileRoute = (path === '/profile.php' &&
+                /^\d{5,}$/.test(new URLSearchParams(location.search).get('id') || '') &&
+                ['', 'timeline', 'posts'].includes((new URLSearchParams(location.search).get('sk') || '').toLowerCase())) ||
+            (/^\/[a-z0-9._-]+(?:\/(?:posts|timeline))?\/?$/i.test(path) &&
+                !/^\/(?:friends|groups|pages|marketplace|messages|messenger|notifications|search|photo|photos|videos|watch|reel|reels|stories|events|gaming|settings|help|share|people)(?:\/|$)/i.test(path));
+        if (!profileRoute) return 0;
+        const matches = new Set();
+        const add = card => {
+            if (card?.isConnected && matches.size < limit) matches.add(card);
+        };
+        if (root?.nodeType === 1) {
+            if (root.matches?.(FB_STANDALONE_AUTHOR_CARD_SELECTOR_V325)) add(root);
+            add(root.closest?.(FB_STANDALONE_AUTHOR_CARD_SELECTOR_V325));
+        }
+        const candidates = root?.querySelectorAll?.(FB_STANDALONE_AUTHOR_CARD_SELECTOR_V325) || [];
+        for (let i = 0; i < candidates.length && matches.size < limit; i++) add(candidates[i]);
+        let banned = 0;
+        for (const card of matches) {
+            if (!isFBSingleStandalonePostWithBlockedAuthorV326(card)) continue;
+            if (!card.classList.contains('fb-post-banned')) {
+                // Only the proven one-post card is hidden. Do NOT collapse an ancestor
+                // or mark a shared React FeedUnit as banned on this fallback path.
+                hideElementHard(card, 'fb-post-banned');
+                card.classList.remove('fb-post-approved', 'fb-feed-unit-approved', 'fb-trusted-profile-post-v50');
+                card.classList.add('fb-feed-slot-banned-v49');
+                card.setAttribute('data-fb-v49-collapsed-slot', '1');
+                card.setAttribute('data-fb-v25-scan-complete', '1');
+            }
+            banned++;
+        }
+        return banned;
+    } catch (e) { return 0; }
 };
 
 const postHasBlockedLinksOrFbids = (post) => {
@@ -9891,6 +10246,10 @@ const evaluatePostForBan = (post) => {
         if (post.classList.contains('fb-post-banned') || post.classList.contains('fb-element-banned')) return true;
         post.classList.remove('fb-post-pending', 'fb-post-scanning', 'fb-post-expanding');
 
+        if (isFBBlockedPrimaryPostAuthorV319(post)) {
+            banPostAfterScan(post, 'blocked primary post author v319');
+            return true;
+        }
         if (postHasAIInfoTag(post)) {
             banPostAfterScan(post, 'Facebook AI-info disclosure tag');
             return true;
@@ -10150,7 +10509,8 @@ const deleteRestrictedWords = () => {
         let removedCount = 0;
         document.querySelectorAll(selectors.join(','))
             .forEach(element => {
-                if (isSafeElement(element) || isTopLeftSearchDropdownElement(element)) return;
+                if (isSafeElement(element) || isTopLeftSearchDropdownElement(element) ||
+                    isNotificationPanelElement(element)) return;
                 if (isFBCommentSurfaceElement(element)) return;
                 if (isProfileHeaderProtectedArea(element)) return;
                 if (__fbRestrictedWordsChecked.has(element)) return;
@@ -10623,7 +10983,7 @@ const deletePeopleYouMayKnow = () => {
         let deletedCount = 0;
         document.querySelectorAll(selectors.join(','))
             .forEach(element => {
-                if (isTopLeftSearchDropdownElement(element)) return;
+                if (isTopLeftSearchDropdownElement(element) || isNotificationPanelElement(element)) return;
                 if (!element.classList.contains('fb-element-banned')) {
                     element.classList.add('fb-element-banned');
                     element.style.setProperty('display', 'none', 'important');
@@ -12308,6 +12668,22 @@ const observeDOMChanges = () => {
             if (handleFBSPARouteTransition('mutation')) return;
             // v87: make newly inserted right-rail contacts safe before any transient UI early exit.
             processFBContactRailMutationBatchV87(mutations);
+            // v325: profile author bans must not depend on general post-scanner eligibility.
+            // Only touch mutations containing a standalone post card; this avoids a
+            // profile-account lookup for every unrelated Facebook DOM insertion.
+            if (!isFBHomeFeedSurface() && !isFBMessengerPath()) {
+                for (const mutation of mutations) {
+                    if (mutation.type !== 'childList') continue;
+                    for (const node of mutation.addedNodes) {
+                        if (node?.nodeType !== 1) continue;
+                        if (node.matches?.(FB_STANDALONE_AUTHOR_CARD_SELECTOR_V325) ||
+                            node.closest?.(FB_STANDALONE_AUTHOR_CARD_SELECTOR_V325) ||
+                            node.querySelector?.(FB_STANDALONE_AUTHOR_CARD_SELECTOR_V325)) {
+                            scrubFBBlockedStandaloneProfileAuthorsV325(node, 12);
+                        }
+                    }
+                }
+            }
 
             // v57: the document-start micro-observer owns exact identity/chat-shell work.
             // Do not duplicate those scans in the already-busy main Facebook observer.
@@ -13791,6 +14167,20 @@ const scrubBlockedLikesOverlayRows = () => {
             return matchesAnyActiveRegex(normalized) || matchesAnyBlockedFbid(raw) || matchesBlockedUrlCandidates(raw);
         };
 
+        // v320: share the v319 opaque exact-profile preferences with the reaction
+        // row scanner. Only the link representing THIS row's identity is examined;
+        // a mutual friend, mentioned person or unrelated link must not trigger it.
+        const isBlockedReactionProfileV320 = (profileLink) => {
+            try {
+                if (!isFBStrictElementAccount() || !profileLink) return false;
+                const href = profileLink.getAttribute('href') || '';
+                for (const key of getFBProfileKeysFromUrl(href)) {
+                    if (FB_BLOCKED_POST_AUTHOR_FINGERPRINTS_V319.has(getFBPrimaryAuthorFingerprintV319(key))) return true;
+                }
+            } catch (e) {}
+            return false;
+        };
+
         const isLikelyProfileLink = (link) => {
             try {
                 if (!link || !link.href) return false;
@@ -13810,7 +14200,7 @@ const scrubBlockedLikesOverlayRows = () => {
         const findLikesOverlayRow = (link, dialog) => {
             try {
                 const dynamicRow = link.closest('div[data-visualcompletion="ignore-dynamic"]');
-                if (dynamicRow && dynamicRow !== dialog) return dynamicRow;
+                if (dynamicRow && dynamicRow !== dialog && dynamicRow.querySelector('a[href*="facebook.com/"]')) return dynamicRow;
 
                 let current = link;
                 let best = null;
@@ -13855,7 +14245,9 @@ const scrubBlockedLikesOverlayRows = () => {
                 if (!row || row.classList.contains('fb-likes-overlay-row-banned') || row.classList.contains('fb-element-banned')) return;
 
                 const signal = collectSignals(row) + ' ' + collectSignals(link);
-                if (isBlockedSignal(signal)) {
+                // Prefer this row's intrinsic profile identity; still apply existing
+                // regex/FBID/URL checks to the remaining bounded row metadata.
+                if (isBlockedReactionProfileV320(link) || isBlockedSignal(signal)) {
                     row.classList.remove('fb-likes-overlay-row-approved');
                     hideElementHard(row, 'fb-likes-overlay-row-banned');
                     hidden++;
@@ -14643,6 +15035,7 @@ const initializeFacebookCleaner = () => {
     hideCriticalElements();
     processSearchResults();
 
+    scrubFBBlockedStandaloneProfileAuthorsV325(document, 80);
     if (isFBTrustedProfileTimelineSurface()) releaseFBTrustedTimelinePosts(document);
     else scanFBCanonicalPostsInRootV65(document, 48, false);
 
