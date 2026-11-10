@@ -1829,8 +1829,30 @@
        * Account for that native inset when moving Medium to the left edge and
        * High to the right; Instant and optional Pro remain out of view. */
       [${BRAVEFOX_NATIVE_TWO_STOP_VIEWPORT_ATTR}="true"] {
-        clip-path: inset(-24px 0 -24px 0) !important;
+        /* v29.8.2: clip the stretched native track into a proper pill.
+         * The extra 4px vertically preserves the 28px native thumb while
+         * rounding BOTH visible ends of Medium/High. Unlike overflow:hidden,
+         * this does not reduce the hit target or expose Instant/Pro. */
+        clip-path: inset(-4px 0 -4px 0 round 16px) !important;
+        border-radius: 999px !important;
         min-width: 0 !important;
+      }
+      /* Round original track/range artwork as well, including Firefox
+       * Nightly's legacy HTML-range implementation. Never style other sliders. */
+      [${BRAVEFOX_TWO_STOP_NATIVE_ATTR}="true"] [data-model-picker-power-slider]
+      :is([data-slot="slider-track"], [data-slot="slider-range"], [data-radix-slider-track], [data-radix-slider-range]),
+      [${BRAVEFOX_TWO_STOP_NATIVE_ATTR}="true"] [data-model-picker-power-slider]
+      > [data-orientation="horizontal"] > [data-orientation="horizontal"] {
+        border-radius: 999px !important;
+      }
+      [${BRAVEFOX_TWO_STOP_NATIVE_ATTR}="true"]:is(input[type="range"])::-moz-range-track {
+        border-radius: 999px !important;
+      }
+      [${BRAVEFOX_TWO_STOP_NATIVE_ATTR}="true"]:is(input[type="range"])::-moz-range-progress {
+        border-radius: 999px !important;
+      }
+      [${BRAVEFOX_TWO_STOP_NATIVE_ATTR}="true"]:is(input[type="range"])::-webkit-slider-runnable-track {
+        border-radius: 999px !important;
       }
       /* The real Radix/HTML slider handles the gestures. Extending the root
        * to the left (and, for four stops, to the right) moves its native
@@ -2030,13 +2052,13 @@
         transform: translate(-50%, -50%);
         pointer-events: none;
       }
-      [${BRAVEFOX_TWO_STOP_ATTR}="true"] [data-bravefox-effort-stop="medium"] { left: 12px; }
-      [${BRAVEFOX_TWO_STOP_ATTR}="true"] [data-bravefox-effort-stop="high"] { left: calc(100% - 12px); }
+      [${BRAVEFOX_TWO_STOP_ATTR}="true"] [data-bravefox-effort-stop="medium"] { left: 14px; }
+      [${BRAVEFOX_TWO_STOP_ATTR}="true"] [data-bravefox-effort-stop="high"] { left: calc(100% - 14px); }
       [${BRAVEFOX_TWO_STOP_ATTR}="true"][data-bravefox-selected="high"] [data-bravefox-effort-stop] { background: rgba(255,255,255,.42); }
       [${BRAVEFOX_TWO_STOP_ATTR}="true"] [data-bravefox-effort-thumb] {
         position: absolute;
         top: 50%;
-        left: 12px;
+        left: 14px;
         width: 28px;
         height: 28px;
         box-sizing: border-box;
@@ -2048,7 +2070,7 @@
         transition: none;
         pointer-events: none;
       }
-      [${BRAVEFOX_TWO_STOP_ATTR}="true"][data-bravefox-selected="high"] [data-bravefox-effort-thumb] { left: calc(100% - 12px); }
+      [${BRAVEFOX_TWO_STOP_ATTR}="true"][data-bravefox-selected="high"] [data-bravefox-effort-thumb] { left: calc(100% - 14px); }
       /* On the first mount, the native state dictates the thumb position immediately.
        * Only deliberate user input enables the short native-style animation.
        * This prevents the initial left-to-right "catch-up" when High is active. */
@@ -2067,7 +2089,7 @@
         transition: none;
       }
       [${BRAVEFOX_TWO_STOP_ATTR}="true"][data-bravefox-dragging="true"] [data-bravefox-effort-thumb] {
-        left: var(--bravefox-drag-left, 12px) !important;
+        left: var(--bravefox-drag-left, 14px) !important;
       }
       [${BRAVEFOX_TWO_STOP_ATTR}="true"][data-bravefox-dragging="true"] [data-bravefox-effort-fill] {
         width: var(--bravefox-drag-fill, 0px) !important;
@@ -4963,7 +4985,7 @@
       if (!dragRect) return;
       // Direct thumb movement under the pointer; native selection happens only
       // on release, so pointermove never hammers React or its model API.
-      const left = Math.max(12, Math.min(dragRect.width - 12, clientX - dragRect.left));
+      const left = Math.max(14, Math.min(dragRect.width - 14, clientX - dragRect.left));
       widget.style.setProperty('--bravefox-drag-left', left + 'px');
       widget.style.setProperty('--bravefox-drag-fill', (left + 1) + 'px');
     };

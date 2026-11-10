@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         FBCleaner
-// @version	 29.8.0
-// @date	 2026-11-09
+// @version	 29.8.2
+// @date	 2026-11-10
 // @description  Makes my Facebook experience less terrible.
 // @match        *://*.facebook.com/*
 // @grant        none
@@ -18,7 +18,7 @@
 // the exact global Friends shortcut, and only on the home feed the left-nav
 // Friends/Meta AI bookmarks, before React creates either control.
 const FB_EARLY_NAV_STYLE_V321 = 'fb-early-nav-prehide-style-v321';
-const FB_EARLY_NAV_STRICT_ID_V321 = '100005050653554';
+const FB_EARLY_NAV_ACCOUNT_IDS_V327 = new Set(['100005050653554', '1267550854']);
 let __fbEarlyNavIdentityTimedOutV321 = false;
 const syncFBEarlyNavPrehideV321 = (accountId = '') => {
     try {
@@ -36,7 +36,12 @@ const syncFBEarlyNavPrehideV321 = (accountId = '') => {
                 html.fb-nav-early-prehide-v321 li:has(> span > div > a[role="link"][href="/friends/"]),
                 /* Home feed only: captured left navigation bookmark rows. */
                 html.fb-nav-early-prehide-v321.fb-nav-early-home-v321 li.html-li:has(> div > div > div > a[href="https://www.facebook.com/friends/"]),
+                html.fb-nav-early-prehide-v321.fb-nav-early-home-v321 li.html-li:has(> div a[aria-label="Friends"][href*="/friends"]),
+                html.fb-nav-early-prehide-v321.fb-nav-early-home-v321 li.html-li:has(> div a[aria-label="Kaverit"][href*="/friends"]),
                 html.fb-nav-early-prehide-v321.fb-nav-early-home-v321 li.html-li:has(> div > div > div > a[href^="https://www.meta.ai/"][href*="facebook_bookmarks"]),
+                html.fb-nav-early-prehide-v321.fb-nav-early-home-v321 li.html-li:has(> div a[aria-label="Meta AI"]),
+                html.fb-nav-early-prehide-v321.fb-nav-early-home-v321 li.html-li:has(> div a[href="https://www.meta.ai/"]),
+                html.fb-nav-early-prehide-v321.fb-nav-early-home-v321 li.html-li:has(> div span[aria-label="Meta AI"]),
                 /* v322: Meta AI may rehydrate a different link wrapper or temporarily
                    drop the bookmark query string. Keep the *bookmark LI* hidden,
                    never arbitrary Meta AI links inside posts/notifications. */
@@ -66,9 +71,9 @@ const syncFBEarlyNavPrehideV321 = (accountId = '') => {
         const id = String(accountId || cookieId);
         // v326: the exact top-nav Friends LI also needs hiding on Messenger.
         // Messenger's old anchor-only rule hid the SVG but left a blank LI + tooltip.
-        // Preserve strict-account prehide and the bounded unknown-identity fallback;
+        // Preserve both explicit accounts and the bounded unknown-identity fallback;
         // the home-only bookmark selectors still cannot affect Messenger.
-        const hide = id === FB_EARLY_NAV_STRICT_ID_V321 ||
+        const hide = FB_EARLY_NAV_ACCOUNT_IDS_V327.has(id) ||
             (!id && !__fbEarlyNavIdentityTimedOutV321);
         html.classList.toggle('fb-nav-early-prehide-v321', hide);
         html.classList.toggle('fb-nav-early-home-v321', home && !messenger);
@@ -92,6 +97,81 @@ setTimeout(() => {
         syncFBEarlyNavPrehideV321(id);
     } catch (e) {}
 }, 3500);
+
+// ===== v327: globally scoped, document-start sponsored/shopping-post prehide =====
+// These are real feed-post containers, not generic article/menu/profile wrappers.
+// A revealed/cached/approved post is still hidden as soon as Facebook adds the
+// sponsored metadata or shopping CTA. React may retain the node; CSS collapses it.
+const FB_GLOBAL_AD_PREHIDE_STYLE_V327 = 'fb-global-sponsored-shopping-prehide-v327';
+const FB_GLOBAL_POST_SELECTOR_V327 = ':is(div[data-pagelet^="FeedUnit_"], div[data-pagelet^="TimelineFeedUnit_"], [role="feed"] div[aria-posinset], [role="feed"] > [role="article"])';
+const FB_GLOBAL_AD_DISCLOSURE_CSS_V327 = [
+    'a[href^="/ads/about/"]',
+    'a[href*="facebook.com/ads/about/"]',
+    'a[aria-label="Sponsoroitu" i]',
+    'a[aria-label="Sponsored" i]',
+    // Label-only recommendations are scoped to feed-post badges, not text/captions.
+    'a[aria-label="Suositeltu" i]',
+    'a[aria-label="Recommended" i]'
+].join(', ');
+const FB_GLOBAL_BUY_CTA_CSS_V327 = [
+    '[data-ad-rendering-role^="cta-"] a[aria-label="Osta nyt" i]',
+    '[data-ad-rendering-role^="cta-"] a[aria-label="Osta" i]',
+    '[data-ad-rendering-role^="cta-"] a[aria-label="Buy now" i]',
+    '[data-ad-rendering-role^="cta-"] a[aria-label="Buy" i]',
+    '[data-ad-rendering-role^="cta-"] a[aria-label="Shop now" i]',
+    '[data-ad-rendering-role^="cta-"] button[aria-label="Osta nyt" i]',
+    '[data-ad-rendering-role^="cta-"] button[aria-label="Osta" i]',
+    '[data-ad-rendering-role^="cta-"] button[aria-label="Buy now" i]',
+    '[data-ad-rendering-role^="cta-"] button[aria-label="Buy" i]',
+    '[data-ad-rendering-role^="cta-"] button[aria-label="Shop now" i]',
+    'a[aria-label="Osta nyt" i]',
+    'a[aria-label="Osta" i]',
+    'a[aria-label="Buy now" i]',
+    'a[aria-label="Buy" i]',
+    'button[aria-label="Osta nyt" i]',
+    'button[aria-label="Osta" i]',
+    'button[aria-label="Buy now" i]',
+    'button[aria-label="Buy" i]',
+    'a[aria-label="Shop now" i]',
+    'button[aria-label="Shop now" i]',
+    '[role="button"][aria-label="Osta nyt" i]',
+    '[role="button"][aria-label="Osta" i]',
+    '[role="button"][aria-label="Buy now" i]',
+    '[role="button"][aria-label="Buy" i]',
+    '[role="button"][aria-label="Shop now" i]'
+].join(', ');
+const syncFBGlobalAdPrehideV327 = () => {
+    try {
+        const html = document.documentElement;
+        if (!html) return false;
+        if (document.getElementById(FB_GLOBAL_AD_PREHIDE_STYLE_V327)) return true;
+        const style = document.createElement('style');
+        style.id = FB_GLOBAL_AD_PREHIDE_STYLE_V327;
+        style.textContent = `
+            /* Both accounts, every real Facebook feed surface. No placeholder/flash. */
+            ${FB_GLOBAL_POST_SELECTOR_V327}:has(:is(${FB_GLOBAL_AD_DISCLOSURE_CSS_V327})),
+            ${FB_GLOBAL_POST_SELECTOR_V327}:has(:is(${FB_GLOBAL_BUY_CTA_CSS_V327})) {
+                display: none !important;
+                visibility: hidden !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
+                content-visibility: hidden !important;
+                transition: none !important;
+                animation: none !important;
+            }
+        `;
+        (document.head || html).appendChild(style);
+        return true;
+    } catch (e) { return false; }
+};
+if (!syncFBGlobalAdPrehideV327()) {
+    try {
+        const fbAdInitialStyleObserverV327 = new MutationObserver((_, observer) => {
+            if (syncFBGlobalAdPrehideV327()) observer.disconnect();
+        });
+        fbAdInitialStyleObserverV327.observe(document, { childList: true });
+    } catch (e) {}
+}
 
 // v313 diagnostic console entry: define this before the main startup routine.
 // The audit remains read-only; initialization failures must not erase its entry point.
@@ -119,20 +199,34 @@ const syncFBEarlyFeedGateV311 = () => {
             .some(page => path === page || path.startsWith(page + '/'));
         html.classList.toggle('fb-early-home-feed-v311', home);
         html.classList.toggle('fb-early-supported-page-v311', supported);
-        // v318: own-profile PYMK must be suppressed before Facebook's first paint.
-        // This class is deliberately account + route scoped; Dad's account stays native.
+        // v327: protect the exact known PYMK profile module for BOTH accounts.
+        // Dad's additional policy applies to profile-like routes only; it does not
+        // enable the broad Haukkis-only cosmetics on Dad's account.
         const ownProfile = path === '/haukkis' || path === '/100005050653554' ||
             (path === '/profile.php' && new URLSearchParams(location.search).get('id') === '100005050653554');
-        let ownAccount = false;
-        try { ownAccount = /(?:^|;\s*)c_user=100005050653554(?:;|$)/.test(document.cookie || ''); }
+        let accountId = '';
+        try { accountId = String(document.cookie || '').match(/(?:^|;\s*)c_user=(\d+)/)?.[1] || ''; }
         catch (e) {}
-        // Once account bootstrap is available, accept the existing cached identity too.
-        // Document-start itself still relies on the cookie; never expose Dad's profile UI.
-        if (!ownAccount) {
-            try { ownAccount = getEarlyLoggedInFacebookAccountFbid() === '100005050653554'; }
+        if (!accountId) {
+            try { accountId = getEarlyLoggedInFacebookAccountFbid(); }
             catch (e) {}
         }
-        html.classList.toggle('fb-early-own-pymk-v318', ownProfile && ownAccount);
+        const segment = path.split('/').filter(Boolean)[0] || '';
+        const nonProfileRootV327 = new Set([
+            'home.php', 'friends', 'groups', 'pages', 'marketplace', 'search',
+            'messages', 'messenger', 'notifications', 'watch', 'video', 'videos',
+            'reel', 'reels', 'stories', 'events', 'gaming', 'settings', 'help',
+            'share', 'photo', 'photos', 'permalink.php', 'story.php', 'people'
+        ]);
+        const profileLikeV327 = (path === '/profile.php' &&
+                /^\d{5,}$/.test(new URLSearchParams(location.search).get('id') || '')) ||
+            (!!segment && !nonProfileRootV327.has(segment) && !segment.endsWith('.php') &&
+                path.split('/').filter(Boolean).length <= 2);
+        html.classList.toggle('fb-early-own-pymk-v318', ownProfile && accountId === '100005050653554');
+        // Unknown identity is conservatively prehidden too: don't reveal a carousel
+        // just because the account cookie/Relay identity arrives after the first paint.
+        html.classList.toggle('fb-early-dad-profile-pymk-v327',
+            profileLikeV327 && (!accountId || accountId === '1267550854'));
         if (document.getElementById(FB_EARLY_FEED_GATE_STYLE_V311)) return true;
         const style = document.createElement('style');
         style.id = FB_EARLY_FEED_GATE_STYLE_V311;
@@ -140,10 +234,19 @@ const syncFBEarlyFeedGateV311 = () => {
             /* v318: Captured own-profile PYMK has an h2 heading, NOT an aria-label.
                Match its precise outer carousel shell, not generic profile classes. */
             html.fb-early-own-pymk-v318 [role="main"] div.x1exxf4d.xpv9jar.x1nb4dca.x1nmn18.x1obq294.x5a5i1n.xde0f50.x15x8krk.x13fuv20.x18b5jzi.x1q0q8m5.x1t7ytsu.x178xt8z.x1lun4ml.xso031l.xpilrb4.xev17xk.x1xmf6yo,
-            html.fb-strict-element-hiding-v37 [role="main"] div.x1exxf4d.xpv9jar.x1nb4dca.x1nmn18.x1obq294.x5a5i1n.xde0f50.x15x8krk.x13fuv20.x18b5jzi.x1q0q8m5.x1t7ytsu.x178xt8z.x1lun4ml.xso031l.xpilrb4.xev17xk.x1xmf6yo {
+            html.fb-strict-element-hiding-v37 [role="main"] div.x1exxf4d.xpv9jar.x1nb4dca.x1nmn18.x1obq294.x5a5i1n.xde0f50.x15x8krk.x13fuv20.x18b5jzi.x1q0q8m5.x1t7ytsu.x178xt8z.x1lun4ml.xso031l.xpilrb4.xev17xk.x1xmf6yo,
+            /* Dad: same verified whole-carousel shell, not generic profile posts. */
+            html.fb-early-dad-profile-pymk-v327 [role="main"] div.x1exxf4d.xpv9jar.x1nb4dca.x1nmn18.x1obq294.x5a5i1n.xde0f50.x15x8krk.x13fuv20.x18b5jzi.x1q0q8m5.x1t7ytsu.x178xt8z.x1lun4ml.xso031l.xpilrb4.xev17xk.x1xmf6yo,
+            html.fb-early-dad-profile-pymk-v327 [role="main"] [role="region"][aria-label="Ihmisiä, jotka saatat tuntea"],
+            html.fb-early-dad-profile-pymk-v327 [role="main"] [role="region"][aria-label="People You May Know"],
+            html.fb-early-dad-profile-pymk-v327 [role="main"] .fb-dad-profile-pymk-banned-v327 {
                 display: none !important;
                 visibility: hidden !important;
+                opacity: 0 !important;
                 pointer-events: none !important;
+                content-visibility: hidden !important;
+                animation: none !important;
+                transition: none !important;
             }
             /* Hide the captured PYMK *feed carousel* before classification; JS then
                bans the whole FeedUnit and collapses its safe one-post slot. */
@@ -3827,6 +3930,90 @@ const getFBFeedUnitWrapper = (seed) => {
     } catch (e) {
         return null;
     }
+};
+
+// ===== v327: semantic post-level sponsored/shopping policy (both accounts) =====
+// The global post rule is intentionally NOT put in globalRegex: a user talking
+// ABOUT a sponsored post or saying "buy" in a normal caption isn't an ad.
+const FB_GLOBAL_AD_LABELS_V327 = new Set(['sponsoroitu', 'sponsored', 'suositeltu', 'recommended']);
+const FB_GLOBAL_BUY_CTA_TEXT_V327 = new Set([
+    'osta', 'osta nyt', 'buy', 'buy now', 'shop now'
+]);
+const isFBGlobalAdControlSafeV327 = (control) => {
+    try {
+        return !!control && !control.closest?.('[role="dialog"], [role="menu"], [role="navigation"], [role="complementary"], [data-pagelet*="Comment" i], [data-pagelet*="Notification" i]') &&
+            !isInsideComment(control) && !isNotificationPanelElement(control);
+    } catch (e) { return false; }
+};
+const getFBGlobalAdOrShoppingReasonV327 = (seed) => {
+    try {
+        const post = getFBFeedUnitWrapper(seed) || seed;
+        if (!post?.querySelectorAll || !post?.closest) return '';
+        if (!post.closest('[role="feed"]') && !post.matches('div[data-pagelet^="FeedUnit_"], div[data-pagelet^="TimelineFeedUnit_"]')) return '';
+        if (post.closest('[role="dialog"], [role="navigation"], [role="menu"], [role="complementary"]') ||
+            isNotificationPanelElement(post) || isFBCommentSurfaceElement(post) || isFBInsideEmbeddedChatSurfaceV56(post)) return '';
+
+        const disclosures = post.querySelectorAll('a[href*="/ads/about/"], a[aria-label="Sponsoroitu" i], a[aria-label="Sponsored" i], a[aria-label="Suositeltu" i], a[aria-label="Recommended" i]');
+        for (let i = 0; i < disclosures.length && i < 24; i++) {
+            const link = disclosures[i];
+            if (!isFBGlobalAdControlSafeV327(link)) continue;
+            const label = String(link.getAttribute('aria-label') || link.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+            const href = String(link.getAttribute('href') || '').toLowerCase();
+            if (href.includes('/ads/about/') || FB_GLOBAL_AD_LABELS_V327.has(label)) return 'sponsored disclosure v327';
+        }
+        // This includes late-hydrated CTA wrappers from Facebook's ad carousel.
+        // Exact aria labels are accepted outside CTA wrappers too, but never post text.
+        const controls = post.querySelectorAll([
+            '[data-ad-rendering-role^="cta-"] a',
+            '[data-ad-rendering-role^="cta-"] button',
+            '[data-ad-rendering-role^="cta-"] [role="button"]',
+            'a[aria-label]', 'button[aria-label]', '[role="button"][aria-label]'
+        ].join(','));
+        for (let i = 0; i < controls.length && i < 130; i++) {
+            const control = controls[i];
+            if (!isFBGlobalAdControlSafeV327(control)) continue;
+            const label = String(control.getAttribute('aria-label') || '').replace(/\s+/g, ' ').trim().toLowerCase();
+            if (FB_GLOBAL_BUY_CTA_TEXT_V327.has(label)) return 'shopping CTA v327';
+            if (control.closest('[data-ad-rendering-role^="cta-"]')) {
+                const text = String(control.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+                if (FB_GLOBAL_BUY_CTA_TEXT_V327.has(text)) return 'shopping CTA text v327';
+            }
+        }
+    } catch (e) {}
+    return '';
+};
+
+// v327: only the exact recommendation heading/region on Dad's profile routes.
+// The captured outer class is prehidden at document-start; this is a bounded
+// semantic fallback for later Facebook hydration and changed element wrappers.
+const scrubFBDadProfilePYMKV327 = (root = document) => {
+    try {
+        if (!document.documentElement?.classList.contains('fb-early-dad-profile-pymk-v327')) return 0;
+        const main = root.matches?.('[role="main"]') ? root : root.querySelector?.('[role="main"]') || document.querySelector('[role="main"]');
+        if (!main) return 0;
+        const candidates = main.querySelectorAll([
+            'h2', 'h3', '[role="heading"]',
+            '[role="region"][aria-label="Ihmisiä, jotka saatat tuntea"]',
+            '[role="region"][aria-label="People You May Know"]'
+        ].join(','));
+        let hidden = 0;
+        for (let i = 0; i < candidates.length && i < 120; i++) {
+            const heading = candidates[i];
+            const title = String(heading.getAttribute('aria-label') || heading.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+            if (title !== 'ihmisiä, jotka saatat tuntea' && title !== 'people you may know') continue;
+            const exactShell = heading.closest('div.x1exxf4d.xpv9jar.x1nb4dca.x1nmn18.x1obq294.x5a5i1n.xde0f50');
+            const region = heading.closest('[role="region"]');
+            // A titled region is safe to hide whole; an outer shell is safe only
+            // with the captured fingerprint. Never climb to a shared profile/feed.
+            const target = exactShell || region;
+            if (!target || target.closest('[role="dialog"], [role="navigation"]')) continue;
+            if (!target.classList.contains('fb-dad-profile-pymk-banned-v327')) {
+                target.classList.add('fb-dad-profile-pymk-banned-v327');
+                hidden++;
+            }
+        }
+        return hidden;
+    } catch (e) { return 0; }
 };
 
 // ===== v67 TERMINAL ONE-POST SHELL COLLAPSE =====
@@ -9743,6 +9930,17 @@ const screenFBCanonicalPostNowV65 = (seed, forceRecheck = false, expectedGenerat
             return true;
         }
 
+        // v327: both accounts, regardless of previous approved-cache state.
+        // Never let a late sponsored badge or shopping CTA pass an early approval.
+        const globalAdReasonV327 = getFBGlobalAdOrShoppingReasonV327(post);
+        if (globalAdReasonV327) {
+            if (!post.classList.contains('fb-post-banned')) {
+                banPostAfterScan(post, globalAdReasonV327);
+            }
+            __fbPostScanRetryCountV65.delete(post);
+            return true;
+        }
+
         if (isFBTrustedProfileTimelineSurface()) {
             releaseFBNativeHydrationSlotV53(post);
             releaseFBTrustedTimelinePosts(post);
@@ -10248,6 +10446,11 @@ const evaluatePostForBan = (post) => {
 
         if (isFBBlockedPrimaryPostAuthorV319(post)) {
             banPostAfterScan(post, 'blocked primary post author v319');
+            return true;
+        }
+        const globalAdReasonV327 = getFBGlobalAdOrShoppingReasonV327(post);
+        if (globalAdReasonV327) {
+            banPostAfterScan(post, globalAdReasonV327);
             return true;
         }
         if (postHasAIInfoTag(post)) {
@@ -12299,6 +12502,7 @@ const handleFBSPARouteTransition = (reason = '') => {
             updateFBCommentImmunityClasses();
             updateFBCommentOverlayClass();
             updateFBHomeFeedGateClass();
+            scrubFBDadProfilePYMKV327(document);
             refreshFBElementHidingAccountScope();
             updateFBFriendsSoftGate();
             refreshFBFriendsIdentityAttributeObserverV61();
@@ -12729,6 +12933,13 @@ const observeDOMChanges = () => {
                     hideCriticalNavOnly();
                     return;
                 }
+            }
+
+            // v327: the captured PYMK shell is already CSS-prehidden; sweep newly
+            // hydrated semantic headings only on Dad's profile-like routes.
+            if (document.documentElement?.classList.contains('fb-early-dad-profile-pymk-v327') &&
+                shouldRunCadenced('dadProfilePYMKV327', 300, false)) {
+                scrubFBDadProfilePYMKV327(document);
             }
 
             // Check for search/feed-related changes first for instant processing.
@@ -14928,6 +15139,7 @@ const runAllFilters = () => {
         updateFBProfileScreening(false);
         updateFBSearchPageClass();
         updateFBHomeFeedGateClass();
+        scrubFBDadProfilePYMKV327(document);
         updateFBCommentImmunityClasses();
         if (isFBNoPostScanUrl(window.location.href)) {
             protectNotificationSurfaces(document);
@@ -14998,6 +15210,7 @@ const initializeFacebookCleaner = () => {
     updateFBProfileScreening(true);
     updateFBSearchPageClass();
     updateFBHomeFeedGateClass();
+    scrubFBDadProfilePYMKV327(document);
     updateFBCommentImmunityClasses();
     updateFBFriendsSoftGate();
     refreshAccountScopedFilters();
