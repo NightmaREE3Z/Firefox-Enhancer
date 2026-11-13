@@ -1,18 +1,572 @@
 // ==UserScript==
 // @name         IGCleaner
-// @version	 29.8.0
-// @date	 2026-11-09
+// @version	 29.8.3
+// @date	 2026-11-13
 // @description  Trying to make my Instagram experience tolerable.
 // @match        *://www.instagram.com/*
 // @match        *://www.instagram.com/?next=%2F/*
 // @match        *://www.instagram.com/accounts/onetap/?next=%2F/*
 // @match        *://www.threads.net/*
+// @match        *://www.tiktok.com/*
+// @match        *://tiktok.com/*
+// @match        *://*.tiktok.com/*
 // @grant        none
 // @run-at       document-start
 // ==/UserScript==
 
 (function() {
 'use strict';
+
+// ======== Unified keyword regex filter ========
+// One source of truth for text/content keyword filtering. Literal keywords from the old list
+// are stored here as escaped /i regex literals; runtime-synced names are appended as regexes.
+const keywordsToHide = [
+	
+	// Regex terms
+	/Bliss/i, /Alexa Bliss/i, /Tiffany/i, /Stratton/i, /Chelsea Green/i, /Bayley/i, /Blackheart/i, /Mercedes/i, /Alba Fyre/i, /sensuel/i, /Maryse/i, /Meta AI/i, 
+	/Del Rey/i, /CJ Perry/i, /Becky Lynch/i, /Michin/i, /Mia Yim/i, /julmakira/i, /Stephanie/i, /Liv Morgan/i, /Piper Niven/i, /queer/i, /Pride/i, /NXT Womens/i, 
+	/Perry/i, /Henley/i, /Nattie/i, /Jordynne/i, /Woman/i, /Women/i, /@tiffanywwe/i, /@yaonlylivvonce/i, /@alexa_bliss_wwe_/i, /@alexa_bliss/i, /@samanthathebomb/i, 
+	/Women's/i, /Woman's/i, /Summer Rae/i, /Naomi/i, /Bianca Belair/i, /Jessika Carr/i, /Carr WWE/i, /Jessica Karr/i, /bikini/i, /Kristen Stewart/i, /TOR-Browser/i, 
+	/Nia Jax/i, /AI generated/i, /Young Bucks/i, /Jackson/i, /Lash Legend/i, /Jordynne Grace/i, /generated/i, /DeepSeek/i, /Alexis/i, /TOR-selain/i, /Opera GX/i, 
+	/prostitute/i, /AI-generated/i, /Arianna Grace/i, /deepnude/i, /undress/i, /nudify/i, /nude/i, /nudifier/i, /faceswap/i, /facemorph/i, /Sydney/i, /Sweeney/i,
+	/Zelina Vega/i, /Mandy Rose/i, /playboy/i, /Irving/i, /IYO SKY/i, /Nikki/i, /Bella/i, /Opera Browser/i, /Safari/i, /OperaGX/i, /MS Edge/i, /Microsoft Edge/i, 
+	/Lola Vice/i, /Vice WWE/i, /Candice LeRae/i, /attire/i, /only fans/i, /miska/i, /crotch/i, /dress/i, /dreamtime/i, /Velvet Sky/i, /panties/i, /panty/i,
+	/cleavage/i, /deviantart/i, /Trish/i, /Stratus/i, /Tutki/i, /AdvancingAI/i, /Paxley/i, /Sydney Sweeney/i, /clothes/i, /9B9pOqs0qQ/i, /misk33/i, /Steward/i, 
+	/Tiffy Time/i, /cameltoe/i, /dreamtime AI/i, /Joanie/i, /Stewart/i, /Isla Dawn/i, /escort/i, /inpaint/i, /photopea/i, /onlyfans/i, /fantime/i, /undressed/i,
+	/upscale/i, /upscaling/i, /upscaled/i, /AJ Lee/i, /deepfake/i, /ring gear/i, /Transvestite/i, /Aleksa/i, /Giulia/i, /Rodriguez/i, /justforfans/i, /Kristen/i, 
+	/Natasha/i, /Natalia/i, /booty/i, /Paige/i, /Mafiaprinsessa/i, /Chyna/i, /lingerie/i, /venice/i, /AI model/i, /nudifying/i, /undressing/i, /undressed/i, /LGBTQ/i, 
+	/undressifying/i, /Vladimir Putin/i, /Toni Storm/i, /Skye Blue/i, /Carmella/i, /Mariah May/i, /Harley Cameron/i, /Hayter/i, /trunks/i, /pants/i, /undressify/i,
+	/Del Ray/i, /Belts Mone/i, /Cargill/i, /five feet of fury/i, /Ripley/i,  /5 feet of fury/i, /selain/i, /browser/i, /DeepSeek AI/i, /fansly/i, /Meiko Satomura/i, 
+	/patreon/i, /Vince Russo/i, /Tay Conti/i, /Valhalla/i, /lotta/i, /Shirai/i, /Io Sky/i, /Iyo Shirai/i, /Dakota Kai/i, /wiikmaaan/i, /Asuka/i, /Kairi Sane/i, 
+	/NXT Women/i, /Russo/i, /underwear/i, /Rule 34/i, /Nikkita Lyons/i, /Lisa Marie Varon/i, /belfie/i, /Miko Satomura/i, /Sarray/i, /Xia Li/i, /Shayna Baszler/i, 
+	/Ronda Rousey/i, /Dana Brooke/i, /Izzi Dame/i, /Tamina/i, /Alicia Fox/i, /Madison Rayne/i, /Saraya/i, /Sol Ruca/i, /Layla/i, /Michelle McCool/i, /Eve Torres/i,
+	/cloth/i, /Kelly/i, /Melina WWE/i, /Jillian Hall/i, /Mickie James/i, /Su Yung/i, /Britt/i, /Nick Jackson/i, /Matt Jackson/i, /manyvids/i, /Roxanne/i, /Anna Jay/i,   
+	/Sakazaki/i, /Primera/i, /Maria Kanellis/i, /Beth Phoenix/i, /Victoria WWE/i, /Molly Holly/i, /Gail Kim/i, /Awesome Kong/i, /Deonna/i, /Purrazzo/i, /Amari Miller/i,
+	/Riho/i, /Britney/i, /Nyla Rose/i, /Angelina Love/i, /Tessmacher/i, /Havok/i, /Taya Valkyrie/i, /Valkyria/i, /Tay Melo/i, /Nightingale/i, /Statlander/i, /LGBTQ/i, 
+	/Hikaru Shida/i, /ZELINA!/i, /rule34/i, /Sasha/i, /lesbian/i, /Penelope Ford/i, /Shotzi/i, /Tegan/i, /Sasha Banks/i, /Sakura/i, /Tessa/i, /Brooke/i, /Jakara/i, 
+	/Scarlett Bordeaux/i, /lesbo/i, /Roxan/i, /B-Fab/i, /Kayden Carter/i, /Katana Chance/i, /Lyra Valkyria/i, /Indi Hartwell/i, /Blair/i, /Davenport/i, /Maxxine Dupri/i, 
+	/Russia/i, /China/i, /Natalya/i, /Lisa Varon/i, /Vilma/i, /Karmen Petrovic/i, /Ava Raine/i, /Yulisa Leon/i, /Cora Jade/i, /Gina Adams/i, /Jacy Jayne/i, /Gigi Dolin/i, 
+	/Thea Hail/i, /Tatum WWE/i, /Fallon/i, /Valentina Feroz/i, /Wilma/i, /wondershare/i, /filmora/i, /Kelani Jordan/i, /Electra Lopez/i, /Wendy Choo/i, /lottapupu/i, 
+	/tiliehdotuksia/i, /linktr.ee/i, /vsco.co/i, /AI\-/i, /-\AI/i, /AI\-suck/i, /AIblow/i, /Suckin/i, /Gina Adam/i, /Henriikka/i, /pride/i, /transve/i, /Lawren/i, /Lawrenc/i, 
+	/Henni/i, /Valtez/i, /Lawrence/i, /Jenn1/i, /J3nn1/i, /J3nni/i, /J3nn4/i, /Jenn4/i, /Dua Lipa/i, /Dualipa/i, /Julianne/i, /Juliane/i, /Juliana/i, /Julianna/i, /Stratu/i, 
+	/jjulia/i, /juuliska/i, /Roxanna/i, /Wilm/i, /Noelle/i, /Kristiina/i, /Reetta/i, /irpp4/i, /juliana/i, /julianna/i, /juulianna/i, /juuliana/i, /juulia/i, /rasikangas/i,  
+	/rasikannas/i, /rasikangas/i, /Ansku/i, /Crowley/i, /Ruby Soho/i, /Monica/i, /Sucks/i, /Sucki/i, /Sucky/i, /AIsuck/i, /motionsw/i, /motionc/i, /poseai/i, /RemovingAI/i, 
+	/blowjob/i, /b\-job/i, /bj0b/i, /Ninajessika/i,  /bl0w/i, /blowj0b/i, /dr0ol/i, /dro0l/i, /bjob/i, /5uck/i, /lex bl/i, /Steph's/i, /Stephanie's/i, /Stepha/i, /Stepan/i, 
+	/Tiffa/i, /Tiffy/i, /katj/i, /lesb/i, /homo/i, /Jenny/i, /transvestite/i, /Jenna/i, /Castillo/i, /Matsumoto/i, /Shino Suzuki/i, /Yamashita/i, /Adriana/i, /Lumiikki/i, 
+	/motionai/i, /Dolly/i, /Aliisa/i, /maarit/i, /taija/i, /saija/i, /seija/i, /tiina/i, /teija/i, /Miska/i, /Saara/i, /Saaru/i, /Lumikki/i, /Laura/i, /Noora/i, /Lumiikki/i, 
+	/Elina/i, /Nooru/i, /Camila/i, /Emilia/i, /Tiinu/i, /Katherin/i, /Janita/i, /Susan/i, /Sirja/i, /Venla/i, /Jenn/i, /Irene/i, /Milana/i, /Milene/i, /Minea/i, /Anette/i, 
+	/Tytti/i, /McQueen/i, /Dolli/i, /Elisa/i, /Elise/i, /Rebecca/i, /Jonna/i, /Janna/i, /Janet/i, /Aleksiina/i, /Alexiina/i, /Maria/i, /Marie/i, /Katja/i, /Minna/i, /Janika/i, 
+	/Janissa/i, /Pauliina/i, /Janisa/i, /Miisa/i, /Kaisa/i, /Pinj/i, /Jemina/i, /Moona/i, /Viivi/i, /Annika/i, /Marissa/i, /Jutta/i, /Amalia/i, /Nelli/i, /Anniina/i, /Marjut/i, 
+	/Siiri/i, /Kamila/i, /Kamilla/i, /Kamilia/i, /Lauren/i, /Camilla/i, /Camilia/i, /Krisse/i, /Miina/i, /Merja/i, /Alina/i, /Mirkku/i, /Irkku/i, /zelina/i, /Aliina/i, /Vilhel/i, 
+	/Sexi/i, /Wilhel/i, /Aurora/i, /Joana/i, /Iiris/i, /minja/i, /Erika/i, /Janina/i, /Kasie Cay/i, /Marie Varon/i, /Takaichi/i, /With Grok/i, /By Grok/i, /heidih/i, /Grok's/i, 
+	/Elon Musk/i, /ElonMusk/i, /Sam Altman/i, /SamAltman/i, /changemotion/i, /swapmotion/i, /Huuska/i, /Sakurai/i, /Lyons/i, /Milena/i, /AI creative/i, /AI created/i, /Tekoäly/i, 
+	/Teko äly/i, /Teko-äly/i, /Teko_äly/i, /generoiva/i, /generoitu/i, /generative/i, /AI create/i, /seksi/i, /anaali/i, /pillu/i, /pimppi/i, /kyrpä/i, /kulli/i, /seksuaali/i,
+	/sexual/i, /Kairi's/i, /Kairii/i, /Sexxy/i, /Sexy/i, /Sexx/i, /@lovable.dev/i, /lovable.dev/i, /maisa/i, /gener/i, /Zerrano/i, /Stratt/i, /Rasikangas/i, /Serrano/i, /Malla/i,
+	/m1ska/i, /m1sk4/i, /Milli/i, /Niina/i, /Jasmin/i, /Saana/i, /Veera/i, /Saya Kamitani/i, /misk4/i, /misk3/i, /m1sk3/i, /m1ske/i, /m1mmuska/i, /misk33waaa/i, /vsco\.co/i,
+	/misk33wa/i, /misk3waa/i, /misk3waaa/i, /miskaawq9/i, /misk3wa/i, /Matilda/i, /Kamitani/i, /Minja/i, /Nikkita/i, /linktr\.ee/i, /misk33waa/i, /Myös Metalta/i, /mallikuva/i,
+	/Sinulle ehdotettua/i, /Sinulle ehdotettu/i, /Suggested for you/i,  /@lovable\.dev/i, /@lovable\.ai/i, /@lovable.ai/i, /lovable.ai/i, /lovable ai/i, /modeling/i, /Kelani/i,
+	/Monroe/i, /Chantel/i, /Zaria/i, /Jaida/i, /Elegance Brand/i, /By Elegance/i, 
+
+	// Regex Hashtags
+	/#perse/i, /#pylly/i, /#tissit/i, /#takapuoli/i, /#takamus/i, /#boobs/i, /#boobies/i, /#boobie/i, /#booty/i, /#butt/i, /#babe/i, /#bestie/i, /#aigen/i, /#aigenerated/i, 
+	/#aigeneration/i, /#artificial/i, /#aiapplication/i, /#aiedit/i, /#rack/i, /#finnishgirl/i, /#girl/i, /#women/i, /#woman/i, /#ladies/i, /#girls/i, /#womens/i, /#womans/i, 
+	/#belfie/i, /#artificialintelligence/i,  /#gym/i, /#gymgirl/i, /#gymwoman/i, /#heru/i, /#heruu/i, /#heruhoro/i, /#slut/i, /#horny/i, /#horni/i, /#bitch/i, /#panties/i,
+	/#pants/i, /#pajama/i, /#pyjama/i, /#bikini/i, /#lingerie/i, /#girly/i, /#girlie/i, /#finnishwoman/i, /#boudoir/i,
+
+
+	/\bCharlotte\b/i, /\bGina\b/i, /\bGin4\b/i, /\bHer\b/i, /\bShe\b/i, /\bHer's\b/i, /\bShe's\b/i, /\bHers\b/i, /\bShes\b/i, /\bAss\b/i, /\bAlexa\b/i, /\bTiffy\b/i, /\bAI\b/i,
+	/\bHepe\b/i, /\bSKADI/i, /\bIris\b/i, /\bMiia\b/i, /\bMira\b/i, /\bTiia\b/i, /\bKara\b/i, /\bEllu\b/i, /\bEeva\b/i, /\bEevi\b/i, /\bEssi\b/i, /\bKira\b/i, /\bSusu\b/i,   
+	/\bNea\b/i, /\bSara\b/i, /\bAnni\b/i, /\bBra\b/i,  /\bNia\b/i, /\bJax\b/i, /\bNikki\b/i,  /\bElla\b/i, /\bElli\b/i, /\bRosa\b/i, /\bMari\b/i, /\bmotion\b/i, /\bDoll\b/i, 
+	/\bOona\b/i, /\bIra\b/i, /\bIrppa\b/i, /\bG1na\b/i, /\bNeea\b/i, /\bG!na\b/i, /\bGigi\b/i, /\bDolin\b/i, /\bSarah\b/i, /\bG1n4\b/i, /\bEmmi\b/i, /\bAI-generated\b/i, 
+	/\bKati\b/i, /\bKiia\b/i, /\bIda\b/i, /\bIida\b/i, /\bAI art\b/i, /\bVera\b/i, /\bLexi\b/i, /\bBy AI\b/i, /\bAI edited\b/i, /\bAI edit\b/i, /\bModel\b/i, /\bSexy\b/i, 
+	/\bSex\b/i, /\bAlexis\b/i, /\bHomo\b/i, /\bGay\b/i, /\bDeep\b/i, /\bFake\b/i, /\bBrie\b/i, /\bGirls\b/i, /\bGirly\b/i, /\bGirlie\b/i, /\bGirl's\b/i, /\bTorres\b/i, 
+	/\bEve WWE\b/i, /\bManna\b/i, /\bNanna\b/i, /\bAava\b/i, /\bAva\b/i, /\bRaine\b/i, /\bGrok\b/i, /\bJensku\b/i, /\bSanna\b/i, /\bHanna\b/i, /\bHenna\b/i, /\bNiina\b/i, 
+	/\bSandra\b/i, /\bMilla\b/i, /\bMirka\b/i, /\bZoey\b/i, /\bViola\b/i, /\bMinka\b/i, /\bRoosa\b/i, /\bPeppi\b/i, /\bEveliina\b/i, /\bJimi\b/i, /\bJulle\b/i, /\bNox\b/i, 
+	/\bLana\b/i, /\bMenni\b/i, /\bGlna\b/i, /\bvsco\b/i, /\bElon\b/i, /\bMusk\b/i,  /\bAltman\b/i, /\bTara\b/i, /\bKairi\b/i, /\bIzzi\b/i,
+
+
+	// Boundaried Regex Hashtags
+	/\b#ass\b/i, /\b#tit\b/i, /\b#tits\b/i, /\b#boob\b/i, /\b#AI\b/i, /\b#Nox\b/i,
+
+];
+
+// String allowed words
+const allowedWords = [
+   "Lähetä", "Viesti", "Lähetä viesti", "Send a message", "Send message", "Send", "message", "Battlefield", "BF", "BF6", "BF1", "BF4", "BF 1942", "BF2", "Battle field", "memes", "masterrace", "#itsevarmuus",
+   "#memes", "meme", "#meme", "Pearl", "Harbor", "Market", "Bro", "Brother", "Metallica", "Sabaton", "Joakim", "James", "Hetfield", "PC", "Build", "Memory", "Ram", "Motherboard", "Mobo", "Cooling", "pcmaster",
+   "AIO", "CPU", "GPU", "Radeon", "GeForce", "GTX", "RTX", "50", "60", "70", "80", "90", "X3D", "50TI", "60TI", "70TI", "80TI", "90TI", "Processor", "Graphics", "Card", "Intel", "AMD", "NVidia", "RGB", "cooler",
+   "#healing", "#heal", "#itsetunto", "😂", "🤣", "😭", "Lisa Su", "Jensen Huang", "Chip", "Android", "Huawei", "Tech", "Patch", "MSI", "Asus", "ROG", "Strix", "TUF", "Suprim", "Gaming", "OSRS", "RS3", "Jagex", 
+   "Old School", "RuneScape",  "Sea Shanty 2", "Sailor's Dream", "Sailing", "Skilling", "Bossing", "Boss", "Mod Ash", "JMod", "Reddit", "Core", "Cores", "3DVCache", "VCache", "Inno3D", "Inno 3D", "Sapphire", "XFX",
+   "Nitro", "Pure", "Asus Prime", "X570", "B550", "B650", "B650E", "X670", "X670E", "B850", "X870", "X870E", "B450", "X470", "B350", "X370", "LGA", "1150", "1151", "1155", "AM4", "AM5", "AM6", "Corsair", "Kingston",
+   "PowerColor", "DDR5", "DDR4", "DDR3", "Computing", "Computer", "AData", "AM3", "AM3+", "AM2", "GSkill", "Memory", "Ram", "Turbo", "Overclock", "Overclocked", "Air cooling", "Radiator", "Pump", "Header", "Water", 
+   "GTA", "Grand Theft Auto", "PlayStation", "PS1", "PS2", "PS3", "PS4", "PS5", "Xbox", "Series", "Pro", "Console", "Sega", "MegaDrive", "Genesis", "Nintendo", "Upgrade", "Room", "Setup", "Christmas", "Wordables",
+   "Wordable", "lifelearnedfeelings", "feel", "feelings", "feeling", "pcmasterrace_official", "pcmasterrace", "pc masterrace", "pc master race", "gaming", "game",
+];
+
+// Instagram accounts to hide
+const instagramAccountsToHide = [
+  'yaonlylivvonce', 'alexa_bliss_wwe_', 'samanthathebomb', 'tiffanywwe', 'beckylynchwwe', 'charlottewwe', 'biancabelairwwe', 'thetrishstratuscom', 'thebriebella', 'thenikkibella', 'niajaxwwe', 'sonyadevillewwe', 
+  'mandysacs', 'natbynature', 'zelinavegawwe', 'carmellawwe', 'itsmebayley', 'sashabankswwe', 'mercedesmone', 'saraya', 'theajmendez', 'livmorganwwe', 'candicelerae', 'indihartwell', 'raquelwwe', 'dakotakaiwwe',
+  'kairi_sane_wwe', 'asuka_wwe', 'meiko_satomura', 'roxanne_wwe', 'pipernivenwwe', 'nikki_cross_wwe', 'jacyjaynewwe', 'gigidxdolinnxt', 'avawwe_', 'blairdavenportwwe', 'lyravalkyria', 'katana_chance', 'serenadeeb', 
+  'kaydenwwe', 'maxxinedupri', 'chelseaagreen', 'fallonhenleywwe', 'karmenpetrovicwwe', 'danabrookewwe', 'valhallawwe', 'laceyevanswwe', 'shotziwwe', 'dejwujs_', 'dejwujs', 'tegan_nox_wwe', 'mia_yim', 'sylviorvokki',
+  'candicewwe', 'emmalution', 'tenille_dashwood', 'lashlegendwwe', 'karabrannbacka', 'julmakira', 'piia_oksanen', 'wiikmaaan', 'taijamaarit', 'riituskavaanhoi', 'heidisofia_agneta', 'nylarosebeast', 'krisstatlander', 
+  'jamiehayter', 'thunderrosa22', 'brittbaker', 'thepenelopeford', 'sylviliukkonen',  'willowwrestles', 'skye_by_wrestling', 'redvelvett', 'anna_jay_aew', 'tayconti_', 'tayconti', 'taymelo', 'heidika', 'heidik', 
+  'heidih', 'heidit', 'grok', 'erikavikman', 'erika.helin', 'hikaru_shida', 'jjuliakristiina_', 'mafiaprinsessa', 'riho_ringstar', 'gailkimitsme', 'deonnapurrazzo', 'jordynnegrace', 'mickiejames', 'trinity_fatu',
+  'm1mmuska', 'mimmi', 'juliaerikaaz', 'dvondivawwe', 'suyung', 'madisonraynewrestling', 'katariinapohjoiskangas', 'angelinalove', 'velvet_sky', 'brookeadams', 'tessblanchard', 'thetayavalkyrie', 'havokdeathmachine', 
+  'killerkellywrestling', 'kierahogan', 'diamante_lax', 'ladyfrost', 'taryn_terrell', 'rebeltanea', 'martimichellewwe', 'jaderedeww',  'alishawrestling', 'savannah_evanswrestling', 'jazzygabert', 'masha_slamovich', 
+  'paigewwe', 'kayfabe_kayla', 'roxanne_perez', 'cora.jade', 'piia_barlund', 'lottapupu', 'giuliawrestler', 'starkz_wrestler', 'thedollhousewrestling', 'holidead', 'tessafblanchard', 'thealliebunny', 'taya_valkyrie',
+  'thedemonbunny', 'rhearipley_wwe', 'rosemarythehive', 'siennawrestling', 'madisonrayne', 'kimber_lee90', 'kiera_hogan', 'diamantelax', 'realtenille', 'stephaniemcmahon', 'stephanie_buttermore', 'stephanie.vaquer', 
+  'julianarasikannas', 'wiltsuboe', 'emiliaaq96', 'wwe_asuka', 'kairi_sane_wwe', 'wwe_mandyrose', 'stephaniesanzo', 'shaqwrestling', 'jadecargill', 'emimatsumoto', 'yukisakazaki', 'gina.adams', 'mizuki_wrestler',
+  'miskaawq9', 'misk33', 'misk33waaa', 'misk33waa', 'misk33wa', 'misk3waa', 'misk3waaa', 'misk3wa', 'misk4', 'misaaqw', 'lovable.dev', 'lovable', 'lovable.ai', 'izzi_wwe', 'chantelmonroe',
+
+  // v29.5.5 wrestling-account expansion: exact published handles only (no guessed variants).
+  'kelani_wwe', // NXT: handle specifically referenced in wwenxt caption.
+  // WWE / NXT / WWE alumni (published handle directories)
+  'brie', 'trishstratuscom', 'rondarousey', 'natalieevamarie', 'thebarbieblank', 'carleebrightwwe', 'corajadewwe',
+  'elaynablack', 'thefoxxyone', 'aliyahwwe', 'madusa_rocks', 'shadiabseiso', 'brandilauren_', 'beapriestley96',
+  'nikkitalyons',
+
+  // AEW / ROH (2026 published profiles)
+  'reneepaquette', 'realbrittbaker', 'annajay____', 'danni_ellexo', 'marinashafir', 'themeganbayne', 'miss_leilagrey',
+  'lena_kross', 'hailwindsor', 'itsmayaworldd', 'thehyan', 'tonistorm_', 'realrubysoho', 'lexynair',
+  'riho_gtmv',
+
+  // TNA Knockouts (2026 verified Instagram tags and published directory)
+  'xiabrookside', 'zoey_serrano', 'qosbaszler', 'the_gnomie', 'harleyhudsonx', 'doublexdiva', 'allieimpact',
+
+  // STARDOM / NJPW-affiliated women (published Japanese Instagram directory)
+  'stardom_azm', 'miyu_stardom', 'saya_iida_5_19', 'iwatanimayu', 'unapiiiiiii', 'kashima_saki_1', 'sayasayadesuyo',
+  'momokohgo', 'maisakurai914', 'syuri_official', '0221giulia', 'mina_shirakawa', 'stardom_starlightkid', 'aaamintan',
+  'waka_tsukiyama', 'toxic_thekla', 'stardom_natsuko', 'tam_nakano', 'natsumi_poi', '_hazuki_0929_', 'u_t_m_0914',
+  'stardom_hanan', '5_hmk_28', 'maika_0324', 'mirai_ss_', 'rina.kh8730', 'ruaka__stardom', 'ladyc_stardom',
+  'stardom_momo', 'hina.qq.007', 'k_o_nami',
+
+  // TJPW / Japanese independent women (published Instagram directories)
+  'tenmaino', 'araiyuki57', 'makifuckingitoh', '_marupon427', 'yuki_kamifuku', 'mahiro_tjpw', 'yuka_sakazaki_ayayayay',
+  'suzume_tjpw', 'nk147cm', 'juria_210', 'neco_tjpw_', 'uug_p_hikari', 'misao_tjp', 'pompompom327',
+  'mizupyon3', 'miyu.yamashita', 'raku_uugp', 'uug_p_miu', 'tsukina.umino', 'totochan326', 'tsukka0730official',
+  'hoshihamuko', 'kahoooo._.31', 'ohkayumi', 'nagisa_nozaki', 'kiyukizayami', 'co_ha_ku', 'mikikofutagami',
+  'manami.senjo', 'mika0610senjo', 'yurika1023_23', 'dashchisako', 'heidikatrinaa', 'chihero71', 'saki__akai',
+  'yoppy228', 'haruka_katou', 'yunamanase', 'yuuri_916', 'mayumi.ozaki.5203', 'kato_sonoko', 'tydachu',
+  'akari_wrestler', 'crea0518_purej',
+
+  // Additional published women wrestling accounts (historical directories)
+  'aerial_monroe', 'aja_perera', 'alexxiaanicole', 'alexleesekai', 'b000giebear', 'theeallieparker', 'allierecks',
+  'cjfitlv', 'germanwrestling', 'fit_winchester',
+
+];
+
+// ===== v29.5.5: shared Unicode-aware AI boundaries and exact compact hashtags =====
+// These helpers affect *matching*, not the user's stored/order-preserved regex list.
+// Literal two-word names (including SmackDownHotel slugs) recognize #ChelseaGreen,
+// but never arbitrarily ban #ChelseaGreenland or ordinary Finnish compounds.
+const __ig2955EffectiveRegexCache = new WeakMap();
+const __ig2955HashtagRegexCache = new WeakMap();
+
+const allowedWordsLower = allowedWords.map(w => w.toLowerCase());
+const instagramAccountsToHideLower = instagramAccountsToHide.map(a => a.toLowerCase());
+const instagramAccountsSet = new Set(instagramAccountsToHideLower);
+
+
+// ===== TikTok SPA filtering — shared Instagram regexes and account list =====
+// Runs in its own early branch. Instagram feed/network observers never touch TikTok.
+function installTikTokFilteringV2983() {
+    const TIKTOK_HOME_V2983 = 'https://www.tiktok.com/';
+    const TIKTOK_DIRECT_REDIRECTS_V2983 = [
+        'arabran', '1mmus', 'st.se.mim', 'joiskang', 'atarii', 'skavaa', 'karabrannbacka'
+    ];
+    const TIKTOK_SCAN_SELECTOR_V2983 = [
+        '[id^="grid-item-container-"]',
+        'a[href^="/@"][data-discover="true"]',
+        '[data-e2e="discover_category-list-live-card"]',
+        '[data-e2e="recommend-list-item-container"]',
+        '[data-e2e="user-post-item"]',
+        'li[data-e2e="content-sug-item"]',
+        'a[data-e2e="discover-nav-category-tab"]',
+        // TikTok upcoming LIVE events. Use the event-card root, not the inner
+        // title/organizer, so a blocked match leaves no empty card behind.
+        'div.ehn1xzb0'
+    ].join(', ');
+    const TIKTOK_CARD_TEXT_V2983 = [
+        '[data-e2e="search-card-video-caption"]',
+        '[data-e2e="new-desc-span"]',
+        '[data-e2e="search-card-user-unique-id"]',
+        '[data-e2e="live-side-nav-name"]'
+    ].join(', ');
+    const TIKTOK_CSS_CLASS_V2983 = 'bravefox-tiktok-blocked-v2983';
+    const TIKTOK_STYLE_ID_V2983 = 'bravefox-tiktok-no-glimpse-v2983';
+    const TIKTOK_ROUTE_CLASS_V2983 = 'bravefox-tiktok-redirecting-v2983';
+    let lastRoute = location.href;
+    let observer = null;
+    let observerTimer = null;
+    let routeTimer = null;
+    let redirecting = false;
+    let disposed = false;
+
+    function tokMatchesKeywordV2983(value) {
+        const text = String(value || '').trim();
+        if (!text) return false;
+        return keywordsToHide.some(rx => keywordRegexMatchesOutsideAllowedSpan(rx, text));
+    }
+
+    function tokMatchesUsernameV2983(value) {
+        const username = String(value || '').trim().replace(/^@/, '').toLowerCase();
+        if (!username) return false;
+        return instagramAccountsSet.has(username) || tokMatchesKeywordV2983(username);
+    }
+
+    function tokPathUserV2983(path) {
+        try {
+            const decoded = decodeURIComponent(String(path || ''));
+            return decoded.match(/^\/@([a-z0-9._]+)(?:\/|$)/i)?.[1] || '';
+        } catch {
+            return String(path || '').match(/^\/@([a-z0-9._]+)(?:\/|$)/i)?.[1] || '';
+        }
+    }
+
+    function tokGetUserFromLinkV2983(href) {
+        try {
+            const url = new URL(href, location.origin);
+            if (url.hostname !== 'tiktok.com' && !url.hostname.endsWith('.tiktok.com')) return '';
+            return tokPathUserV2983(url.pathname);
+        } catch { return ''; }
+    }
+
+    function tokRedirectV2983() {
+        if (redirecting) return true;
+        redirecting = true;
+        document.documentElement?.classList.add(TIKTOK_ROUTE_CLASS_V2983);
+        try { window.stop?.(); } catch {}
+        try { location.replace(TIKTOK_HOME_V2983); return true; } catch {}
+        try { location.assign(TIKTOK_HOME_V2983); return true; } catch {}
+        try { location.href = TIKTOK_HOME_V2983; } catch {}
+        return true;
+    }
+
+    function tokIsBlockedRouteV2983(href = location.href) {
+        try {
+            const url = new URL(href, location.href);
+            if (url.hostname !== 'tiktok.com' && !url.hostname.endsWith('.tiktok.com')) return false;
+            const path = decodeURIComponent(url.pathname || '/');
+            const full = (path + url.search).toLowerCase();
+            // Seven existing extra.js URL redirects are owned here exclusively.
+            if (TIKTOK_DIRECT_REDIRECTS_V2983.some(term => full.includes(term))) return true;
+            const username = tokPathUserV2983(path);
+            if (username && tokMatchesUsernameV2983(username)) return true;
+            if (/^\/search(?:\/|$)/i.test(path)) {
+                const query = url.searchParams.get('q') || '';
+                if (tokMatchesKeywordV2983(query) || tokMatchesUsernameV2983(query)) return true;
+                if (extractHandlesFromText(query).some(tokMatchesUsernameV2983)) return true;
+            }
+            // Category destinations are independent SPA routes under /live/.
+            if (/^\/live\//i.test(path)) {
+                const category = path.replace(/^\/live\//i, '').split('/').join(' ');
+                if (tokMatchesKeywordV2983(category)) return true;
+            }
+        } catch {}
+        return false;
+    }
+
+    function tokBlockedItemV2983(node) {
+        if (!node?.matches?.(TIKTOK_SCAN_SELECTOR_V2983)) return false;
+        let textParts = [];
+        if (node.matches('li[data-e2e="content-sug-item"], a[data-e2e="discover-nav-category-tab"]')) {
+            textParts.push(node.textContent || '');
+        } else if (node.matches('a[href^="/@"][data-discover="true"]')) {
+            // Only profile-result cards, never ordinary profile navigation links.
+            if (!node.querySelector(':scope > div[data-fmp="true"]')) return false;
+            textParts.push(node.textContent || '');
+        } else if (node.matches('[data-e2e="discover_category-list-live-card"]')) {
+            textParts.push(node.textContent || '');
+        } else if (node.matches('div.ehn1xzb0')) {
+            // Upcoming LIVE / Events cards: screen ONLY the event title and
+            // organizer's display name/handle. Schedule, follow counts and
+            // Register button are metadata, not content matching signals.
+            const title = node.querySelector(':scope > .ehn1xzb2 > span');
+            const organizer = node.querySelector(':scope > .ehn1xzb3 a[href]');
+            if (!title || !organizer || !tokGetUserFromLinkV2983(organizer.getAttribute('href') || '')) return false;
+            textParts.push(title.textContent || '');
+            textParts.push(organizer.querySelector('span.e15aa3qv0')?.textContent || '');
+        } else if (node.matches('[data-e2e="recommend-list-item-container"], [data-e2e="user-post-item"]')) {
+            // Supplemental feed/profile-grid coverage. Scoped e2e selectors avoid
+            // mistaking the surrounding recommendations or entire page for a card.
+            node.querySelectorAll('[data-e2e="video-desc"], [data-e2e="video-author-uniqueid"], [data-e2e="video-author-nickname"], img[alt]').forEach(el => {
+                textParts.push(el.textContent || el.getAttribute('alt') || '');
+            });
+        } else if (node.matches('[id^="grid-item-container-"]')) {
+            if (!node.querySelector('[data-e2e="search_top-item"], [data-e2e="search_video-item"], [data-e2e="search_photo-item"]')) return false;
+            node.querySelectorAll(TIKTOK_CARD_TEXT_V2983).forEach(el => textParts.push(el.textContent || ''));
+            // Image alt is TikTok's own full description when the visible caption is short.
+            node.querySelectorAll('[data-e2e^="search_"] img[alt]').forEach(el => textParts.push(el.getAttribute('alt') || ''));
+        }
+        if (textParts.some(tokMatchesKeywordV2983)) return true;
+        if (textParts.some(text => extractHandlesFromText(text).some(tokMatchesUsernameV2983))) return true;
+        const links = [];
+        if (node.matches('a[href]')) links.push(node);
+        node.querySelectorAll?.('a[href]').forEach(link => links.push(link));
+        return links.some(link => {
+            const href = link.getAttribute('href') || '';
+            const username = tokGetUserFromLinkV2983(href);
+            return (username && tokMatchesUsernameV2983(username)) ||
+                (link.matches('[data-e2e="discover-nav-category-tab"]') && tokMatchesKeywordV2983(href));
+        });
+    }
+
+    function tokCheckItemV2983(node) {
+        if (!node?.isConnected || !node.matches?.(TIKTOK_SCAN_SELECTOR_V2983)) return;
+        const blocked = tokBlockedItemV2983(node);
+        if (blocked !== node.classList.contains(TIKTOK_CSS_CLASS_V2983)) {
+            node.classList.toggle(TIKTOK_CSS_CLASS_V2983, blocked);
+            if (blocked) {
+                node.setAttribute('aria-hidden', 'true');
+                try { node.setAttribute('inert', ''); } catch {}
+            } else {
+                node.removeAttribute('aria-hidden');
+                node.removeAttribute('inert');
+            }
+        }
+        // A narrow prepaint gate keeps newly mounted Events hidden until their
+        // title/organizer are screened. It also permits approved cards to paint.
+        if (node.matches('div.ehn1xzb0') && !node.hasAttribute('data-bravefox-tiktok-event-scanned-v2983')) {
+            node.setAttribute('data-bravefox-tiktok-event-scanned-v2983', '1');
+        }
+    }
+
+    function tokScanV2983(root = document) {
+        if (redirecting || disposed || !root) return;
+        if (root.nodeType === 1) tokCheckItemV2983(root);
+        root.querySelectorAll?.(TIKTOK_SCAN_SELECTOR_V2983).forEach(tokCheckItemV2983);
+        // For a profile, scope description checks to profile metadata, not the whole page.
+        if (tokPathUserV2983(location.pathname)) {
+            const fields = document.querySelectorAll('[data-e2e="user-title"], [data-e2e="user-subtitle"], [data-e2e="user-bio"]');
+            if (Array.from(fields).some(el => tokMatchesKeywordV2983(el.textContent || ''))) tokRedirectV2983();
+        }
+    }
+
+    function tokInjectCSSV2983() {
+        if (document.getElementById(TIKTOK_STYLE_ID_V2983)) return;
+        const style = document.createElement('style');
+        style.id = TIKTOK_STYLE_ID_V2983;
+        style.textContent = `
+            /* Event cards are hidden only while their title and organizer are
+               being inspected. Matched cards use the normal full-card collapse. */
+            div.ehn1xzb0:not([data-bravefox-tiktok-event-scanned-v2983="1"]) {
+                visibility: hidden !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
+            }
+            /* Profile grids size their outer grid-item-container, while the matcher
+               marks the nested user-post-item. Collapse the complete cell so no
+               empty grid slot remains; :has() updates as SPA cards are recycled. */
+            [id^="grid-item-container-"]:has([data-e2e="user-post-item"].${TIKTOK_CSS_CLASS_V2983}),
+            [id^="grid-item-container-"]:has([data-e2e="recommend-list-item-container"].${TIKTOK_CSS_CLASS_V2983}) {
+                display: none !important;
+                visibility: hidden !important;
+                pointer-events: none !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                border: 0 !important;
+            }
+            .${TIKTOK_CSS_CLASS_V2983},
+            /* Hide the outer heading/row too; hiding only the link leaves its height behind. */
+            h2:has(a[data-e2e="nav-explore"]),
+            a[data-e2e="nav-explore"],
+            .TUXTooltip-reference:has(> a[data-e2e="nav-explore"]),
+            [data-e2e="live-side-nav-channel"],
+            .tiktok-af7r1a:has([data-e2e="live-side-nav-channel-title"]) {
+                display: none !important;
+                visibility: hidden !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
+                max-height: 0 !important;
+                overflow: hidden !important;
+                transition: none !important;
+                animation: none !important;
+            }
+            /* Sidebar utilities: suppress the complete Get Coins / Get App cells
+               before paint. Keep Upload (Lataa) and all other sidebar items intact.
+               data-e2e is stable; do not depend on TikTok's generated CSS hashes. */
+            [data-e2e="side-nav-utilities"] > div:has(button[data-e2e="side-nav-utilities-get-coin"]),
+            [data-e2e="side-nav-utilities"] > div:has(button[data-e2e="side-nav-utilities-get-app"]),
+            div[class*="--DivSideNavUtilityCell"]:has(button[data-e2e="side-nav-utilities-get-coin"]),
+            div[class*="--DivSideNavUtilityCell"]:has(button[data-e2e="side-nav-utilities-get-app"]),
+            button[data-e2e="side-nav-utilities-get-coin"],
+            button[data-e2e="side-nav-utilities-get-app"] {
+                display: none !important;
+                visibility: hidden !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
+                position: absolute !important;
+                left: -10000px !important;
+                top: -10000px !important;
+                width: 0 !important;
+                height: 0 !important;
+                min-width: 0 !important;
+                min-height: 0 !important;
+                max-width: 0 !important;
+                max-height: 0 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                overflow: hidden !important;
+                transition: none !important;
+                animation: none !important;
+            }
+            html.${TIKTOK_ROUTE_CLASS_V2983} body > * {
+                visibility: hidden !important;
+                pointer-events: none !important;
+            }
+        `;
+        (document.head || document.documentElement)?.appendChild(style);
+    }
+
+    function tokOnRouteV2983() {
+        if (disposed || redirecting) return;
+        const next = location.href;
+        if (next !== lastRoute) lastRoute = next;
+        if (tokIsBlockedRouteV2983(next)) { tokRedirectV2983(); return; }
+        tokInjectCSSV2983();
+        tokScanV2983();
+        if (routeTimer !== null) clearTimeout(routeTimer);
+        routeTimer = setTimeout(() => {
+            routeTimer = null;
+            if (!redirecting && !disposed) tokScanV2983();
+        }, 150);
+    }
+
+    // Preflight BEFORE MutationObservers and page hydration: no forbidden route flash.
+    if (tokIsBlockedRouteV2983()) { tokRedirectV2983(); return; }
+    tokInjectCSSV2983();
+
+    const onClick = event => {
+        const anchor = event.target?.closest?.('a[href]');
+        if (!anchor || !tokIsBlockedRouteV2983(anchor.href)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation?.();
+        tokRedirectV2983();
+    };
+    document.addEventListener('click', onClick, true);
+
+    const onSearchCommit = event => {
+        if (event.type === 'keydown' && event.key !== 'Enter') return;
+        const input = event.target?.closest?.('input[name="q"], input[data-e2e="search-user-input"], input[type="search"]') ||
+            event.target?.querySelector?.('input[name="q"], input[data-e2e="search-user-input"], input[type="search"]');
+        if (!input || !tokMatchesKeywordV2983(input.value || '') && !tokMatchesUsernameV2983(input.value || '')) return;
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation?.();
+        tokRedirectV2983();
+    };
+    document.addEventListener('keydown', onSearchCommit, true);
+    document.addEventListener('submit', onSearchCommit, true);
+
+    function tokOnMutationV2983(mutations) {
+        if (redirecting || disposed) return;
+        if (location.href !== lastRoute) tokOnRouteV2983();
+        if (redirecting) return;
+        let requiresFullScan = false;
+        for (const mutation of mutations) {
+            if (mutation.type === 'childList') {
+                for (const added of mutation.addedNodes) {
+                    if (added.nodeType !== 1) continue;
+                    tokScanV2983(added); // synchronous before the new item can paint
+                    const card = added.closest?.(TIKTOK_SCAN_SELECTOR_V2983);
+                    if (card) tokCheckItemV2983(card);
+                }
+                if (mutation.target?.nodeType === 1 && mutation.target.closest?.(TIKTOK_SCAN_SELECTOR_V2983)) {
+                    tokCheckItemV2983(mutation.target.closest(TIKTOK_SCAN_SELECTOR_V2983));
+                }
+            } else if (mutation.type === 'characterData') {
+                const card = mutation.target.parentElement?.closest?.(TIKTOK_SCAN_SELECTOR_V2983);
+                if (card) tokCheckItemV2983(card);
+                else requiresFullScan = true;
+            } else if (mutation.type === 'attributes') {
+                const card = mutation.target.closest?.(TIKTOK_SCAN_SELECTOR_V2983);
+                if (card) tokCheckItemV2983(card);
+                else requiresFullScan = true;
+            }
+        }
+        if (requiresFullScan && observerTimer === null) {
+            observerTimer = setTimeout(() => {
+                observerTimer = null;
+                if (!redirecting && !disposed) tokScanV2983();
+            }, 90);
+        }
+        if (!document.getElementById(TIKTOK_STYLE_ID_V2983)) tokInjectCSSV2983();
+    }
+
+    function tokStartObserverV2983() {
+        if (observer || disposed) return;
+        const root = document.documentElement;
+        if (!root) return;
+        tokInjectCSSV2983();
+        observer = new MutationObserver(tokOnMutationV2983);
+        observer.observe(root, {
+            childList: true, subtree: true, characterData: true,
+            attributes: true, attributeFilter: ['href', 'alt', 'title', 'aria-label']
+        });
+        tokScanV2983();
+    }
+    tokStartObserverV2983();
+    if (!observer) document.addEventListener('DOMContentLoaded', tokStartObserverV2983, { once: true });
+
+    function tokOnPopV2983() { tokOnRouteV2983(); }
+    window.addEventListener('popstate', tokOnPopV2983);
+    window.addEventListener('hashchange', tokOnPopV2983);
+    window.addEventListener('pageshow', tokOnPopV2983);
+    window.addEventListener('locationchange', tokOnPopV2983);
+    if (window.navigation?.addEventListener) {
+        window.navigation.addEventListener('currententrychange', tokOnPopV2983);
+    }
+    for (const method of ['pushState', 'replaceState']) {
+        const original = history[method];
+        if (typeof original !== 'function') continue;
+        history[method] = function() {
+            const before = location.href;
+            const result = original.apply(this, arguments);
+            if (location.href !== before) tokOnRouteV2983();
+            return result;
+        };
+    }
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) tokOnRouteV2983();
+    });
+
+    // Runtime-sync of wrestler keyword names, as on Instagram. No second static list.
+    try {
+        const storage = typeof browser !== 'undefined' && browser.storage?.local ? browser.storage.local :
+            typeof chrome !== 'undefined' && chrome.storage?.local ? chrome.storage.local : null;
+        if (storage) {
+            const load = () => {
+                const apply = data => {
+                    if (!Array.isArray(data?.wrestling_women_urls)) return;
+                    for (const url of data.wrestling_women_urls) {
+                        const slug = String(url || '').split('/').filter(Boolean).pop() || '';
+                        const name = slug.replace(/-/g, ' ').trim();
+                        if (name.length <= 2) continue;
+                        const rx = new RegExp(escapeRegexLiteral(name), 'i');
+                        if (!keywordsToHide.some(existing => existing.source === rx.source && existing.flags === rx.flags)) keywordsToHide.push(rx);
+                    }
+                    tokOnRouteV2983();
+                };
+                const result = storage.get(['wrestling_women_urls'], apply);
+                if (result?.then) result.then(apply).catch(() => {});
+            };
+            load();
+            const onChange = (changes, area) => {
+                if (area === 'local' && changes.wrestling_women_urls) load();
+            };
+            if (typeof browser !== 'undefined' && browser.storage?.onChanged) browser.storage.onChanged.addListener(onChange);
+            else if (typeof chrome !== 'undefined' && chrome.storage?.onChanged) chrome.storage.onChanged.addListener(onChange);
+        }
+    } catch {}
+}
+
+if (location.hostname === 'tiktok.com' || location.hostname.endsWith('.tiktok.com')) {
+    installTikTokFilteringV2983();
+    return;
+}
+
 
 // ===== Standalone blocked post redirect switch =====
 // 0 = collapse blocked photo/video/reel permalink in place (default).
@@ -1688,79 +2242,6 @@ function ig2955TrustedHomeAuthorV326(article) {
         } catch {}
     }
 
-// ======== Unified keyword regex filter ========
-// One source of truth for text/content keyword filtering. Literal keywords from the old list
-// are stored here as escaped /i regex literals; runtime-synced names are appended as regexes.
-const keywordsToHide = [
-	
-	// Regex terms
-	/Bliss/i, /Alexa Bliss/i, /Tiffany/i, /Stratton/i, /Chelsea Green/i, /Bayley/i, /Blackheart/i, /Mercedes/i, /Alba Fyre/i, /sensuel/i, /Maryse/i, /Meta AI/i, 
-	/Del Rey/i, /CJ Perry/i, /Becky Lynch/i, /Michin/i, /Mia Yim/i, /julmakira/i, /Stephanie/i, /Liv Morgan/i, /Piper Niven/i, /queer/i, /Pride/i, /NXT Womens/i, 
-	/Perry/i, /Henley/i, /Nattie/i, /Jordynne/i, /Woman/i, /Women/i, /@tiffanywwe/i, /@yaonlylivvonce/i, /@alexa_bliss_wwe_/i, /@alexa_bliss/i, /@samanthathebomb/i, 
-	/Women's/i, /Woman's/i, /Summer Rae/i, /Naomi/i, /Bianca Belair/i, /Jessika Carr/i, /Carr WWE/i, /Jessica Karr/i, /bikini/i, /Kristen Stewart/i, /TOR-Browser/i, 
-	/Nia Jax/i, /AI generated/i, /Young Bucks/i, /Jackson/i, /Lash Legend/i, /Jordynne Grace/i, /generated/i, /DeepSeek/i, /Alexis/i, /TOR-selain/i, /Opera GX/i, 
-	/prostitute/i, /AI-generated/i, /Arianna Grace/i, /deepnude/i, /undress/i, /nudify/i, /nude/i, /nudifier/i, /faceswap/i, /facemorph/i, /Sydney/i, /Sweeney/i,
-	/Zelina Vega/i, /Mandy Rose/i, /playboy/i, /Irving/i, /IYO SKY/i, /Nikki/i, /Bella/i, /Opera Browser/i, /Safari/i, /OperaGX/i, /MS Edge/i, /Microsoft Edge/i, 
-	/Lola Vice/i, /Vice WWE/i, /Candice LeRae/i, /attire/i, /only fans/i, /miska/i, /crotch/i, /dress/i, /dreamtime/i, /Velvet Sky/i, /panties/i, /panty/i,
-	/cleavage/i, /deviantart/i, /Trish/i, /Stratus/i, /Tutki/i, /AdvancingAI/i, /Paxley/i, /Sydney Sweeney/i, /clothes/i, /9B9pOqs0qQ/i, /misk33/i, /Steward/i, 
-	/Tiffy Time/i, /cameltoe/i, /dreamtime AI/i, /Joanie/i, /Stewart/i, /Isla Dawn/i, /escort/i, /inpaint/i, /photopea/i, /onlyfans/i, /fantime/i, /undressed/i,
-	/upscale/i, /upscaling/i, /upscaled/i, /AJ Lee/i, /deepfake/i, /ring gear/i, /Transvestite/i, /Aleksa/i, /Giulia/i, /Rodriguez/i, /justforfans/i, /Kristen/i, 
-	/Natasha/i, /Natalia/i, /booty/i, /Paige/i, /Mafiaprinsessa/i, /Chyna/i, /lingerie/i, /venice/i, /AI model/i, /nudifying/i, /undressing/i, /undressed/i, /LGBTQ/i, 
-	/undressifying/i, /Vladimir Putin/i, /Toni Storm/i, /Skye Blue/i, /Carmella/i, /Mariah May/i, /Harley Cameron/i, /Hayter/i, /trunks/i, /pants/i, /undressify/i,
-	/Del Ray/i, /Belts Mone/i, /Cargill/i, /five feet of fury/i, /Ripley/i,  /5 feet of fury/i, /selain/i, /browser/i, /DeepSeek AI/i, /fansly/i, /Meiko Satomura/i, 
-	/patreon/i, /Vince Russo/i, /Tay Conti/i, /Valhalla/i, /lotta/i, /Shirai/i, /Io Sky/i, /Iyo Shirai/i, /Dakota Kai/i, /wiikmaaan/i, /Asuka/i, /Kairi Sane/i, 
-	/NXT Women/i, /Russo/i, /underwear/i, /Rule 34/i, /Nikkita Lyons/i, /Lisa Marie Varon/i, /belfie/i, /Miko Satomura/i, /Sarray/i, /Xia Li/i, /Shayna Baszler/i, 
-	/Ronda Rousey/i, /Dana Brooke/i, /Izzi Dame/i, /Tamina/i, /Alicia Fox/i, /Madison Rayne/i, /Saraya/i, /Sol Ruca/i, /Layla/i, /Michelle McCool/i, /Eve Torres/i,
-	/cloth/i, /Kelly/i, /Melina WWE/i, /Jillian Hall/i, /Mickie James/i, /Su Yung/i, /Britt/i, /Nick Jackson/i, /Matt Jackson/i, /manyvids/i, /Roxanne/i, /Anna Jay/i,   
-	/Sakazaki/i, /Primera/i, /Maria Kanellis/i, /Beth Phoenix/i, /Victoria WWE/i, /Molly Holly/i, /Gail Kim/i, /Awesome Kong/i, /Deonna/i, /Purrazzo/i, /Amari Miller/i,
-	/Riho/i, /Britney/i, /Nyla Rose/i, /Angelina Love/i, /Tessmacher/i, /Havok/i, /Taya Valkyrie/i, /Valkyria/i, /Tay Melo/i, /Nightingale/i, /Statlander/i, /LGBTQ/i, 
-	/Hikaru Shida/i, /ZELINA!/i, /rule34/i, /Sasha/i, /lesbian/i, /Penelope Ford/i, /Shotzi/i, /Tegan/i, /Sasha Banks/i, /Sakura/i, /Tessa/i, /Brooke/i, /Jakara/i, 
-	/Scarlett Bordeaux/i, /lesbo/i, /Roxan/i, /B-Fab/i, /Kayden Carter/i, /Katana Chance/i, /Lyra Valkyria/i, /Indi Hartwell/i, /Blair/i, /Davenport/i, /Maxxine Dupri/i, 
-	/Russia/i, /China/i, /Natalya/i, /Lisa Varon/i, /Vilma/i, /Karmen Petrovic/i, /Ava Raine/i, /Yulisa Leon/i, /Cora Jade/i, /Gina Adams/i, /Jacy Jayne/i, /Gigi Dolin/i, 
-	/Thea Hail/i, /Tatum WWE/i, /Fallon/i, /Valentina Feroz/i, /Wilma/i, /wondershare/i, /filmora/i, /Kelani Jordan/i, /Electra Lopez/i, /Wendy Choo/i, /lottapupu/i, 
-	/tiliehdotuksia/i, /linktr.ee/i, /vsco.co/i, /AI\-/i, /-\AI/i, /AI\-suck/i, /AIblow/i, /Suckin/i, /Gina Adam/i, /Henriikka/i, /pride/i, /transve/i, /Lawren/i, /Lawrenc/i, 
-	/Henni/i, /Valtez/i, /Lawrence/i, /Jenn1/i, /J3nn1/i, /J3nni/i, /J3nn4/i, /Jenn4/i, /Dua Lipa/i, /Dualipa/i, /Julianne/i, /Juliane/i, /Juliana/i, /Julianna/i, /Stratu/i, 
-	/jjulia/i, /juuliska/i, /Roxanna/i, /Wilm/i, /Noelle/i, /Kristiina/i, /Reetta/i, /irpp4/i, /juliana/i, /julianna/i, /juulianna/i, /juuliana/i, /juulia/i, /rasikangas/i,  
-	/rasikannas/i, /rasikangas/i, /Ansku/i, /Crowley/i, /Ruby Soho/i, /Monica/i, /Sucks/i, /Sucki/i, /Sucky/i, /AIsuck/i, /motionsw/i, /motionc/i, /poseai/i, /RemovingAI/i, 
-	/blowjob/i, /b\-job/i, /bj0b/i, /Ninajessika/i,  /bl0w/i, /blowj0b/i, /dr0ol/i, /dro0l/i, /bjob/i, /5uck/i, /lex bl/i, /Steph's/i, /Stephanie's/i, /Stepha/i, /Stepan/i, 
-	/Tiffa/i, /Tiffy/i, /katj/i, /lesb/i, /homo/i, /Jenny/i, /transvestite/i, /Jenna/i, /Castillo/i, /Matsumoto/i, /Shino Suzuki/i, /Yamashita/i, /Adriana/i, /Lumiikki/i, 
-	/motionai/i, /Dolly/i, /Aliisa/i, /maarit/i, /taija/i, /saija/i, /seija/i, /tiina/i, /teija/i, /Miska/i, /Saara/i, /Saaru/i, /Lumikki/i, /Laura/i, /Noora/i, /Lumiikki/i, 
-	/Elina/i, /Nooru/i, /Camila/i, /Emilia/i, /Tiinu/i, /Katherin/i, /Janita/i, /Susan/i, /Sirja/i, /Venla/i, /Jenn/i, /Irene/i, /Milana/i, /Milene/i, /Minea/i, /Anette/i, 
-	/Tytti/i, /McQueen/i, /Dolli/i, /Elisa/i, /Elise/i, /Rebecca/i, /Jonna/i, /Janna/i, /Janet/i, /Aleksiina/i, /Alexiina/i, /Maria/i, /Marie/i, /Katja/i, /Minna/i, /Janika/i, 
-	/Janissa/i, /Pauliina/i, /Janisa/i, /Miisa/i, /Kaisa/i, /Pinj/i, /Jemina/i, /Moona/i, /Viivi/i, /Annika/i, /Marissa/i, /Jutta/i, /Amalia/i, /Nelli/i, /Anniina/i, /Marjut/i, 
-	/Siiri/i, /Kamila/i, /Kamilla/i, /Kamilia/i, /Lauren/i, /Camilla/i, /Camilia/i, /Krisse/i, /Miina/i, /Merja/i, /Alina/i, /Mirkku/i, /Irkku/i, /zelina/i, /Aliina/i, /Vilhel/i, 
-	/Sexi/i, /Wilhel/i, /Aurora/i, /Joana/i, /Iiris/i, /minja/i, /Erika/i, /Janina/i, /Kasie Cay/i, /Marie Varon/i, /Takaichi/i, /With Grok/i, /By Grok/i, /heidih/i, /Grok's/i, 
-	/Elon Musk/i, /ElonMusk/i, /Sam Altman/i, /SamAltman/i, /changemotion/i, /swapmotion/i, /Huuska/i, /Sakurai/i, /Lyons/i, /Milena/i, /AI creative/i, /AI created/i, /Tekoäly/i, 
-	/Teko äly/i, /Teko-äly/i, /Teko_äly/i, /generoiva/i, /generoitu/i, /generative/i, /AI create/i, /seksi/i, /anaali/i, /pillu/i, /pimppi/i, /kyrpä/i, /kulli/i, /seksuaali/i,
-	/sexual/i, /Kairi's/i, /Kairii/i, /Sexxy/i, /Sexy/i, /Sexx/i, /@lovable.dev/i, /lovable.dev/i, /maisa/i, /gener/i, /Zerrano/i, /Stratt/i, /Rasikangas/i, /Serrano/i, /Malla/i,
-	/m1ska/i, /m1sk4/i, /Milli/i, /Niina/i, /Jasmin/i, /Saana/i, /Veera/i, /Saya Kamitani/i, /misk4/i, /misk3/i, /m1sk3/i, /m1ske/i, /m1mmuska/i, /misk33waaa/i, /vsco\.co/i,
-	/misk33wa/i, /misk3waa/i, /misk3waaa/i, /miskaawq9/i, /misk3wa/i, /Matilda/i, /Kamitani/i, /Minja/i, /Nikkita/i, /linktr\.ee/i, /misk33waa/i, /Myös Metalta/i, /mallikuva/i,
-	/Sinulle ehdotettua/i, /Sinulle ehdotettu/i, /Suggested for you/i,  /@lovable\.dev/i, /@lovable\.ai/i, /@lovable.ai/i, /lovable.ai/i, /lovable ai/i, /modeling/i, /Kelani/i,
-	/Monroe/i, /Chantel/i, /Zaria/i, /Jaida/i, /Elegance Brand/i, /By Elegance/i, 
-
-	// Regex Hashtags
-	/#perse/i, /#pylly/i, /#tissit/i, /#takapuoli/i, /#takamus/i, /#boobs/i, /#boobies/i, /#boobie/i, /#booty/i, /#butt/i, /#babe/i, /#bestie/i, /#aigen/i, /#aigenerated/i, 
-	/#aigeneration/i, /#artificial/i, /#aiapplication/i, /#aiedit/i, /#rack/i, /#finnishgirl/i, /#girl/i, /#women/i, /#woman/i, /#ladies/i, /#girls/i, /#womens/i, /#womans/i, 
-	/#belfie/i, /#artificialintelligence/i,  /#gym/i, /#gymgirl/i, /#gymwoman/i, /#heru/i, /#heruu/i, /#heruhoro/i, /#slut/i, /#horny/i, /#horni/i, /#bitch/i, /#panties/i,
-	/#pants/i, /#pajama/i, /#pyjama/i, /#bikini/i, /#lingerie/i, /#girly/i, /#girlie/i, /#finnishwoman/i, /#boudoir/i,
-
-
-	/\bCharlotte\b/i, /\bGina\b/i, /\bGin4\b/i, /\bHer\b/i, /\bShe\b/i, /\bHer's\b/i, /\bShe's\b/i, /\bHers\b/i, /\bShes\b/i, /\bAss\b/i, /\bAlexa\b/i, /\bTiffy\b/i, /\bAI\b/i,
-	/\bHepe\b/i, /\bSKADI/i, /\bIris\b/i, /\bMiia\b/i, /\bMira\b/i, /\bTiia\b/i, /\bKara\b/i, /\bEllu\b/i, /\bEeva\b/i, /\bEevi\b/i, /\bEssi\b/i, /\bKira\b/i, /\bSusu\b/i,   
-	/\bNea\b/i, /\bSara\b/i, /\bAnni\b/i, /\bBra\b/i,  /\bNia\b/i, /\bJax\b/i, /\bNikki\b/i,  /\bElla\b/i, /\bElli\b/i, /\bRosa\b/i, /\bMari\b/i, /\bmotion\b/i, /\bDoll\b/i, 
-	/\bOona\b/i, /\bIra\b/i, /\bIrppa\b/i, /\bG1na\b/i, /\bNeea\b/i, /\bG!na\b/i, /\bGigi\b/i, /\bDolin\b/i, /\bSarah\b/i, /\bG1n4\b/i, /\bEmmi\b/i, /\bAI-generated\b/i, 
-	/\bKati\b/i, /\bKiia\b/i, /\bIda\b/i, /\bIida\b/i, /\bAI art\b/i, /\bVera\b/i, /\bLexi\b/i, /\bBy AI\b/i, /\bAI edited\b/i, /\bAI edit\b/i, /\bModel\b/i, /\bSexy\b/i, 
-	/\bSex\b/i, /\bAlexis\b/i, /\bHomo\b/i, /\bGay\b/i, /\bDeep\b/i, /\bFake\b/i, /\bBrie\b/i, /\bGirls\b/i, /\bGirly\b/i, /\bGirlie\b/i, /\bGirl's\b/i, /\bTorres\b/i, 
-	/\bEve WWE\b/i, /\bManna\b/i, /\bNanna\b/i, /\bAava\b/i, /\bAva\b/i, /\bRaine\b/i, /\bGrok\b/i, /\bJensku\b/i, /\bSanna\b/i, /\bHanna\b/i, /\bHenna\b/i, /\bNiina\b/i, 
-	/\bSandra\b/i, /\bMilla\b/i, /\bMirka\b/i, /\bZoey\b/i, /\bViola\b/i, /\bMinka\b/i, /\bRoosa\b/i, /\bPeppi\b/i, /\bEveliina\b/i, /\bJimi\b/i, /\bJulle\b/i, /\bNox\b/i, 
-	/\bLana\b/i, /\bMenni\b/i, /\bGlna\b/i, /\bvsco\b/i, /\bElon\b/i, /\bMusk\b/i,  /\bAltman\b/i, /\bTara\b/i, /\bKairi\b/i, /\bIzzi\b/i,
-
-
-	// Boundaried Regex Hashtags
-	/\b#ass\b/i, /\b#tit\b/i, /\b#tits\b/i, /\b#boob\b/i, /\b#AI\b/i, /\b#Nox\b/i,
-
-];
-
 function publishInstagramKeywordConfigToMainWorld() {
     try {
         const patterns = keywordsToHide.map(regex => ({
@@ -1836,13 +2317,6 @@ function resetKeywordRegexState(regex) {
         if (regex?.global || regex?.sticky) regex.lastIndex = 0;
     } catch {}
 }
-
-// ===== v29.5.5: shared Unicode-aware AI boundaries and exact compact hashtags =====
-// These helpers affect *matching*, not the user's stored/order-preserved regex list.
-// Literal two-word names (including SmackDownHotel slugs) recognize #ChelseaGreen,
-// but never arbitrarily ban #ChelseaGreenland or ordinary Finnish compounds.
-const __ig2955EffectiveRegexCache = new WeakMap();
-const __ig2955HashtagRegexCache = new WeakMap();
 
 function ig2955EffectiveRegex(regex) {
     if (!(regex instanceof RegExp)) return regex;
@@ -1944,72 +2418,6 @@ function addKeywordRegexUnique(regex) {
     }
 }
 
-// String allowed words
-const allowedWords = [
-   "Lähetä", "Viesti", "Lähetä viesti", "Send a message", "Send message", "Send", "message", "Battlefield", "BF", "BF6", "BF1", "BF4", "BF 1942", "BF2", "Battle field", "memes", "masterrace", "#itsevarmuus",
-   "#memes", "meme", "#meme", "Pearl", "Harbor", "Market", "Bro", "Brother", "Metallica", "Sabaton", "Joakim", "James", "Hetfield", "PC", "Build", "Memory", "Ram", "Motherboard", "Mobo", "Cooling", "pcmaster",
-   "AIO", "CPU", "GPU", "Radeon", "GeForce", "GTX", "RTX", "50", "60", "70", "80", "90", "X3D", "50TI", "60TI", "70TI", "80TI", "90TI", "Processor", "Graphics", "Card", "Intel", "AMD", "NVidia", "RGB", "cooler",
-   "#healing", "#heal", "#itsetunto", "😂", "🤣", "😭", "Lisa Su", "Jensen Huang", "Chip", "Android", "Huawei", "Tech", "Patch", "MSI", "Asus", "ROG", "Strix", "TUF", "Suprim", "Gaming", "OSRS", "RS3", "Jagex", 
-   "Old School", "RuneScape",  "Sea Shanty 2", "Sailor's Dream", "Sailing", "Skilling", "Bossing", "Boss", "Mod Ash", "JMod", "Reddit", "Core", "Cores", "3DVCache", "VCache", "Inno3D", "Inno 3D", "Sapphire", "XFX",
-   "Nitro", "Pure", "Asus Prime", "X570", "B550", "B650", "B650E", "X670", "X670E", "B850", "X870", "X870E", "B450", "X470", "B350", "X370", "LGA", "1150", "1151", "1155", "AM4", "AM5", "AM6", "Corsair", "Kingston",
-   "PowerColor", "DDR5", "DDR4", "DDR3", "Computing", "Computer", "AData", "AM3", "AM3+", "AM2", "GSkill", "Memory", "Ram", "Turbo", "Overclock", "Overclocked", "Air cooling", "Radiator", "Pump", "Header", "Water", 
-   "GTA", "Grand Theft Auto", "PlayStation", "PS1", "PS2", "PS3", "PS4", "PS5", "Xbox", "Series", "Pro", "Console", "Sega", "MegaDrive", "Genesis", "Nintendo", "Upgrade", "Room", "Setup", "Christmas", "Wordables",
-   "Wordable", "lifelearnedfeelings", "feel", "feelings", "feeling", "pcmasterrace_official", "pcmasterrace", "pc masterrace", "pc master race", "gaming", "game",
-];
-
-// Instagram accounts to hide
-const instagramAccountsToHide = [
-  'yaonlylivvonce', 'alexa_bliss_wwe_', 'samanthathebomb', 'tiffanywwe', 'beckylynchwwe', 'charlottewwe', 'biancabelairwwe', 'thetrishstratuscom', 'thebriebella', 'thenikkibella', 'niajaxwwe', 'sonyadevillewwe', 
-  'mandysacs', 'natbynature', 'zelinavegawwe', 'carmellawwe', 'itsmebayley', 'sashabankswwe', 'mercedesmone', 'saraya', 'theajmendez', 'livmorganwwe', 'candicelerae', 'indihartwell', 'raquelwwe', 'dakotakaiwwe',
-  'kairi_sane_wwe', 'asuka_wwe', 'meiko_satomura', 'roxanne_wwe', 'pipernivenwwe', 'nikki_cross_wwe', 'jacyjaynewwe', 'gigidxdolinnxt', 'avawwe_', 'blairdavenportwwe', 'lyravalkyria', 'katana_chance', 'serenadeeb', 
-  'kaydenwwe', 'maxxinedupri', 'chelseaagreen', 'fallonhenleywwe', 'karmenpetrovicwwe', 'danabrookewwe', 'valhallawwe', 'laceyevanswwe', 'shotziwwe', 'dejwujs_', 'dejwujs', 'tegan_nox_wwe', 'mia_yim', 'sylviorvokki',
-  'candicewwe', 'emmalution', 'tenille_dashwood', 'lashlegendwwe', 'karabrannbacka', 'julmakira', 'piia_oksanen', 'wiikmaaan', 'taijamaarit', 'riituskavaanhoi', 'heidisofia_agneta', 'nylarosebeast', 'krisstatlander', 
-  'jamiehayter', 'thunderrosa22', 'brittbaker', 'thepenelopeford', 'sylviliukkonen',  'willowwrestles', 'skye_by_wrestling', 'redvelvett', 'anna_jay_aew', 'tayconti_', 'tayconti', 'taymelo', 'heidika', 'heidik', 
-  'heidih', 'heidit', 'grok', 'erikavikman', 'erika.helin', 'hikaru_shida', 'jjuliakristiina_', 'mafiaprinsessa', 'riho_ringstar', 'gailkimitsme', 'deonnapurrazzo', 'jordynnegrace', 'mickiejames', 'trinity_fatu',
-  'm1mmuska', 'mimmi', 'juliaerikaaz', 'dvondivawwe', 'suyung', 'madisonraynewrestling', 'katariinapohjoiskangas', 'angelinalove', 'velvet_sky', 'brookeadams', 'tessblanchard', 'thetayavalkyrie', 'havokdeathmachine', 
-  'killerkellywrestling', 'kierahogan', 'diamante_lax', 'ladyfrost', 'taryn_terrell', 'rebeltanea', 'martimichellewwe', 'jaderedeww',  'alishawrestling', 'savannah_evanswrestling', 'jazzygabert', 'masha_slamovich', 
-  'paigewwe', 'kayfabe_kayla', 'roxanne_perez', 'cora.jade', 'piia_barlund', 'lottapupu', 'giuliawrestler', 'starkz_wrestler', 'thedollhousewrestling', 'holidead', 'tessafblanchard', 'thealliebunny', 'taya_valkyrie',
-  'thedemonbunny', 'rhearipley_wwe', 'rosemarythehive', 'siennawrestling', 'madisonrayne', 'kimber_lee90', 'kiera_hogan', 'diamantelax', 'realtenille', 'stephaniemcmahon', 'stephanie_buttermore', 'stephanie.vaquer', 
-  'julianarasikannas', 'wiltsuboe', 'emiliaaq96', 'wwe_asuka', 'kairi_sane_wwe', 'wwe_mandyrose', 'stephaniesanzo', 'shaqwrestling', 'jadecargill', 'emimatsumoto', 'yukisakazaki', 'gina.adams', 'mizuki_wrestler',
-  'miskaawq9', 'misk33', 'misk33waaa', 'misk33waa', 'misk33wa', 'misk3waa', 'misk3waaa', 'misk3wa', 'misk4', 'misaaqw', 'lovable.dev', 'lovable', 'lovable.ai', 'izzi_wwe', 'chantelmonroe',
-
-  // v29.5.5 wrestling-account expansion: exact published handles only (no guessed variants).
-  'kelani_wwe', // NXT: handle specifically referenced in wwenxt caption.
-  // WWE / NXT / WWE alumni (published handle directories)
-  'brie', 'trishstratuscom', 'rondarousey', 'natalieevamarie', 'thebarbieblank', 'carleebrightwwe', 'corajadewwe',
-  'elaynablack', 'thefoxxyone', 'aliyahwwe', 'madusa_rocks', 'shadiabseiso', 'brandilauren_', 'beapriestley96',
-  'nikkitalyons',
-
-  // AEW / ROH (2026 published profiles)
-  'reneepaquette', 'realbrittbaker', 'annajay____', 'danni_ellexo', 'marinashafir', 'themeganbayne', 'miss_leilagrey',
-  'lena_kross', 'hailwindsor', 'itsmayaworldd', 'thehyan', 'tonistorm_', 'realrubysoho', 'lexynair',
-  'riho_gtmv',
-
-  // TNA Knockouts (2026 verified Instagram tags and published directory)
-  'xiabrookside', 'zoey_serrano', 'qosbaszler', 'the_gnomie', 'harleyhudsonx', 'doublexdiva', 'allieimpact',
-
-  // STARDOM / NJPW-affiliated women (published Japanese Instagram directory)
-  'stardom_azm', 'miyu_stardom', 'saya_iida_5_19', 'iwatanimayu', 'unapiiiiiii', 'kashima_saki_1', 'sayasayadesuyo',
-  'momokohgo', 'maisakurai914', 'syuri_official', '0221giulia', 'mina_shirakawa', 'stardom_starlightkid', 'aaamintan',
-  'waka_tsukiyama', 'toxic_thekla', 'stardom_natsuko', 'tam_nakano', 'natsumi_poi', '_hazuki_0929_', 'u_t_m_0914',
-  'stardom_hanan', '5_hmk_28', 'maika_0324', 'mirai_ss_', 'rina.kh8730', 'ruaka__stardom', 'ladyc_stardom',
-  'stardom_momo', 'hina.qq.007', 'k_o_nami',
-
-  // TJPW / Japanese independent women (published Instagram directories)
-  'tenmaino', 'araiyuki57', 'makifuckingitoh', '_marupon427', 'yuki_kamifuku', 'mahiro_tjpw', 'yuka_sakazaki_ayayayay',
-  'suzume_tjpw', 'nk147cm', 'juria_210', 'neco_tjpw_', 'uug_p_hikari', 'misao_tjp', 'pompompom327',
-  'mizupyon3', 'miyu.yamashita', 'raku_uugp', 'uug_p_miu', 'tsukina.umino', 'totochan326', 'tsukka0730official',
-  'hoshihamuko', 'kahoooo._.31', 'ohkayumi', 'nagisa_nozaki', 'kiyukizayami', 'co_ha_ku', 'mikikofutagami',
-  'manami.senjo', 'mika0610senjo', 'yurika1023_23', 'dashchisako', 'heidikatrinaa', 'chihero71', 'saki__akai',
-  'yoppy228', 'haruka_katou', 'yunamanase', 'yuuri_916', 'mayumi.ozaki.5203', 'kato_sonoko', 'tydachu',
-  'akari_wrestler', 'crea0518_purej',
-
-  // Additional published women wrestling accounts (historical directories)
-  'aerial_monroe', 'aja_perera', 'alexxiaanicole', 'alexleesekai', 'b000giebear', 'theeallieparker', 'allierecks',
-  'cjfitlv', 'germanwrestling', 'fit_winchester',
-
-];
-
 publishInstagramAllowedConfigToMainWorld();
 publishInstagramAccountConfigToMainWorld();
 
@@ -2057,9 +2465,6 @@ loadDynamicWrestlingData();
 // ===================================
 
 const instagramBannedPathsLower = instagramBannedPaths.map(p => p.toLowerCase());
-const allowedWordsLower = allowedWords.map(w => w.toLowerCase());
-const instagramAccountsToHideLower = instagramAccountsToHide.map(a => a.toLowerCase());
-const instagramAccountsSet = new Set(instagramAccountsToHideLower);
 
 const approvedPostIDs = new Set(); 
 const scannedPostsCache = new Map(); 

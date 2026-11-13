@@ -1,6 +1,477 @@
 (function () {
     'use strict';
 
+    // SHARED Reddit + Arctic Shift matching rules. One list, no duplicated
+    // keyword definitions and no alternate AI-term exceptions.
+    const redgifsKeyword = "www.redgifs.com";
+
+
+    const adultSubreddits = [
+        "r/fat_fetish", "r/ratemyboobs", "r/chubby", "r/jumalattaretPro", "r/AlexaBliss", "r/AlexaPearl", "r/comfyui", "r/grok", "r/artificialintelligence", "r/AI", "r/WrestlingBotches"
+    ];
+
+
+    const regexKeywordsToHide = [
+        /deepn/i, /deepf/i, /deeph/i, /deeps/i, /deepm/i, /deepb/i, /deept/i, /deepa/i, /nudi/i, /nude/i, /nude app/i, /undre/i, /dress/i, /deepnude/i, /face swap/i, 
+	/Alexa/i, /Blis/i, /Keibler/i, /morph/i, /inpaint/i, /art intel/i, /safari/i, /Opera Browser/i, /Mozilla/i, /Firefox/i, /Firefux/i, /soulgen/i, /ismartta/i,
+	/image enhancing/i, /Stacy/i, /Staci/i, /tush/i, /lex bl/i, /image ai/i, /edit ai/i, /deviant/i, /Lex Cabr/i, /Lex Carb/i, /Lex Kauf/i, /Lex Man/i, /photo AI/i, 
+	/nudecrawler/i, /pict AI/i, /Del Ray/i, /enhanced image/i, /AI edit/i, /faceswap/i, /DeepSeek/i, /deepnude ai/i, /deepnude-ai/i, /object/i, /Opera GX/i, /Perez/i, 
+	/unc1oth/i, /Mickie/i, /Micky/i, /Brows/i, /pics app/i, /ed17/i, /Lana Perry/i, /Del Rey/i, /uncloth/i, /decloth/i, /rem cloth/i, /del cloth/i, /eras cloth/i, 
+	/La Premare/i, /GenHey/i, /arxiv/i, /Bella/i, /Tiffy/i, /CJ Lana/i, /Tiffa/i, /Strat/i, /Perze/i, /Brave/i, /Roxan/i, /Browser/i, /Selain/i, /Brit Bake/i, /vega/i, 
+	/TOR-Selain/i, /3dit/i, /ed1t/i, /Liv org/i, /off pant/i, /rem pant/i, /del pant/i, /eras pant/i, /editing/i, /3d1t/i, /3d!7/i, /nofap/i, /TOR-browser/i, /Feikki/i, 
+	/MS Edge/i, /AI Tool/i, /aitool/i, /Valtez/i, /Chelsey/i, /Zel Veg/i, /Ch3l/i, /Chel5/i, /Steph/i, /St3ph/i, /editation/i, /penetration/i, /Paig3/i, /P4ige/i, /pa1g/i, 
+	/pa!g/i, /palg3/i, /palge/i, /Br1tt/i, /Br!tt/i, /Brltt/i, /Lana Del Rey/i, /\bLana\b/i, /image app/i, /edi7/i, /syvavaarennos/i, /boy friend/i, /pic app/i, /Opera/i,  
+	/Diipfeikki/i, /Diipfeik/i, /deep feik/i, /deepfeik/i, /Diip feik/i, /Diip feikki/i, /syva vaarennos/i, /syvä vaarennos/i, /picture app/i, /edit app/i, /photo app/i, 
+	/P4IG3/i, /syvävääre/i, /uncensor app/i, /clothes remover/i, /AI unblur/i, /deblur/i, /nsfwgen/i, /nsfw gen/i, /image enhancer/i, /skin view/i, /erotic/i, /AI fantasy/i, 
+	/Fantasy AI/i, /fantasy edit/i, /AI recreation/i, /synth/i, /Zendaya/i, /Doja Cat/i, /Madelyn/i, /Salma Hayek/i, /Megan Fox/i, /Addison/i, /Emma Watson/i, /photo trick/i,
+	/Nicki/i, /Minaj/i, /Taylor/i,  /next-gen face/i, /smooth body/i, /photo trick/i, /edit for fun/i, /realistic AI/i, /Derriere/i, /Stratusfaction/i, /face plus/i, /lexi/i,
+	/homo/i, /transu/i, /5yvä/i, /face\+/i, /face+/i, /face\-/i, /bg remover/i, /Elayna/i, /Eleyna/i, /Eliyna/i, /Elina Black/i, /Elena Black/i, /Elyna Black/i, /Elyina/i, 
+	/Elina/i, /Elyna/i, /Aikusviihde/i, /Aikus viihde/i, /La Primare/i, /Fantop/i, /Fan top/i, /Fan-top/i, /Topfan/i, /Top fan/i, /Top-fan/i, /Top-fans/i, /fanstopia/i, /Jenni/i, 
+	/fans top/i, /topiafan/i, /topia fan/i, /topia-fan/i, /topifan/i, /topi fan/i, /twat/i, /topi-fan/i, /topaifan/i, /topai fan/i, /topai-fan/i, /fans-topia/i, /fans-topai/i, 
+	/softorbit/i, /softorbits/i, /VMWare/i, /soft-orbit/i, /soft-orbits/i, /VM Ware/i, /Virtual Machine/i, /Virtualbox/i, /Virtual box/i, /Virtual laatikko/i, /hypervisor/i, 
+	/Virtuaali laatikko/i, /Virtuaalilaatikko/i, /hyper v/i, /hyperv/i, /virtuaalimasiini/i, /virtuaali masiini/i, /virtuaali workstation/i, /virtual workstation/i, /\*/i,
+	/virtualworkstation/i, /virtuaaliworkstation/i, /hyper-v/i, /hyper visor/i,  /vbox/i, /virbox/i, /virtbox/i, /vir box/i, /virt box/i, /vrbox/i, /vibox/i, /virbox virtual/i, 
+	/virtbox virtual/i, /vibox virtual/i, /vbox virtual/i, /Cathy/i,  /virtmachine/i, /vmachine/i, /v machine/i, /vimachine/i, /vi-machine/i, /vi machine/i, /virmachine/i, 
+	/vir-machine/i, /vir machine/i, /virt machine/i, /v-machine/i, /Kathy/i, /virt-machine/i, /virtumachine/i, /vir mach/i, /virtu-machine/i, /virtu machine/i, /virtuamachine/i, 
+	/virtua-machine/i, /virtua machine/i, /vi mach/i, /virtual machi/i, /virtuaali masiina/i, /virt mach/i, /virtu mach/i, /virtua mach/i, /virtual mach/i, /vi mac/i, /vir mac/i, 
+	/virt mac/i, /virtu mac/i, /virtua mac/i, /virtuaalimasiina/i, /Katherine/i, /Kazuki/i, /Yoshiko/i, /Yoshihiko/i, /Hirata/i, /birppis/i, /irpp4/i, /b1rppis/i, /birpp1s/i, 
+	/b1rpp1s/i, /comfyui/i, /Lily Adam/i, /Lilly Adam/i, /Dualipa/i, /comfy ui/i, /comfy ai/i, /comfyai/i, /comfy-ui/i, /comfy-ai/i, /Becky/i, /Becki/i, /Rebecca/i, /Amber Heard/i, 
+	/mid journey/i, /unstable diffusion/i, /Dua Lipa/i, /Jasmin/i, /ElonMusk/i, /stablediffused/i, /Hirada/i, /Mizubi/i, /Mizupi/i, /Mizuki/i, /Watanabe/i, /Watanaba/i, /Wakana/i, 
+	/Kana Urai/i, /Uehara/i, /Sherilyn/i, /jazmyn/i, /Jazmin/i, /Jasmyn/i, /Primera/i, /Julianne/i, /Juliane/i, /Juliana/i, /Julianna/i, /rasikangas/i, /rasikannas/i, /cargil/i, 
+	/cargirl/i, /Lisa Varon/i, /Elon Musk/i, /Marie Varon/i, /gargirl/i, /garcirl/i, /barlow/i, /Nikki/i, /HeyGen/i, /cargril/i, /Saya Kamitani/i, /Kamitani/i, /Katie/i, /Nikkita/i, 
+	/Nikkita Lyons/i, /Lisa Marie/i, /Lisa Marie Varon/i, /gargril/i, /Takaichi/i, /Sakurai/i, /Arrivederci/i, /Alice/i, /Alicy/i, /Alici/i, /headgen/i, /head gen/i, /genhead/i, 
+	/Arisu Endo/i, /Crowley/i, /Ruby Soho/i, /Monica/i, /Castillo/i, /Matsumoto/i, /Shino Suzuki/i, /Yamashita/i, /Adriana/i, /Nia Jax/i, /McQueen/i, /Kasie Cay/i, /Mafiaprinsessa/i, 
+	/mangoanimat/i, /photo jiggle/i, /animat pic/i, /animat pho/i, /ai-app/i, /animat ima/i, /animat img/i, /pic animat/i, /pho animat/i, /ai twerk/i, /twerk ai/i, /img animat/i, 
+	/ima animat/i, /photo animat/i, /image animat/i, /make pic mov/i, /make pho mov/i, /make img mov/i, /make ima mov/i, /gif pic/i, /gif pho/i, /gif img/i, /gif ima/i, /photo to gif/i, 
+	/image to gif/i, /pic to gif/i, /pic to vid/i, /photo to video/i, /image to video/i, /ph0t/i, /pho7/i, /ph07/i, /1m4g/i, /im4g/i, /!mag/i, /!m4g/i, /!mg/i, /v1d3/i, /vid3/i, /v1de/i, 
+	/vld3/i, /g!f/i, /mangoai/i, /mangoapp/i, /mango-app/i, /mangoanim/i, /mango anim/i, /mango-anim/i, /lantaai/i, /lantaaa/i, /motionai/i, /changemotion/i, /swapmotion/i, /motionsw/i, 
+	/motionc/i, /poseAI/i, /AI-/i, /-AI/i, /AIblow/i, /5uck/i, /AIsuck/i, /AI-suck/i, /drool/i, /RemovingAI/i, /bj0b/i, /BJAI/i, /BJ-AI/i, /MouthAI/i, /MouthinAI/i, /MouthingAI/i, 
+	/AIMouth/i, /BlowAI/i, /BlowsAI/i, /BlowingAI/i, /JobAI/i, /AIJob/i, /ZuckCock/i, /ZuckC/i, /AroundHer/i, /ZuckP/i, /Zuckz/i, /Zucks/i, /Zuzkc/i, /YouZuck/i, /ZuckYou/i, /AIZuck/i, 
+	/ZuckAI/i, /M0u7h/i, /ZuckD/i, /AISucc/i, /SuccAI/i, /FapAI/i, /HerAi/i, /AiHer/i, /SheAi/i, /AIShe/i, /AroundAI/i, /AIFap/i, /AIHug/i, /HugAI/i, /AIOut/i, /AIAdult/i, /AIContent/i, 
+	/AdultAI/i, /ContentAI/i, /AIMake/i, /AICreate/i, /CreateAI/i, /AICreating/i, /CreatingAI/i, /AICreation/i, /CreationAI/i, /MakeAI/i, /AIMaking/i, /MakingAI/i, /OutAI/i, /t0ol/i, 
+	/AIStuff/i, /StuffAI/i, /to0l/i, /t00l/i, /70ol/i, /7o0l/i, /700l/i, /FindAI/i, /FinderAI/i, /FindingAI/i, /AIFind/i, /DirectoryAI/i, /AIDirect/i, /AILook/i, /LookAI/i, /LooksAI/i, 
+	/LookupAI/i, /Look-upAI/i, /LookingUpAI/i, /UpLookAI/i, /AIUpLook/i, /ButtAPP/i, /DrawingsAI/i, /AIAPP/i, /AssAI/i, /AIAss/i, /AssAPP/i, /AppAss/i, /BoobysAI/i, /AITit/i, /TitAI/i, 
+	/BoobiesAI/i, /TitsAI/i, /AIBoob/i, /BoobAI/i, /BoobsAI/i, /BoobieAI/i, /BoobyAI/i, /APPAI/i, /AISketch/i, /SketchAI/i, /AIDraw/i, /AIDrew/i, /DrawAI/i, /DrewAI/i, /DrawsAI/i, 
+	/DrawingAI/i, /PaintingAI/i, /PaintingsAI/i, /PaintAI/i, /depn/i, /d3pn/i, /deppn/i, /depenu/i, /depeni/i, /d3ppn/i, /d3penu/i, /d3p3nu/i, /dep3nu/i, /d3peni/i, /d3p3ni/i, /d3p3n1/i, 
+	/d3p3n!/i, /dep3n1/i, /dep3n!/i, /d3pen1/i, /d3pen!/i, /p05/i, /po5/i, /p0s/i, /postur/i, /iconicto/i, /diepn/i, /artif/i, /artin/i, /-tool/i, /deipn/i, /Claude/i, /Anthropic/i,
+	/Grok-AI/i, /TwitterAI/i, /Anthr/i, /Antro/i, /s0ftw/i, /softw/i, /w4re/i, /war3/i, /w4r3/i, /p41n/i, /pa1n/i, /p4in/i, /ndif/i, /ndfy/i, /bliswwe/i, /nd!f/i, /ndlf/i, /Kairi/i, 
+	/vaat.*pois/i, /vaatteet pois/i,/edgye/i, /bl15s/i, /bl1s5/i, /bl155/i, /bl1ss/i, /bli55/i, /anusaukko/i, /anus-aukko/i, /anus aukko/i, /pers aukko/i, /nd1f/i, /Redmond/i, /Jackie/i, 
+	/Kiana/i,  /Jiana/i, /Kairi Sane/i, /Kairi's/i, /Kairii/i, /Kendal Grey/i, /Kayla/i, /Braxton/i, /alex4/i, /Samantha/i, /Samantha Irvin/i, /Samantha Irwin/i, /4lexa/i, /al3xa/i, 
+	/alex4/i, /4l3xa/i, /al3x4/i, /4l3x4/i, /4lex4/i, /blis5/i, /bli5s/i, /artintel/i, /artifi intel/i, /ardrob/i, /wardrobe/i, /robe malfunc/i, /ring gear malfunc/i, /ring malfunc/i, 
+	/solrvca/i, /billieeilish/i, /billie eilish/i, /ivynile/i, /Ivy Nile/, /UnderRatedLadies/i, /Ivy+Nile/i, /SkylarRaye/i, /Serrano/i, /Zerrano/i, /windsor/i, /winds0r/i, /w1nds0r/i, 
+	/w1ndsor/i, /Vince Russo/i, /Xia Li/i, /Dave Meltzer/i, /nudify/i, /nudifier/i, /nudifying/i, /Jessika Carr/i, /undressify/i, /getdisciplined/i, /Toni Storm/i, /Britt Baker/i, 
+	/Skye Blue/i, /Carmella/i, /Mariah May/i, /Harley/i, /Hayter/i, /Cameron/i, /Ripley/i, /Rhea Ripley/i, /Blake/i, /transv/i, /transvestite/i, /queer/i, /undressing/i, /undressifying/i, 
+	/LGBTQ/i, /Pride/i, /Jessica Carr/i, /Jessika Karr/i, /Jessika/i, /Jessica Karr/i, /camgirl/i, /onlyfans/i, /Jessica WWE/i, /Tiffany Stratton/i, /Lillian/i, /Garcia/i, /Jordynne/i, 
+	/Trish/i, /Stratus/i, /DeepSeek AI/i, /ai app/i, /nudyi/i, /fantime/i, /fansly/i, /justforfans/i, /patreon/i, /CJ Perry/i, /manyvids/i, /chaturbate/i, /myfreecams/i, /stripchat/i,
+	/camsoda/i, /bongacams/i, /Mandy Rose/i, /Chelsea Green/i, /Liv Xoxo/i, /livejasmin/i, /Chelsea/i, /Piper Niven/i, /Hardwell/i, /5 feet of fury/i, /bliss/i, /alexa bliss/i, /venice/i, 
+	/Morgan Xoxo/i, /Tiffy time/i, /Stratton/i, /Tiffany/i, /Zelina/i, /Zelina Vega/i, /Valhalla/i, /Sportskeeda/i, /IYO SKY/i, /Io Shirai/i, /Iyo Shirai/i, /IO SKY/i, /Asuka/i, /Meiko/i, 
+	/Dakota Kai/i, /Satomura/i, /Kelly Kelly/i, /Dynamite/i, /Shayna Baszler/i, /Ronda Rousey/i, /Dana Brooke/i, /Alicia Fox/i, /Summer Rae/i, /Microsoft Edge/i, /jizzed/i, /Torrie/i, 
+	/Sasha/i, /Layla/i, /Michelle McCool/i, /Eve Torres/i, /Melina/i, /Melina wrestler/i, /Jillian Hall/i, /five feet of fury/i, /raepd/i, /Wilson/i, /Mickie James/i, /Maria/i, /Kanellis/i, 
+	/Beth Phoenix/i, /Victoria/i, /Molly Holly/i, /Gail Kim/i, /Awesome Kong/i, /Rampaige/i, /Madison Rayne/i, /Velvet Sky/i, /Jamie Hayter/i, /Saraya/i, /filmora/i, /wondershare/i, /Havok/i, 
+	/Tessmacher/i, /Su Yung/i, /Miko Satomura/i, /Mercedes/i, /Valkyrie/i, /Deonna/i, /Purrazzo/i, /Vaquer/i, /Vaqueer/i, /Vaguer/i, /Vagueer/i, /Tamina/i, /Anna Jay/i, /Tay Conti/i, /No nut/i,
+	/Tay Melo/i, /Nightingale/i, /Statlander/i, /Hikaru Shida/i, /Tessa/i, /Sakazaki/i, /Nyla Rose/i, /Emi Sakura/i, /Fatal Influence/i, /Aubert/i, /Brooke/i, /Hikaru/i, /aivideo/i, /Penelope/i, 
+	/Roxanne/i, /Shotzi/i, /Blackheart/i, /Tegan/i, /Charlotte/i, /Kamifuku/i, /Sarray/i, /OperaGX/i, /Sky Wrestling/i, /Becky Lynch/i, /Bayley/i, /Bailey/i, /Giulia/i, /Michin/i, /nofap/i, 
+	/Mia Yim/i, /AJ Lee/i, /Paige/i, /Bianca/i, /Belair/i,  /Liv Morgan/i, /stephanie/i, /Thekla/i, /Jordynne Grace/i, /NXT Womens/i, /Alicia/i, /Atout/i, /NXT Women/i, /NXT Woman/i, /Aubrey/i, 
+	/Edwards/i, /Renee/i, /Maryse/i, /Sasha Banks/i, /Jackson/i, /Jakara/i,  /Lash Legend/i, /Izzi Dame/i, /Alba Fyre/i, /Isla Dawn/i, /Sydney/i, /Gina Adams/i, /Kelly2/i, /Russo/i, /Scarlett/i, 
+	/Raquel Rodriguez/i, /Bordeaux/i, /Kayden/i, /Katana Chance/i,  /Carter/i, /Valkyria/i, /Tamina Snuka/i, /Renee Young/i, /Priscilla/i, /Cathalina/i, /Roxanne Perez/i, /Indi Hartwell/i, 
+	/Hartwell/i, /Karmen/i, /Davenport/i, /wonder share/i, /Lola Vice/i, /Maxxine Dupri/i, /Karmen Petrovic/i, /Brittany/i, /Renee Paquette/i, /Ava Raine/i, /Cora Jade/i, /Jacy Jayne/i, 
+	/Gigi Dolin/i, /Thea Hail/i, /Tatum/i, /Paxley/i, /Fallon Henley/i, /Sky wrestle/i, /Kelani Jordan/i, /Blair/i, /venoisi/i, /Electra/i, /Wendy Choo/i, /Yulisa/i, /Valentina/i, /Valentine/i, 
+	/Amari Miller/i, /venoise/i, /AlexaBliss/i, /Sol Ruca/i, /AlexaPearl/i, /Arianna/i, /Natalya/i, /Nattie/i, /Diffusion/i, /StableDiffusion/i, /UnStableDiffusion/i, /Dreambooth/i, /Dream booth/i, 
+	/AI generated/i, /AI-generated/i, /generated/i, /machine learning/i, /artificial intelligence/i, /AI girl/i, /neural network/i, /deep learning/i, /Naomi/i, /Jazmyn Nyx/i, /stable diffusion/i, 
+	/artificial/i, /synthetic/i, /computer generated/i, /algorithm/i, /Angelina/i, /automated/i, /editor/i, /text to image/i, /image enhanced/i, /Answers BETA/i, /ai video/i, /Belts Mone/i, /Shir/i,
+	/Irving/i, /Amanda Huber/i, /Ivy Nile/i, /kawa/i, /perver/i, /Mariah/i, /Kairi/i,
+
+
+   // Boundaried Regexes
+    	/\bAmber\b/i, /\bAlexa\b/i, /\bAleksa\b/i, /\blexi\b/i, /\bButt\b/i, /\bsexy\b/i, /\bKarr\b/i, /\bMina\b/i, /\bTisu\b/i, /\bTisut\b/i, /\bRinnat\b/i, /\bXoxo\b/i, /\bLGBT\b/i, /\bJazz\b/i, /\bKaina\b/i, 
+	/\bZoey\b/i, /\bKairi\b/i, /\bxAI\b/i,/\b50ft\b/i, /\bVidu\b/i, /\bJade\b/i, /\bmotion\b/i, /\bMachaine\b/i, /\bNyx\b/i, /\bMachiine\b/i, /\bLily\b/i, /\bMacheine\b/i, /\bLili\b/i, /\bAnt\b/i, /\bAva\b/i, 
+	/\bNox\b/i, /\bFuku\b/i, /\bAnswers BETA\b/i, /\bCarr\b/i, /\bTaya\b/i, /\bMachiene\b/i, /\bcam4\b/i, /\bGrok\b/i, /\bVM\b/i, /\bVMs\b/i, /\bTegan\b/i, /\bS0ft\b/i, /\bVMs\b/i, /\bRape\b/i, /\bEmma\b/i, 
+	/\bNiven\b/i,  /\bB-Fab\b/i, /\bB-Fab\b/i, /\bVM\b/i, /\bJaida\b/i, /\bSeksi\b/i, /\bRiho\b/i, /\bIzzi\b/i, /\bbra\b/i, /\bSlut\b/i, /\bTor\b/i,  /\bAi\b/i, /\bADM\b/i, /\bAis\b/i, /\b-Ai\b/i, /\bLita\b/i,
+	/\bJaida\b/i, /\bedit\b/i, /\bADMX\b/i, /\bSol\b/i, /\bAi-\b/i, /\bGina\b/i, /\bLiv\b/i, /\bDame\b/i, /\bTay\b/i, /\bIndi\b/i,
+
+
+   // Nuclear/special regexes
+/gr[a4][i1l]n(?:[\s_\-\/.]{0,3}(?:re(?:mov(?:e|al|ing)?|m)|(?:delet(?:e|ing|ion)?|del)|eras(?:e|ing)?|(?:ph(?:o|0)?t(?:o|0)?|pic(?:t(?:ure|ures)?)?|image|img)))|(?:re(?:mov(?:e|al|ing)?|m)|(?:delet(?:e|ing|ion)?|del)|eras(?:e|ing)?|fix|denois(?:e|er|ing)?)(?:[\s_\-\/.]{0,3}(?:ph(?:o|0)?t(?:o|0)?|pic(?:t(?:ure|ures)?)?|image|img))?(?:[\s_\-\/.]{0,3}gr[a4][i1l]n)|gr[a4][i1l]n(?:[\s_\-\/.]{0,3}(?:ph(?:o|0)?t(?:o|0)?|pic|image|img))|(?:ph(?:o|0)?t(?:o|0)?|pic|image|img)(?:[\s_\-\/.]{0,3}fix)/i, /lex.*bl/i, /liv.*morgan/i, /saad.*pipar/i, /s4ad.*pipar/i, /s44d.*pipar/i, /sa4d.*pipar/i, /rint.*pois/i, /dress.*remov/i,
+        /(?:n(?:o|0)ise(?:[\s_\-\/.]{0,3}(?:re(?:mov(?:e|al|ing)?|m|duc(?:e|ed|ing|tion)?)|(?:delet(?:e|ing|ion)?|del)|eras(?:e|ing)?|fix|filter(?:ing)?))|(?:re(?:mov(?:e|al|ing)?|m|duc(?:e|ed|ing|tion)?)|(?:delet(?:e|ing|ion)?|del)|eras(?:e|ing)?|fix|filter(?:ing)?)(?:[\s_\-\/.]{0,3})n(?:o|0)ise|de[\s_\-\.]?n(?:o|0)is(?:e|er|ing)?)/i, /make.*(move|gif|video)/i, /photo.*(move|gif|video)/i, /image.*(move|gif|video)/i, /pic.*(move|gif|video)/i, /img.*(move|gif|video)/i, /booty/i, /ass.*(animat|ai|move)/i, /twerk/i, /twerking/i, /jiggle/i, /bounce.*(ai|gif)/i, /booty.*(ai|gif|video|animat)/i, /ass.*(ai|gif|video|animat)/i, /undress/i, /strip.*ai/i, /nude.*ai/i, /clothes.*remove/i, /remove.*(clothes|clothing|dress)/i, /face.*(swap|deepfake|replace)/i, /hous.*pois/i, /pait.*pois/i, /liiv.*pois/i, /alushous.*pois/i, /alkkarit.*pois/i, /alusvaat.*pois/i, /clothing.*remove/i, /\bra\*e\b/i,/\br\*pe\b/i, /\*ape/i, /rap\*/i, /0rga\$m/i,
+/alexa.*(wwe|wrest|ras|NXT|pro)/i, /blis.*(wwe|wrest|ras|NXT|pro)/i, /lexa.*(wwe|wrest|ras|NXT|pro)/i, /lexi.*(wwe|wrest|ras|NXT|pro)/i, /bils.*(wwe|wrest|ras|NXT|pro)/i, /lex.*(kauf|cabr|carb)/i, /model.*(mach|langu)/i, /robe.*(wwe|tna|aew|njpw|wrestl|rasll|rasslin)/i,
+/robe.*(malf|func)/i, /ring gear|trunk|pant|shirt|jacket.*(malf|func)/i, /malfunc.*(wwe|tna|aew|njpw|wrestl|rasll|rasslin|ring)/i, /(?:poista|poisto|poistaminen)[ -]?(?:vaatteet|vaatteiden)/i,  /\|\s*\|/i, /\(o\)\(o\)/i, /\(!\)/i, /see[- ]?through/i, /AI[ -]?generated/i, /generated[ -]?by[ -]?AI/i, /artificial[ -]?intelligence/i, /machine[ -]?learning/i, /neural[ -]?network/i, /deep[ -]?learning/i, /midjourney/i, /dall[ -]?e/i, /stable[ -]?diffusion/i, /computer[ -]?generated/i, /text[ -]?to[ -]?image/i, /image[ -]?generation/i, /AI[ -]?art/i, /synthetic[ -]?media/i, /algorithmically/i, /bot[ -]?generated/i, /automated[ -]?content/i,
+
+    ];
+
+
+    // v29.5.0: One authoritative regex list, with a compiled fast lane for simple
+    // literals. Complex regexes (boundaries, lookarounds, wildcards, etc.) are
+    // executed unchanged; no keywords are removed or given different semantics.
+    // Rebuild when the existing dynamic wrestler-name feature extends the list.
+    let redditCompiledRegexCountV295 = -1;
+    let redditLiteralRegexGroupsV295 = [];
+    let redditComplexRegexesV295 = [];
+
+    function rebuildRedditRegexMatcherV295() {
+        const literals = [];
+        const complex = [];
+        for (const expression of regexKeywordsToHide) {
+            // Only combine pure, case-insensitive literal RegExp sources. Do not
+            // reinterpret regex syntax, flags or matching order within a pattern.
+            if (expression instanceof RegExp && expression.flags === 'i' &&
+                !/[.*+?^${}()|[\]\\]/.test(expression.source)) {
+                literals.push(expression.source);
+            } else {
+                complex.push(expression);
+            }
+        }
+        const groups = [];
+        // Small alternation groups avoid an excessively large compiled regex.
+        for (let i = 0; i < literals.length; i += 96) {
+            groups.push(new RegExp('(?:' + literals.slice(i, i + 96).join('|') + ')', 'i'));
+        }
+        redditLiteralRegexGroupsV295 = groups;
+        redditComplexRegexesV295 = complex;
+        redditCompiledRegexCountV295 = regexKeywordsToHide.length;
+    }
+
+    function isBlockedByRedditRegexesV295(text) {
+        if (!text) return false;
+        if (redditCompiledRegexCountV295 !== regexKeywordsToHide.length) {
+            rebuildRedditRegexMatcherV295();
+        }
+        for (const group of redditLiteralRegexGroupsV295) {
+            if (group.test(text)) return true;
+        }
+        for (const expression of redditComplexRegexesV295) {
+            if (expression.test(text)) return true;
+        }
+        return false;
+    }
+
+    function isSafeAcronymSuffix(word) {
+        const safeAiWords = ['samurai', 'bonsai', 'mumbai', 'thai', 'dubai', 'shanghai', 'hawaii', 'chai', 'sinai', 'kawaii'];
+        for (let i=0; i<safeAiWords.length; i++) {
+            if (word.endsWith(safeAiWords[i])) return true;
+        }
+        return false;
+    }
+
+    function isSearchTextBanned(text) {
+        if (!text) return false;
+        const lowerText = text.toLowerCase();
+        const strippedText = lowerText.replace(/[^a-zäöå\s]/g, ' ').replace(/\s+/g, ' ').trim();
+        
+        const textVariants = [lowerText, strippedText];
+
+        for (let t = 0; t < textVariants.length; t++) {
+            const textToTest = textVariants[t];
+            if (!textToTest) continue;
+            
+
+            for (let i = 0; i < adultSubreddits.length; i++) {
+                if (textToTest.includes(adultSubreddits[i].toLowerCase().replace('r/', ''))) return true;
+            }
+
+            if (textToTest.includes(redgifsKeyword.toLowerCase())) return true;
+
+            if (isBlockedByRedditRegexesV295(textToTest)) return true;
+            
+            const words = textToTest.split(/\s+/);
+            const exactMatches = ['ai', 'llm', 'mlm'];
+            for (let w = 0; w < words.length; w++) {
+                const word = words[w];
+                if (!word) continue;
+                
+                for (let a = 0; a < exactMatches.length; a++) {
+                    const ac = exactMatches[a];
+                    if (word === ac || (word.endsWith(ac) && !isSafeAcronymSuffix(word))) return true;
+                }
+                
+                if (word.startsWith('ai') && word.length > 2) {
+                    const rest = word.substring(2);
+                    const badSuffixes = ['video', 'art', 'gen', 'chat', 'bot', 'girl', 'porn', 'xxx'];
+                    if (badSuffixes.some(s => rest.startsWith(s))) return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    function isNameBannedByPrefixSuffix(name) {
+        if (!name) return false;
+        const lowerName = name.toLowerCase();
+        const strippedName = lowerName.replace(/[^a-zäöå]/g, ''); 
+        
+        const variants = [lowerName, strippedName];
+        
+        for (let t=0; t<variants.length; t++) {
+            const textToTest = variants[t];
+            if (!textToTest) continue;
+            
+
+            const exactMatches = ['ai', 'llm', 'mlm', 'porn'];
+            for (let i = 0; i < exactMatches.length; i++) {
+                const acronym = exactMatches[i];
+                if (textToTest === acronym || (textToTest.endsWith(acronym) && !isSafeAcronymSuffix(textToTest))) return true;
+            }
+            
+            if (textToTest.startsWith('ai') && textToTest.length > 2) {
+                const rest = textToTest.substring(2);
+                const badSuffixes = ['video', 'art', 'gen', 'chat', 'bot', 'girl', 'porn', 'xxx'];
+                if (badSuffixes.some(s => rest.startsWith(s))) return true;
+            }
+            
+            if (isBlockedByRedditRegexesV295(textToTest)) return true;
+        }
+        return false;
+    }
+
+        // Existing final name block applies on BOTH supported sites.
+    try { regexKeywordsToHide.push(/Lisa Mar(?:ie|ia) Varon/i); } catch {}
+
+    // === Arctic Shift: same reddit.js and blocklists, separate site-specific DOM ===
+    // This is deliberately isolated from the Reddit-side hooks/observers. No
+    // Reddit nav logic, page-world shadow patches, or Reddit-only redirects run
+    // on arctic-shift.photon-reddit.com.
+    function installArcticShiftFiltering() {
+        if (window.__nrArcticShiftFilterInstalled) return;
+        const ROOT = document.documentElement;
+        if (!ROOT) {
+            // Defensive document_start fallback: do not mark the filter booted
+            // before there is an html node to own its prehide stylesheet.
+            document.addEventListener('readystatechange', installArcticShiftFiltering, { once: true });
+            return;
+        }
+        window.__nrArcticShiftFilterInstalled = true;
+        ROOT.classList.add('nr-as-active');
+        let redirecting = false;
+        let scheduled = false;
+        let lastUrl = location.href;
+        // Arctic Shift search interception is submit-only. Never redirect for
+        // a partially typed term or a URL already present on page load.
+
+        // Applied at document_start: Svelte posts and comment bodies stay
+        // invisible before the first inspection, including lazy loaded cards.
+        const style = document.createElement('style');
+        style.id = 'nr-as-filter-prehide';
+        style.textContent = `
+            html.nr-as-active .reddit-thread > .post-container:not(.nr-as-approved),
+            html.nr-as-active .reddit-thread > .post-container.nr-as-banned,
+            html.nr-as-active .comment-node:not(.nr-as-approved),
+            html.nr-as-active .comment-node.nr-as-banned {
+                display: none !important;
+                visibility: hidden !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
+            }
+            html.nr-as-active.nr-as-redirecting .reddit-thread,
+            html.nr-as-active .nr-as-banned {
+                display: none !important;
+                visibility: hidden !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
+            }
+        `;
+        (document.head || ROOT).appendChild(style);
+
+        const targets = 'input[type="text"], input[type="search"], input:not([type])';
+        const fieldNames = new Set(['author', 'subreddit', 'title', 'selftext', 'url', 'ids', 'q', 'query']);
+        const textBlocked = value => {
+            const text = String(value || '').trim().slice(0, 12000);
+            return !!text && (isSearchTextBanned(text) || isBlockedByRedditRegexesV295(text));
+        };
+        function subredditBlocked(value) {
+            const name = String(value || '').trim().replace(/^r\//i, '');
+            if (!name) return false;
+            return adultSubreddits.some(sub => sub.replace(/^r\//i, '').toLowerCase() === name.toLowerCase()) ||
+                isNameBannedByPrefixSuffix(name) || textBlocked(name);
+        }
+        function authorBlocked(value) {
+            const name = String(value || '').trim().replace(/^(?:u|user)\//i, '');
+            return !!name && (isNameBannedByPrefixSuffix(name) || textBlocked(name));
+        }
+        function fieldBlocked(kind, value) {
+            if (!value) return false;
+            if (kind === 'subreddit') return subredditBlocked(value);
+            if (kind === 'author') return authorBlocked(value);
+            return textBlocked(value);
+        }
+        function kindForInput(input) {
+            if (!input || !input.matches?.(targets)) return null;
+            const label = input.closest('label');
+            const displayLabel = label?.querySelector('.label')?.textContent?.trim().toLowerCase() || '';
+            if (/^subreddit\b/.test(displayLabel)) return 'subreddit';
+            if (/^author\b/.test(displayLabel)) return 'author';
+            if (/^title\b/.test(displayLabel)) return 'title';
+            if (/^selftext\b/.test(displayLabel)) return 'selftext';
+            if (/^url\b/.test(displayLabel)) return 'url';
+            if (/ids?\s+or\s+urls?/i.test(input.getAttribute('placeholder') || '')) return 'ids';
+            const key = (input.getAttribute('name') || '').toLowerCase();
+            return fieldNames.has(key) ? key : null;
+        }
+        function inputsHaveBannedTerms() {
+            for (const input of document.querySelectorAll(targets)) {
+                const kind = kindForInput(input);
+                if (kind && fieldBlocked(kind, input.value)) return true;
+            }
+            return false;
+        }
+        function redirectToPreviousPage() {
+            if (redirecting) return;
+            redirecting = true;
+            ROOT.classList.add('nr-as-redirecting');
+            const blockedHref = location.href;
+            // A fresh tab cannot go back. Fall back to the actual Arctic
+            // Shift search homepage rather than the archive domain root.
+            if (history.length > 1) {
+                history.back();
+                setTimeout(() => {
+                    if (location.href === blockedHref) location.replace(location.origin + '/search');
+                }, 750);
+            } else {
+                location.replace(location.origin + '/search');
+            }
+        }
+        function setScreened(card, banned) {
+            if (banned) {
+                card.classList.remove('nr-as-approved');
+                card.classList.add('nr-as-banned');
+            } else {
+                card.classList.remove('nr-as-banned');
+                card.classList.add('nr-as-approved');
+            }
+        }
+        function urlValueFrom(anchor) {
+            if (!anchor) return '';
+            return anchor.getAttribute('href') || '';
+        }
+        function checkPost(outer) {
+            const inner = outer.querySelector(':scope > .post-container') || outer;
+            const header = inner.querySelector(':scope > .header');
+            const subreddit = header?.querySelector('a[href*="/r/"]');
+            const author = header?.querySelector('a.author-link, a[href*="/u/"], a[href*="/user/"]');
+            if (subreddit && subredditBlocked(subreddit.textContent || urlValueFrom(subreddit))) return true;
+            if (author && authorBlocked(author.textContent || urlValueFrom(author))) return true;
+            const title = inner.querySelector(':scope > .title');
+            if (title && textBlocked(title.textContent)) return true;
+            // Link target is the post's URL, not the UI's unrelated buttons.
+            for (const link of inner.querySelectorAll(':scope > .url-row a')) {
+                if (textBlocked(urlValueFrom(link)) || textBlocked(link.textContent)) return true;
+            }
+            // Selftext / markdown, if supplied by the archive's result layout.
+            for (const body of inner.querySelectorAll(':scope > .selftext, :scope > .body, :scope > .md, :scope > .text, :scope > .markdown, :scope > .long-text')) {
+                if (textBlocked(body.textContent)) return true;
+            }
+            return false;
+        }
+        function checkComment(node) {
+            const main = node.querySelector(':scope > .comment-main');
+            const content = main?.querySelector(':scope > .comment-content');
+            if (!content) return false;
+            const header = content.querySelector(':scope > .header');
+            const subreddit = header?.querySelector('a[href*="/r/"]');
+            const author = header?.querySelector('a.author-link, a[href*="/u/"], a[href*="/user/"]');
+            if (subreddit && subredditBlocked(subreddit.textContent || urlValueFrom(subreddit))) return true;
+            if (author && authorBlocked(author.textContent || urlValueFrom(author))) return true;
+            const body = content.querySelector(':scope > .body');
+            if (body && textBlocked(body.textContent)) return true;
+            return false;
+        }
+        function scan() {
+            if (redirecting) return;
+            if (location.href !== lastUrl) lastUrl = location.href;
+            // Do not reject ordinary adult topics just for being NSFW. Explicit
+            // banned names, subreddits and regex terms still apply everywhere.
+            for (const outer of document.querySelectorAll('.reddit-thread > .post-container')) {
+                setScreened(outer, checkPost(outer));
+            }
+            // Screen comments independently of posts, so a single rejected
+            // comment cannot blank an otherwise acceptable post or its siblings.
+            for (const comment of document.querySelectorAll('.comment-node')) {
+                setScreened(comment, checkComment(comment));
+            }
+        }
+        function scheduleScan() {
+            if (scheduled || redirecting) return;
+            scheduled = true;
+            queueMicrotask(() => {
+                scheduled = false;
+                scan();
+            });
+        }
+        function blockSubmittedSearch(event) {
+            if (!inputsHaveBannedTerms()) return false;
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            redirectToPreviousPage();
+            return true;
+        }
+        function isArcticSearchButton(button) {
+            return !!button && button.matches?.('button.submit-button, button[type="submit"]') &&
+                /^search$/i.test((button.textContent || '').trim());
+        }
+        // Svelte can handle the Search button's click without dispatching a
+        // native form submit. Capture the click before its own handler runs.
+        document.addEventListener('click', event => {
+            const button = event.target?.closest?.('button');
+            if (!isArcticSearchButton(button)) return;
+            blockSubmittedSearch(event);
+        }, true);
+        // Native form submissions (including keyboard Enter) are guarded too.
+        // No input/change listeners: editing a field NEVER causes navigation.
+        document.addEventListener('submit', event => {
+            const form = event.target;
+            if (!form?.querySelector?.('button.submit-button, button[type="submit"]')) return;
+            blockSubmittedSearch(event);
+        }, true);
+        const watcher = new MutationObserver(scheduleScan);
+        watcher.observe(ROOT, {
+            childList: true, subtree: true, characterData: true,
+            attributes: true, attributeFilter: ['href', 'value', 'title', 'alt']
+        });
+        window.addEventListener('popstate', scheduleScan, true);
+        window.addEventListener('pageshow', scheduleScan, true);
+        // Svelte may push/replace a URL without mutating visible DOM.
+        const urlPoll = setInterval(() => {
+            if (location.href !== lastUrl) scheduleScan();
+        }, 450);
+        window.addEventListener('pagehide', () => {
+            clearInterval(urlPoll);
+            watcher.disconnect();
+        }, { once: true });
+
+        // Preserve the Reddit script's storage-fed additional banned names too.
+        try {
+            const api = typeof chrome !== 'undefined' ? chrome :
+                (typeof browser !== 'undefined' ? browser : null);
+            if (api?.storage?.local?.get) {
+                api.storage.local.get(['wrestling_women_urls'], result => {
+                    if (!Array.isArray(result?.wrestling_women_urls)) return;
+                    const existing = new Set(regexKeywordsToHide.map(rx => rx.toString()));
+                    for (const item of result.wrestling_women_urls) {
+                        const slug = String(item || '').split('/').filter(Boolean).pop()?.toLowerCase() || '';
+                        if (!slug || ['aj-lee', 'aj', 'becky-lynch', 'becky'].includes(slug)) continue;
+                        const name = slug.replace(/-/g, ' ');
+                        for (const form of [name, name.replace(/\s+/g, '')]) {
+                            const escaped = form.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                            const regex = new RegExp('\\b' + escaped + '\\b', 'i');
+                            if (!existing.has(regex.toString())) {
+                                regexKeywordsToHide.push(regex);
+                                existing.add(regex.toString());
+                            }
+                        }
+                    }
+                    scheduleScan();
+                });
+            }
+        } catch (_) {}
+        scan();
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', scheduleScan, { once: true });
+    }
+
+    // Only the Arctic Shift bootstrap runs on the archive. Reddit starts below.
+    if (location.hostname.toLowerCase() === 'arctic-shift.photon-reddit.com') {
+        installArcticShiftFiltering();
+        return;
+    }
+
+
     // ---- RUNTIME + FIREFOX GUARDS ----
     const IS_FIREFOX = typeof InstallTrigger !== 'undefined' || /\bFirefox\//.test(navigator.userAgent);
     let HEAVY_OBSERVERS_ACTIVE = false;       // track whether main MOs are attached
@@ -486,12 +957,12 @@
     function addPreHidingCSS() {
         const style = document.createElement('style');
         style.textContent = `
-            article:has(> shreddit-post):not(.reddit-approved),
-            article[data-testid="post-container"]:not(.reddit-approved),
-            shreddit-post:not(.reddit-approved),
-            [data-testid="search-post-unit"]:not(.reddit-approved),
-            [data-id="search-media-post-unit"]:not(.reddit-approved),
-            [data-testid="search-post-with-content-preview"]:not(.reddit-approved) {
+            html:not(.nr-post-page) article:has(> shreddit-post):not(.reddit-approved),
+            html:not(.nr-post-page) article[data-testid="post-container"]:not(.reddit-approved),
+            html:not(.nr-post-page) shreddit-post:not(.reddit-approved),
+            html:not(.nr-post-page) [data-testid="search-post-unit"]:not(.reddit-approved),
+            html:not(.nr-post-page) [data-id="search-media-post-unit"]:not(.reddit-approved),
+            html:not(.nr-post-page) [data-testid="search-post-with-content-preview"]:not(.reddit-approved) {
                 /* Keep Reddit's own post geometry while the policy scanner decides it.
                    display:none can starve Shreddit's feed virtualization/hydration. */
                 visibility: hidden !important;
@@ -499,27 +970,81 @@
                 pointer-events: none !important;
             }
             
-            article:has(> shreddit-post).reddit-approved,
-            article[data-testid="post-container"].reddit-approved,
-            shreddit-post.reddit-approved,
-            [data-testid="search-post-unit"].reddit-approved,
-            [data-id="search-media-post-unit"].reddit-approved,
-            [data-testid="search-post-with-content-preview"].reddit-approved {
+            /* Logged-out feed markup lacks Reddit's user-logged-in flag and
+               sometimes never receives our wrapper approval. Keep public feed
+               cards available unless they are explicitly banned by the scan.
+               NSFW and Join rules below still use display:none on matches. */
+            html.nr-home-feed.nr-guest-feed-rescue article.nr-guest-verified:has(> shreddit-post:not([user-logged-in])):not(.reddit-banned):not(.prehide),
+            html.nr-home-feed.nr-guest-feed-rescue shreddit-post.nr-guest-verified:not([user-logged-in]):not(.reddit-banned):not(.prehide) {
+                visibility: visible !important;
+                opacity: 1 !important;
+                pointer-events: auto !important;
+            }
+
+            html:not(.nr-post-page) article:has(> shreddit-post).reddit-approved,
+            html:not(.nr-post-page) article[data-testid="post-container"].reddit-approved,
+            html:not(.nr-post-page) shreddit-post.reddit-approved,
+            html:not(.nr-post-page) [data-testid="search-post-unit"].reddit-approved,
+            html:not(.nr-post-page) [data-id="search-media-post-unit"].reddit-approved,
+            html:not(.nr-post-page) [data-testid="search-post-with-content-preview"].reddit-approved {
                 /* Restore paint without overriding Reddit's native layout display type. */
                 visibility: visible !important;
                 opacity: 1 !important;
                 pointer-events: auto !important;
             }
 
-            html.nr-allow-current-post article,
-            html.nr-allow-current-post shreddit-post,
-            html.nr-allow-current-post [subreddit-prefixed-name],
-            body.nr-allow-current-post article,
-            body.nr-allow-current-post shreddit-post,
-            body.nr-allow-current-post [subreddit-prefixed-name] {
-                display: block !important;
-                visibility: visible !important;
-                opacity: 1 !important;
+            /* A Join control in the credit bar indicates a suggested community
+               card. Hide its entire feed card without waiting for shadow-DOM
+               hydration or the normal scanner pass. Keep direct posts/search usable. */
+            /* Guest popular-feed posts all have Join controls. Apply this
+               no-glimpse gate only when Reddit marks the post logged in. */
+            html.nr-join-feed article:has(> shreddit-post[user-logged-in] shreddit-join-button[data-testid="credit-bar-join-button"]),
+            html.nr-join-feed shreddit-post[user-logged-in]:has(shreddit-join-button[data-testid="credit-bar-join-button"]) {
+                display: none !important;
+                visibility: hidden !important;
+                opacity: 0 !important;
+                height: 0 !important;
+                margin: 0 !important;
+                overflow: hidden !important;
+                pointer-events: none !important;
+            }
+
+            /* A remembered click is never permission to override a blocked post. */
+            html.nr-home-feed article:has(> shreddit-post[nsfw]),
+            html.nr-home-feed article:has(> shreddit-post[subreddit-nsfw]),
+            html.nr-home-feed shreddit-post[nsfw],
+            html.nr-home-feed shreddit-post[subreddit-nsfw],
+            html.nr-home-feed article:has(shreddit-content-tags[nsfw]) {
+                display: none !important;
+                visibility: hidden !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
+            }
+
+            /* Don't let late comment hydration re-anchor the entire post view
+               to an initially empty comment section. Never trigger scrolling. */
+            html.nr-post-page, html.nr-post-page body {
+                overflow-anchor: none;
+            }
+
+            /* Leave the comment's shell and layout visible during hydration.
+               Only hide a hydrated direct-slot body until that individual
+               comment has been checked; this avoids blank comment sections and
+               the huge layout jumps caused by masking every parent comment. */
+            shreddit-comment:not(.reddit-comment-approved):not(.reddit-comment-banned) > [slot="comment"],
+            shreddit-comment:not(.reddit-comment-approved):not(.reddit-comment-banned) > [id$="-comment-rtjson-content"] {
+                visibility: hidden !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
+            }
+            shreddit-comment.reddit-comment-banned {
+                display: none !important;
+                visibility: hidden !important;
+                height: 0 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                overflow: hidden !important;
+                pointer-events: none !important;
             }
             
             #search-dropdown-results-container li[role="presentation"]:not(.reddit-search-approved),
@@ -621,22 +1146,30 @@
                 pointer-events: none !important;
             }
             
-            article:has(> shreddit-post):not(.reddit-approved) img,
-            article[data-testid="post-container"]:not(.reddit-approved) img,
-            shreddit-post:not(.reddit-approved) img,
-            [data-testid="search-post-unit"]:not(.reddit-approved) img,
-            [data-id="search-media-post-unit"]:not(.reddit-approved) img,
-            [data-testid="search-post-with-content-preview"]:not(.reddit-approved) img {
+            html:not(.nr-post-page) article:has(> shreddit-post):not(.reddit-approved) img,
+            html:not(.nr-post-page) article[data-testid="post-container"]:not(.reddit-approved) img,
+            html:not(.nr-post-page) shreddit-post:not(.reddit-approved) img,
+            html:not(.nr-post-page) [data-testid="search-post-unit"]:not(.reddit-approved) img,
+            html:not(.nr-post-page) [data-id="search-media-post-unit"]:not(.reddit-approved) img,
+            html:not(.nr-post-page) [data-testid="search-post-with-content-preview"]:not(.reddit-approved) img {
                 visibility: hidden !important;
                 opacity: 0 !important;
             }
             
-            article:has(> shreddit-post).reddit-approved img,
-            article[data-testid="post-container"].reddit-approved img,
-            shreddit-post.reddit-approved img,
-            [data-testid="search-post-unit"].reddit-approved img,
-            [data-id="search-media-post-unit"].reddit-approved img,
-            [data-testid="search-post-with-content-preview"].reddit-approved img {
+            /* A public-feed card must not remain transparent just because an
+               approval was attached to a nested or recycled wrapper. */
+            html.nr-home-feed.nr-guest-feed-rescue article.nr-guest-verified:has(> shreddit-post:not([user-logged-in])):not(.reddit-banned):not(.prehide) img,
+            html.nr-home-feed.nr-guest-feed-rescue shreddit-post.nr-guest-verified:not([user-logged-in]):not(.reddit-banned):not(.prehide) img {
+                visibility: visible !important;
+                opacity: 1 !important;
+            }
+
+            html:not(.nr-post-page) article:has(> shreddit-post).reddit-approved img,
+            html:not(.nr-post-page) article[data-testid="post-container"].reddit-approved img,
+            html:not(.nr-post-page) shreddit-post.reddit-approved img,
+            html:not(.nr-post-page) [data-testid="search-post-unit"].reddit-approved img,
+            html:not(.nr-post-page) [data-id="search-media-post-unit"].reddit-approved img,
+            html:not(.nr-post-page) [data-testid="search-post-with-content-preview"].reddit-approved img {
                 visibility: visible !important;
                 opacity: 1 !important;
             }
@@ -652,7 +1185,10 @@
         }
     }
 
+    document.documentElement.classList.toggle('nr-post-page', isPostPage());
     addPreHidingCSS();
+    document.documentElement.classList.toggle('nr-home-feed', isHomeFeedContext());
+    document.documentElement.classList.toggle('nr-join-feed', isRedditJoinFeedContext());
 
     try {
         if (ALWAYS_ALLOW_CURRENT_POST) {
@@ -698,176 +1234,96 @@
 	"r/buildapc",
 	"r/buildmeapc",
 	"r/RealHomePorn",
-	"r/AmateursDoingIt"
+	"r/AmateursDoingIt",
     ];
 
 
 
-    const redgifsKeyword = "www.redgifs.com";
-
-
-    const adultSubreddits = [
-        "r/fat_fetish", "r/ratemyboobs", "r/chubby", "r/jumalattaretPro", "r/AlexaBliss", "r/AlexaPearl", "r/comfyui", "r/grok", "r/artificialintelligence", "r/AI", "r/WrestlingBotches"
-    ];
-
-
-    const regexKeywordsToHide = [
-        /deepn/i, /deepf/i, /deeph/i, /deeps/i, /deepm/i, /deepb/i, /deept/i, /deepa/i, /nudi/i, /nude/i, /nude app/i, /undre/i, /dress/i, /deepnude/i, /face swap/i, /image enhancing/i,
-	/Alexa/i, /Blis/i, /naked/i, /rule34/i, /Keibler/i, /morph/i, /inpaint/i, /art intel/i, /safari/i, /Opera Browser/i, /Mozilla/i, /Firefox/i, /Firefux/i, /soulgen/i, /ismartta/i,
-	/Stacy/i, /Staci/i, /tush/i, /lex bl/i, /image ai/i, /edit ai/i, /deviant/i, /Lex Cabr/i, /Lex Carb/i, /Lex Kauf/i, /Lex Man/i, /nudecrawler/i, /photo AI/i, /pict AI/i, /vegi/i,
-	/enhanced image/i, /AI edit/i, /faceswap/i, /DeepSeek/i, /deepnude ai/i, /deepnude-ai/i, /object/i, /unc1oth/i, /Opera GX/i, /Perez/i, /Mickie/i, /Micky/i, /Brows/i, /vagena/i, 
-	/pics app/i, /ed17/i, /Lana Perry/i, /Del Rey/i, /vege/i, /vulv/i, /clit/i, /cl1t/i, /cloth/i, /uncloth/i, /decloth/i, /rem cloth/i, /del cloth/i, /eras cloth/i, /La Premare/i,
-	/GenHey/i, /arxiv/i, /Bella/i, /Tiffy/i, /vagi/i, /vagene/i, /Del Ray/i, /CJ Lana/i, /Tiffa/i, /Strat/i, /puz/i, /Sweee/i, /Kristen Stewart/i, /Steward/i, /Perze/i, /Brave/i, 
-	/Roxan/i, /Browser/i, /Selain/i, /TOR-Selain/i, /Brit Bake/i, /vega/i, /3dit/i, /ed1t/i, /Liv org/i, /pant/i, /off pant/i, /rem pant/i, /del pant/i, /eras pant/i, /her pant/i, 
-	/she pant/i, /pussy/i, /adult content/i, /content adult/i, /porn/i, /editing/i, /3d1t/i, /Sydney Sweeney/i, /Sweeney/i, /fap/i, /Sydnee/i, /Stee/i, /Waaa/i, /Stewart/i, /3d!7/i,
-	/TOR-browser/i, /Feikki/i, /MS Edge/i, /AI Tool/i, /aitool/i, /Valtez/i, /Chelsey/i, /Zel Veg/i, /Ch3l/i, /Chel5/i, /Steph/i, /St3ph/i, /editation/i, /penetration/i, /Paig3/i, 
-	/P4ige/i, /pa1g/i, /pa!g/i, /palg3/i, /palge/i, /Br1tt/i, /Br!tt/i, /Brltt/i, /Lana Del Rey/i, /\bLana\b/i, /image app/i, /edi7/i, /syvavaarennos/i, /boy friend/i, /photo app/i, 
-	/Diipfeikki/i, /Diipfeik/i, /deep feik/i, /deepfeik/i, /Diip feik/i, /Diip feikki/i, /syva vaarennos/i, /syvä vaarennos/i, /picture app/i, /edit app/i, /pic app/i, /Opera/i, 
-	/P4IG3/i, /syvävääre/i, /girl friend/i, /pillu/i, /perse/i, /pylly/i, /peppu/i, /pimppi/i, /pinppi/i, /sexuaali/i, /yhdyntä/i, /application/i, /sukupuoliyhteys/i, /penetraatio/i,  
-	/xray/i, /vaatepoisto/i, /vaatteidenpoisto/i, /poista vaatteet/i, /seksi/i, /vaateiden poisto/i, /kuvankäsittely/i, /paneminen/i, /seksikuva/i, /seksi kuvia/i, /uncensor app/i, 
-	/clothes remover/i, /nsfw/i, /not safe for work/i, /alaston/i, /scanner/i, /AI unblur/i, /deblur/i, /nsfwgen/i, /nsfw gen/i, /image enhancer/i, /skin view/i, /eroottinen/i, 
-	/erotic/i, /AI fantasy/i, /Fantasy AI/i, /fantasy edit/i, /AI recreation/i, /synth/i, /Margot/i, /Robbie/i, /Johansson/i, /Ana de Armas/i, /Emily/i, /Emilia/i, /Ratajkowski/i, 
-	/Zendaya/i, /Doja Cat/i, /Madelyn/i, /Salma Hayek/i, /Megan Fox/i, /Addison/i, /Emma Watson/i, /Taylor/i, /Nicki/i, /Minaj/i, /next-gen face/i, /smooth body/i, /photo trick/i, 
-	/edit for fun/i, /realistic AI/i, /dream girl/i,  /Derriere/i, /Backside/i, /läpinäkyvä/i, /panee/i, /panev/i, /nussi/i, /nussinta /i, /nussia/i, /nussiminen/i, /yhdyntäkuvia/i,
-	/Stratusfaction/i, /yhdynnässä/i, /seksivideo/i, /nussimis/i, /seksikuvia/i, /yhdyntä kuvia/i, /face plus/i, /panovideo/i, /pano video/i, /pano kuva/i, /panokuvat/i, /masturb/i, 
-	/itsetyydy/i, /itse tyydytys/i, /itsetyydytysvid/i, /itsetyydytyskuv/i, /runkkualbumi/i, /runkku/i, /runkkaus/i, /runkata/i, /runkka/i, /näpitys/i, /näpi/i, /sormettamiskuv/i, 
-	/sormittamiskuv/i, /sormetus/i, /fistaaminen/i, /näpityskuv/i, /näpittämiskuv/i, /sormettamisvid/i, /näpitysvid/i, /kotijynkky/i, /jynkkykuv/i, /aikuis viihde/i, /jynkky/i, 
-	/sheer/i, /aikuissisältö/i, /aikuissivusto/i, /homo/i, /lesbo/i, /transu/i, /pervo/i, /5yvä/i,  /face\+/i, /face+/i, /face\-/i, /bg remover/i, /lexi/i, /Elayna/i, /Eleyna/i, 
-	/Eliyna/i, /Elina Black/i, /Elena Black/i, /Elyna Black/i, /Elina/i, /Elyna/i, /Elyina/i, /Aikusviihde/i, /Aikus viihde/i, /La Primare/i, /Fantop/i, /Fan top/i, /Fan-top/i, 
-	/Topfan/i, /Top fan/i, /Top-fan/i, /Top-fans/i, /fanstopia/i, /Jenni/i, /fans top/i, /topiafan/i, /topia fan/i, /topia-fan/i, /topifan/i, /topi fan/i, /twat/i, /topi-fan/i, 
-	/topaifan/i, /topai fan/i, /topai-fan/i, /fans-topia/i, /fans-topai/i, /Henni/i, /Lawren/i, /Lawrenc/i, /Lawrence/i, /Jenny/i, /Jenna/i, /softorbit/i, /softorbits/i, /VMWare/i,
-	/soft-orbit/i, /soft-orbits/i, /VM Ware/i, /Virtual Machine/i, /Virtualbox/i, /Virtual box/i, /Virtual laatikko/i, /Virtuaali laatikko/i, /Virtuaalilaatikko/i, /hypervisor/i,  
-	/hyper v/i, /hyperv/i, /virtuaalimasiini/i, /virtuaali masiini/i, /virtuaali workstation/i, /virtual workstation/i, /virtualworkstation/i, /virtuaaliworkstation/i, /hyper-v/i,
-	/hyper visor/i, /\*/i, /vbox/i, /virbox/i, /virtbox/i, /vir box/i, /virt box/i, /vrbox/i, /vibox/i, /virbox virtual/i, /virtbox virtual/i, /vibox virtual/i, /vbox virtual/i, 
-	/Cathy/i,  /v-machine/i, /vmachine/i, /v machine/i, /vimachine/i, /vi-machine/i, /vi machine/i, /virmachine/i, /vir-machine/i, /vir machine/i, /virt machine/i, /virtmachine/i, 
-	/Kathy/i, /virt-machine/i, /virtumachine/i, /vir mach/i, /virtu-machine/i, /virtu machine/i, /virtuamachine/i, /virtua-machine/i, /virtua machine/i, /vi mach/i, /virtual machi/i, 
-	/virtuaali masiina/i, /virt mach/i, /virtu mach/i, /virtua mach/i, /virtual mach/i, /vi mac/i, /vir mac/i, /virt mac/i, /virtu mac/i, /virtua mac/i, /virtuaalimasiina/i,
-	/Katherine/i, /Kazuki/i, /Yoshiko/i, /Yoshihiko/i, /Hirata/i, /birppis/i, /irpp4/i, /b1rppis/i, /birpp1s/i, /b1rpp1s/i, /comfyui/i, /Lily Adam/i, /Lilly Adam/i, /Dualipa/i, 
-	/comfy ui/i, /comfy ai/i, /comfyai/i, /comfy-ui/i, /comfy-ai/i, /Becky/i, /Becki/i, /Rebecca/i, /Amber Heard/i, /mid journey/i, /unstable diffusion/i, /Dua Lipa/i, /Jasmin/i,
-	/ElonMusk/i, /stablediffused/i, /Hirada/i, /Mizubi/i, /Mizupi/i, /Mizuki/i, /Watanabe/i, /Watanaba/i, /Wakana/i, /Kana Urai/i, /Uehara/i, /Sherilyn/i, /jazmyn/i, /Jazmin/i, 
-	/Jasmyn/i, /Primera/i, /Julianne/i, /Juliane/i, /Juliana/i, /Julianna/i, /rasikangas/i, /rasikannas/i, /cargil/i, /cargirl/i, /Lisa Varon/i, /Elon Musk/i, /Marie Varon/i, 
-	/gargirl/i, /garcirl/i, /barlow/i, /Nikki/i, /HeyGen/i, /cargril/i, /Saya Kamitani/i, /Kamitani/i, /Katie/i, /Nikkita/i, /Nikkita Lyons/i, /Lisa Marie/i, /Lisa Marie Varon/i, 
-	/gargril/i, /Takaichi/i, /Sakurai/i, /Arrivederci/i, /Alice/i, /Alicy/i, /Alici/i, /headgen/i, /head gen/i, /genhead/i, /Arisu Endo/i, /Crowley/i, /Ruby Soho/i, /Monica/i, 
-	/Castillo/i, /Matsumoto/i, /Shino Suzuki/i, /Yamashita/i, /Adriana/i, /Nia Jax/i, /McQueen/i, /Kasie Cay/i, /Mafiaprinsessa/i, /mangoanimat/i, /photo jiggle/i, /animat pic/i, 
-	/animat pho/i, /ai-app/i, /animat ima/i, /animat img/i, /pic animat/i, /pho animat/i, /ai twerk/i, /twerk ai/i, /img animat/i, /ima animat/i, /photo animat/i, /image animat/i, 
-	/make pic mov/i, /make pho mov/i, /make img mov/i, /make ima mov/i, /gif pic/i, /gif pho/i, /gif img/i, /gif ima/i, /photo to gif/i, /image to gif/i, /pic to gif/i, /pic to vid/i, 
-	/photo to video/i, /image to video/i, /ph0t/i, /pho7/i, /ph07/i, /1m4g/i, /im4g/i, /!mag/i, /!m4g/i, /!mg/i, /v1d3/i, /vid3/i, /v1de/i, /vld3/i, /g!f/i, /mangoai/i, /mangoapp/i, 
-	/mango-app/i, /mangoanim/i, /mango anim/i, /mango-anim/i, /lantaai/i, /lantaaa/i, /motionai/i, /changemotion/i, /swapmotion/i, /motionsw/i, /motionc/i, /poseAI/i, /AI-/i, /-AI/i, 
-	/AIblow/i, /5uck/i, /Suckin/i, /Sucks/i, /Sucki/i, /Sucky/i, /AIsuck/i, /AI-suck/i, /drool/i, /RemovingAI/i, /blowjob/i, /bjob/i, /b-job/i, /bj0b/i, /bl0w/i, /blowj0b/i, /dr0ol/i, 
-	/dro0l/i, /dr00l/i, /BJAI/i, /BJ-AI/i, /Suckjob/i, /B-J0b/i, /Suckj0b/i, /Suck-job/i, /Suck-j0b/i, /Mouthjob/i, /Mouthj0b/i, /M0uthjob/i, /M0uthj0b/i, /Mouth-job/i, /Mouth-j0b/i, 
-	/M0uth-job/i, /M0uth/i, /buttsex/i, /Mou7h/i, /MouthAI/i, /MouthinAI/i, /MouthingAI/i, /AIMouth/i, /BlowAI/i, /BlowsAI/i, /BlowingAI/i, /JobAI/i, /AIJob/i, /ZuckCock/i, /Mouthig/i, 
-	/Suck/i, /ZuckC/i, /AroundHer/i, /ZuckP/i, /Zuckz/i, /Zucks/i, /Zuzkc/i, /YouZuck/i, /ZuckYou/i, /AIZuck/i, /ZuckAI/i, /M0u7h/i, /ZuckD/i, /Cuck/i, /Guck/i, /SDuck/i, /Cheek/i, 
-	/Sukc/i, /Sukz/i, /AISucc/i, /SuccAI/i, /Suqz/i, /Suqs/i, /Suqc/i, /Suqq/i, /Suqi/i, /Sucq/i, /cukc/i, /boob/i, /b0ob/i, /b00b/i, /bo0b/i, /titjob/i, /titty/i, /titti/i, /j0b/i, 
-	/w0rk/i, /assjob/i, /buttjob/i, /wank/i, /w4nk/i, /tittt/i, /tiitt/i, /crotch/i, /thigh/i, /legjob/i, /asssex/i, /titsex/i, /ass sex/i, /butt sex/i, /tit sex/i, /butt stuff/i, 
-	/buttstuff/i, /p0rn/i, /redtube/i, /asstube/i, /butttube/i, /xhamster/i, /adulttube/i, /adult tube/i, /FapAI/i, /HerAi/i, /AiHer/i, /SheAi/i, /AIShe/i, /AroundAI/i, /HerAround/i, 
-	/TurnHer/i, /HerTurn/i, /SheAround/i, /AroundShe/i, /TurnShe/i, /SheTurn/i, /-her/i, /her-/i, /-she/i, /she-/i, /AIFap/i, /AIHug/i, /HugAI/i, /AIOut/i, /AIAdult/i, /AIContent/i, 
-	/AdultAI/i, /ContentAI/i, /AIMake/i, /AICreate/i, /CreateAI/i, /AICreating/i, /CreatingAI/i, /AICreation/i, /CreationAI/i, /MakeAI/i, /AIMaking/i, /MakingAI/i, /OutAI/i, /t0ol/i, 
-	/AIStuff/i, /StuffAI/i, /to0l/i, /t00l/i, /70ol/i, /7o0l/i, /700l/i, /FindAI/i, /FinderAI/i, /FindingAI/i, /AIFind/i, /DirectoryAI/i, /AIDirect/i, /AILook/i, /LookAI/i, /LooksAI/i, 
-	/LookupAI/i, /Look-upAI/i, /LookingUpAI/i, /UpLookAI/i, /AIUpLook/i, /ButtAPP/i, /DrawingsAI/i, /AIAPP/i, /AssAI/i, /AIAss/i, /AssAPP/i, /AppAss/i, /Ass-/i, /-Ass/i, /Butt-/i, 
-	/-Butt/i, /Cooch-/i, /-Cooch/i, /Coochie-/i, /Kewch-/i, /1mag/i, /-Kewch/i, /Kewchie-/i, /Coachie/i, /BoobysAI/i, /7ush/i, /7u5h/i, /tu5h/i, /AITit/i, /TitAI/i, /BoobiesAI/i, 
-	/TitsAI/i, /AIBoob/i, /BoobAI/i, /BoobsAI/i, /BoobieAI/i, /BoobyAI/i, /APPAI/i, /cooch/i, /K3wc/i, /ellie/i, /3llie/i, /elli3/i, /3lli3/i, /cha0tic/i, /AISketch/i, /SketchAI/i, 
-	/AIDraw/i, /AIDrew/i, /DrawAI/i, /DrewAI/i, /DrawsAI/i, /DrawingAI/i, /PaintingAI/i, /PaintingsAI/i, /OpenHerLegs/i, /OpeningHerLegs/i, /OpenLegs/i, /OpeningLegs/i, /PaintAI/i,  
-	/OpensLegs/i, /OpensHerLegs/i, /SpreadLeg/i, /SpreadHerLeg/i, /cunnt/i, /cunnn/i, /SpreadingLeg/i, /HerSkirt/i, /PaintsAI/i, /AIPain/i, /SpreadingHerLeg/i, /SpreadsHerLeg/i, 
-	/SpreadsLeg/i, /HerThig/i, /HerLeg/i, /HerThic/i, /SheThig/i, /SheLeg/i, /SheThic/i, /LegShe/i, /LegsShe/i, /Thicc/i, /ThickShe/i, /SheSkirt/i, /Her Skirt/i, /She Skirt/i, 
-	/Girl Skirt/i, /Girls Skirt/i, /Womans Skirt/i, /Woman Skirt/i, /Women Skirt/i, /Girly Skirt/i, /-lab/i, /depn/i, /d3pn/i, /deppn/i, /depenu/i, /depeni/i, /d3ppn/i, /d3penu/i, 
-	/d3p3nu/i, /dep3nu/i, /d3peni/i, /d3p3ni/i, /d3p3n1/i, /d3p3n!/i, /dep3n1/i, /dep3n!/i, /d3pen1/i, /d3pen!/i, /p05/i, /po5/i, /p0s/i, /postur/i, /posin/i, /pose/i, /iconicto/i, 
-	/diepn/i, /artif/i, /artin/i, /-tool/i, /deipn/i, /Claude/i, /Anthropic/i, /wedgi/i, /wedge/i, /wedgy/i, /wedg1/i, /wedg!/i, /w3dg/i, /w33d/i, /we3d/i, /w3ed/i, /w333d/i, /w3333/i, 
-	/we333/i, /w3e33/i, /w33e3/i, /w333e/i, /we33e/i, /we3e3/i, /wee3e/i, /w3e3e/i, /weee/i, /edgin/i, /3dg1n/i, /edgyi/i, /edgy1/i, /3dgy1/i, /3dgin/i, /edg1n/i, /edg1i/i, /edgi1/i,
-	/3dg1i/i, /3dgi1/i, /edgiy/i, /Grok-AI/i, /TwitterAI/i, /Anthr/i, /Antro/i, /s0ftw/i, /softw/i, /w4re/i, /war3/i, /w4r3/i, /p41n/i, /pa1n/i, /p4in/i, /ndif/i, /ndfy/i, /bliswwe/i,
-	/nd!f/i, /ndlf/i, /shag/i, /5hag/i, /5h4g/i, /sh4g/i, /f4gg/i, /fagg3/i, /fagger/i, /vaat.*pois/i, /vaatteet pois/i,/edgye/i, /rintalii/i, /rinta lii/i, /tissi/i, /r1nta/i, /r1nt4/i, 
-	/rint4/i, /l1ivi/i, /liiv1/i, /l1iv1/i, /li1v1/i, /l11v1/i, /l11vi/i, /bl15s/i, /bl1s5/i, /bl155/i, /bl1ss/i, /bli55/i, /anusaukko/i, /anus-aukko/i, /anus aukko/i, /pers aukko/i, 
-	/nd1f/i, /persaukko/i, /perseaukko/i, /perse aukko/i, /perse-aukko/i, /pers-aukko/i, /li1vi/i, /p3rs aukko/i, /p3r5 aukko/i, /Monroe/i, /per5 aukko/i, /p3rs-aukko/i, /Redmond/i, 
-	/p1p4r/i, /p3rse/i, /pers3/i, /p3rs3/i, /per5e/i, /per53/i, /p3r5e/i, /p3r53/i, /rints/i, /r1nts/i, /r1nt5/i, /rint5/i, /pip4r/i, /p1par/i, /Jackie/i, /Kairi/i, /sexx/i, /sexi/i, 
-	/p1p4r/i, /Kiana/i, /Jiana/i, /Kairi Sane/i, /Kairi's/i, /Kairii/i, /Sexxy/i, /Sexy/i, /Goddess/i, /Kendal Grey/i, /Kayla/i, /Braxton/i, /alex4/i,  /Samantha/i, /Samantha Irvin/i, 
-	/Samantha Irwin/i, /4lexa/i, /al3xa/i, /alex4/i, /4l3xa/i, /al3x4/i, /4l3x4/i, /4lex4/i, /blis5/i, /bli5s/i, /artintel/i, /artifi intel/i, /ardrob/i, /wardrobe/i, /robe malfunc/i, 
-	/ring gear malfunc/i, /ring malfunc/i, /solrvca/i, /billieeilish/i, /billie eilish/i, /ivynile/i, /Ivy Nile/, /UnderRatedLadies/i, /Ivy+Nile/i, /SkylarRaye/i, /Serrano/i, /Zerrano/i, 
-	/windsor/i, /winds0r/i, /w1nds0r/i, /w1ndsor/i, /woman/i, /women/i, /girl/i, /girls/i, /girlfriend/i, /boyfriend/i, /amateur/i, /poses/i, /posing/i, /breast/i, /breasts/i, /nudity/i, 
-	/ladies/i, /womens/i, /womans/i, /ladies'/i, /lady's/i, /girl's/i, /woman'/i, /rule 34/i, /got hard/i, /get hard/i, /Vince Russo/i, /Dave Meltzer/i, /nudify/i, /nudifier/i, /nudifying/i, 
-	/lady/i, /Jessika Carr/i, /Xia Li/i, /undressify/i, /getdisciplined/i, /Toni Storm/i, /Skye Blue/i, /Carmella/i, /Mariah May/i, /Harley/i, /Cameron/i, /Hayter/i, /Britt Baker/i, /Ripley/i, 
-	/Rhea Ripley/i, /Blake/i, /transv/i, /transvestite/i, /queer/i, /undressing/i, /undressifying/i, /LGBTQ/i, /Pride/i, /Jessica Carr/i, /Jessika Karr/i, /Jessika/i, /prostitute/i, /escort/i, 
-	/fetish/i, /adult/i, /explicit/i, /mature/i, /sexual/i, /Jessica/i, /Jessica Karr/i, /Analsex/i, /orgasm/i, /vagina/i, /tushy/i, /tushi/i, /genital/i, /busty/i, /camgirl/i, /onlyfans/i, 
-	/raped/i, /org@sm/i, /whore/i, /celeb/i, /cumslut/i, /Tiffany Stratton/i, /Lillian/i, /Garcia/i, /Jordynne/i, /Trish/i, /Stratus/i, /orga\$m/i, /0rg@sm/i, /DeepSeek AI/i, /ai app/i, 
-	/nudyi/i, /orga5m/i, /fantime/i, /fansly/i, /justforfans/i, /patreon/i, /CJ Perry/i, /org@5m/i, /manyvids/i, /0rg@5m/i, /chaturbate/i, /myfreecams/i, /fat fetish/i, /camsoda/i, /Mandy/i,
-	/stripchat/i, /bongacams/i, /livejasmin/i,  /0rgasm/i, /Liv Xoxo/i, /Chelsea/i, /Piper Niven/i, /Hardwell/i, /5 feet of fury/i, /bliss/i, /alexa bliss/i, /her ass/i, /she ass/i, /venice/i,
-	/her's ass/i, /hers ass/i, /Morgan Xoxo/i, /Tiffy time/i, /Stratton/i, /Tiffany/i, /Mandy Rose/i, /Chelsea Green/i, /Zelina/i, /Zelina Vega/i, /Valhalla/i, /Sportskeeda/i, /IYO SKY/i, 
-	/Io Shirai/i, /Iyo Shirai/i, /IO SKY/i, /Dakota Kai/i, /Asuka/i, /Meiko/i, /Satomura/i, /playboy/i, /Dynamite/i, /Shayna Baszler/i, /Ronda Rousey/i, /Dana Brooke/i, /Alicia Fox/i, /Summer Rae/i, 
-	/Microsoft Edge/i, /jizzed/i, /Torrie/i, /Sasha/i, /Layla/i, /Michelle McCool/i, /Eve Torres/i, /Kelly Kelly/i, /Melina/i, /Melina wrestler/i, /Jillian Hall/i, /five feet of fury/i, /raepd/i, 
-	/Wilson/i, /Mickie James/i, /Maria/i, /Kanellis/i, /Beth Phoenix/i, /Victoria/i, /Molly Holly/i, /Gail Kim/i, /Awesome Kong/i, /Rampaige/i, /Madison Rayne/i, /Velvet Sky/i, /Jamie Hayter/i, 
-	/Saraya/i, /filmora/i, /wondershare/i, /Tessmacher/i, /Havok/i, /Su Yung/i, /Miko Satomura/i, /Mercedes/i, /Valkyrie/i, /Deonna/i, /Purrazzo/i, /Vaquer/i, /Vaqueer/i, /Vaguer/i, /Vagueer/i, 
-	/Tamina/i, /Anna Jay/i, /Tay Conti/i, /Tay Melo/i, /Nightingale/i, /Statlander/i, /Hikaru Shida/i, /Tessa/i, /Sakazaki/i, /Nyla Rose/i, /Emi Sakura/i, /Fatal Influence/i, /Aubert/i, /Brooke/i, 
-	/Hikaru/i, /aivideo/i, /Penelope/i, /Roxanne/i, /Shotzi/i, /Blackheart/i, /Tegan/i, /Charlotte/i, /Kamifuku/i, /Sarray/i, /OperaGX/i, /Sky Wrestling/i, /Becky Lynch/i, /Bayley/i, /Bailey/i, 
-	/Giulia/i, /Michin/i, /nofap/i, /Mia Yim/i, /AJ Lee/i, /Paige/i, /Bianca/i, /Belair/i, /Alicia/i, /Atout/i, /stephanie/i, /No nut/i, /Thekla/i, /Liv Morgan/i, /Jordynne Grace/i, /NXT Womens/i, 
-	/NXT Women/i, /NXT Woman/i, /Aubrey/i, /Edwards/i, /Renee/i, /Maryse/i, /Sasha Banks/i, /Jackson/i, /Jakara/i, /Lash Legend/i, /Izzi Dame/i, /Alba Fyre/i, /Isla Dawn/i, /Sydney/i, /Gina Adams/i, 
-	/rawdog/i, /Kelly2/i, /Russo/i, /Raquel Rodriguez/i, /Scarlett/i, /Bordeaux/i, /Kayden/i, /Katana Chance/i,  /Carter/i, /Valkyria/i, /Tamina Snuka/i, /Renee Young/i, /Priscilla/i, /Cathalina/i, 
-	/Roxanne Perez/i, /Indi Hartwell/i, /Hartwell/i, /Karmen/i, /Davenport/i, /wonder share/i, /Lola Vice/i, /Maxxine Dupri/i, /Karmen Petrovic/i, /Brittany/i, /Renee Paquette/i, /Ava Raine/i, 
-	/Cora Jade/i, /Jacy Jayne/i, /Gigi Dolin/i, /Thea Hail/i, /Tatum/i, /Paxley/i, /Fallon Henley/i, /Sky wrestle/i, /Blair/i, /venoisi/i, /Women's/i, /rawdogging/i, /Kelani Jordan/i, /Electra/i, 
-	/Wendy Choo/i, /Yulisa/i, /Valentina/i, /Valentine/i, /Amari Miller/i, /venoise/i, /AlexaBliss/i, /Sol Ruca/i, /AlexaPearl/i, /Arianna/i, /Natalya/i, /Nattie/i, /Woman's/i, /Diffusion/i, 
-	/StableDiffusion/i, /UnStableDiffusion/i, /Dreambooth/i, /Dream booth/i, /sperm/i, /AI generated/i, /AI-generated/i, /generated/i, /machine learning/i, /artificial intelligence/i, /AI girl/i, 
-	/neural network/i, /deep learning/i, /Naomi/i, /Jazmyn Nyx/i, /stable diffusion/i, /artificial/i, /synthetic/i, /computer generated/i, /algorithm/i, /Angelina/i, /automated/i, /text to image/i, 
-	/editor/i, /image enhanced/i, /Answers BETA/i, /ai video/i, /Irving/i,  /Belts Mone/i, /Amanda Huber/i, /Ivy Nile/i, /Shir/i, /kawa/i, /perver/i, /Mariah/i,
-
-
-   // Boundaried Regexes
-    	/\bher's\b/i, /\bshe's\b/i, /\bAmber\b/i, /\bAlexa\b/i, /\bAleksa\b/i, /\blexi\b/i, /\bButt\b/i, /\bsexy\b/i, /\bKarr\b/i, /\bMina\b/i, /\bTisu\b/i, /\bTisut\b/i, /\bRinnat\b/i, /\bXoxo\b/i, 
-	/\bAnaali\b/i,  /\bLGBT\b/i, /\bShe\b/i, /\bJazz\b/i, /\bjizz\b/i, /\bKaina\b/i, /\bZoey\b/i, /\bKairi\b/i, /\bxAI\b/i,/\b50ft\b/i, /\bVidu\b/i, /\bJade\b/i, /\bmotion\b/i, /\bMachaine\b/i, 
-	/\bNyx\b/i, /\bMachiine\b/i, /\bLily\b/i, /\bMacheine\b/i, /\bLili\b/i, /\bAnt\b/i, /\bAva\b/i, /\bAnal-\b/i, /\b-Anal\b/i, /\bAnal\b/i, /\bCum\b/i, /\bNox\b/i, /\bFuku\b/i, /\bDick\b/i, 
-	/\bAnswers BETA\b/i, /\bCock\b/i, /\bporn\b/i, /\bnude\b/i, /\bxxx\b/i, /\br34\b/i, /\br_34\b/i, /\bCarr\b/i, /\bTaya\b/i, /\bMachiene\b/i, /\bcam4\b/i, /\bGrok\b/i, /\bVM\b/i, /\bVMs\b/i,
-	/\bTegan\b/i, /\bS0ft\b/i, /\bsex\b/i, /\bVMs\b/i, /\bRape\b/i, /\bEmma\b/i, /\bAnus\b/i, /\bNiven\b/i,  /\bGirl\b/i, /\bPenis\b/i, /\bLady\b/i, /\bNSFW\b/i, /\bB-Fab\b/i, /\bAdult\b/i, 
-	/\bB-Fab\b/i, /\bVM\b/i, /\bJaida\b/i, /\bSeksi\b/i, /\bRiho\b/i, /\bIzzi\b/i, /\bbra\b/i, /\bSlut\b/i, /\bTor\b/i,  /\bAi\b/i, /\bADM\b/i, /\bAis\b/i, /\b-Ai\b/i, /\bLita\b/i, /\bHer\b/i, 
-	/\bJaida\b/i, /\bedit\b/i, /\bADMX\b/i, /\bSol\b/i, /\bAi-\b/i, /\bPeba\b/i, /\bBeba\b/i, /\bBabe\b/i, /\bBepa\b/i, /\bGina\b/i, /\bLiv\b/i, /\bDame\b/i, /\bTay\b/i, /\bazz\b/i, /\bIndi\b/i,
-	/\bTissi\b/i,
-
-
-   // Nuclear/special regexes
-/gr[a4][i1l]n(?:[\s_\-\/.]{0,3}(?:re(?:mov(?:e|al|ing)?|m)|(?:delet(?:e|ing|ion)?|del)|eras(?:e|ing)?|(?:ph(?:o|0)?t(?:o|0)?|pic(?:t(?:ure|ures)?)?|image|img)))|(?:re(?:mov(?:e|al|ing)?|m)|(?:delet(?:e|ing|ion)?|del)|eras(?:e|ing)?|fix|denois(?:e|er|ing)?)(?:[\s_\-\/.]{0,3}(?:ph(?:o|0)?t(?:o|0)?|pic(?:t(?:ure|ures)?)?|image|img))?(?:[\s_\-\/.]{0,3}gr[a4][i1l]n)|gr[a4][i1l]n(?:[\s_\-\/.]{0,3}(?:ph(?:o|0)?t(?:o|0)?|pic|image|img))|(?:ph(?:o|0)?t(?:o|0)?|pic|image|img)(?:[\s_\-\/.]{0,3}fix)/i, /lex.*bl/i, /liv.*morgan/i, /saad.*pipar/i, /s4ad.*pipar/i, /s44d.*pipar/i, /sa4d.*pipar/i, /rint.*pois/i, /dress.*remov/i,
-        /(?:n(?:o|0)ise(?:[\s_\-\/.]{0,3}(?:re(?:mov(?:e|al|ing)?|m|duc(?:e|ed|ing|tion)?)|(?:delet(?:e|ing|ion)?|del)|eras(?:e|ing)?|fix|filter(?:ing)?))|(?:re(?:mov(?:e|al|ing)?|m|duc(?:e|ed|ing|tion)?)|(?:delet(?:e|ing|ion)?|del)|eras(?:e|ing)?|fix|filter(?:ing)?)(?:[\s_\-\/.]{0,3})n(?:o|0)ise|de[\s_\-\.]?n(?:o|0)is(?:e|er|ing)?)/i, /make.*(move|gif|video)/i, /photo.*(move|gif|video)/i, /image.*(move|gif|video)/i, /pic.*(move|gif|video)/i, /img.*(move|gif|video)/i, /booty/i, /ass.*(animat|ai|move)/i, /twerk/i, /twerking/i, /jiggle/i, /bounce.*(ai|gif)/i, /booty.*(ai|gif|video|animat)/i, /ass.*(ai|gif|video|animat)/i, /undress/i, /strip.*ai/i, /nude.*ai/i, /clothes.*remove/i, /remove.*(clothes|clothing|dress)/i, /face.*(swap|deepfake|replace)/i, /hous.*pois/i, /pait.*pois/i, /liiv.*pois/i, /alushous.*pois/i, /alkkarit.*pois/i, /alusvaat.*pois/i, /clothing.*remove/i, /\bra\*e\b/i,/\br\*pe\b/i, /\*ape/i, /rap\*/i, /0rga\$m/i,
-/alexa.*(wwe|wrest|ras|NXT|pro)/i, /blis.*(wwe|wrest|ras|NXT|pro)/i, /lexa.*(wwe|wrest|ras|NXT|pro)/i, /lexi.*(wwe|wrest|ras|NXT|pro)/i, /bils.*(wwe|wrest|ras|NXT|pro)/i, /lex.*(kauf|cabr|carb)/i, /model.*(mach|langu)/i, /robe.*(wwe|tna|aew|njpw|wrestl|rasll|rasslin)/i,
-/robe.*(malf|func)/i, /ring gear|trunk|pant|shirt|jacket.*(malf|func)/i, /malfunc.*(wwe|tna|aew|njpw|wrestl|rasll|rasslin|ring)/i, /(?:poista|poisto|poistaminen)[ -]?(?:vaatteet|vaatteiden)/i,  /\|\s*\|/i, /\(o\)\(o\)/i, /\(!\)/i, /see[- ]?through/i, /AI[ -]?generated/i, /generated[ -]?by[ -]?AI/i, /artificial[ -]?intelligence/i, /machine[ -]?learning/i, /neural[ -]?network/i, /deep[ -]?learning/i, /midjourney/i, /dall[ -]?e/i, /stable[ -]?diffusion/i, /computer[ -]?generated/i, /text[ -]?to[ -]?image/i, /image[ -]?generation/i, /AI[ -]?art/i, /synthetic[ -]?media/i, /algorithmically/i, /bot[ -]?generated/i, /automated[ -]?content/i,
-
-    ];
-
-
-    // v29.5.0: One authoritative regex list, with a compiled fast lane for simple
-    // literals. Complex regexes (boundaries, lookarounds, wildcards, etc.) are
-    // executed unchanged; no keywords are removed or given different semantics.
-    // Rebuild when the existing dynamic wrestler-name feature extends the list.
-    let redditCompiledRegexCountV295 = -1;
-    let redditLiteralRegexGroupsV295 = [];
-    let redditComplexRegexesV295 = [];
-
-    function rebuildRedditRegexMatcherV295() {
-        const literals = [];
-        const complex = [];
-        for (const expression of regexKeywordsToHide) {
-            // Only combine pure, case-insensitive literal RegExp sources. Do not
-            // reinterpret regex syntax, flags or matching order within a pattern.
-            if (expression instanceof RegExp && expression.flags === 'i' &&
-                !/[.*+?^${}()|[\]\\]/.test(expression.source)) {
-                literals.push(expression.source);
-            } else {
-                complex.push(expression);
-            }
-        }
-        const groups = [];
-        // Small alternation groups avoid an excessively large compiled regex.
-        for (let i = 0; i < literals.length; i += 96) {
-            groups.push(new RegExp('(?:' + literals.slice(i, i + 96).join('|') + ')', 'i'));
-        }
-        redditLiteralRegexGroupsV295 = groups;
-        redditComplexRegexesV295 = complex;
-        redditCompiledRegexCountV295 = regexKeywordsToHide.length;
+    // Adult/NSFW is NOT a global ban. Existing explicit subreddit/domain and
+    // keyword/AI rules above and below still apply in every context.
+    // The extra topic rules below apply ONLY on broad/front-page feeds.
+    function isHomeFeedContext() {
+        const path = (window.location.pathname || '/').replace(/\/+$/, '') || '/';
+        return /^(?:\/|\/(?:best|hot|new|top)|\/r\/(?:all|popular))$/i.test(path);
     }
 
-    function isBlockedByRedditRegexesV295(text) {
+    function isRedditJoinFeedContext() {
+        // A Join button on a direct post or search result is normal navigation,
+        // not necessarily a recommendation. Feed cards are the target.
+        if (isPostPage()) return false;
+        const path = window.location.pathname || '/';
+        return !/(?:\/comments\/|^\/search(?:\/|$)|^\/user\/|^\/u\/|^\/settings(?:\/|$))/i.test(path);
+    }
+
+    function isSuggestedJoinFeedCard(element) {
+        if (!isRedditJoinFeedContext()) return false;
+        // On Reddit's logged-out popular feed EVERY post receives a Join control.
+        // It is not evidence of a suggestion unless the card belongs to a
+        // logged-in session. The user-logged-in marker lives on SHREDDIT-POST.
+        const post = element?.matches?.('shreddit-post') ? element :
+            element?.querySelector?.('shreddit-post') || element?.closest?.('shreddit-post');
+        if (!post?.hasAttribute?.('user-logged-in')) return false;
+        return !!post.querySelector(
+            'shreddit-join-button[data-testid="credit-bar-join-button"]'
+        );
+    }
+
+    const homeFeedTopicFilters = [
+        /\b(?:nsfw|not\s+safe\s+for\s+work|18\+|adult\s+content|gone\s?wild|only\s?fans|fansly)\b/i,
+        /\b(?:sex|sexes|sexy|sexual(?:ly|ity)?|sext(?:ing|s)?|horny|horniness|arous(?:al|ed|ing)|erotic(?:a|ism)?|fetish(?:es|ism)?|kink(?:y|s)?|lust(?:ful)?|lewd|seduct(?:ion|ive)|libido)\b/i,
+        /\b(?:porn(?:ography|ographic|hub)?|porno|xxx|nudes?|nudity|naked|topless|strip(?:per|ping|tease)?|masturbat(?:e|ion|ing)|orgasms?|hookups?|one[ -]?night[ -]?stands?|friends[ -]?with[ -]?benefits)\b/i,
+        /\b(?:boobs?|breasts?|tits?|nipples?|pussy|vagina(?:l)?|penis|dicks?|cocks?|genitals?|erections?|ejaculat(?:e|ion|ing)|intimacy|intimate|virgin(?:ity)?|celiba(?:te|cy)|bikinis?|lingerie|thongs?|pantyhose|seduction|escorts?|sugar[ -]?(?:daddy|baby))\b/i,
+        /\b(?:dating|date\s?night|first\s?date|going\s+on\s+a\s+date|courtship|court(?:ing|ed)|romanc(?:e|es|ing)|romantic|relationship(?:s)?|flirt(?:ing|ation|s)?|crush(?:es)?|boyfriends?|girlfriends?|ex[ -]?(?:wife|husband|boyfriend|girlfriend)|wives|wife|husbands?|fianc(?:e|ee|é|ée)s?|partners?\s+(?:in\s+love|in\s+a\s+relationship))\b/i,
+        /\b(?:women|woman|womans|woman's|womens|women's|girls?|girly|ladies|lady|females?|feminine|femininity|chicks?|babes?|brides?|bachelorettes?|milfs?|cougars?)\b/i,
+        /\b(?:tinder|bumble|hinge|grindr|okcupid|match\.com|badoo|happn|feeld|dating\s?apps?)\b/i,
+        /(?:^|[^a-zäöå])(?:seks(?:i|uaal)[a-zäöå]*|porno[a-zäöå]*|alasto[a-zäöå]*|kiima[a-zäöå]*|fetissi[a-zäöå]*|treffi[a-zäöå]*|seurustel[a-zäöå]*|romanttinen|romantiikka)(?=$|[^a-zäöå])/i,
+        /(?:^|[^a-zäöå])(?:nain[a-zäöå]*|nais[a-zäöå]*|tyttö[a-zäöå]*|tytö[a-zäöå]*|poikaystävä[a-zäöå]*|vaimo[a-zäöå]*|morsia[a-zäöå]*)(?=$|[^a-zäöå])/i
+    ];
+
+    function hasHomeFeedTopic(text) {
         if (!text) return false;
-        if (redditCompiledRegexCountV295 !== regexKeywordsToHide.length) {
-            rebuildRedditRegexMatcherV295();
+        const candidate = String(text).slice(0, 12000);
+        return homeFeedTopicFilters.some(pattern => pattern.test(candidate));
+    }
+
+    function hasHomeFeedSubredditTopic(element) {
+        const name = (getSubredditForAnyRedditPost(element) || '').toLowerCase()
+            .replace(/^r\//, '').replace(/[_\-\s]/g, '');
+        return /(?:women|woman|girls?|ladies|lady|female|dating|relationship|romance|sex|porn|nsfw|gonewild|onlyfans|fansly|twoxchromosomes|femaledatingstrategy)/i.test(name);
+    }
+
+    function isExplicitlyNSFWPost(element) {
+        if (!element || !element.querySelector) return false;
+        const candidates = [element, ...element.querySelectorAll('shreddit-post, shreddit-content-tags')];
+        for (const node of candidates) {
+            if (node.hasAttribute?.('nsfw') || node.hasAttribute?.('subreddit-nsfw') ||
+                node.getAttribute?.('data-nsfw') === 'true' ||
+                node.getAttribute?.('over-18') === 'true') return true;
         }
-        for (const group of redditLiteralRegexGroupsV295) {
-            if (group.test(text)) return true;
-        }
-        for (const expression of redditComplexRegexesV295) {
-            if (expression.test(text)) return true;
+        return !!element.querySelector(
+            '.text-category-nsfw, .nsfw, .nsfw-tag, .nsfw-content, ' +
+            'svg[icon-name="nsfw-outline"], svg[icon-name="nsfw-fill-12"], ' +
+            '[data-testid="search-warnings"] .text-category-nsfw'
+        );
+    }
+
+    function postHasFailedMedia(element) {
+        if (!element || !element.querySelectorAll) return false;
+        const mediaSlots = element.querySelectorAll('[slot="post-media-container"]');
+        for (const media of mediaSlots) {
+            // The sample HTML has <slot name="error"> placeholders for lazy
+            // loaders; those are NOT errors unless real error UI materializes.
+            if (media.querySelector(
+                '[data-testid*="media-error" i], [data-testid*="video-error" i], ' +
+                '[class*="media-error" i], [class*="video-error" i]'
+            )) return true;
+            const msg = (media.innerText || media.textContent || '').slice(0, 2500);
+            if (/\b(?:video|media|image|embed|content)\s+(?:is\s+)?(?:unavailable|not\s+available|failed\s+to\s+load|could\s+not\s+be\s+loaded|cannot\s+be\s+(?:played|loaded)|can.t\s+be\s+(?:played|loaded))\b/i.test(msg) ||
+                /\b(?:failed|unable)\s+to\s+(?:load|play)\s+(?:this\s+)?(?:video|media|image|embed|content)\b/i.test(msg)) return true;
+            // This setup already DNS-blocks RedGIFs. Its embed in the supplied
+            // HTML is therefore a known non-working media card, not a generic
+            // NSFW ban. Keep other adult media eligible to load normally.
+            if (media.querySelector('shreddit-embed[providername="RedGIFs"], shreddit-embed[html*="redgifs.com/ifr/"]')) return true;
         }
         return false;
     }
@@ -930,7 +1386,6 @@
     }
     applyDynamicWrestlerBans();
 
-    try { regexKeywordsToHide.push(/Lisa Mar(?:ie|ia) Varon/i); } catch {}
 
     const selectorsToDelete = [
         "community-highlight-carousel",
@@ -1194,8 +1649,10 @@
     window.addEventListener('pagehide', cleanup);
 
     function isPostPage() {
-        const url = window.location.href;
-        return url.includes('/comments/') && !url.includes('/s/') && !url.includes('?') && url.split('/').length >= 7;
+        // Reddit post permalinks are /comments/<id>/..., including routes with
+        // query parameters, comment anchors, and client-side navigation.
+        // Detect the PATH, not the entire URL (where a query can be misleading).
+        return /\/comments\/[a-z0-9]+(?:\/|$)/i.test(window.location.pathname || '');
     }
 
     // Answers markup is immediately concealed by document-start CSS. The expensive
@@ -1244,6 +1701,7 @@
             if (pending.length > 180) {
                 pending = pending.slice(-180);
                 queueRedditOverflowSweepV295();
+                queueRedditCommentOverflowSweep();
             }
             if (timer === null && pending.length) {
                 const remaining = Math.max(0, wait - (performance.now() - lastCall));
@@ -1306,10 +1764,12 @@
             const metadataElements = element.querySelectorAll(
                 '[aria-label], [title], [alt], [data-permalink], [data-testid]'
             );
-            const targets = [element, ...metadataElements];
+            const targets = [element, ...element.querySelectorAll('shreddit-post, [author], [post-title], [subreddit-prefixed-name], [slot="authorName"]'), ...metadataElements];
             for (const target of targets) {
                 if (target.closest?.('script, style, noscript, template')) continue;
-                for (const attribute of ['data-permalink', 'data-testid', 'aria-label', 'title', 'alt']) {
+                for (const attribute of ['data-permalink', 'data-testid', 'aria-label', 'title', 'alt',
+                                         'author', 'data-author', 'post-title', 'subreddit-prefixed-name',
+                                         'subreddit-name', 'permalink']) {
                     const value = target.getAttribute?.(attribute);
                     if (value && value.length > 2) chunks.push(value);
                 }
@@ -1350,86 +1810,6 @@
         }
         
         contentBannedCache.set(cacheKey, false);
-        return false;
-    }
-
-    function isSafeAcronymSuffix(word) {
-        const safeAiWords = ['samurai', 'bonsai', 'mumbai', 'thai', 'dubai', 'shanghai', 'hawaii', 'chai', 'sinai', 'kawaii'];
-        for (let i=0; i<safeAiWords.length; i++) {
-            if (word.endsWith(safeAiWords[i])) return true;
-        }
-        return false;
-    }
-
-    function isSearchTextBanned(text) {
-        if (!text) return false;
-        const lowerText = text.toLowerCase();
-        const strippedText = lowerText.replace(/[^a-zäöå\s]/g, ' ').replace(/\s+/g, ' ').trim();
-        
-        const textVariants = [lowerText, strippedText];
-
-        for (let t = 0; t < textVariants.length; t++) {
-            const textToTest = textVariants[t];
-            if (!textToTest) continue;
-            
-            if (textToTest.includes('openai') || textToTest.includes('chatgpt') || textToTest.includes('airbnb')) continue;
-
-            for (let i = 0; i < adultSubreddits.length; i++) {
-                if (textToTest.includes(adultSubreddits[i].toLowerCase().replace('r/', ''))) return true;
-            }
-
-            if (textToTest.includes(redgifsKeyword.toLowerCase())) return true;
-
-            if (isBlockedByRedditRegexesV295(textToTest)) return true;
-            
-            const words = textToTest.split(/\s+/);
-            const exactMatches = ['ai', 'llm', 'mlm'];
-            for (let w = 0; w < words.length; w++) {
-                const word = words[w];
-                if (!word) continue;
-                
-                for (let a = 0; a < exactMatches.length; a++) {
-                    const ac = exactMatches[a];
-                    if (word === ac || (word.endsWith(ac) && !isSafeAcronymSuffix(word))) return true;
-                }
-                
-                if (word.startsWith('ai') && word.length > 2) {
-                    const rest = word.substring(2);
-                    const badSuffixes = ['video', 'art', 'gen', 'chat', 'bot', 'girl', 'porn', 'xxx'];
-                    if (badSuffixes.some(s => rest.startsWith(s))) return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    function isNameBannedByPrefixSuffix(name) {
-        if (!name) return false;
-        const lowerName = name.toLowerCase();
-        const strippedName = lowerName.replace(/[^a-zäöå]/g, ''); 
-        
-        const variants = [lowerName, strippedName];
-        
-        for (let t=0; t<variants.length; t++) {
-            const textToTest = variants[t];
-            if (!textToTest) continue;
-            
-            if (textToTest.includes('openai') || textToTest.includes('chatgpt') || textToTest.includes('airbnb')) continue;
-
-            const exactMatches = ['ai', 'llm', 'mlm', 'porn'];
-            for (let i = 0; i < exactMatches.length; i++) {
-                const acronym = exactMatches[i];
-                if (textToTest === acronym || (textToTest.endsWith(acronym) && !isSafeAcronymSuffix(textToTest))) return true;
-            }
-            
-            if (textToTest.startsWith('ai') && textToTest.length > 2) {
-                const rest = textToTest.substring(2);
-                const badSuffixes = ['video', 'art', 'gen', 'chat', 'bot', 'girl', 'porn', 'xxx'];
-                if (badSuffixes.some(s => rest.startsWith(s))) return true;
-            }
-            
-            if (isBlockedByRedditRegexesV295(textToTest)) return true;
-        }
         return false;
     }
 
@@ -1509,36 +1889,42 @@
     }
 
     function markElementAsApproved(element) {
-        const identifier = getPostIdentifier(element);
+        // The CSS prehide gate applies independently to ARTICLE and its inner
+        // SHREDDIT-POST. Approval of just one is not enough to paint the card.
+        // Callers screen the canonical card root before using this function.
+        const root = getRedditScreeningRootV295(element);
+        const related = [element];
+        if (root?.tagName === 'ARTICLE' && root.querySelector?.('shreddit-post')) {
+            related.push(root);
+            for (const nested of root.querySelectorAll('shreddit-post')) related.push(nested);
+        }
+        // Do not resurrect an explicitly banned card or any banned descendant,
+        // and do not save an approval for one that has already been rejected.
+        if (related.some(node => node.classList.contains('reddit-banned') ||
+                node.classList.contains('prehide') ||
+                node.closest?.('.reddit-banned, .prehide'))) return;
+
+        const identifier = getPostIdentifier(root || element);
         if (identifier) {
             if (approvalPersistence.size >= MAX_APPROVAL_PERSISTENCE) {
                 const entries = Array.from(approvalPersistence.entries()).slice(-Math.floor(MAX_APPROVAL_PERSISTENCE * 0.7));
                 approvalPersistence.clear();
                 entries.forEach(([key, value]) => approvalPersistence.set(key, value));
             }
-            
+
             approvalPersistence.set(identifier, true);
             try { rememberApprovedPostId(identifier); } catch {}
         }
 
         try {
-            const canonical = tryGetCanonicalPostId(element);
+            const canonical = tryGetCanonicalPostId(root || element);
             if (canonical && canonical !== identifier) rememberApprovedPostId(canonical);
         } catch {}
 
-        element.classList.add('reddit-approved');
-        permanentlyApprovedElements.add(element);
-
-        // v29.5.0: Home-feed fragments arrive as ARTICLE > SHREDDIT-POST. The
-        // parent is already screened above, so release the child in the same turn.
-        // Previously two independent CSS gates could leave an approved article blank.
-        if (element.tagName === 'ARTICLE') {
-            const directPost = Array.from(element.children || []).find(child => child.tagName === 'SHREDDIT-POST');
-            if (directPost && element.querySelectorAll('shreddit-post').length === 1) {
-                directPost.classList.add('reddit-approved');
-                permanentlyApprovedElements.add(directPost);
-                processedElements.add(directPost);
-            }
+        for (const node of new Set(related)) {
+            node.classList.add('reddit-approved');
+            permanentlyApprovedElements.add(node);
+            processedElements.add(node);
         }
     }
 
@@ -1623,6 +2009,13 @@
     }
 
     function getSubredditForAnyRedditPost(el) {
+        // Feed cards are usually ARTICLE > SHREDDIT-POST. Read the child's
+        // actual community metadata before relying on visible link text.
+        const nestedPost = el.tagName === 'SHREDDIT-POST' ? el : el.querySelector?.('shreddit-post[subreddit-prefixed-name], shreddit-post[subreddit-name]');
+        if (nestedPost && nestedPost !== el) {
+            const childSub = nestedPost.getAttribute('subreddit-prefixed-name') || nestedPost.getAttribute('subreddit-name');
+            if (childSub) return childSub.startsWith('r/') ? childSub : 'r/' + childSub;
+        }
         const prefixedName = el.getAttribute && el.getAttribute('subreddit-prefixed-name');
         if (prefixedName) return prefixedName.startsWith('r/') ? prefixedName : 'r/' + prefixedName;
         
@@ -1677,6 +2070,17 @@
             }
         }
         
+        // Modern feed cards put the subreddit metadata on a nested
+        // shreddit-post, while the scanner often receives the ARTICLE host.
+        const nestedPost = element.querySelector?.('shreddit-post[subreddit-prefixed-name], shreddit-post[subreddit-name]');
+        if (nestedPost) {
+            const nestedName = nestedPost.getAttribute('subreddit-prefixed-name') ||
+                nestedPost.getAttribute('subreddit-name') || '';
+            const normalizedNested = nestedName.startsWith('r/') ? nestedName : 'r/' + nestedName;
+            if (safeSubreddits.some(safeSub => safeSub.toLowerCase() === normalizedNested.toLowerCase()))
+                return true;
+        }
+
         const subreddit = getSubredditForAnyRedditPost(element);
         if (subreddit) {
             const normalizedName = subreddit.startsWith('r/') ? subreddit : 'r/' + subreddit;
@@ -1695,26 +2099,56 @@
         return checkTextForKeywords(contentText, isSafe);
     }
 
+    // Safe communities are intentionally readable, including normal AI
+    // discussion in r/ChatGPT, r/ChatGPTComplaints and r/OpenAI. The *only*
+    // content exception in their posts is explicit generative image/video
+    // material. Comments are always screened by the full original list.
+    const SAFE_COMMUNITY_GENERATED_MEDIA = [
+        /\b(?:ai|a\.?i\.?|artificial\s+intelligence)[\s_-]*(?:generated|generating|generator|generation|made|created)[\s_-]*(?:images?|pictures?|photos?|videos?|artworks?|art)\b/i,
+        /\b(?:images?|pictures?|photos?|videos?|artworks?)[\s_-]*(?:generated|generating|generation|generator)[\s_-]*(?:by[\s_-]*)?(?:ai|a\.?i\.?|artificial\s+intelligence)\b/i,
+        /\b(?:ai|a\.?i\.?|artificial\s+intelligence)[\s_-]*(?:images?|pictures?|photos?|videos?|artworks?|art)[\s_-]*(?:generation|generator|generating|creation|creator)\b/i,
+        /\b(?:image|picture|photo|video|art)[\s_-]*(?:generation|generator|generating|to[\s_-]*video)\b/i,
+        /\b(?:text[\s_-]*to[\s_-]*(?:image|video)|image[\s_-]*to[\s_-]*video|img2vid|img2img|txt2img|text2img)\b/i,
+        /\b(?:midjourney|stable[\s_-]*diffusion|dall[\s-]*e|flux[\s-]*image|comfy[\s_-]*ui|sora[\s_-]*video|runway[\s_-]*gen[\s-]*[234])\b/i
+    ];
+
+    function safeCommunityPostHasGeneratedMedia(element) {
+        // Content only: don't scan the URL, unrelated navigation, comments or
+        // renderer internals. In particular, "r/OpenAI" is never a match.
+        const post = element.matches?.('shreddit-post') ? element :
+            element.querySelector?.('shreddit-post') || element;
+        const pieces = [post.getAttribute?.('post-title') || ''];
+        const title = post.querySelector?.('[slot="title"], h1, h2, h3, [data-testid="post-title-text"]');
+        if (title) pieces.push(title.textContent || '');
+        const body = post.querySelector?.('[slot="text-body"], [data-testid="post-content"], .post-content');
+        if (body) pieces.push(body.textContent || '');
+        const content = pieces.join(' ').slice(0, 10000);
+        return SAFE_COMMUNITY_GENERATED_MEDIA.some(pattern => pattern.test(content));
+    }
+
     function evaluateElementForBanning(element) {
+        // A direct post page is never a feed card. Only its comments are
+        // subject to the independent comment scanner below.
+        if (isPostPage()) return false;
         const wasApprovedBefore = (permanentlyApprovedElements.has(element) || wasElementPreviouslyApproved(element));
         if (!STRICT_BLOCKING && wasApprovedBefore) return false;
         
-        const identifier = getPostIdentifier(element);
-
-        if (isElementFromWhitelistedAuthor(element)) return false;
-        if (identifier && CURRENT_POST_ID && identifier === CURRENT_POST_ID) return false;
-        if (CURRENT_POST_ID) {
-            const canonical = tryGetCanonicalPostId(element);
-            if (canonical && canonical === CURRENT_POST_ID) return false;
-        }
-        if (identifier && CURRENT_POST_ID && identifier === CURRENT_POST_ID && isCurrentPageWhitelistedAuthor()) return false;
-
+        // Existing blocklists take priority over approved clicks and authors.
         const isSafe = isElementInSafeSubreddit(element);
         const fullContent = extractCompletePostContent(element);
 
-        if (isElementFromAdultSubreddit(element)) return true;
+        // The front page remains tech-only regardless of an originating
+        // community's safe status; direct subreddit feeds use its exemption.
+        if (isHomeFeedContext() &&
+            (isExplicitlyNSFWPost(element) || hasHomeFeedSubredditTopic(element) ||
+             hasHomeFeedTopic(fullContent + ' ' + (getSubredditForAnyRedditPost(element) || '')))) return true;
 
-        if (checkTextForKeywords(fullContent, isSafe)) return true;
+        if (isSuggestedJoinFeedCard(element)) return true;
+        if (isSafe) return safeCommunityPostHasGeneratedMedia(element);
+
+        if (isElementFromAdultSubreddit(element)) return true;
+        if (checkTextForKeywords(fullContent)) return true;
+        if (postHasFailedMedia(element)) return true;
         
         const titleElement = element.querySelector && element.querySelector('h1, h2, h3, a[data-click-id="body"], .title, [slot="title"], [data-testid="post-title-text"]');
         if (titleElement && checkContentForKeywords(titleElement, isSafe)) return true;
@@ -1722,9 +2156,7 @@
         const contentElement = element.querySelector && element.querySelector('.post-content, .md-container, p, [slot="text-body"], [data-testid="post-content"]');
         if (contentElement && checkContentForKeywords(contentElement, isSafe)) return true;
         
-        const nsfwIndicators = element.querySelectorAll && element.querySelectorAll('.nsfw, [data-nsfw="true"], svg[icon-name="nsfw-outline"], .text-category-nsfw');
-        if (nsfwIndicators && nsfwIndicators.length > 0) return true;
-        
+        // NSFW badges alone are allowed away from the front page.
         return false;
     }
 
@@ -1746,6 +2178,10 @@
     }
 
     function screenRedditSearchPreviewV295(card) {
+        if (isPostPage()) {
+            revealPostCardOnDetailPage(card);
+            return;
+        }
         // A title is needed before a result is ready to be approved. Until then
         // the initial CSS gate leaves the incomplete card invisible.
         const title = card.querySelector('a[data-testid="post-title-text"], a[data-testid="post-title"], [id^="search-post-title-t3_"]');
@@ -1784,21 +2220,66 @@
             ? element.parentElement : element;
     }
 
+    function revealPostCardOnDetailPage(card) {
+        if (!card || !isPostPage()) return;
+        document.documentElement.classList.add('nr-post-page');
+        document.documentElement.classList.remove('nr-home-feed', 'nr-join-feed');
+        // A transition from a filtered feed can reuse both ARTICLE and
+        // SHREDDIT-POST. Reset BOTH rather than relying on former approvals.
+        const nodes = [card];
+        if (card.tagName === 'ARTICLE') {
+            for (const child of card.querySelectorAll('shreddit-post')) nodes.push(child);
+        }
+        for (const node of nodes) {
+            const wasHidden = node.classList.contains('reddit-banned') ||
+                node.classList.contains('reddit-search-banned') ||
+                node.classList.contains('prehide');
+            node.classList.remove('reddit-banned', 'reddit-search-banned', 'prehide');
+            node.classList.add('reddit-approved');
+            if (wasHidden) {
+                // Clear only properties installed by our own hiding routine.
+                // Don't rewrite Reddit's layout styles or comment elements.
+                for (const key of ['display', 'visibility', 'opacity', 'height',
+                    'padding', 'margin', 'pointer-events', 'position', 'z-index']) {
+                    if (node.style.getPropertyPriority(key) === 'important')
+                        node.style.removeProperty(key);
+                }
+            }
+            processedElements.add(node);
+        }
+    }
+
     function screenRedditPostRootV295(seed) {
         const post = getRedditScreeningRootV295(seed);
         if (!post) return;
+        if (isPostPage()) {
+            revealPostCardOnDetailPage(post);
+            return;
+        }
         if (post.matches?.(REDDIT_SEARCH_PREVIEW_SELECTOR_V295)) {
             screenRedditSearchPreviewV295(post);
             return;
         }
         if (processedElements.has(post)) {
-            // Shreddit can replace the child custom element without replacing ARTICLE.
-            // The old wrapper's approval is NOT transferable until the replacement
-            // content has passed the same full blocking checks.
             if (post.classList.contains('reddit-approved') &&
-                post.tagName === 'ARTICLE' &&
-                Array.from(post.children || []).some(child =>
-                    child.tagName === 'SHREDDIT-POST' && !child.classList.contains('reddit-approved'))) {
+                ((!isElementInSafeSubreddit(post) && postHasFailedMedia(post)) ||
+                 isSuggestedJoinFeedCard(post) ||
+                 (isHomeFeedContext() && (isExplicitlyNSFWPost(post) ||
+                    hasHomeFeedSubredditTopic(post) ||
+                    hasHomeFeedTopic(extractCompletePostContent(post)))))) {
+                post.classList.remove('reddit-approved');
+                post.classList.add('reddit-banned', 'prehide');
+                safelyHideElement(post);
+                return;
+            }
+            // Shreddit can replace the child custom element without replacing ARTICLE,
+            // or a guest-feed mutation can leave an approved inner SHREDDIT-POST under
+            // an unapproved outer ARTICLE. Both cases require one fresh card-level
+            // policy decision, not an automatic approval inherited from the child.
+            if (post.tagName === 'ARTICLE' && post.querySelector('shreddit-post') &&
+                (!post.classList.contains('reddit-approved') ||
+                 Array.from(post.querySelectorAll('shreddit-post')).some(child =>
+                     !child.classList.contains('reddit-approved')))) {
                 if (evaluateElementForBanning(post)) {
                     post.classList.remove('reddit-approved');
                     post.classList.add('reddit-banned', 'prehide');
@@ -1824,7 +2305,63 @@
         markElementAsApproved(post);
     }
 
+    function screenRedditComment(comment) {
+        if (!comment) return;
+        // Only the comment's OWN text counts. A missing parent body must not
+        // inherit a banned descendant's content and hide the entire thread.
+        const bodies = comment.querySelectorAll('[slot="comment"], [id$="-comment-rtjson-content"]');
+        let body = null;
+        for (const candidate of bodies) {
+            if (candidate.closest('shreddit-comment') === comment) {
+                body = candidate;
+                break;
+            }
+        }
+        if (!body) {
+            // React may attach the text several ticks later. The comment
+            // remains present instead of disappearing with its replies.
+            return;
+        }
+        const content = (body.innerText || body.textContent || '').slice(0, 9000);
+        const author = comment.getAttribute('author') || comment.getAttribute('data-author') || '';
+        const banned = checkTextForKeywords(author + ' ' + content) ||
+            isNameBannedByPrefixSuffix(author);
+        if (banned) {
+            comment.classList.remove('reddit-comment-approved');
+            comment.classList.add('reddit-comment-banned');
+            safelyHideElement(comment);
+            return;
+        }
+        if (comment.classList.contains('reddit-comment-banned')) {
+            comment.classList.remove('reddit-comment-banned', 'reddit-banned', 'prehide');
+            // Recycled comment nodes may still have our inline !important
+            // styles even after Reddit replaces their author/body.
+            for (const property of ['display', 'visibility', 'opacity', 'height',
+                'padding', 'margin', 'pointer-events', 'position', 'z-index']) {
+                if (comment.style.getPropertyPriority(property) === 'important')
+                    comment.style.removeProperty(property);
+            }
+        }
+        comment.classList.add('reddit-comment-approved');
+    }
+
+    function processAllUnapprovedComments() {
+        const comments = document.querySelectorAll(
+            'shreddit-comment:not(.reddit-comment-approved):not(.reddit-comment-banned)'
+        );
+        for (const comment of comments) screenRedditComment(comment);
+    }
+
     function processAllUnapprovedPosts() {
+        if (isPostPage()) {
+            // Ignore *every* post-level rule here. Feed-approved posts must not
+            // be hidden again just because the user opened their permalink.
+            const posts = document.querySelectorAll(
+                'article:has(> shreddit-post), article[data-testid="post-container"], shreddit-post'
+            );
+            for (const post of posts) revealPostCardOnDetailPage(getRedditScreeningRootV295(post));
+            return;
+        }
         const posts = document.querySelectorAll(`
             article:has(> shreddit-post):not(.prehide):not(.reddit-approved),
             article[data-testid="post-container"]:not(.prehide):not(.reddit-approved),
@@ -1859,11 +2396,14 @@
     }
 
     function hideJoinNowPosts() {
+        if (isPostPage()) return;
         const posts = document.querySelectorAll('article:not(.prehide), shreddit-post:not(.prehide)');
         for (let i = 0; i < posts.length; i++) {
             const post = posts[i];
             
-            let joinNowFound = false;
+            // Community suggestions use a custom element with shadow DOM. Its
+            // visible Join label cannot be found through post.textContent.
+            let joinNowFound = isSuggestedJoinFeedCard(post);
             const btns = post.querySelectorAll('button, a');
             for (let j = 0; j < btns.length && !joinNowFound; j++) {
                 if (btns[j].textContent && btns[j].textContent.trim().toLowerCase() === 'join now') {
@@ -1878,13 +2418,6 @@
         }
     }
 
-    function checkForAdultContentTag() {
-        const adultContentTags = document.querySelectorAll('.flex.items-center svg[icon-name="nsfw-outline"]');
-        if (adultContentTags.length > 0 && !isUrlAllowed()) {
-            window.location.replace('https://www.reddit.com');
-        }
-    }
-
     function hideBannedSubredditsFromSearch() {
         // Do not classify the site's normal navigation or feed LI elements as search results.
         const searchUi = '#search-dropdown-results-container, faceplate-search-dropdown, shreddit-search-dropdown';
@@ -1893,7 +2426,7 @@
             !document.querySelector('[data-testid="search-community"], li[data-testid="search-sdui-query-autocomplete"]')) return;
         const allSearchItems = [
             ...Array.from(document.querySelectorAll('[data-type="search-dropdown-item-label-text"]')),
-            ...Array.from(document.querySelectorAll('#search-dropdown-results-container span.font-semibold.text-12.uppercase, faceplate-search-dropdown span.font-semibold.text-12.uppercase, shreddit-search-dropdown span.font-semibold.text-12.uppercase, span.text-category-nsfw')),
+            ...Array.from(document.querySelectorAll('#search-dropdown-results-container span.font-semibold.text-12.uppercase, faceplate-search-dropdown span.font-semibold.text-12.uppercase, shreddit-search-dropdown span.font-semibold.text-12.uppercase')),
             ...Array.from(document.querySelectorAll('li[data-testid="search-sdui-query-autocomplete"], li.recent-search-item')),
             ...Array.from(document.querySelectorAll('#search-dropdown-results-container li[role="presentation"], faceplate-search-dropdown li[role="presentation"], shreddit-search-dropdown li[role="presentation"], #search-dropdown-results-container a[role="option"], faceplate-search-dropdown a[role="option"], shreddit-search-dropdown a[role="option"], div[data-testid="search-dropdown-item"]')),
             ...Array.from(document.querySelectorAll('[data-testid="search-community"]'))
@@ -1903,12 +2436,6 @@
             const item = allSearchItems[i];
             if (processedSearchItems.has(item)) continue;
             processedSearchItems.add(item);
-            
-            if (item.classList.contains('text-category-nsfw') || 
-                (item.textContent && item.textContent.trim().toUpperCase() === "NSFW")) {
-                hideSearchElement(item);
-                continue;
-            }
             
             const ariaLabel = item.getAttribute ? (item.getAttribute('aria-label') || '') : '';
             const textContent = item.textContent || '';
@@ -2001,15 +2528,7 @@
             const ariaLabel = item.getAttribute ? (item.getAttribute('aria-label') || '') : '';
             const fullText = text + ' ' + ariaLabel;
             
-            let hasNSFWBadge = false;
-            const spans = item.querySelectorAll('span, div');
-            for (let j = 0; j < spans.length && !hasNSFWBadge; j++) {
-                if (spans[j].textContent && spans[j].textContent.trim().toUpperCase() === 'NSFW') {
-                    hasNSFWBadge = true;
-                }
-            }
-            
-            if (isSearchTextBanned(fullText) || hasNSFWBadge) {
+            if (isSearchTextBanned(fullText)) {
                 hideSearchElement(item);
             } else {
                 item.classList.add('reddit-search-approved');
@@ -2080,8 +2599,6 @@
     // === THE ULTIMATE SANITY ENFORCER (WITH HOMEPAGE GUARD) ===
     function enforceSanity() {
         if (isRedirecting) return;
-        if (ALWAYS_ALLOW_CURRENT_POST || isCurrentPageWhitelistedAuthor()) return;
-
         try {
             const currentUrl = window.location.href.toLowerCase();
             const urlObj = new URL(window.location.href);
@@ -2116,7 +2633,7 @@
             if (isHomePage) return;
 
             // 3. Check Subreddit URL
-            if (!isSafeSubredditUrl()) {
+            {
                 const subMatch = currentUrl.match(/\/r\/([a-zA-Z0-9_]+)/i);
                 if (subMatch && subMatch[1] && (isNameBannedByPrefixSuffix(subMatch[1]) || isSubredditNameBanned(subMatch[1]))) {
                     devLog(`Banned subreddit detected: ${subMatch[1]}. Redirecting...`);
@@ -2136,13 +2653,11 @@
             }
 
             // 5. Fallback URL Check (unified regex policy)
-            if (!isUrlAllowed()) {
-                if (isBlockedByRedditRegexesV295(currentUrl)) {
-                    devLog('Banned regex in URL. Redirecting...');
-                    isRedirecting = true;
-                    window.location.replace('https://www.reddit.com');
-                    return;
-                }
+            if (isBlockedByRedditRegexesV295(currentUrl)) {
+                devLog('Banned regex in URL. Redirecting...');
+                isRedirecting = true;
+                window.location.replace('https://www.reddit.com');
+                return;
             }
         } catch (e) {}
     }
@@ -2301,13 +2816,19 @@
     }
 
     function checkAndHideNSFWClassElements() {
-        if (ALWAYS_ALLOW_CURRENT_POST) return;
-        const nsfwClasses = ['NSFW', 'nsfw-tag', 'nsfw-content'];
-        for (let i = 0; i < nsfwClasses.length; i++) {
-            const elements = document.querySelectorAll(`.${nsfwClasses[i]}`);
-            for (let j = 0; j < elements.length; j++) {
-                removeElementAndRelated(elements[j]);
-            }
+        if (!isHomeFeedContext()) return;
+        const indicators = document.querySelectorAll(
+            'shreddit-post[nsfw], shreddit-post[subreddit-nsfw], ' +
+            'article .text-category-nsfw, article svg[icon-name="nsfw-fill-12"], ' +
+            'article svg[icon-name="nsfw-outline"]'
+        );
+        for (const indicator of indicators) {
+            const card = indicator.closest('article, shreddit-post');
+            if (!card) continue;
+            const root = getRedditScreeningRootV295(card);
+            root.classList.remove('reddit-approved');
+            root.classList.add('reddit-banned', 'prehide');
+            safelyHideElement(root);
         }
     }
 
@@ -2348,6 +2869,10 @@
 
     // --- MAIN FILTER FUNCTION ---
     function runAllChecks() {
+        if (isPostPage()) {
+            document.documentElement.classList.add('nr-post-page');
+            document.documentElement.classList.remove('nr-home-feed', 'nr-join-feed');
+        }
         const now = performance.now();
         // Newly inserted posts are screened by the mutation handler. Full UI
         // audits need no faster cadence; keeping them below React's commit rate
@@ -2366,13 +2891,13 @@
         observeSearchDropdown();
         
         processShadowDOM();
+        processAllUnapprovedComments();
         processAllUnapprovedPosts();
         processSearchCommunities();
         hideAndClearRecentPostsPanel();
         
         if (!isUrlAllowed()) {
             hideJoinNowPosts();
-            checkForAdultContentTag();
             hideRecentCommunitiesSection();
         }
         
@@ -2383,12 +2908,88 @@
         checkAndHideNSFWClassElements();
     }
 
+    function isRedditCardEffectivelyVisible(post) {
+        // A visible inner SHREDDIT-POST can be completely invisible when its
+        // ARTICLE has opacity:0 or visibility:hidden. Inspect the whole chain,
+        // not just the inner component's computed style.
+        for (let node = post; node && node.nodeType === 1;
+             node = node.parentElement || node.getRootNode?.()?.host || null) {
+            const computed = getComputedStyle(node);
+            if (node.hidden || computed.display === 'none' ||
+                computed.visibility === 'hidden' || computed.visibility === 'collapse' ||
+                Number(computed.opacity) <= 0) return false;
+            if (node === document.body || node === document.documentElement) break;
+        }
+        return true;
+    }
+
+    function recoverGuestHomeFeed() {
+        if (!isHomeFeedContext() || isPostPage()) {
+            document.documentElement.classList.remove('nr-guest-feed-rescue');
+            return;
+        }
+        if (document.querySelector('shreddit-post[user-logged-in]')) {
+            document.documentElement.classList.remove('nr-guest-feed-rescue');
+            return;
+        }
+        // Work at the ARTICLE level: both it and the inner post are independently
+        // subject to the prehide CSS. A prior child-only approval never suffices.
+        // Retain a narrow fallback only for *individually re-screened* guest cards.
+        const candidates = document.querySelectorAll('shreddit-post:not([user-logged-in])');
+        if (!candidates.length) {
+            document.documentElement.classList.remove('nr-guest-feed-rescue');
+            return;
+        }
+        let needsVerifiedRescue = false;
+        let count = 0;
+        const visited = new Set();
+        for (const post of candidates) {
+            if (++count > 70) break;
+            const card = getRedditScreeningRootV295(post);
+            if (!card || visited.has(card)) continue;
+            visited.add(card);
+            if (card.closest?.('.reddit-banned, .prehide') ||
+                post.closest('.reddit-banned, .prehide') ||
+                isExplicitlyNSFWPost(card) || isSuggestedJoinFeedCard(card)) continue;
+
+            // Verify the complete card *before* re-approving it. The homepage's
+            // keyword, AI, NSFW, dating, and Join rules remain authoritative.
+            if (!card.classList.contains('reddit-approved') ||
+                !post.classList.contains('reddit-approved') ||
+                !isRedditCardEffectivelyVisible(post)) {
+                if (evaluateElementForBanning(card)) {
+                    card.classList.remove('reddit-approved', 'nr-guest-verified');
+                    card.classList.add('reddit-banned', 'prehide');
+                    safelyHideElement(card);
+                    continue;
+                }
+                markElementAsApproved(card);
+            }
+            if (!card.classList.contains('reddit-approved') ||
+                !post.classList.contains('reddit-approved') ||
+                card.classList.contains('reddit-banned') ||
+                post.classList.contains('reddit-banned')) continue;
+
+            // CSS rescue is scoped only to cards that passed their own checks;
+            // never override a blanket class for unexamined guest posts.
+            if (!isRedditCardEffectivelyVisible(post)) {
+                card.classList.add('nr-guest-verified');
+                post.classList.add('nr-guest-verified');
+                needsVerifiedRescue = true;
+            }
+        }
+        document.documentElement.classList.toggle('nr-guest-feed-rescue', needsVerifiedRescue);
+    }
+
     // --- INITIALIZATION AND EVENT HANDLING ---
     function init() {
         interceptSearchInputChanges();
         interceptSearchFormSubmit();
         
         runAllChecks();
+        setTimeout(recoverGuestHomeFeed, 350);
+        const guestFeedRecoveryInterval = setInterval(recoverGuestHomeFeed, 1900);
+        intervalIds.add(guestFeedRecoveryInterval);
         
         // The documentElement observer below already watches body mutations,
         // handles fresh posts and performs the periodic full audit. A second
@@ -2418,6 +3019,7 @@
                 return;
             }
             processAllUnapprovedPosts();
+            processAllUnapprovedComments();
             const now = performance.now();
             if (now - lastPeripheralAuditV295 < 8500) return;
             lastPeripheralAuditV295 = now;
@@ -2455,6 +3057,16 @@
         init();
     }
 
+    let redditCommentOverflowSweepQueued = false;
+    function queueRedditCommentOverflowSweep() {
+        if (redditCommentOverflowSweepQueued) return;
+        redditCommentOverflowSweepQueued = true;
+        setTimeout(() => {
+            redditCommentOverflowSweepQueued = false;
+            processAllUnapprovedComments();
+        }, 90);
+    }
+
     let redditOverflowSweepQueuedV295 = false;
     function queueRedditOverflowSweepV295() {
         if (redditOverflowSweepQueuedV295) return;
@@ -2473,6 +3085,15 @@
         
         for (let i = 0; i < limitedMutations.length; i++) {
             const mutation = limitedMutations[i];
+            if (mutation.type === 'characterData') {
+                const ownComment = mutation.target.parentElement?.closest?.('shreddit-comment');
+                if (ownComment) screenRedditComment(ownComment);
+                continue;
+            }
+            if (mutation.type === 'childList') {
+                const ownComment = mutation.target.closest?.('shreddit-comment');
+                if (ownComment) screenRedditComment(ownComment);
+            }
             
             if (mutation.target.id === 'search-dropdown-results-container' ||
                 mutation.target.tagName === 'FACEPLATE-SEARCH-DROPDOWN' ||
@@ -2492,7 +3113,13 @@
             const addedLimit = Math.min(mutation.addedNodes.length, 15);
             for (let j = 0; j < addedLimit; j++) {
                 const node = mutation.addedNodes[j];
-                if (!node || node.nodeType !== 1) continue;
+                if (!node) continue;
+                if (node.nodeType === 3) {
+                    const comment = node.parentElement?.closest?.('shreddit-comment');
+                    if (comment) screenRedditComment(comment);
+                    continue;
+                }
+                if (node.nodeType !== 1) continue;
 
                 // Never query each entire added React subtree for unrelated
                 // recent-posts markup. Preserve the clearing feature when its
@@ -2521,6 +3148,30 @@
                 
                 const enclosingSearchCard = node.closest?.(REDDIT_SEARCH_PREVIEW_SELECTOR_V295);
                 if (enclosingSearchCard) screenRedditSearchPreviewV295(enclosingSearchCard);
+
+                const enclosingComment = node.closest?.('shreddit-comment');
+                if (enclosingComment) screenRedditComment(enclosingComment);
+                if (node.matches?.('shreddit-comment')) screenRedditComment(node);
+                if (node.querySelectorAll) {
+                    const nestedComments = node.querySelectorAll('shreddit-comment');
+                    for (let k = 0; k < Math.min(nestedComments.length, 90); k++)
+                        screenRedditComment(nestedComments[k]);
+                }
+                // React can add the credit-bar Join host AFTER this post was
+                // already approved. Revoke approval as soon as that happens;
+                // the :has() CSS gate conceals it before this observer fires.
+                const joinPrompt = node.matches?.('shreddit-join-button[data-testid="credit-bar-join-button"]')
+                    ? node : node.querySelector?.('shreddit-join-button[data-testid="credit-bar-join-button"]');
+                if (joinPrompt && isRedditJoinFeedContext()) {
+                    const joinPost = joinPrompt.closest?.('shreddit-post');
+                    if (joinPost) screenRedditPostRootV295(joinPost);
+                }
+
+                const mediaPost = node.closest?.('shreddit-post');
+                if (mediaPost && (node.closest?.('[slot="post-media-container"]') ||
+                    node.matches?.('[slot="post-media-container"]'))) {
+                    screenRedditPostRootV295(mediaPost);
+                }
 
                 if (node.tagName === 'ARTICLE' || node.tagName === 'SHREDDIT-POST' ||
                    (node.getAttribute && node.getAttribute('data-testid') === 'search-post-unit') ||
@@ -2615,7 +3266,7 @@
         subtree: true,
         attributes: true,
         attributeFilter: ['recent-post-ids'],
-        characterData: false
+        characterData: true
     });
 
     const domDetachObserver = new MutationObserver((muts) => {
@@ -2644,10 +3295,54 @@
     hideBannedSubredditsFromAllSearchDropdowns();
     hideAndClearRecentPostsPanel();
 
+    function syncRedditFeedPolicyForRoute() {
+        document.documentElement.classList.toggle('nr-post-page', isPostPage());
+        document.documentElement.classList.remove('nr-guest-feed-rescue');
+        const home = isHomeFeedContext();
+        document.documentElement.classList.toggle('nr-home-feed', home);
+        document.documentElement.classList.toggle('nr-join-feed', isRedditJoinFeedContext());
+
+        // Reddit sometimes RECYCLES the same cards when navigating from home
+        // to a subreddit/search. An old home-only ban must not follow a safe
+        // adult card there, and an old approval must not bypass the home rules.
+        function resetHiddenCard(node) {
+            const previouslyBanned = node.classList.contains('reddit-banned') ||
+                                     node.classList.contains('reddit-search-banned') ||
+                                     node.classList.contains('reddit-comment-banned');
+            node.classList.remove('reddit-approved', 'reddit-banned',
+                'reddit-search-banned', 'reddit-comment-approved',
+                'reddit-comment-banned', 'nr-guest-verified', 'prehide');
+            if (previouslyBanned) {
+                for (const property of ['display', 'visibility', 'opacity', 'height',
+                        'padding', 'margin', 'pointer-events', 'position', 'z-index']) {
+                    if (node.style.getPropertyPriority(property) === 'important')
+                        node.style.removeProperty(property);
+                }
+            }
+            processedElements.delete(node);
+            processedSearchItems.delete(node);
+            permanentlyApprovedElements.delete(node);
+        }
+        for (const card of document.querySelectorAll(
+            'article.reddit-approved, article.reddit-banned, article.prehide, ' +
+            'shreddit-post.reddit-approved, shreddit-post.reddit-banned, shreddit-post.prehide, ' +
+            '[data-testid="search-post-unit"], [data-id="search-media-post-unit"], ' +
+            '[data-testid="search-post-with-content-preview"], ' +
+            '#search-dropdown-results-container .reddit-search-approved, ' +
+            '#search-dropdown-results-container .reddit-search-banned'
+        )) resetHiddenCard(card);
+        approvalPersistence.clear();
+        lastFilterTime = -Infinity;
+    }
+
     let currentUrl = window.location.href;
+    document.documentElement.classList.toggle('nr-post-page', isPostPage());
+    document.documentElement.classList.toggle('nr-home-feed', isHomeFeedContext());
+    document.documentElement.classList.toggle('nr-join-feed', isRedditJoinFeedContext());
     const urlCheckInterval = setInterval(() => {
         if (window.location.href !== currentUrl) {
             currentUrl = window.location.href;
+            syncRedditFeedPolicyForRoute();
             
             cleanupCaches();
             

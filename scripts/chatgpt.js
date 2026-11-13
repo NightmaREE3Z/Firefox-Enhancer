@@ -486,6 +486,23 @@
   const CHATGPT_DELETE_FAILURE_TOAST_SELECTOR =
     'li[data-sonner-toast] [data-title] .whitespace-pre-wrap';
 
+  // === Library trash-emptied success toast ========================================
+  // Edit messageText to customize the native "Roskakori tyhjennetty" notification.
+  // Set it to null to leave ChatGPT's original wording unchanged.
+  // Only the visible title changes; the success icon, close button and behavior stay native.
+  const CHATGPT_TRASH_EMPTIED_TOAST_CUSTOMIZATION = {
+    enabled: true,
+    messageText: 'Ui juna! Homma toimi tälläkertaa. Roskakori tyhjennetty onnistuneesti.'
+  };
+
+  const CHATGPT_TRASH_EMPTIED_TOAST_NATIVE_LABELS = new Set([
+    'roskakori tyhjennetty',
+    'trash emptied',
+    'trash has been emptied',
+    'trash emptied successfully',
+    'trash successfully emptied'
+  ]);
+
   // === Generic action-failure error toast ========================================
   // Edit messageText to customize the native Finnish error notification:
   // "Toiminnon suorittaminen ei onnistunut. Yritä uudelleen."
@@ -6695,6 +6712,7 @@
             }
             if (parent instanceof Element && parent.closest('li[data-sonner-toast]')) {
               customizeDeleteFailureToast(parent);
+              customizeTrashEmptiedToast(parent);
               customizeActionFailureToast(parent);
             }
             if (parent instanceof Element && mayContainConversationMessage(parent)) {
@@ -6783,6 +6801,7 @@
               node.querySelector('li[data-sonner-toast]')
             ) {
               customizeDeleteFailureToast(node);
+              customizeTrashEmptiedToast(node);
               customizeActionFailureToast(node);
             }
 
@@ -16683,6 +16702,26 @@
     });
   }
 
+  function customizeTrashEmptiedToast(scope = document) {
+    const settings = CHATGPT_TRASH_EMPTIED_TOAST_CUSTOMIZATION;
+    if (!settings.enabled || typeof settings.messageText !== 'string') return;
+
+    forEachMatch(scope, CHATGPT_DELETE_FAILURE_TOAST_SELECTOR, message => {
+      // Modify only the native toast title, never the surrounding Sonner controls.
+      const titleTextNode = Array.from(message.childNodes).find(child =>
+        child.nodeType === Node.TEXT_NODE && normalizeText(child.nodeValue)
+      );
+      if (!titleTextNode) return;
+
+      const text = normalizeText(titleTextNode.nodeValue);
+      if (!CHATGPT_TRASH_EMPTIED_TOAST_NATIVE_LABELS.has(text) &&
+          text !== normalizeText(settings.messageText)) return;
+      if (titleTextNode.nodeValue !== settings.messageText) {
+        titleTextNode.nodeValue = settings.messageText;
+      }
+    });
+  }
+
   function customizeActionFailureToast(scope = document) {
     const settings = CHATGPT_ACTION_FAILURE_TOAST_CUSTOMIZATION;
     if (!settings.enabled || typeof settings.messageText !== 'string') return;
@@ -16908,6 +16947,7 @@
     customizeConversationLoadError(scope);
     customizeHistoryLoadError(scope);
     customizeDeleteFailureToast(scope);
+    customizeTrashEmptiedToast(scope);
     customizeActionFailureToast(scope);
     replaceCustomizableHomeHeadline(scope);
     reconcileNativeChatGptAnnouncementFilter(scope);

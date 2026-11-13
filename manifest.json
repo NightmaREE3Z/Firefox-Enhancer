@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "BraveFox Enhancer",
-  "version": "29.8.1",
+  "version": "29.8.5",
   "description": "Unified for Firefox PC and Android personal use, for more peaceful Interwebs experience",
   "background": {
     "scripts": [
@@ -396,8 +396,15 @@
     {
       "matches": [
         "https://instagram.com/*",
+        "https://threads.net/*",
+        "https://threads.com/*",
+        "https://threads.org/*",
+        "https://tiktok.com/*",
         "https://www.instagram.com/*",
-        "https://www.threads.net/*"
+        "https://www.threads.net/*",
+        "https://www.threads.com/*",
+        "https://www.threads.org/*",
+        "https://www.tiktok.com/*"
       ],
       "js": [
         "scripts/instagram.js"
@@ -489,6 +496,15 @@
         "*://twitch.tv/*",
         "*://*.twitch.tv/*"
       ]
+    },
+    {
+      "matches": [
+        "https://arctic-shift.photon-reddit.com/*"
+      ],
+      "js": [
+        "scripts/reddit.js"
+      ],
+      "run_at": "document_start"
     },
     {
       "matches": [

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BraveFox WebFilter Script
-// @version	 29.7.2
-// @date	 2026-11-02
+// @version	 29.8.3
+// @date	 2026-11-13
 // @description  Filter out stuff on the internet (Targeted Enforcer)
 // @match        *://xvideos.com/*
 // @match        *://*.xvideos.com/*
@@ -2081,6 +2081,23 @@
                 html.bravefox-redgifs-filtering-active button[${REDGIFS_UI_STATE_ATTR}="blocked"] {
                     display: none !important;
                 }
+                /* RedGifs banner and player LIVE promo: collapse the whole containers
+                   immediately, including elements mounted later by React. */
+                html.bravefox-redgifs-filtering-active .AnnouncementBar,
+                html.bravefox-redgifs-filtering-active li.sideBarItem:has(> .liveAdButton),
+                html.bravefox-redgifs-filtering-active li.sideBarItem .liveAdButton {
+                    display: none !important;
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    height: 0 !important;
+                    min-height: 0 !important;
+                    max-height: 0 !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    pointer-events: none !important;
+                    transition: none !important;
+                    animation: none !important;
+                }
                 /* Remove named promotions from the outset, without waiting for a text check. */
                 html.bravefox-redgifs-filtering-active .OnlyFansCreatorsSidebar,
                 html.bravefox-redgifs-filtering-active .adSearchLink,
@@ -2202,7 +2219,7 @@
             if (!text) { button.removeAttribute(REDGIFS_UI_STATE_ATTR); return; }
             if (redGifsUiCache.get(button) === text && button.hasAttribute(REDGIFS_UI_STATE_ATTR)) return;
             redGifsUiCache.set(button, text);
-            const blocked = (button.matches('button.aTab') && /^AI\s*Porn$/i.test(text)) ||
+            const blocked = (button.matches('button.aTab') && /^(?:AI\s*Porn|Watch\s+Live\s+Sex)$/i.test(text)) ||
                 (button.matches('button[data-rg-tab="true"]') && /^Niches$/i.test(text));
             button.setAttribute(REDGIFS_UI_STATE_ATTR, blocked ? 'blocked' : 'clean');
             if (blocked) button.setAttribute('aria-hidden', 'true');
@@ -2296,6 +2313,9 @@
             if (!injectRedGifsNoGlimpseCSS()) return;
             document.querySelectorAll(REDGIFS_BURGER_ITEM_SELECTOR)
                 .forEach(filterRedGifsBurgerMenuItem);
+            // Classify header tabs already mounted before the observer starts, too.
+            document.querySelectorAll(REDGIFS_UI_SELECTOR)
+                .forEach(filterRedGifsUiButton);
             if (!redGifsSourcesReady() || !isRedGifsScanRoute()) return;
             checkRedGifsSearchRoute();
             document.querySelectorAll(REDGIFS_CARD_SELECTOR).forEach(candidate =>

@@ -1703,23 +1703,21 @@ Never provide or suggest icacls/takeown commands, even if asked, unless I'm acti
         });
     }
 
+    // React repeatedly mounts/unmounts Spotlight controls. Only click each fresh button
+    // once, on insertion or navigation, rather than spawning overlapping 50-ms timers.
+    const snapchatMinimizedButtons = new WeakSet();
     function handleSnapchatSpotlightAutoMinimize() {
         if (!window.location.hostname.includes('snapchat.com')) return;
-        const tryMinimize = () => {
-            try {
-                const minimizeButton = document.querySelector(snapchatMinimizeButtonSelector);
-                if (minimizeButton && !hiddenElements.has(minimizeButton)) {
-                    minimizeButton.click();
-                    console.log('Auto-minimized Snapchat spotlight immediately.');
-                } else {
-                    addTimeout(tryMinimize, 50);
-                }
-            } catch (e) {
-                console.warn('Failed to auto-minimize Snapchat spotlight:', e);
+        try {
+            const minimizeButton = document.querySelector(snapchatMinimizeButtonSelector);
+            if (minimizeButton && !snapchatMinimizedButtons.has(minimizeButton)) {
+                snapchatMinimizedButtons.add(minimizeButton);
+                minimizeButton.click();
+                console.log('Auto-minimized Snapchat spotlight immediately.');
             }
-        };
-        tryMinimize();
-        onEvent(document, 'DOMContentLoaded', tryMinimize, false);
+        } catch (e) {
+            console.warn('Failed to auto-minimize Snapchat spotlight:', e);
+        }
     }
 
     function handleSnapchatCameraExpansion() {
@@ -2296,10 +2294,6 @@ Never provide or suggest icacls/takeown commands, even if asked, unless I'm acti
                     return true;
                 }
             }
-            if (hrefLower.includes('@karabrannbacka')) {
-                fastRedirect('https://www.tiktok.com');
-                return true;
-            }
         } catch {}
         return false;
     }
@@ -2414,75 +2408,85 @@ Never provide or suggest icacls/takeown commands, even if asked, unless I'm acti
             }
         }
 
-        if (currentURL.includes('@karabrannbacka')) {
-            try { window.stop(); } catch {}
-            fastRedirect('https://www.tiktok.com');
-            return;
-        }
+
     }
 
+    // ===== Shared SPA lifecycle: navigation, hydration, and DOM replacement =====
     let observerScheduled = false;
+    let lastObservedRoute = window.location.href;
+    let routeHydrationTimer = null;
+    let routeHydrationSerial = 0;
+
+    function scheduleRouteHydration() {
+        if (routeHydrationTimer !== null) {
+            clearTimeout(routeHydrationTimer);
+            __timers.timeouts.delete(routeHydrationTimer);
+            routeHydrationTimer = null;
+        }
+        const serial = ++routeHydrationSerial;
+        // One delayed pass catches deferred React/Angular hydration. Later insertions
+        // are handled by the observer, so there is no high-frequency DOM polling.
+        routeHydrationTimer = addTimeout(() => {
+            routeHydrationTimer = null;
+            if (serial !== routeHydrationSerial || __isRedirectingFast || document.hidden) return;
+            mainHandler();
+        }, 180);
+    }
+
+    function onSpaLocationChange() {
+        if (__isRedirectingFast) return;
+        const next = window.location.href;
+        if (next === lastObservedRoute) return;
+        lastObservedRoute = next;
+        currentURL = next;
+        // A Gemini overlay's contextual state must not survive a navigation.
+        document.documentElement?.classList.remove('gemini-gem-menu-active');
+        injectInlineCSS();
+        mainHandler();
+        scheduleRouteHydration();
+    }
+
     function observerCallback(mutationsList) {
-        // Spotify gets a synchronous pass on newly inserted DOM so the target row is
-        // classed before the normal debounced cleanup pass.
-        if (isSpotifyHost()) {
-            for (const mutation of mutationsList) {
-                mutation.addedNodes.forEach(node => {
-                    if (node && node.nodeType === 1) {
-                        handleSpotifyNoGlimpseHiding(node);
-                        hideSpotifyBannedSearchDropdownResults(node);
-                    }
-                });
-            }
-        }
+        if (__isRedirectingFast) return;
+        if (window.location.href !== lastObservedRoute) onSpaLocationChange();
 
-        // Gemini gets the same synchronous treatment: if Angular inserts/replaces a saved-info
-        // row or its 3-dot child, hide the protected row's action trigger before the debounced pass.
-        if (window.location.hostname.includes('gemini.google.com')) {
-            for (const mutation of mutationsList) {
-                mutation.addedNodes.forEach(node => {
-                    if (node && node.nodeType === 1) protectGeminiMemoryRows(node);
-                });
-            }
-        }
-
-        // GitHub Copilot is React-rendered. Re-discover the Personal instructions editor
-        // synchronously when its dialog/textarea is inserted or replaced.
-        if (isGitHubCopilotPage()) {
-            for (const mutation of mutationsList) {
-                mutation.addedNodes.forEach(node => {
-                    if (node && node.nodeType === 1) protectCopilotPersonalInstructionsEditors(node);
-                });
-            }
+        // Immediate subtree-only inspection minimizes flashes before the debounced pass.
+        for (const mutation of mutationsList) {
+            if (mutation.type !== 'childList') continue;
+            mutation.addedNodes.forEach(node => {
+                if (!node || node.nodeType !== 1) return;
+                if (isSpotifyHost()) {
+                    handleSpotifyNoGlimpseHiding(node);
+                    hideSpotifyBannedSearchDropdownResults(node);
+                }
+                if (window.location.hostname.includes('gemini.google.com')) protectGeminiMemoryRows(node);
+                if (isGitHubCopilotPage()) protectCopilotPersonalInstructionsEditors(node);
+            });
         }
 
         if (observerScheduled) return;
         observerScheduled = true;
         addTimeout(() => {
             observerScheduled = false;
-            handleIRCGalleriaThumbDeletion();
-            handleGeminiUnwantedHiding();
-            protectCopilotPersonalInstructionsEditors();
-            handleSpotifyNoGlimpseHiding();
-            hideSpotifyBannedSearchDropdownResults();
-            
-            // Re-check and inject NextDNS UI if React dynamically loaded the form
-            if (NextDNSManager.isTargetPage()) {
-                NextDNSManager.injectUI();
-            }
-        }, 80);
+            if (__isRedirectingFast || document.hidden) return;
+            if (window.location.href !== lastObservedRoute) onSpaLocationChange();
+            mainHandler();
+        }, 90);
     }
 
     function initObserver() {
         if (__isRedirectingFast) return;
         const observer = trackObserver(new MutationObserver(observerCallback));
         function startObserve() {
-            if (document.body) {
-                observer.observe(document.body, { childList: true, subtree: true });
+            // Observe the document root, not body: React/Angular can replace body
+            // or main entirely without reloading the page.
+            if (document.documentElement) {
+                observer.observe(document.documentElement, {
+                    childList: true, subtree: true, characterData: true,
+                    attributes: true, attributeFilter: ['href', 'title', 'aria-label', 'data-test-id', 'data-testid']
+                });
             } else {
-                onEvent(document, 'DOMContentLoaded', () => {
-                    observer.observe(document.body, { childList: true, subtree: true });
-                }, false);
+                onEvent(document, 'DOMContentLoaded', startObserve, { once: true });
             }
         }
         startObserve();
@@ -2490,29 +2494,28 @@ Never provide or suggest icacls/takeown commands, even if asked, unless I'm acti
 
     function mainHandler() {
         if (__isRedirectingFast) return;
+        if (window.location.href !== lastObservedRoute) lastObservedRoute = window.location.href;
+        currentURL = window.location.href;
+        // Site CSS can disappear when frameworks replace head or route layouts.
+        if (!document.getElementById('extra-redirect-style')) injectInlineCSS();
         handleRedirectionsAndContentHiding();
         if (currentURL.toLowerCase().includes('irc-galleria.net/user/irpp4')) {
             handleIRCGalleriaThumbDeletion();
         }
-        
-        // Inject NextDNS tools
-        if (NextDNSManager.isTargetPage()) {
-            NextDNSManager.injectUI();
-        }
+        if (NextDNSManager.isTargetPage()) NextDNSManager.injectUI();
     }
 
     mainHandler();
     initObserver();
 
+    // Slow safety heartbeat for sites that change URL/state without mutating any
+    // observed DOM. Heavy scans happen on navigation or mutation, not every 120 ms.
     function scheduleIntervals() {
         addInterval(() => {
-            if (!document.hidden && !__isRedirectingFast) {
-                mainHandler();
-                if (currentURL.toLowerCase().includes('irc-galleria.net/user/irpp4')) {
-                    handleIRCGalleriaThumbDeletion();
-                }
-            }
-        }, 120);
+            if (document.hidden || __isRedirectingFast) return;
+            if (window.location.href !== lastObservedRoute) onSpaLocationChange();
+            else mainHandler();
+        }, 2000);
     }
     startIntervals(scheduleIntervals);
 
@@ -2521,43 +2524,40 @@ Never provide or suggest icacls/takeown commands, even if asked, unless I'm acti
             stopIntervals();
         } else {
             startIntervals(scheduleIntervals);
+            if (window.location.href !== lastObservedRoute) onSpaLocationChange();
             mainHandler();
         }
     }, false);
 
     (function() {
-        var _wr = function(type) {
-            var orig = history[type];
-            return function() {
-                var rv = orig.apply(this, arguments);
-                window.dispatchEvent(new Event(type));
-                return rv;
+        const wrapHistory = function(type) {
+            const original = history[type];
+            if (typeof original !== 'function') return;
+            history[type] = function() {
+                const before = window.location.href;
+                const result = original.apply(this, arguments);
+                if (window.location.href !== before) window.dispatchEvent(new Event('locationchange'));
+                return result;
             };
         };
-        history.pushState = _wr('pushState');
-        history.replaceState = _wr('replaceState');
-        onEvent(window, 'pushState', function() {
-            window.dispatchEvent(new Event('locationchange'));
-        }, false);
-        onEvent(window, 'replaceState', function() {
-            window.dispatchEvent(new Event('locationchange'));
-        }, false);
-        onEvent(window, 'popstate', function() {
-            window.dispatchEvent(new Event('locationchange'));
-        }, false);
+        wrapHistory('pushState');
+        wrapHistory('replaceState');
     })();
 
-    onEvent(window, 'locationchange', function() {
-        if (__isRedirectingFast) return;
-        currentURL = window.location.href;
-        injectInlineCSS();
-        mainHandler();
-        if (currentURL.toLowerCase().includes('irc-galleria.net/user/irpp4')) {
-            handleIRCGalleriaThumbDeletion();
-        }
+    onEvent(window, 'locationchange', onSpaLocationChange, false);
+    onEvent(window, 'popstate', onSpaLocationChange, false);
+    onEvent(window, 'hashchange', onSpaLocationChange, false);
+    onEvent(window, 'pageshow', function() {
+        if (window.location.href !== lastObservedRoute) onSpaLocationChange();
+        else mainHandler();
     }, false);
+    if (window.navigation?.addEventListener) {
+        onEvent(window.navigation, 'currententrychange', onSpaLocationChange, false);
+    }
 
-    onEvent(window, 'pagehide', cleanup, false);
-    onEvent(window, 'beforeunload', cleanup, false);
+    // Preserve SPA listeners when the browser restores this document from BFCache.
+    onEvent(window, 'pagehide', function(event) {
+        if (!event.persisted) cleanup();
+    }, false);
 
 })();
