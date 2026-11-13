@@ -4,6 +4,19 @@ const form = document.querySelector('#unlockForm');
 const input = document.querySelector('#passwordInput');
 const button = document.querySelector('#unlockButton');
 const errorText = document.querySelector('#errorText');
+const pickerButton = document.querySelector('#openElementPicker');
+
+pickerButton?.addEventListener('click', async () => {
+  pickerButton.disabled = true;
+  try {
+    const response = await browser.runtime.sendMessage({ type: 'ESELECT_START' });
+    if (!response?.ok) throw new Error(response?.error || 'Could not start picker.');
+    window.close();
+  } catch (error) {
+    pickerButton.textContent = error?.message || 'Picker unavailable on this tab';
+    pickerButton.disabled = false;
+  }
+});
 const panel = document.querySelector('.lock-panel');
 
 const versionLabel = document.querySelector('#enhancerVersion');

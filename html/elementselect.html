@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>BraveFox Element Picker — Manage</title>
+  <link rel="stylesheet" href="../css/elementselect.css">
+</head>
+<body class="elementselect-manager">
+  <header class="es-header">
+    <div>
+      <h1>Element Picker · Manage</h1>
+      <p>Your hidden elements, organized by website.</p>
+    </div>
+    <img class="es-logo" src="../icons/48.png" alt="BraveFox Enhancer">
+  </header>
+  <main class="es-layout">
+    <aside class="es-card es-side" aria-label="Websites">
+      <h2>Websites</h2>
+      <input id="search" type="search" placeholder="Find website…" aria-label="Search websites">
+      <div id="hosts"></div>
+    </aside>
+    <div class="es-content">
+      <section class="es-card" aria-label="Hidden elements">
+        <h2 id="selectedSite">Select a website</h2>
+        <div id="rules"></div>
+      </section>
+      <section class="es-card" aria-label="Add a rule">
+        <h2>Add CSS rule</h2>
+        <form id="addForm" class="es-add">
+          <label>Website host<input id="newHost" type="text" placeholder="example.com" required></label>
+          <label>Where to hide it
+            <select id="newScope">
+              <option value="site">Entire website</option>
+              <option value="path">Path and subpages</option>
+              <option value="exact">Exact URL</option>
+            </select>
+          </label>
+          <label>Page path (for path / exact URL)<input id="newPath" type="text" placeholder="/some/page"></label>
+          <label>Query string (exact URL only)<input id="newQuery" type="text" placeholder="?q=example"></label>
+          <label class="wide">CSS selector<input id="newSelector" type="text" placeholder="article[data-testid=&quot;ad-card&quot;]" spellcheck="false" required></label>
+          <div class="wide"><button class="action primary" type="submit">Add rule</button></div>
+        </form>
+      </section>
+      <section id="authBox" hidden>
+        <p>Editing rules for <strong id="authSite"></strong> requires the existing BraveFox password.</p>
+        <form id="unlockForm" autocomplete="off">
+          <input id="password" type="password" autocomplete="off" placeholder="Password" aria-label="BraveFox password">
+          <button class="action primary" type="submit">Unlock</button>
+        </form>
+      </section>
+      <section class="es-card" aria-label="Settings">
+        <h2>Settings</h2>
+        <label class="es-setting">
+          <input id="contextEnabled" type="checkbox">
+          <span><strong>Context menu entry</strong><small>Show “Elementinvalitsin” when right-clicking a webpage.</small></span>
+        </label>
+        <p class="es-footer">Trusted sites come exclusively from Focus Master's TrustedSites.csv. This page cannot edit them.</p>
+      </section>
+      <section class="es-card" aria-label="Backup and restore">
+        <h2>Backup and restore</h2>
+        <div class="es-row">
+          <button id="export" class="action" type="button">Export JSON</button>
+          <label class="es-import">Import JSON (merge only)<input id="import" type="file" accept=".json,application/json"></label>
+        </div>
+        <p class="es-footer">Imports only add rules. Existing rules are never replaced or removed, including protected rules.</p>
+      </section>
+      <p id="status" role="status" aria-live="polite"></p>
+    </div>
+  </main>
+  <script src="../scripts/elementselect.js"></script>
+</body>
+</html>

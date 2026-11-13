@@ -328,6 +328,15 @@
   const ANALYSIS_ACTIVITY_USER_ATTR = 'data-bravefox-analysis-user-controlled';
   const ANALYSIS_ACTIVITY_PENDING_ATTR = 'data-bravefox-analysis-collapse-pending';
 
+  // ChatGPT's summaries/results island can pin itself open when new artifacts
+  // arrive. Close the whole island through its native toolbar toggle; collapsing
+  // just the inner "Results" heading still leaves an unwanted floating card.
+  const THREAD_SUMMARY_TOGGLE_SELECTOR = 'button[data-thread-summary-panel-toggle="true"][aria-pressed]';
+  const threadSummaryClosePending = new WeakSet();
+  const threadSummaryCollapseAttempts = new WeakMap();
+  let threadSummaryRoute = location.pathname;
+  let threadSummaryUserOpen = false;
+
   // ChatGPT mounts the sidebar in stages. Keep the early navigation rows hidden until
   // the real Library button exists, then reveal that top group together. Recent chats stay
   // hidden until the real Projects section exists, so both late-loading areas settle together.
@@ -1737,6 +1746,7 @@
   maintainSidebarStageReveal(document);
   armSidebarStageFailOpen();
   collapseAnalysisActivityPanels(document);
+  collapseThreadSummaryPanels(document);
   configureRouteObserver();
   scheduleGeneralUiScan(true);
   scheduleSidebarPolishRetries();
@@ -4197,6 +4207,8 @@
         if (analysisToggle && isAnalysisActivityToggle(analysisToggle)) {
           markAnalysisActivityUserControlled(analysisToggle);
         }
+        const summaryToggle = getElementFromEvent(event, THREAD_SUMMARY_TOGGLE_SELECTOR);
+        if (summaryToggle) rememberThreadSummaryUserChoice(summaryToggle);
       }
 
       // Pre-empt normal left-click navigation into protected ChatGPT routes. This runs
@@ -4383,6 +4395,8 @@
         if (analysisToggle && isAnalysisActivityToggle(analysisToggle)) {
           markAnalysisActivityUserControlled(analysisToggle);
         }
+        const summaryToggle = getElementFromEvent(event, THREAD_SUMMARY_TOGGLE_SELECTOR);
+        if (summaryToggle) rememberThreadSummaryUserChoice(summaryToggle);
       }
 
       if (event.key === 'Escape') {
@@ -6657,6 +6671,10 @@
             collapseAnalysisActivityPanels(mutation.target);
             continue;
           }
+          if (mutation.type === 'attributes' && mutation.attributeName === 'aria-pressed') {
+            if (isThreadSummaryToggle(mutation.target)) collapseThreadSummaryToggle(mutation.target);
+            continue;
+          }
           if (mutation.type === 'attributes' &&
               (mutation.attributeName === 'aria-checked' || mutation.attributeName === 'disabled')) {
             if (isPersonalizationRoute() && mutation.target instanceof HTMLButtonElement &&
@@ -6821,6 +6839,7 @@
             // MutationObserver callbacks run before the browser's next paint. Collapse new
             // reasoning/activity panels here so expanded analysis does not become a scroll wall.
             collapseAnalysisActivityPanels(node);
+            collapseThreadSummaryPanels(node);
 
             // Keep the sidebar's staged reveal synchronized before the browser paints new rows.
             // Library releases the top navigation; Projects releases Recent + chat history.
@@ -6943,7 +6962,7 @@
         subtree: true,
         characterData: true,
         attributes: true,
-        attributeFilter: ['aria-expanded', 'aria-checked', 'disabled']
+        attributeFilter: ['aria-expanded', 'aria-pressed', 'aria-checked', 'disabled']
       });
     };
 
@@ -6973,6 +6992,80 @@
         applyGptPagePolicy(document);
       }
     }, delay);
+  }
+
+  function syncThreadSummaryRoute() {
+    if (threadSummaryRoute === location.pathname) return;
+    threadSummaryRoute = location.pathname;
+    threadSummaryUserOpen = false;
+  }
+
+  function isThreadSummaryToggle(button) {
+    return button instanceof HTMLButtonElement &&
+      button.matches(THREAD_SUMMARY_TOGGLE_SELECTOR);
+  }
+
+  function rememberThreadSummaryUserChoice(button) {
+    if (!isThreadSummaryToggle(button)) return;
+    syncThreadSummaryRoute();
+    // Capture the state before React handles the real click/key activation.
+    // Only the user can override the default-closed state. We leave the
+    // native panel and its layout completely untouched.
+    threadSummaryUserOpen = button.getAttribute('aria-pressed') !== 'true';
+    threadSummaryCollapseAttempts.delete(button);
+  }
+
+  function collapseThreadSummaryToggle(button) {
+    if (!isThreadSummaryToggle(button)) return false;
+    syncThreadSummaryRoute();
+    if (threadSummaryUserOpen) return false;
+    if (button.getAttribute('aria-pressed') !== 'true') {
+      threadSummaryClosePending.delete(button);
+      threadSummaryCollapseAttempts.delete(button);
+      return false;
+    }
+    if (threadSummaryClosePending.has(button)) return false;
+
+    // React may not have hydrated the toolbar yet. Retry briefly if its pressed
+    // state has not changed, without creating a permanent polling loop.
+    const attempt = (threadSummaryCollapseAttempts.get(button) || 0) + 1;
+    if (attempt > 4) return false;
+    threadSummaryCollapseAttempts.set(button, attempt);
+    threadSummaryClosePending.add(button);
+    try {
+      button.click();
+    } catch {
+      threadSummaryClosePending.delete(button);
+      return false;
+    }
+    window.setTimeout(() => {
+      threadSummaryClosePending.delete(button);
+      if (!button.isConnected) return;
+      if (button.getAttribute('aria-pressed') === 'true') collapseThreadSummaryToggle(button);
+      else threadSummaryCollapseAttempts.delete(button);
+    }, 180 + attempt * 60);
+    return true;
+  }
+
+  function collapseThreadSummaryPanels(scope = document) {
+    if (!scope) return;
+    syncThreadSummaryRoute();
+    if (scope instanceof Element) {
+      const button = scope.closest(THREAD_SUMMARY_TOGGLE_SELECTOR);
+      if (button) { collapseThreadSummaryToggle(button); return; }
+    }
+    if (typeof scope.querySelector !== 'function') return;
+    const nestedButton = scope.querySelector(THREAD_SUMMARY_TOGGLE_SELECTOR);
+    if (nestedButton) { collapseThreadSummaryToggle(nestedButton); return; }
+    // The toolbar and floating results card live in separate DOM branches.
+    // A remounted card can signal automatic reopening before its toolbar
+    // reports the pressed-state mutation, so also check that native control.
+    if (scope instanceof Element &&
+        (scope.matches('[data-summary-panel-variant], [data-pip-obstacle="thread-summary-panel"]') ||
+         scope.closest('[data-summary-panel-variant]') ||
+         scope.querySelector('[data-summary-panel-variant], [data-pip-obstacle="thread-summary-panel"]'))) {
+      collapseThreadSummaryToggle(document.querySelector(THREAD_SUMMARY_TOGGLE_SELECTOR));
+    }
   }
 
   function getAnalysisActivityLabel(button) {

@@ -2,6 +2,8 @@
 // Shared by Firefox PC/ESR and Firefox Android/Fenix Nightly.
 // Platform-exclusive behavior lives in modules/pc-esr.js and modules/fenix-nightly.js.
 
+import './scripts/elementselect.js';
+
 import { isCompletelyExcludedHostname, isCompletelyExcludedUrl, isGoogleMapsOrEarthUrl } from "./blocker/shared.js";
 import { getSettings, loadDataset } from "./blocker/storage.js";
 import { findTimeRuleBlock } from "./blocker/timers.js";

@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "BraveFox Enhancer",
-  "version": "29.8.5",
+  "version": "29.9.0",
   "description": "Unified for Firefox PC and Android personal use, for more peaceful Interwebs experience",
   "background": {
     "scripts": [
@@ -15,11 +15,17 @@
     "webNavigation",
     "history",
     "tabs",
+    "contextMenus",
     "storage",
     "alarms",
     "<all_urls>"
   ],
   "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["scripts/elementselect.js"],
+      "run_at": "document_start"
+    },
     {
       "matches": [
         "http://*/*",
@@ -541,7 +547,8 @@
   "web_accessible_resources": [
     "icons/*",
     "blocker/blocked.html",
-    "html/password-protected.html"
+    "html/password-protected.html",
+    "css/elementselect.css"
   ],
   "icons": {
     "16": "icons/16.png",

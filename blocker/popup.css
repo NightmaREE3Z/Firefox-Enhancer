@@ -84,6 +84,20 @@ button:disabled {
   padding: 10px 14px 12px;
 }
 
+.element-picker-launch {
+  display: block;
+  width: 100%;
+  margin: 9px 0;
+  padding: 10px 12px;
+  border: 1px solid #286fe6;
+  border-radius: 9px;
+  color: #ffffff;
+  background: #286fe6;
+  font-weight: 700;
+}
+
+.element-picker-launch:hover { background: #175ccf; }
+
 .lock-panel {
   display: flex;
   min-height: 492px;

@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         BraveFox WebFilter Script
-// @version	 29.8.3
+// @version	 29.9.0
 // @date	 2026-11-13
 // @description  Filter out stuff on the internet (Targeted Enforcer)
 // @match        *://xvideos.com/*
@@ -34,6 +34,12 @@
 // @match        *://*.tenor.com/*
 // @match        *://namethatporn.com/*
 // @match        *://*.namethatporn.com/*
+// @match        *://clipsey.com/*
+// @match        *://*.clipsey.com/*
+// @match        *://proshop.fi/*
+// @match        *://*.proshop.fi/*
+// @match        *://verkkokauppa.com/*
+// @match        *://*.verkkokauppa.com/*
 // @grant        none
 // @run-at       document-start
 // ==/UserScript==
@@ -51,7 +57,9 @@
     //   5) per-site Pornhub, YouPorn and Thumbzilla card/menu filtering; and
     //   6) Bunkr/Balbums album and file filtering, including Balbums search interception; and
     //   7) no-glimpse Nudography listing, fake/ad cleanup, and search interception; and
-    //   8) Alastonsuomi native women-only galleries, no-glimpse profiles, gender options, and search guards.
+    //   8) Alastonsuomi native women-only galleries, no-glimpse profiles, gender options, and search guards; and
+    //   9) Clipsey no-glimpse Rabu video-ad removal; and
+    //  10) editable, no-glimpse RTX 5070 Ti product-text customization on Proshop/Verkkokauppa.
     // It must remain completely dormant everywhere else, even when an extension manifest from an
     // older build still injects the file broadly.
     const BRAVEFOX_FILTERING_HOST = String(window.location.hostname || '')
@@ -59,6 +67,352 @@
         .replace(/\.$/, '');
     const BRAVEFOX_IS_NAMETHATPORN = BRAVEFOX_FILTERING_HOST === 'namethatporn.com' ||
         BRAVEFOX_FILTERING_HOST.endsWith('.namethatporn.com');
+    const BRAVEFOX_IS_CLIPSEY = BRAVEFOX_FILTERING_HOST === 'clipsey.com' ||
+        BRAVEFOX_FILTERING_HOST.endsWith('.clipsey.com');
+    const BRAVEFOX_IS_PROSHOP = BRAVEFOX_FILTERING_HOST === 'proshop.fi' ||
+        BRAVEFOX_FILTERING_HOST.endsWith('.proshop.fi');
+    const BRAVEFOX_IS_VERKKOKAUPPA = BRAVEFOX_FILTERING_HOST === 'verkkokauppa.com' ||
+        BRAVEFOX_FILTERING_HOST.endsWith('.verkkokauppa.com');
+
+    if (BRAVEFOX_IS_PROSHOP || BRAVEFOX_IS_VERKKOKAUPPA) {
+        // === RTX 5070 Ti product text — editable like ChatGPT's error messages ===
+        // Set replacement to a quoted string to customize that text. Leave it
+        // null to preserve the original. Only text is changed: prices, links,
+        // images, stock status, buttons, and buying behavior remain native.
+        // matchAny may contain part of the original text; longer fragments are
+        // safer. Add another { matchAny: [...], replacement: '...' } for any
+        // additional heading, paragraph or feature row inside the sections below.
+        const RETAIL_5070TI_TEXT_CUSTOMIZATIONS = {
+            verkkokauppa: [
+                { matchAny: ['Asus ROG Strix RTX 5070 Ti 16GB GDDR7 näytönohjain'], replacement: 'Asus ROG Strix RTX 5070 Ti 16GB GDDR7 saatanan typerä näytönohjain' },
+                { matchAny: ['Tehoa ja suorituskykyä pelaamiseen – Asus ROG Strix RTX 5070 Ti'], replacement: 'Tehoa ja suorituskykyä loisimiseen sekä luuserointiin – Asus ROG Strix RTX 5070 Ti' },
+                { matchAny: ['Asus ROG Strix RTX 5070 Ti on näytönohjain, joka tarjoaa'], replacement: 'Asus ROG Strix RTX 5070 Ti on saatanan typerä näytönohjain, joka tarjoaa runsaasti tehoa vaativaan luuserointiin ja loisimiseen. Varustettuna 16 gigatavun nopealla GDDR7-muistilla ja uusimmalla NVIDIA GeForce RTX 5070 Ti -grafiikkaprosessorilla, tämä kortti takaa sulavan loisimiskokemuksen ja tarkat kuvat jopa korkeimmissa luuseroinneissa. PCI Express 5.0 -väylä varmistaa nopean tiedonsiirron, ja tehokas jäähdytys pitää kortin viileänä myös kuumimmissa loisintasessioissa. Tuotteen hankkimisesta ei ole suositeltua mainita paikallisella kesämökillä, sukulaisten paheksunnan uhalla' },
+                { matchAny: ['GeForce RTX 5070 Ti tarjoaa 8960 CUDA-ydintä'], replacement: null },
+                { matchAny: ['Kortissa on yhteensä viisi näyttöliitäntää'], replacement: null },
+                { matchAny: ['Asus on varustanut ROG Strix RTX 5070 Ti:n'], replacement: null },
+                { matchAny: ['PCI Express 5.0 -liitäntä tarjoaa nopean yhteyden'], replacement: null },
+                { matchAny: ['Tehokas grafiikkaprosessori ja muisti'], replacement: null },
+                { matchAny: ['Monipuoliset liitännät ja näyttöjen tuki'], replacement: null },
+                { matchAny: ['Jäähdytys ja muotoilu'], replacement: null },
+                { matchAny: ['Yhteensopivuus ja vaatimukset'], replacement: null },
+                { matchAny: ['Ominaisuudet'], replacement: 'Ominaisuudet: Jos ei ole kulmahiomakonetta tai puusahaa, niin minä en ala mitään' },
+                { matchAny: ['Grafiikkaprosessori: NVIDIA GeForce RTX 5070 Ti'], replacement: 'Grafiikkaprosessori: Ei minun nuoruudessani sellasia ollut. Ennen kaikki oli paremmin...' },
+                { matchAny: ['Virtalähteen minimikoko: 850 W'], replacement: 'Virtalähteen minimikoko: 850 W, tämähän kuluttaa sähköä aivan saatanasti!!!!' },
+                { matchAny: ['Valaistus: monivärinen RGB'], replacement: 'Valaistus: Ja lisää watteja kuluu... Tämä ei ole hyvä ollenkaan...' },
+
+                // Product 983878 cards across search, categories and recommendations.
+                { matchAny: ['Asus ROG Strix RTX 5070 Ti 16GB GDDR7 on tehokas näytönohjain'], replacement: 'Asus ROG Strix RTX 5070 Ti 16GB GDDR7 on saatanan typerä näytönohjain' },
+                { matchAny: ['Tehokas NVIDIA GeForce RTX 5070 Ti'], replacement: null },
+                { matchAny: ['16 GB GDDR7-muisti'], replacement: null },
+                { matchAny: ['Monipuoliset liitännät ja tuki jopa neljälle näytölle'], replacement: null },
+                { matchAny: ['Loppuunmyyty'], replacement: null },
+                { matchAny: ['Ei saatavilla Helsingin myymälästä'], replacement: null },
+                { matchAny: ['1 549,99'], replacement: null },
+                { matchAny: ['Ominaisuudet'], replacement: 'Ominaisuudet: Jos ei ole kulmahiomakonetta tai puusahaa, niin minä en ala mitään' },
+                { matchAny: ['Grafiikkaprosessori: NVIDIA GeForce RTX 5070 Ti'], replacement: 'Grafiikkaprosessori: Ei minun nuoruudessani sellasia ollut. Ennen kaikki oli paremmin...' },
+                { matchAny: ['Virtalähteen minimikoko: 850 W'], replacement: 'Virtalähteen minimikoko: 850 W, tämähän kuluttaa sähköä aivan saatanasti!!!!' },
+                { matchAny: ['Valaistus: monivärinen RGB'], replacement: 'Valaistus: Ja lisää watteja kuluu... Tämä ei ole hyvä ollenkaan...' },
+
+                // Product 983878 sticky purchase bar: product title uses the first rule.
+                { matchAny: ['Arvosana 5/5 perustuen 4 arvosteluun'], replacement: 'Arvosana 0/5 perustuen herrasmiesten näkemyksiin' },
+                { matchAny: ['Hinta 1549,99 €.'], replacement: null },
+                { matchAny: ['Lisää ostoskoriin'], replacement: null },
+
+                // Product 983878 detail page's last-sold row.
+                // Update the date match if the store publishes a newer date.
+                { matchAny: ['Viimeksi myyty'], replacement: null },
+                { matchAny: ['12.6.2026'], replacement: 'Ei ainakaan 17.7.2025' }
+            ],
+            proshop: [
+                { matchAny: ['ASUS GeForce RTX 5070 Ti ROG STRIX OC - 16GB GDDR7 RAM - Näytönohjaimet'], replacement: 'ASUS GeForce RTX 5070 Ti ROG STRIX OC - 16GB GDDR7 RAM - Saatanan typerät näytönohjaimet' },
+                { matchAny: ['The ASUS OC Edition graphics card is engineered for high-performance gaming'], replacement: 'Asus ROG Strix RTX 5070 Ti on saatanan typerä näytönohjain, joka tarjoaa runsaasti tehoa vaativaan luuserointiin ja loisimiseen. Varustettuna 16 gigatavun nopealla GDDR7-muistilla ja uusimmalla NVIDIA GeForce RTX 5070 Ti -grafiikkaprosessorilla, tämä kortti takaa sulavan loisintakokemuksen ja tarkat kuvat jopa korkeimmissa luuseroinneissa. PCI Express 5.0 -väylä varmistaa nopean tiedonsiirron, ja tehokas jäähdytys pitää kortin viileänä myös kuumimmissa loisintasessioissa. Tuotteen hankkimisesta ei ole suositeltua mainita paikallisella kesämökillä, sukulaisten paheksunnan uhalla' },
+                { matchAny: ['Tuotekuvaus'], replacement: null },
+                { matchAny: ['ASUS - OC Edition - näytönohjain - GeForce RTX 5070 Ti - 16 Gt'], replacement: 'ASUS - Strix OC Edition - Saatanan typerä näytönohjain - GeForce RTX 5070 Ti - 16 Gt' },
+                { matchAny: ['Näytönohjain, NVIDIA GeForce RTX 5070 Ti Overclocked'], replacement: 'Saatanan typerä näytönohjain, NVIDIA GeForce RTX 5070 Ti. Älä edes harkihe ostavas tämmöstä joutavaa paskaa... Lopeta loisiminen ja mene oikeisiin miesten töihin!!!' },
+                { matchAny: ['Näytönohjain'], replacement: 'Saatanan typerä näytönhjain' },
+                { matchAny: ['Tilattu - Toimituspäivä ei tiedossa'], replacement: 'Tilattu - Toimituspäivä ei tiedossa, tilaus ei sukulaisten hyväksymä' }
+            ]
+        };
+
+        const site = BRAVEFOX_IS_PROSHOP ? 'proshop' : 'verkkokauppa';
+        const isTargetDetailPage = () => BRAVEFOX_IS_PROSHOP
+            ? /\/3331059(?:\/|$)/.test(location.pathname)
+            : /\/fi\/product\/983878(?:\/|$)/.test(location.pathname);
+        const retailerTextRules = RETAIL_5070TI_TEXT_CUSTOMIZATIONS[site]
+            .filter(rule => typeof rule.replacement === 'string' && Array.isArray(rule.matchAny) && rule.matchAny.length);
+
+        if (retailerTextRules.length) {
+            const READY_ATTR = 'data-bravefox-retail-text-ready';
+            const STYLE_ID = 'bravefox-retail-5070ti-custom-text';
+            const sitewideSelectors = BRAVEFOX_IS_PROSHOP
+                ? [
+                    'a.search__item[href$="/3331059"] .itemName',
+                    'a.search__item[href$="/3331059"] .itemStock span',
+                    'a.site-product-link[href$="/3331059"] h2',
+                    'a.site-product-link[href$="/3331059"] > div[style*="line-clamp"]',
+                    '.site-productTextContainer:has(a.site-product-link[href$="/3331059"]) .site-stock-text',
+                    '.basketLineProductText a[href$="/3331059"] b[data-bind="text: text"]',
+                    '.site-basket-checkOut .miniBasketLine .lineProductName'
+                ]
+                : [
+                    // Complete tile and sticky bar are never rewritten: only their text leaves.
+                    'article[data-product-id="983878"] h3 a > span.sr_true',
+                    'article[data-product-id="983878"] span.stm-ui-text--size_large',
+                    'article[data-product-id="983878"] p[class*="textStyle_ui.medium"]',
+                    'article[data-product-id="983878"] ul.stm-ul li',
+                    'article[data-product-id="983878"] span.stm-ui-text--size_small.stm-ui-text--weight_semiBold',
+                    'article[data-product-id="983878"] .StoreAvailabilityText > span',
+                    'article[data-product-id="983878"] data[data-price="current"]'
+                ];
+            const detailSelectors = BRAVEFOX_IS_PROSHOP
+                ? [
+                    'h1[product-display-name][data-productid="3331059"]',
+                    'div.d-grid > div.specItemTitle',
+                    'div.d-grid > div:not(.specItemTitle)',
+                    'div:not([class]):not([id]):not([style]):not(:has(*))',
+                    'p'
+                ]
+                : [
+                        'header.productHeaderRoot h1',
+                        '.stm-prose h3 > span',
+                        '.stm-prose p > span',
+                        '.stm-prose li > span',
+                        'tr:has(> td.sc-ajoqfw-0) > td.sc-ajoqfw-0',
+                        'tr:has(> td.sc-ajoqfw-0) > td:nth-child(2) li > span',
+                        'div[title][class*="bd-t-c_background.secondary"] > div.flex-g_1 > span.stm-ui-text--weight_semiBold',
+                        'div[title][class*="bd-t-c_background.secondary"] .stm-rating__root > span.sr_true',
+                        'div[title][class*="bd-t-c_background.secondary"] .stm-price__root > span.sr_true',
+                        'div[title][class*="bd-t-c_background.secondary"] data[data-price="current"]',
+                        'div[title][class*="bd-t-c_background.secondary"] button[data-cart-button][data-id="983878"] .stm-button__childrenWrapper > span'
+                ];
+            let targetSelectors = [];
+            let targetSelectorQuery = '';
+            let activeDetailRoute = null;
+
+            function refreshRetailSelectors() {
+                const detail = isTargetDetailPage();
+                if (activeDetailRoute === detail) return false;
+                activeDetailRoute = detail;
+                targetSelectors = detail ? [...sitewideSelectors, ...detailSelectors] : [...sitewideSelectors];
+                targetSelectorQuery = targetSelectors.join(', ');
+                installRetailTextStyle();
+                return true;
+            }
+
+            const matchesOriginal = text => retailerTextRules.find(rule =>
+                rule.matchAny.some(needle =>
+                    typeof needle === 'string' && needle && text.toLocaleLowerCase('fi').includes(needle.toLocaleLowerCase('fi'))
+                )
+            );
+
+            function installRetailTextStyle() {
+                const root = document.head || document.documentElement;
+                if (!root) return;
+                let style = document.getElementById(STYLE_ID);
+                if (!style) {
+                    style = document.createElement('style');
+                    style.id = STYLE_ID;
+                    root.appendChild(style);
+                }
+                // The original text stays invisible until replacement/approval,
+                // including on dynamically inserted search results and SPA cards.
+                // We never gate all spans on the page; only the supplied regions.
+                const css = targetSelectors.map(selector =>
+                    `${selector}:not([${READY_ATTR}]) { visibility: hidden !important; }`
+                ).join('\n');
+                if (style.textContent !== css) style.textContent = css;
+            }
+
+            function customizeRetailNode(node) {
+                if (!(node instanceof Element) || !targetSelectors.some(selector => node.matches(selector))) return;
+                const original = node.textContent?.trim() || '';
+                if (BRAVEFOX_IS_PROSHOP) {
+                    // Anonymous stock <div>s must not trigger the broad "Näytönohjain" rule.
+                    if (node.matches('div:not([class]):not([id]):not([style]):not(:has(*))') &&
+                        original !== 'Tilattu - Toimituspäivä ei tiedossa') {
+                        if (node.getAttribute(READY_ATTR) !== '1') node.setAttribute(READY_ATTR, '1');
+                        return;
+                    }
+                    // Other products can share the same mini-basket. Leave their names intact.
+                    if (node.matches('.site-basket-checkOut .miniBasketLine .lineProductName') &&
+                        !original.toLocaleLowerCase('fi').includes(
+                            'ASUS GeForce RTX 5070 Ti ROG STRIX OC - 16GB GDDR7 RAM - Näytönohjaimet'.toLocaleLowerCase('fi'))) {
+                        if (node.getAttribute(READY_ATTR) !== '1') node.setAttribute(READY_ATTR, '1');
+                        return;
+                    }
+                }
+                const rule = matchesOriginal(original);
+                if (rule && original !== rule.replacement) {
+                    if (node.matches('.site-basket-checkOut .miniBasketLine .lineProductName')) {
+                        // Preserve the Knockout quantity <span> and the " x " prefix.
+                        const nameNode = Array.from(node.childNodes).find(child =>
+                            child.nodeType === Node.TEXT_NODE &&
+                            rule.matchAny.some(needle => child.nodeValue?.toLocaleLowerCase('fi').includes(needle.toLocaleLowerCase('fi')))
+                        );
+                        if (nameNode) {
+                            const needle = rule.matchAny.find(part =>
+                                nameNode.nodeValue.toLocaleLowerCase('fi').includes(part.toLocaleLowerCase('fi'))
+                            );
+                            const index = nameNode.nodeValue.toLocaleLowerCase('fi').indexOf(needle.toLocaleLowerCase('fi'));
+                            const after = nameNode.nodeValue.slice(index + needle.length);
+                            if (!nameNode.nodeValue.includes(rule.replacement)) {
+                                nameNode.nodeValue = nameNode.nodeValue.slice(0, index) + rule.replacement + after;
+                            }
+                        }
+                    } else if (node.matches('data[data-price="current"]')) {
+                        // Leave the actual numeric price and checkout data intact.
+                        const textNode = Array.from(node.childNodes).find(child => child.nodeType === Node.TEXT_NODE);
+                        if (textNode) textNode.nodeValue = rule.replacement;
+                        const decimals = node.querySelector('small');
+                        if (decimals) decimals.textContent = '';
+                    } else {
+                        node.textContent = rule.replacement;
+                    }
+                }
+                if (BRAVEFOX_IS_VERKKOKAUPPA && isTargetDetailPage()) {
+                    const stickyBar = node.closest('div[title][class*="bd-t-c_background.secondary"]');
+                    if (stickyBar) {
+                        const title = stickyBar.getAttribute('title') || '';
+                        const titleRule = matchesOriginal(title);
+                        if (titleRule && title !== titleRule.replacement) stickyBar.setAttribute('title', titleRule.replacement);
+                        const cartButton = node.closest('button[data-cart-button][data-id="983878"]');
+                        if (cartButton) {
+                            const buttonLabel = cartButton.getAttribute('aria-label') || '';
+                            const buttonRule = matchesOriginal(buttonLabel);
+                            if (buttonRule && buttonLabel !== buttonRule.replacement) cartButton.setAttribute('aria-label', buttonRule.replacement);
+                        }
+                    }
+                }
+                if (node.getAttribute(READY_ATTR) !== '1') node.setAttribute(READY_ATTR, '1');
+            }
+
+            function scanRetailText(root) {
+                if (!root) return;
+                if (root.nodeType === Node.ELEMENT_NODE) customizeRetailNode(root);
+                if (typeof root.querySelectorAll !== 'function') return;
+                root.querySelectorAll(targetSelectorQuery).forEach(customizeRetailNode);
+            }
+
+            let retailLastUrl = window.location.href;
+            let retailRouteGeneration = 0;
+            const retailFollowUpTimers = new Set();
+
+            function scheduleRetailHydration() {
+                retailRouteGeneration++;
+                const generation = retailRouteGeneration;
+                retailFollowUpTimers.forEach(timer => clearTimeout(timer));
+                retailFollowUpTimers.clear();
+                [0, 60, 200, 600, 1400, 3000].forEach(delay => {
+                    if (typeof setTimeout !== 'function') return;
+                    const timer = setTimeout(() => {
+                        retailFollowUpTimers.delete(timer);
+                        if (generation !== retailRouteGeneration) return;
+                        refreshRetailSelectors();
+                        installRetailTextStyle();
+                        scanRetailText(document);
+                    }, delay);
+                    retailFollowUpTimers.add(timer);
+                });
+            }
+
+            function checkRetailRoute() {
+                const nextUrl = window.location.href;
+                if (nextUrl === retailLastUrl && activeDetailRoute === isTargetDetailPage()) return false;
+                retailLastUrl = nextUrl;
+                refreshRetailSelectors();
+                scanRetailText(document);
+                scheduleRetailHydration();
+                return true;
+            }
+
+            const observer = new MutationObserver(records => {
+                checkRetailRoute();
+                refreshRetailSelectors();
+                installRetailTextStyle();
+                for (const record of records) {
+                    if (record.type === 'attributes') {
+                        if (record.target !== document.documentElement && record.target !== document.body) {
+                            const target = targetSelectors.map(selector => record.target.closest?.(selector)).find(Boolean);
+                            if (target) customizeRetailNode(target);
+                            scanRetailText(record.target);
+                        }
+                    } else if (record.type === 'characterData') {
+                        const parent = record.target.parentElement;
+                        const target = parent && targetSelectors.map(selector => parent.closest(selector)).find(Boolean);
+                        if (target) customizeRetailNode(target);
+                    } else {
+                        for (const added of record.addedNodes) {
+                            if (added.nodeType === Node.ELEMENT_NODE) {
+                                const target = targetSelectors.map(selector => added.closest(selector)).find(Boolean);
+                                if (target) customizeRetailNode(target);
+                                scanRetailText(added);
+                            } else if (added.nodeType === Node.TEXT_NODE) {
+                                const parent = added.parentElement;
+                                const target = parent && targetSelectors.map(selector => parent.closest(selector)).find(Boolean);
+                                if (target) customizeRetailNode(target);
+                            }
+                        }
+                    }
+                }
+            });
+            observer.observe(document, {
+                childList: true, characterData: true, subtree: true, attributes: true,
+                attributeFilter: ['class', 'href', 'data-productid', 'data-product-id', 'data-id', 'title']
+            });
+            refreshRetailSelectors();
+            installRetailTextStyle();
+            scanRetailText(document);
+            ['pushState', 'replaceState'].forEach(method => {
+                const original = window.history?.[method];
+                if (typeof original !== 'function') return;
+                window.history[method] = function (...args) {
+                    const result = original.apply(this, args);
+                    checkRetailRoute();
+                    return result;
+                };
+            });
+            window.addEventListener?.('popstate', checkRetailRoute, true);
+            window.addEventListener?.('hashchange', checkRetailRoute, true);
+            window.addEventListener?.('pageshow', () => {
+                checkRetailRoute();
+                installRetailTextStyle();
+                scanRetailText(document);
+                scheduleRetailHydration();
+            }, true);
+            window.navigation?.addEventListener?.('currententrychange', checkRetailRoute);
+            document.addEventListener?.('DOMContentLoaded', () => {
+                checkRetailRoute();
+                scanRetailText(document);
+            }, { once: true });
+            if (typeof setInterval === 'function') {
+                // Backstop for frameworks that replace or bypass the History API hooks.
+                setInterval(checkRetailRoute, 1200);
+            }
+        }
+        return;
+    }
+
+    if (BRAVEFOX_IS_CLIPSEY) {
+        // Pure CSS at document-start: video ads inserted later by the page never paint.
+        // Clipsey has no other filtering.js site handler to initialize.
+        const installClipseyAdStyle = () => {
+            const root = document.head || document.documentElement;
+            if (!root) return false;
+            if (document.getElementById('bravefox-clipsey-rabu-ad-hide')) return true;
+            const style = document.createElement('style');
+            style.id = 'bravefox-clipsey-rabu-ad-hide';
+            style.textContent = 'aside.ads-container.rabu-video-ad[data-rabu-video-ad] { display: none !important; }';
+            root.appendChild(style);
+            return true;
+        };
+        if (!installClipseyAdStyle()) {
+            const observer = new MutationObserver(() => {
+                if (installClipseyAdStyle()) observer.disconnect();
+            });
+            observer.observe(document, { childList: true });
+        }
+        return;
+    }
     const BRAVEFOX_IS_XVIDEOS = BRAVEFOX_FILTERING_HOST === 'xvideos.com' ||
         BRAVEFOX_FILTERING_HOST.endsWith('.xvideos.com');
     const BRAVEFOX_IS_ALASTONSUOMI = BRAVEFOX_FILTERING_HOST === 'alastonsuomi.com' ||
@@ -3507,6 +3861,9 @@
         let removeStorageListener = null;
         let pendingScan = false;
         let redirecting = false;
+        let nudographyLastUrl = window.location.href;
+        let nudographyRouteGeneration = 0;
+        const nudographyRouteTimers = new Set();
         const pendingRoots = new Set();
         const scannedText = new WeakMap();
 
@@ -3745,6 +4102,24 @@
             checkCelebrityDetail();
         }
 
+        function checkNudographyRoute() {
+            const nextUrl = window.location.href;
+            if (nextUrl === nudographyLastUrl) return false;
+            nudographyLastUrl = nextUrl;
+            const generation = ++nudographyRouteGeneration;
+            nudographyRouteTimers.forEach(timer => clearTimeout(timer));
+            nudographyRouteTimers.clear();
+            runPass(true);
+            [100, 400, 1200].forEach(delay => {
+                const timer = setTimeout(() => {
+                    nudographyRouteTimers.delete(timer);
+                    if (generation === nudographyRouteGeneration) runPass(true);
+                }, delay);
+                nudographyRouteTimers.add(timer);
+            });
+            return true;
+        }
+
         function scheduleScan() {
             if (pendingScan) return;
             pendingScan = true;
@@ -3762,6 +4137,7 @@
             createCSS();
             if (observer) return;
             observer = new MutationObserver(records => {
+                checkNudographyRoute();
                 for (const record of records) {
                     if (record.type === 'childList') {
                         record.addedNodes.forEach(node => {
@@ -3903,13 +4279,32 @@
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', () => runPass(), { once: true });
         }
-        window.addEventListener('pageshow', () => { observe(); runPass(true); }, true);
+        ['pushState', 'replaceState'].forEach(method => {
+            const original = window.history?.[method];
+            if (typeof original !== 'function') return;
+            window.history[method] = function (...args) {
+                const result = original.apply(this, args);
+                checkNudographyRoute();
+                return result;
+            };
+        });
+        window.addEventListener('popstate', checkNudographyRoute, true);
+        window.addEventListener('hashchange', checkNudographyRoute, true);
+        window.navigation?.addEventListener?.('currententrychange', checkNudographyRoute);
+        window.addEventListener('pageshow', () => {
+            observe();
+            checkNudographyRoute();
+            runPass(true);
+        }, true);
+        if (typeof setInterval === 'function') setInterval(checkNudographyRoute, 1200);
         window.addEventListener('pagehide', event => {
             if (event.persisted) return;
             observer?.disconnect();
             observer = null;
             pendingRoots.clear();
             if (removeStorageListener) removeStorageListener();
+            nudographyRouteTimers.forEach(timer => clearTimeout(timer));
+            nudographyRouteTimers.clear();
         }, true);
         console.log('BraveFox Nudography no-glimpse filtering enabled.');
     }
@@ -3940,7 +4335,7 @@
         const NATIVE_GENDER_WOMEN = '2'; // "Vain naiset"; site also supports women + couples (4).
         const NATIVE_GENDER_ATTEMPT_KEY = 'bravefox-alastonsuomi-women-gallery-attempt-v1';
         const GALLERY_PREPARING_CLASS = 'bravefox-alastonsuomi-gallery-preparing';
-        const IS_HOMEPAGE = /^\/(?:index\.php)?\/?$/i.test(window.location.pathname || '/');
+        const isHomepage = () => /^\/(?:index\.php)?\/?$/i.test(window.location.pathname || '/');
         // The site's old four-column table rows do not flow around hidden <td>s.
         // Repack both homepage galleries visually and backfill eligible cells from
         // their *native* refresh endpoints, never by duplicating existing profiles.
@@ -3951,7 +4346,10 @@
         const GALLERY_REFILL_MAX_ATTEMPTS = 3;
         const galleryRefillState = new Map();
         let nativeGenderChecked = false;
-        if (IS_HOMEPAGE && document.documentElement) {
+        let lastAlastonsuomiUrl = window.location.href;
+        let homepageHydratingUntil = 0;
+        const alastonsuomiRouteTimers = new Set();
+        if (isHomepage() && document.documentElement) {
             document.documentElement.classList.add(GALLERY_PREPARING_CLASS);
         }
         const regexes = createStaticBlockedRegexWords();
@@ -4093,10 +4491,36 @@
             document.documentElement?.classList.remove(GALLERY_PREPARING_CLASS);
         }
 
+        function syncAlastonsuomiRoute() {
+            const nextUrl = window.location.href;
+            if (nextUrl === lastAlastonsuomiUrl) return false;
+            lastAlastonsuomiUrl = nextUrl;
+            galleryRefillState.clear();
+            nativeGenderChecked = false;
+            if (isHomepage()) {
+                homepageHydratingUntil = Date.now() + 1000;
+                document.documentElement?.classList.add(GALLERY_PREPARING_CLASS);
+            } else {
+                homepageHydratingUntil = 0;
+                releaseHomepageGalleries();
+            }
+            alastonsuomiRouteTimers.forEach(timer => clearTimeout(timer));
+            alastonsuomiRouteTimers.clear();
+            [100, 350, 1250].forEach(delay => {
+                const timer = setTimeout(() => {
+                    alastonsuomiRouteTimers.delete(timer);
+                    if (window.location.href === nextUrl) runPass(true);
+                }, delay);
+                alastonsuomiRouteTimers.add(timer);
+            });
+            return true;
+        }
+
         function ensureNativeWomenOnlyGalleries() {
-            if (!IS_HOMEPAGE || nativeGenderChecked) return;
+            if (!isHomepage() || nativeGenderChecked) return;
             const selector = document.querySelector(NATIVE_GENDER_SELECTOR);
             if (!selector) {
+                if (Date.now() < homepageHydratingUntil) return;
                 // A page without the site's native preference widget cannot
                 // safely use the native route. Keep the existing DOM filter.
                 if (document.readyState !== 'loading') {
@@ -4434,7 +4858,7 @@
         }
 
         function refillHomepageGalleries() {
-            if (!IS_HOMEPAGE || !nativeGenderChecked || !remoteReady || !wrestlerReady ||
+            if (!isHomepage() || !nativeGenderChecked || !remoteReady || !wrestlerReady ||
                 redirecting || document.readyState === 'loading' ||
                 document.documentElement?.classList.contains(GALLERY_PREPARING_CLASS)) return;
             for (const target of GALLERY_REFILL_TARGETS) {
@@ -4467,6 +4891,7 @@
         }
 
         function runPass(force = false) {
+            syncAlastonsuomiRoute();
             addNoGlimpseCSS();
             ensureNativeWomenOnlyGalleries();
             checkSearchUrl();
@@ -4601,11 +5026,25 @@
             if (!remoteReady) { remoteReady = true; runPass(true); }
             if (!wrestlerReady) setWrestlers([]);
         }, 5500);
+        function onAlastonsuomiNavigation() {
+            runPass(true);
+        }
         loadWrestlers();
         watchWrestlers();
         window.addEventListener(FOCUS_MASTER_BLOCKED_TERMS_UPDATED_EVENT, () => runPass(true), true);
-        window.addEventListener('popstate', () => runPass(true), true);
-        window.addEventListener('pageshow', () => { observe(); runPass(true); }, true);
+        ['pushState', 'replaceState'].forEach(method => {
+            const original = window.history?.[method];
+            if (typeof original !== 'function') return;
+            window.history[method] = function (...args) {
+                const result = original.apply(this, args);
+                onAlastonsuomiNavigation();
+                return result;
+            };
+        });
+        window.addEventListener('popstate', onAlastonsuomiNavigation, true);
+        window.addEventListener('hashchange', onAlastonsuomiNavigation, true);
+        window.navigation?.addEventListener?.('currententrychange', onAlastonsuomiNavigation);
+        window.addEventListener('pageshow', () => { observe(); onAlastonsuomiNavigation(); }, true);
         observe();
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', () => runPass(), { once: true });
@@ -4615,6 +5054,8 @@
             observer?.disconnect();
             observer = null;
             if (removeStorageListener) removeStorageListener();
+            alastonsuomiRouteTimers.forEach(timer => clearTimeout(timer));
+            alastonsuomiRouteTimers.clear();
         }, true);
         console.log('BraveFox Alastonsuomi no-glimpse filtering enabled.');
     }

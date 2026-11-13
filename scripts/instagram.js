@@ -411,6 +411,24 @@ function installTikTokFilteringV2983() {
                 transition: none !important;
                 animation: none !important;
             }
+            /* TikTok's top-right action bar uses different elements from the
+               sidebar utilities. Match the stable Coins ID and App phone icon,
+               hiding their complete wrappers without flashing empty cells. */
+            div[class*="DivActionBarContainer"]:has(button#top-right-get-coins-button),
+            div[class*="DivActionBarContainer"]:has(button[data-e2e="top-right-action-bar-get-coin"]),
+            div[class*="DivActionBarContainer"]:has(button[data-e2e="top-right-action-bar-get-app"]),
+            div[class*="DivActionBarContainer"]:has(button svg path[d^="M20 9c0-1.1"]) {
+                display: none !important;
+                visibility: hidden !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
+                max-height: 0 !important;
+                overflow: hidden !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                transition: none !important;
+                animation: none !important;
+            }
             html.${TIKTOK_ROUTE_CLASS_V2983} body > * {
                 visibility: hidden !important;
                 pointer-events: none !important;

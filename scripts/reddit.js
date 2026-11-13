@@ -3,12 +3,14 @@
 
     // SHARED Reddit + Arctic Shift matching rules. One list, no duplicated
     // keyword definitions and no alternate AI-term exceptions.
-    const redgifsKeyword = "www.redgifs.com";
-
-
     const adultSubreddits = [
         "r/fat_fetish", "r/ratemyboobs", "r/chubby", "r/jumalattaretPro", "r/AlexaBliss", "r/AlexaPearl", "r/comfyui", "r/grok", "r/artificialintelligence", "r/AI", "r/WrestlingBotches"
     ];
+
+    const explicitBlockedSubredditSearchPatterns = adultSubreddits.map(sub => {
+        const name = sub.replace(/^r\//i, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        return new RegExp('(?:^|[^a-z0-9_])(?:r/)?' + name + '(?=$|[^a-z0-9_])', 'i');
+    });
 
 
     const regexKeywordsToHide = [
@@ -103,49 +105,119 @@
     // literals. Complex regexes (boundaries, lookarounds, wildcards, etc.) are
     // executed unchanged; no keywords are removed or given different semantics.
     // Rebuild when the existing dynamic wrestler-name feature extends the list.
+    // Ordinary adult-language matches must not erase otherwise acceptable
+    // posts, comments, communities or search results outside the home feed.
+    // Keep the original patterns above for the strictly filtered front page.
+    // Specific people, AI/deepfake terms and premium-content services remain
+    // blocked by the rest of the original list everywhere outside post pages.
+    const ordinaryAdultKeywordSources = new Set([
+        '/nudi/i', '/nude/i', '/dress/i', '/tush/i', '/erotic/i',
+        '/penetration/i', '/booty/i', '/twerk/i', '/twerking/i', '/jiggle/i',
+        '/twat/i', '/jizzed/i', '/\\bsexy\\b/i', '/\\bSlut\\b/i',
+        '/\\bbra\\b/i', '/\\*/i'
+    ]);
+
+    const premiumAdultHosts = [
+        'onlyfans.com', 'fansly.com', 'fanvue.com', 'justforfans.com',
+        'fantime.com', 'fanstopia.com', 'fancentro.com', 'manyvids.com',
+        'chaturbate.com', 'myfreecams.com', 'stripchat.com', 'camsoda.com',
+        'bongacams.com', 'livejasmin.com', 'patreon.com'
+    ];
+    const premiumAdultTextPattern = /\b(?:only[\s._-]*fans|fansly|fanvue|just[\s._-]*for[\s._-]*fans|fantime|fans[\s._-]*topia|fancentro|manyvids|chaturbate|myfreecams|stripchat|camsoda|bongacams|livejasmin|patreon)\b/i;
+
+    function mentionsPremiumAdultPlatform(text) {
+        return !!text && premiumAdultTextPattern.test(String(text).slice(0, 16000));
+    }
+
+    function isPremiumAdultLink(anchor) {
+        if (!anchor?.getAttribute) return false;
+        const href = anchor.getAttribute('href') || '';
+        if (mentionsPremiumAdultPlatform(href) || mentionsPremiumAdultPlatform(anchor.textContent) ||
+            mentionsPremiumAdultPlatform(anchor.getAttribute('aria-label')) ||
+            mentionsPremiumAdultPlatform(anchor.getAttribute('title'))) return true;
+        try {
+            const hostname = new URL(href, location.href).hostname.toLowerCase();
+            return premiumAdultHosts.some(domain => hostname === domain || hostname.endsWith('.' + domain));
+        } catch { return false; }
+    }
+
+    function screenPremiumAdultLinks(root = document) {
+        const links = [];
+        if (root.matches?.('a[href]')) links.push(root);
+        if (root.querySelectorAll) links.push(...root.querySelectorAll('a[href]'));
+        for (const link of links) {
+            const shouldHide = isPremiumAdultLink(link);
+            if (shouldHide) {
+                if (!link.classList.contains('nr-premium-link-hidden')) {
+                    link.classList.add('nr-premium-link-hidden');
+                    link.style.setProperty('display', 'none', 'important');
+                }
+            } else if (link.classList.contains('nr-premium-link-hidden')) {
+                link.classList.remove('nr-premium-link-hidden');
+                if (link.style.getPropertyValue('display') === 'none' &&
+                    link.style.getPropertyPriority('display') === 'important') {
+                    link.style.removeProperty('display');
+                }
+            }
+        }
+    }
+
     let redditCompiledRegexCountV295 = -1;
     let redditLiteralRegexGroupsV295 = [];
     let redditComplexRegexesV295 = [];
+    let redditAdultLiteralRegexGroupsV295 = [];
+    let redditAdultComplexRegexesV295 = [];
 
     function rebuildRedditRegexMatcherV295() {
         const literals = [];
         const complex = [];
+        const adultLiterals = [];
+        const adultComplex = [];
         for (const expression of regexKeywordsToHide) {
             // Only combine pure, case-insensitive literal RegExp sources. Do not
             // reinterpret regex syntax, flags or matching order within a pattern.
             if (expression instanceof RegExp && expression.flags === 'i' &&
                 !/[.*+?^${}()|[\]\\]/.test(expression.source)) {
                 literals.push(expression.source);
+                if (!ordinaryAdultKeywordSources.has(expression.toString())) adultLiterals.push(expression.source);
             } else {
                 complex.push(expression);
+                if (!ordinaryAdultKeywordSources.has(expression.toString())) adultComplex.push(expression);
             }
         }
-        const groups = [];
         // Small alternation groups avoid an excessively large compiled regex.
-        for (let i = 0; i < literals.length; i += 96) {
-            groups.push(new RegExp('(?:' + literals.slice(i, i + 96).join('|') + ')', 'i'));
-        }
-        redditLiteralRegexGroupsV295 = groups;
+        const compileGroups = values => {
+            const groups = [];
+            for (let i = 0; i < values.length; i += 96) {
+                groups.push(new RegExp('(?:' + values.slice(i, i + 96).join('|') + ')', 'i'));
+            }
+            return groups;
+        };
+        redditLiteralRegexGroupsV295 = compileGroups(literals);
         redditComplexRegexesV295 = complex;
+        redditAdultLiteralRegexGroupsV295 = compileGroups(adultLiterals);
+        redditAdultComplexRegexesV295 = adultComplex;
         redditCompiledRegexCountV295 = regexKeywordsToHide.length;
     }
 
-    function isBlockedByRedditRegexesV295(text) {
+    function isBlockedByRedditRegexesV295(text, allowOrdinaryAdultWords = false) {
         if (!text) return false;
         if (redditCompiledRegexCountV295 !== regexKeywordsToHide.length) {
             rebuildRedditRegexMatcherV295();
         }
-        for (const group of redditLiteralRegexGroupsV295) {
+        const literals = allowOrdinaryAdultWords ? redditAdultLiteralRegexGroupsV295 : redditLiteralRegexGroupsV295;
+        const complex = allowOrdinaryAdultWords ? redditAdultComplexRegexesV295 : redditComplexRegexesV295;
+        for (const group of literals) {
             if (group.test(text)) return true;
         }
-        for (const expression of redditComplexRegexesV295) {
+        for (const expression of complex) {
             if (expression.test(text)) return true;
         }
         return false;
     }
 
     function isSafeAcronymSuffix(word) {
-        const safeAiWords = ['samurai', 'bonsai', 'mumbai', 'thai', 'dubai', 'shanghai', 'hawaii', 'chai', 'sinai', 'kawaii'];
+        const safeAiWords = ['samurai', 'bonsai', 'mumbai', 'thai', 'dubai', 'shanghai', 'hawaii', 'chai', 'sinai', 'kawaii', 'hentai', 'senpai'];
         for (let i=0; i<safeAiWords.length; i++) {
             if (word.endsWith(safeAiWords[i])) return true;
         }
@@ -162,15 +234,13 @@
         for (let t = 0; t < textVariants.length; t++) {
             const textToTest = textVariants[t];
             if (!textToTest) continue;
+
+            if (mentionsPremiumAdultPlatform(textToTest)) return true;
             
 
-            for (let i = 0; i < adultSubreddits.length; i++) {
-                if (textToTest.includes(adultSubreddits[i].toLowerCase().replace('r/', ''))) return true;
-            }
+            if (explicitBlockedSubredditSearchPatterns.some(pattern => pattern.test(textToTest))) return true;
 
-            if (textToTest.includes(redgifsKeyword.toLowerCase())) return true;
-
-            if (isBlockedByRedditRegexesV295(textToTest)) return true;
+            if (isBlockedByRedditRegexesV295(textToTest, true)) return true;
             
             const words = textToTest.split(/\s+/);
             const exactMatches = ['ai', 'llm', 'mlm'];
@@ -205,7 +275,7 @@
             if (!textToTest) continue;
             
 
-            const exactMatches = ['ai', 'llm', 'mlm', 'porn'];
+            const exactMatches = ['ai', 'llm', 'mlm'];
             for (let i = 0; i < exactMatches.length; i++) {
                 const acronym = exactMatches[i];
                 if (textToTest === acronym || (textToTest.endsWith(acronym) && !isSafeAcronymSuffix(textToTest))) return true;
@@ -217,7 +287,7 @@
                 if (badSuffixes.some(s => rest.startsWith(s))) return true;
             }
             
-            if (isBlockedByRedditRegexesV295(textToTest)) return true;
+            if (mentionsPremiumAdultPlatform(textToTest) || isBlockedByRedditRegexesV295(textToTest, true)) return true;
         }
         return false;
     }
@@ -251,6 +321,17 @@
         const style = document.createElement('style');
         style.id = 'nr-as-filter-prehide';
         style.textContent = `
+            a.nr-premium-link-hidden,
+            a[href*="onlyfans" i], a[href*="fansly" i],
+            a[href*="fanvue" i], a[href*="justforfans" i],
+            a[href*="fantime" i], a[href*="fanstopia" i],
+            a[href*="fancentro" i], a[href*="manyvids" i],
+            a[href*="chaturbate" i], a[href*="myfreecams" i],
+            a[href*="stripchat" i], a[href*="camsoda" i],
+            a[href*="bongacams" i], a[href*="livejasmin" i],
+            a[href*="patreon.com" i] {
+                display: none !important;
+            }
             html.nr-as-active .reddit-thread > .post-container:not(.nr-as-approved),
             html.nr-as-active .reddit-thread > .post-container.nr-as-banned,
             html.nr-as-active .comment-node:not(.nr-as-approved),
@@ -274,7 +355,7 @@
         const fieldNames = new Set(['author', 'subreddit', 'title', 'selftext', 'url', 'ids', 'q', 'query']);
         const textBlocked = value => {
             const text = String(value || '').trim().slice(0, 12000);
-            return !!text && (isSearchTextBanned(text) || isBlockedByRedditRegexesV295(text));
+            return !!text && isSearchTextBanned(text);
         };
         function subredditBlocked(value) {
             const name = String(value || '').trim().replace(/^r\//i, '');
@@ -343,6 +424,9 @@
         }
         function checkPost(outer) {
             const inner = outer.querySelector(':scope > .post-container') || outer;
+            for (const attribute of ['url', 'href', 'content-href', 'domain', 'data-url']) {
+                if (mentionsPremiumAdultPlatform(inner.getAttribute(attribute))) return true;
+            }
             const header = inner.querySelector(':scope > .header');
             const subreddit = header?.querySelector('a[href*="/r/"]');
             const author = header?.querySelector('a.author-link, a[href*="/u/"], a[href*="/user/"]');
@@ -352,7 +436,7 @@
             if (title && textBlocked(title.textContent)) return true;
             // Link target is the post's URL, not the UI's unrelated buttons.
             for (const link of inner.querySelectorAll(':scope > .url-row a')) {
-                if (textBlocked(urlValueFrom(link)) || textBlocked(link.textContent)) return true;
+                if (isPremiumAdultLink(link) || textBlocked(urlValueFrom(link)) || textBlocked(link.textContent)) return true;
             }
             // Selftext / markdown, if supplied by the archive's result layout.
             for (const body of inner.querySelectorAll(':scope > .selftext, :scope > .body, :scope > .md, :scope > .text, :scope > .markdown, :scope > .long-text')) {
@@ -376,6 +460,7 @@
         function scan() {
             if (redirecting) return;
             if (location.href !== lastUrl) lastUrl = location.href;
+            screenPremiumAdultLinks(ROOT);
             // Do not reject ordinary adult topics just for being NSFW. Explicit
             // banned names, subreddits and regex terms still apply everywhere.
             for (const outer of document.querySelectorAll('.reddit-thread > .post-container')) {
@@ -957,6 +1042,19 @@
     function addPreHidingCSS() {
         const style = document.createElement('style');
         style.textContent = `
+            /* Premium adult promotion links disappear everywhere, including on
+               native post pages. Only links disappear there, never their post. */
+            a.nr-premium-link-hidden,
+            a[href*="onlyfans" i], a[href*="fansly" i],
+            a[href*="fanvue" i], a[href*="justforfans" i],
+            a[href*="fantime" i], a[href*="fanstopia" i],
+            a[href*="fancentro" i], a[href*="manyvids" i],
+            a[href*="chaturbate" i], a[href*="myfreecams" i],
+            a[href*="stripchat" i], a[href*="camsoda" i],
+            a[href*="bongacams" i], a[href*="livejasmin" i],
+            a[href*="patreon.com" i] {
+                display: none !important;
+            }
             html:not(.nr-post-page) article:has(> shreddit-post):not(.reddit-approved),
             html:not(.nr-post-page) article[data-testid="post-container"]:not(.reddit-approved),
             html:not(.nr-post-page) shreddit-post:not(.reddit-approved),
@@ -1084,29 +1182,6 @@
                 pointer-events: none !important;
             }
             
-            /* RedGIFs is blocked at DNS level in this setup, so Reddit's embedded iframe
-               can only render a browser error page. Collapse the media slot itself so the
-               failed iframe never leaves a black/error box behind, while keeping the post. */
-            shreddit-post[domain*="redgifs.com"] [slot="post-media-container"],
-            shreddit-post[content-href*="redgifs.com"] [slot="post-media-container"],
-            [slot="post-media-container"]:has(shreddit-embed[providername="RedGIFs"]),
-            [slot="post-media-container"]:has(shreddit-embed[html*="redgifs.com/ifr/"]),
-            shreddit-embed[providername="RedGIFs"],
-            shreddit-embed[html*="redgifs.com/ifr/"],
-            iframe[src*="redgifs.com/ifr/"] {
-                display: none !important;
-                visibility: hidden !important;
-                opacity: 0 !important;
-                height: 0 !important;
-                min-height: 0 !important;
-                max-height: 0 !important;
-                margin: 0 !important;
-                padding: 0 !important;
-                border: 0 !important;
-                overflow: hidden !important;
-                pointer-events: none !important;
-            }
-
             a[href="/answers/"],
             a[href^="/answers"],
             faceplate-tracker[noun="gen_guides_sidebar"],
@@ -1320,10 +1395,6 @@
             const msg = (media.innerText || media.textContent || '').slice(0, 2500);
             if (/\b(?:video|media|image|embed|content)\s+(?:is\s+)?(?:unavailable|not\s+available|failed\s+to\s+load|could\s+not\s+be\s+loaded|cannot\s+be\s+(?:played|loaded)|can.t\s+be\s+(?:played|loaded))\b/i.test(msg) ||
                 /\b(?:failed|unable)\s+to\s+(?:load|play)\s+(?:this\s+)?(?:video|media|image|embed|content)\b/i.test(msg)) return true;
-            // This setup already DNS-blocks RedGIFs. Its embed in the supplied
-            // HTML is therefore a known non-working media card, not a generic
-            // NSFW ban. Keep other adult media eligible to load normally.
-            if (media.querySelector('shreddit-embed[providername="RedGIFs"], shreddit-embed[html*="redgifs.com/ifr/"]')) return true;
         }
         return false;
     }
@@ -1787,7 +1858,9 @@
         let lowerText = textContent.toLowerCase();
         if (lowerText.length > 2000) lowerText = lowerText.substring(0, 2000); 
         
-        const cacheKey = (isSafeSub ? 'safe:' : 'global:') + lowerText;
+        const allowOrdinaryAdultWords = !isHomeFeedContext();
+        const cacheKey = (isSafeSub ? 'safe:' : 'global:') +
+            (allowOrdinaryAdultWords ? 'adult:' : 'home:') + lowerText;
         if (contentBannedCache.has(cacheKey)) return contentBannedCache.get(cacheKey);
         
         if (contentBannedCache.size >= MAX_CACHE_SIZE) {
@@ -1803,7 +1876,8 @@
             const textToTest = textVariants[t];
             if (!textToTest) continue;
 
-            if (isBlockedByRedditRegexesV295(textToTest)) {
+            if (mentionsPremiumAdultPlatform(textToTest) ||
+                isBlockedByRedditRegexesV295(textToTest, allowOrdinaryAdultWords)) {
                 contentBannedCache.set(cacheKey, true);
                 return true;
             }
@@ -1950,7 +2024,7 @@
             }
         }
         
-        if (isBlockedByRedditRegexesV295(lowerSub)) {
+        if (isBlockedByRedditRegexesV295(lowerSub, true)) {
             bannedSubredditCache.set(lowerSub, true);
             return true;
         }
@@ -2126,6 +2200,20 @@
         return SAFE_COMMUNITY_GENERATED_MEDIA.some(pattern => pattern.test(content));
     }
 
+    function postMentionsPremiumAdultPlatform(element, content = '') {
+        if (mentionsPremiumAdultPlatform(content)) return true;
+        const posts = [element, ...element.querySelectorAll('shreddit-post')];
+        for (const post of posts) {
+            for (const attribute of ['content-href', 'domain', 'post-title', 'url', 'data-url', 'outbound-url']) {
+                if (mentionsPremiumAdultPlatform(post.getAttribute?.(attribute))) return true;
+            }
+        }
+        for (const link of element.querySelectorAll('a[href]')) {
+            if (isPremiumAdultLink(link)) return true;
+        }
+        return false;
+    }
+
     function evaluateElementForBanning(element) {
         // A direct post page is never a feed card. Only its comments are
         // subject to the independent comment scanner below.
@@ -2136,6 +2224,10 @@
         // Existing blocklists take priority over approved clicks and authors.
         const isSafe = isElementInSafeSubreddit(element);
         const fullContent = extractCompletePostContent(element);
+
+        // Paid-content promotion is a site-wide listing ban, even in otherwise
+        // whitelisted communities. Individual post pages remain exempt.
+        if (postMentionsPremiumAdultPlatform(element, fullContent)) return true;
 
         // The front page remains tech-only regardless of an originating
         // community's safe status; direct subreddit feeds use its exemption.
@@ -2148,7 +2240,6 @@
 
         if (isElementFromAdultSubreddit(element)) return true;
         if (checkTextForKeywords(fullContent)) return true;
-        if (postHasFailedMedia(element)) return true;
         
         const titleElement = element.querySelector && element.querySelector('h1, h2, h3, a[data-click-id="body"], .title, [slot="title"], [data-testid="post-title-text"]');
         if (titleElement && checkContentForKeywords(titleElement, isSafe)) return true;
@@ -2262,7 +2353,7 @@
         }
         if (processedElements.has(post)) {
             if (post.classList.contains('reddit-approved') &&
-                ((!isElementInSafeSubreddit(post) && postHasFailedMedia(post)) ||
+                (postMentionsPremiumAdultPlatform(post, extractCompletePostContent(post)) ||
                  isSuggestedJoinFeedCard(post) ||
                  (isHomeFeedContext() && (isExplicitlyNSFWPost(post) ||
                     hasHomeFeedSubredditTopic(post) ||
@@ -2459,6 +2550,7 @@
             for (let ni = 0; ni < addedLimit; ni++) {
                 const node = mutation.addedNodes[ni];
                 if (node && node.nodeType === 1) {
+                    screenPremiumAdultLinks(node);
                     processShadowSearchItems(mutation.target);
                     // A feed's shadow root can receive posts after its initial
                     // scan. Screen those specific new posts instead of leaving
@@ -2598,7 +2690,9 @@
 
     // === THE ULTIMATE SANITY ENFORCER (WITH HOMEPAGE GUARD) ===
     function enforceSanity() {
-        if (isRedirecting) return;
+        // Never redirect away from a native post because its subreddit, URL
+        // slug or visible content happens to contain a blocked keyword.
+        if (isRedirecting || isPostPage()) return;
         try {
             const currentUrl = window.location.href.toLowerCase();
             const urlObj = new URL(window.location.href);
@@ -2653,7 +2747,7 @@
             }
 
             // 5. Fallback URL Check (unified regex policy)
-            if (isBlockedByRedditRegexesV295(currentUrl)) {
+            if (mentionsPremiumAdultPlatform(currentUrl) || isBlockedByRedditRegexesV295(currentUrl, true)) {
                 devLog('Banned regex in URL. Redirecting...');
                 isRedirecting = true;
                 window.location.replace('https://www.reddit.com');
@@ -2856,6 +2950,7 @@
             if (!element.shadowRoot || shadowRootObservers.has(element.shadowRoot)) continue;
             
             shadowRootsProcessed.add(element.shadowRoot);
+            screenPremiumAdultLinks(element.shadowRoot);
             
             const posts = element.shadowRoot.querySelectorAll('article, shreddit-post');
             for (let j = 0; j < posts.length; j++) {
@@ -2883,6 +2978,8 @@
         if (document.body && !document.body.classList.contains('reddit-filter-ready')) {
             document.body.classList.add('reddit-filter-ready');
         }
+
+        screenPremiumAdultLinks(document);
         
         hideAnswersButton();
         
@@ -3086,6 +3183,8 @@
         for (let i = 0; i < limitedMutations.length; i++) {
             const mutation = limitedMutations[i];
             if (mutation.type === 'characterData') {
+                const changedLink = mutation.target.parentElement?.closest?.('a[href]');
+                if (changedLink) screenPremiumAdultLinks(changedLink);
                 const ownComment = mutation.target.parentElement?.closest?.('shreddit-comment');
                 if (ownComment) screenRedditComment(ownComment);
                 continue;
@@ -3120,6 +3219,8 @@
                     continue;
                 }
                 if (node.nodeType !== 1) continue;
+
+                screenPremiumAdultLinks(node);
 
                 // Never query each entire added React subtree for unrelated
                 // recent-posts markup. Preserve the clearing feature when its
