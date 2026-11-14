@@ -57,7 +57,7 @@
 	/DrawingAI/i, /PaintingAI/i, /PaintingsAI/i, /PaintAI/i, /depn/i, /d3pn/i, /deppn/i, /depenu/i, /depeni/i, /d3ppn/i, /d3penu/i, /d3p3nu/i, /dep3nu/i, /d3peni/i, /d3p3ni/i, /d3p3n1/i, 
 	/d3p3n!/i, /dep3n1/i, /dep3n!/i, /d3pen1/i, /d3pen!/i, /p05/i, /po5/i, /p0s/i, /postur/i, /iconicto/i, /diepn/i, /artif/i, /artin/i, /-tool/i, /deipn/i, /Claude/i, /Anthropic/i,
 	/Grok-AI/i, /TwitterAI/i, /Anthr/i, /Antro/i, /s0ftw/i, /softw/i, /w4re/i, /war3/i, /w4r3/i, /p41n/i, /pa1n/i, /p4in/i, /ndif/i, /ndfy/i, /bliswwe/i, /nd!f/i, /ndlf/i, /Kairi/i, 
-	/vaat.*pois/i, /vaatteet pois/i,/edgye/i, /bl15s/i, /bl1s5/i, /bl155/i, /bl1ss/i, /bli55/i, /anusaukko/i, /anus-aukko/i, /anus aukko/i, /pers aukko/i, /nd1f/i, /Redmond/i, /Jackie/i, 
+	/vaat.*pois/i, /vaatteet pois/i, /edgye/i, /bl15s/i, /bl1s5/i, /bl155/i, /bl1ss/i, /bli55/i, /anusaukko/i, /anus-aukko/i, /anus aukko/i, /pers aukko/i, /nd1f/i, /Redmond/i, /Jackie/i, 
 	/Kiana/i,  /Jiana/i, /Kairi Sane/i, /Kairi's/i, /Kairii/i, /Kendal Grey/i, /Kayla/i, /Braxton/i, /alex4/i, /Samantha/i, /Samantha Irvin/i, /Samantha Irwin/i, /4lexa/i, /al3xa/i, 
 	/alex4/i, /4l3xa/i, /al3x4/i, /4l3x4/i, /4lex4/i, /blis5/i, /bli5s/i, /artintel/i, /artifi intel/i, /ardrob/i, /wardrobe/i, /robe malfunc/i, /ring gear malfunc/i, /ring malfunc/i, 
 	/solrvca/i, /billieeilish/i, /billie eilish/i, /ivynile/i, /Ivy Nile/, /UnderRatedLadies/i, /Ivy+Nile/i, /SkylarRaye/i, /Serrano/i, /Zerrano/i, /windsor/i, /winds0r/i, /w1nds0r/i, 
@@ -81,7 +81,7 @@
 	/Amari Miller/i, /venoise/i, /AlexaBliss/i, /Sol Ruca/i, /AlexaPearl/i, /Arianna/i, /Natalya/i, /Nattie/i, /Diffusion/i, /StableDiffusion/i, /UnStableDiffusion/i, /Dreambooth/i, /Dream booth/i, 
 	/AI generated/i, /AI-generated/i, /generated/i, /machine learning/i, /artificial intelligence/i, /AI girl/i, /neural network/i, /deep learning/i, /Naomi/i, /Jazmyn Nyx/i, /stable diffusion/i, 
 	/artificial/i, /synthetic/i, /computer generated/i, /algorithm/i, /Angelina/i, /automated/i, /editor/i, /text to image/i, /image enhanced/i, /Answers BETA/i, /ai video/i, /Belts Mone/i, /Shir/i,
-	/Irving/i, /Amanda Huber/i, /Ivy Nile/i, /kawa/i, /perver/i, /Mariah/i, /Kairi/i,
+	/WWEUpscaled/i, /Irving/i, /Amanda Huber/i, /Ivy Nile/i, /kawa/i, /perver/i, /Mariah/i, /Kairi/i, /Roxy WWE/i, /Roxanne/i, /baddie/i,
 
 
    // Boundaried Regexes
@@ -89,14 +89,14 @@
 	/\bZoey\b/i, /\bKairi\b/i, /\bxAI\b/i,/\b50ft\b/i, /\bVidu\b/i, /\bJade\b/i, /\bmotion\b/i, /\bMachaine\b/i, /\bNyx\b/i, /\bMachiine\b/i, /\bLily\b/i, /\bMacheine\b/i, /\bLili\b/i, /\bAnt\b/i, /\bAva\b/i, 
 	/\bNox\b/i, /\bFuku\b/i, /\bAnswers BETA\b/i, /\bCarr\b/i, /\bTaya\b/i, /\bMachiene\b/i, /\bcam4\b/i, /\bGrok\b/i, /\bVM\b/i, /\bVMs\b/i, /\bTegan\b/i, /\bS0ft\b/i, /\bVMs\b/i, /\bRape\b/i, /\bEmma\b/i, 
 	/\bNiven\b/i,  /\bB-Fab\b/i, /\bB-Fab\b/i, /\bVM\b/i, /\bJaida\b/i, /\bSeksi\b/i, /\bRiho\b/i, /\bIzzi\b/i, /\bbra\b/i, /\bSlut\b/i, /\bTor\b/i,  /\bAi\b/i, /\bADM\b/i, /\bAis\b/i, /\b-Ai\b/i, /\bLita\b/i,
-	/\bJaida\b/i, /\bedit\b/i, /\bADMX\b/i, /\bSol\b/i, /\bAi-\b/i, /\bGina\b/i, /\bLiv\b/i, /\bDame\b/i, /\bTay\b/i, /\bIndi\b/i,
+	/\bJaida\b/i, /\bedit\b/i, /\bADMX\b/i, /\bSol\b/i, /\bAi-\b/i, /\bGina\b/i, /\bLiv\b/i, /\bDame\b/i, /\bTay\b/i, /\bIndi\b/i, /\bRoxy\b/i,
 
 
    // Nuclear/special regexes
 /gr[a4][i1l]n(?:[\s_\-\/.]{0,3}(?:re(?:mov(?:e|al|ing)?|m)|(?:delet(?:e|ing|ion)?|del)|eras(?:e|ing)?|(?:ph(?:o|0)?t(?:o|0)?|pic(?:t(?:ure|ures)?)?|image|img)))|(?:re(?:mov(?:e|al|ing)?|m)|(?:delet(?:e|ing|ion)?|del)|eras(?:e|ing)?|fix|denois(?:e|er|ing)?)(?:[\s_\-\/.]{0,3}(?:ph(?:o|0)?t(?:o|0)?|pic(?:t(?:ure|ures)?)?|image|img))?(?:[\s_\-\/.]{0,3}gr[a4][i1l]n)|gr[a4][i1l]n(?:[\s_\-\/.]{0,3}(?:ph(?:o|0)?t(?:o|0)?|pic|image|img))|(?:ph(?:o|0)?t(?:o|0)?|pic|image|img)(?:[\s_\-\/.]{0,3}fix)/i, /lex.*bl/i, /liv.*morgan/i, /saad.*pipar/i, /s4ad.*pipar/i, /s44d.*pipar/i, /sa4d.*pipar/i, /rint.*pois/i, /dress.*remov/i,
         /(?:n(?:o|0)ise(?:[\s_\-\/.]{0,3}(?:re(?:mov(?:e|al|ing)?|m|duc(?:e|ed|ing|tion)?)|(?:delet(?:e|ing|ion)?|del)|eras(?:e|ing)?|fix|filter(?:ing)?))|(?:re(?:mov(?:e|al|ing)?|m|duc(?:e|ed|ing|tion)?)|(?:delet(?:e|ing|ion)?|del)|eras(?:e|ing)?|fix|filter(?:ing)?)(?:[\s_\-\/.]{0,3})n(?:o|0)ise|de[\s_\-\.]?n(?:o|0)is(?:e|er|ing)?)/i, /make.*(move|gif|video)/i, /photo.*(move|gif|video)/i, /image.*(move|gif|video)/i, /pic.*(move|gif|video)/i, /img.*(move|gif|video)/i, /booty/i, /ass.*(animat|ai|move)/i, /twerk/i, /twerking/i, /jiggle/i, /bounce.*(ai|gif)/i, /booty.*(ai|gif|video|animat)/i, /ass.*(ai|gif|video|animat)/i, /undress/i, /strip.*ai/i, /nude.*ai/i, /clothes.*remove/i, /remove.*(clothes|clothing|dress)/i, /face.*(swap|deepfake|replace)/i, /hous.*pois/i, /pait.*pois/i, /liiv.*pois/i, /alushous.*pois/i, /alkkarit.*pois/i, /alusvaat.*pois/i, /clothing.*remove/i, /\bra\*e\b/i,/\br\*pe\b/i, /\*ape/i, /rap\*/i, /0rga\$m/i,
 /alexa.*(wwe|wrest|ras|NXT|pro)/i, /blis.*(wwe|wrest|ras|NXT|pro)/i, /lexa.*(wwe|wrest|ras|NXT|pro)/i, /lexi.*(wwe|wrest|ras|NXT|pro)/i, /bils.*(wwe|wrest|ras|NXT|pro)/i, /lex.*(kauf|cabr|carb)/i, /model.*(mach|langu)/i, /robe.*(wwe|tna|aew|njpw|wrestl|rasll|rasslin)/i,
-/robe.*(malf|func)/i, /ring gear|trunk|pant|shirt|jacket.*(malf|func)/i, /malfunc.*(wwe|tna|aew|njpw|wrestl|rasll|rasslin|ring)/i, /(?:poista|poisto|poistaminen)[ -]?(?:vaatteet|vaatteiden)/i,  /\|\s*\|/i, /\(o\)\(o\)/i, /\(!\)/i, /see[- ]?through/i, /AI[ -]?generated/i, /generated[ -]?by[ -]?AI/i, /artificial[ -]?intelligence/i, /machine[ -]?learning/i, /neural[ -]?network/i, /deep[ -]?learning/i, /midjourney/i, /dall[ -]?e/i, /stable[ -]?diffusion/i, /computer[ -]?generated/i, /text[ -]?to[ -]?image/i, /image[ -]?generation/i, /AI[ -]?art/i, /synthetic[ -]?media/i, /algorithmically/i, /bot[ -]?generated/i, /automated[ -]?content/i,
+/robe.*(malf|func)/i, /ring gear|trunk|pant|shirt|jacket.*(malf|func)/i, /malfunc.*(wwe|tna|aew|njpw|wrestl|rasll|rasslin|ring)/i, /(?:poista|poisto|poistaminen)[ -]?(?:vaatteet|vaatteiden)/i,  /\|\s*\|/i, /\(o\)\(o\)/i, /\(!\)/i, /see[- ]?through/i, /AI[ -]?generated/i, /generated[ -]?by[ -]?AI/i, /artificial[ -]?intelligence/i, /machine[ -]?learning/i, /neural[ -]?network/i, /deep[ -]?learning/i, /midjourney/i, /dall[ -]?e/i, /stable[ -]?diffusion/i, /computer[ -]?generated/i, /text[ -]?to[ -]?image/i, /image[ -]?generation/i, /AI[ -]?art/i, /synthetic[ -]?media/i, /algorithmically/i, /bot[ -]?generated/i, /automated[ -]?content/i, /(?:stories?(?:ig|insta)|(?:ig|insta)(?:story|stories)(?:viewer|saver|downloader)?|(?:anon|anonymous)(?:story|stories)(?:viewer|saver)?|(?:story|stories)(?:viewer|saver|downloader))/i, /(?:WWE|TNA|AEW)[ -]?(?:NSFW|porn|sex|anal|pussy|nude|naked|enhanced|upscale|cooch|adult|kewch|vagina|girl|woman|women|jiggle|jiggling|lady|ladies|she|her|ass|butt|cunt|twerk|penetr|masturb)/i, /(?:Roxy|Roxan|Prodigy)[ -]?(?:NSFW|porn|sex|anal|pussy|nude|naked|cooch|kewch|vagina|girl|enhanced|upscale|adult|jiggle|jiggling|woman|women|lady|ladies|she|her|nude|ass|butt|cunt|twerk|penetr|masturb)/i, /(?:Wrestle|Wrestling|Rassl)[ -]?(?:NSFW|adult|porn|nude|naked|sex|anal|pussy|cooch|kewch|vagina|girl|jiggle|enhanced|upscale|jiggling|woman|women|lady|ladies|she|her|ass|butt|cunt|twerk|penetr|masturb)/i,
 
     ];
 
@@ -111,10 +111,10 @@
     // Specific people, AI/deepfake terms and premium-content services remain
     // blocked by the rest of the original list everywhere outside post pages.
     const ordinaryAdultKeywordSources = new Set([
-        '/nudi/i', '/nude/i', '/dress/i', '/tush/i', '/erotic/i',
+        '/nudity/i', '/nude/i', '/dress/i', '/tush/i', '/erotic/i', '/anal/i',
         '/penetration/i', '/booty/i', '/twerk/i', '/twerking/i', '/jiggle/i',
-        '/twat/i', '/jizzed/i', '/\\bsexy\\b/i', '/\\bSlut\\b/i',
-        '/\\bbra\\b/i', '/\\*/i'
+        '/twat/i', '/jizzed/i', '/\\bsexy\\b/i', '/\\bSlut\\b/i', '/naked/i',
+        '/\\bbra\\b/i', '/pussy/i', '/pussies/i', '/vagina/i', '/\\*/i' 
     ]);
 
     const premiumAdultHosts = [
@@ -224,8 +224,58 @@
         return false;
     }
 
+    // Wrestling-specific adult filter. Both sides of the match must occur in
+    // the same result/post/search query; promotion names and women's wrestling
+    // vocabulary alone must not remove normal wrestling discussions.
+    const wrestlingContextPattern = /\b(?:wwe|wwf|aew|njpw|tna|impact(?:[\s_-]+wrestling)?|roh|nxt|wcw|ecw|nwa|mlw|cmll|aaa|ajpw|bjw|ddt|gcw|noah|stardom|revpro|pwg|tjpw|dragon[\s_-]*gate|lucha[\s_-]*libre|luchador(?:a|es)?|puroresu|joshi|squared[\s_-]*circle|wrestl(?:e(?:d|s)?|ers?|ing)|rassl(?:e|ers?|in|ing)|wrassl(?:e|ers?|in|ing))\b/i;
+    const wrestlingSexualPatterns = [
+        /(?:\b(?:nsfw|not[\s_-]*safe[\s_-]*for[\s_-]*work|adult(?:[\s_-]*content)?|18[\s_-]*plus|xxx|porn(?:ography|ographic|o)?|sex(?:y|ual(?:ly|ity)?)?|erotic(?:a|ism)?|lewd|fetish(?:es|ism)?|kink(?:s|y)?|horny|lustful|seduct(?:ive|ion)|arous(?:ed|al|ing)|thirst[\s_-]*trap)\b|\b18\s*\+(?!\w))/i,
+        /\b(?:nudes?|nudity|naked|topless|bottomless|nip(?:ple)?[\s_-]*slips?|nipples?|boobs?|breasts?|tits?|cleavage|underboob|sideboob|booty|cameltoe|upskirt|downblouse|pussy|vagina|genitals?|masturbat(?:e|ion|ing)|orgasms?|hentai)\b/i,
+        /\b(?:lingerie|thongs?|panties|bikinis?|see[\s_-]*through|transparent[\s_-]*clothing|wardrobe[\s_-]*malfunction|ring[\s_-]*gear[\s_-]*malfunction|costume[\s_-]*malfunction|revealing[\s_-]*(?:gear|attire|outfits?|clothing)|nip[\s_-]*slip|only[\s_-]*fans|fansly|manyvids|gone[\s_-]*wild|rule[\s_-]*34|r34|deepfake[\s_-]*nudes?|nudify|undress[\s_-]*ai)\b/i,
+        /\b(?:leaked?[\s_-]*(?:nudes?|private[\s_-]*photos?|intimate[\s_-]*(?:photos?|videos?))|(?:nice|hot|sexy|big|juicy|bare|exposed)[\s_-]*(?:ass|butt|booty|body))\b/i,
+        /\b(?:porno|alaston|alastomuus|seksik[aä]s|seksuaalinen|seksuaalista|seksivideo|seksikuvat|rinnat[\s_-]*paljaana|vaate(?:t|iden)[\s_-]*pois)\b/i
+    ];
+    const wrestlingAdultCommunityPattern = /(?:wwe|wwf|aew|njpw|tna|roh|nxt|wcw|ecw|stardom|joshi|lucha|wrestl[a-z]*|rassl[a-z]*|wrassl[a-z]*|squaredcircle)(?:porn|nsfw|fap|rule34|r34|gonewild|lewd|xxx|nudes?|18plus|withthe(?:plot|package))|(?:porn|nsfw|fap|rule34|r34|gonewild|lewd|xxx|nudes?|18plus)(?:wwe|wwf|aew|njpw|tna|roh|nxt|wcw|ecw|wrestl[a-z]*|rassl[a-z]*|wrassl[a-z]*)/i;
+
+    function hasWrestlingContext(text) {
+        return !!text && wrestlingContextPattern.test(String(text).replace(/[_/+.%-]+/g, ' '));
+    }
+
+    function isWrestlingAdultContent(text, subredditContext = '') {
+        const combined = (String(text || '') + ' ' + String(subredditContext || '')).slice(0, 12000);
+        if (!combined.trim()) return false;
+        // Preserve the + in "18+" while decoding + as a separator in queries.
+        const words = combined.replace(/[_/.%-]+/g, ' ').replace(/\+(?=\w)/g, ' ');
+        const compact = combined.replace(/[^a-z0-9]/gi, '');
+        if (wrestlingAdultCommunityPattern.test(compact)) return true;
+        return hasWrestlingContext(words) &&
+            wrestlingSexualPatterns.some(pattern => pattern.test(words));
+    }
+
+    // Women's wrestling is a separate blanket block, including ordinary
+    // results, title histories and discussion. No sexual wording is required.
+    const wrestlingWomenTermsPattern = /\b(?:women|woman|womens|women's|woman's|female|females|girls?|ladies|lady|divas?|knockouts?|joshi|wrestlettes?|wrestling[\s_-]*queens?)\b/i;
+    const wrestlingWomenCommunityPattern = /(?:wwe|wwf|aew|njpw|tna|impact|roh|nxt|wcw|ecw|stardom|wrestl[a-z]*|rassl[a-z]*|wrassl[a-z]*|squaredcircle)(?:women|woman|womens|female|girls?|ladies|divas?|knockouts?|joshi)|(?:women|woman|womens|female|girls?|ladies|divas?|knockouts?|joshi)(?:wwe|wwf|aew|njpw|tna|roh|nxt|wcw|ecw|wrestl[a-z]*|rassl[a-z]*|wrassl[a-z]*)/i;
+    const womensWrestlingPromotionsPattern = /\b(?:stardom|stardomjoshi|tjpw|tokyo[\s_-]*joshi[\s_-]*pro[\s_-]*wrestling|sukeban|sendai[\s_-]*girls|ice[\s_-]*ribbon|shimmer[\s_-]*women[\s_-]*athletes|shimmer[\s_-]*wrestling|shine[\s_-]*wrestling|pro[\s_-]*wrestling[\s_-]*eve|women[\s_-]*of[\s_-]*wrestling|wow[\s_-]*women[\s_-]*of[\s_-]*wrestling|marigold[\s_-]*wrestling|dream[\s_-]*star[\s_-]*fighting[\s_-]*marigold|oz[\s_-]*academy|sea[\s_-]*d[\s_-]*lin{2,}g|world[\s_-]*woman[\s_-]*pro[\s_-]*wrestling[\s_-]*diana)\b/i;
+
+    function isWomenWrestlingContent(text, subredditContext = '') {
+        const combined = (String(text || '') + ' ' + String(subredditContext || '')).slice(0, 12000);
+        if (!combined.trim()) return false;
+        const words = combined.replace(/[_/+.%-]+/g, ' ');
+        const compact = combined.replace(/[^a-z0-9]/gi, '');
+        return womensWrestlingPromotionsPattern.test(words) ||
+            wrestlingWomenCommunityPattern.test(compact) ||
+            (hasWrestlingContext(words) && wrestlingWomenTermsPattern.test(words));
+    }
+
+    function isRestrictedWrestlingContent(text, subredditContext = '') {
+        return isWrestlingAdultContent(text, subredditContext) ||
+            isWomenWrestlingContent(text, subredditContext);
+    }
+
     function isSearchTextBanned(text) {
         if (!text) return false;
+        if (isRestrictedWrestlingContent(text)) return true;
         const lowerText = text.toLowerCase();
         const strippedText = lowerText.replace(/[^a-zäöå\s]/g, ' ').replace(/\s+/g, ' ').trim();
         
@@ -265,6 +315,7 @@
 
     function isNameBannedByPrefixSuffix(name) {
         if (!name) return false;
+        if (isRestrictedWrestlingContent(name)) return true;
         const lowerName = name.toLowerCase();
         const strippedName = lowerName.replace(/[^a-zäöå]/g, ''); 
         
@@ -387,11 +438,21 @@
             return fieldNames.has(key) ? key : null;
         }
         function inputsHaveBannedTerms() {
+            const combinedWrestlingSearch = [];
             for (const input of document.querySelectorAll(targets)) {
                 const kind = kindForInput(input);
-                if (kind && fieldBlocked(kind, input.value)) return true;
+                if (!kind) continue;
+                if (fieldBlocked(kind, input.value)) return true;
+                if (input.value) combinedWrestlingSearch.push(input.value);
             }
-            return false;
+            return isRestrictedWrestlingContent(combinedWrestlingSearch.join(' '));
+        }
+        function inputsHaveRestrictedWrestlingTerms() {
+            const values = [];
+            for (const input of document.querySelectorAll(targets)) {
+                if (kindForInput(input) && input.value) values.push(input.value);
+            }
+            return isRestrictedWrestlingContent(values.join(' '));
         }
         function redirectToPreviousPage() {
             if (redirecting) return;
@@ -424,6 +485,7 @@
         }
         function checkPost(outer) {
             const inner = outer.querySelector(':scope > .post-container') || outer;
+            const wrestlingFields = [];
             for (const attribute of ['url', 'href', 'content-href', 'domain', 'data-url']) {
                 if (mentionsPremiumAdultPlatform(inner.getAttribute(attribute))) return true;
             }
@@ -431,18 +493,25 @@
             const subreddit = header?.querySelector('a[href*="/r/"]');
             const author = header?.querySelector('a.author-link, a[href*="/u/"], a[href*="/user/"]');
             if (subreddit && subredditBlocked(subreddit.textContent || urlValueFrom(subreddit))) return true;
+            if (subreddit) wrestlingFields.push(subreddit.textContent || urlValueFrom(subreddit));
             if (author && authorBlocked(author.textContent || urlValueFrom(author))) return true;
             const title = inner.querySelector(':scope > .title');
             if (title && textBlocked(title.textContent)) return true;
+            if (title) wrestlingFields.push(title.textContent || '');
             // Link target is the post's URL, not the UI's unrelated buttons.
             for (const link of inner.querySelectorAll(':scope > .url-row a')) {
                 if (isPremiumAdultLink(link) || textBlocked(urlValueFrom(link)) || textBlocked(link.textContent)) return true;
+                wrestlingFields.push(urlValueFrom(link), link.textContent || '');
             }
             // Selftext / markdown, if supplied by the archive's result layout.
             for (const body of inner.querySelectorAll(':scope > .selftext, :scope > .body, :scope > .md, :scope > .text, :scope > .markdown, :scope > .long-text')) {
                 if (textBlocked(body.textContent)) return true;
+                wrestlingFields.push(body.textContent || '');
             }
-            return false;
+            const wrestlingText = wrestlingFields.join(' ');
+            const isMarkedNSFW = inner.hasAttribute('nsfw') || inner.getAttribute('data-nsfw') === 'true';
+            return isRestrictedWrestlingContent(wrestlingText) ||
+                (isMarkedNSFW && hasWrestlingContext(wrestlingText));
         }
         function checkComment(node) {
             const main = node.querySelector(':scope > .comment-main');
@@ -455,7 +524,8 @@
             if (author && authorBlocked(author.textContent || urlValueFrom(author))) return true;
             const body = content.querySelector(':scope > .body');
             if (body && textBlocked(body.textContent)) return true;
-            return false;
+            return isRestrictedWrestlingContent(body?.textContent || '',
+                (subreddit?.textContent || '') + ' ' + location.pathname);
         }
         function scan() {
             if (redirecting) return;
@@ -484,7 +554,14 @@
             if (!inputsHaveBannedTerms()) return false;
             event.preventDefault();
             event.stopImmediatePropagation();
-            redirectToPreviousPage();
+            if (inputsHaveRestrictedWrestlingTerms()) {
+                // Arctic Shift's /search is its search landing/front page.
+                redirecting = true;
+                ROOT.classList.add('nr-as-redirecting');
+                location.replace(location.origin + '/search');
+            } else {
+                redirectToPreviousPage();
+            }
             return true;
         }
         function isArcticSearchButton(button) {
@@ -1147,6 +1224,9 @@
             
             #search-dropdown-results-container li[role="presentation"]:not(.reddit-search-approved),
             #search-dropdown-results-container div[role="presentation"]:not(.reddit-search-approved),
+            search-telemetry-tracker[data-type="search-dropdown-item"]:not(.reddit-search-approved),
+            li[data-testid="search-sdui-typeahead-suggestion"]:not(.reddit-search-approved),
+            search-telemetry-tracker[data-type="search-dropdown-item"] li[role="presentation"]:has(a[data-search-scope-id][href^="/r/"]):not(.reddit-search-approved),
             li[data-testid="search-sdui-query-autocomplete"]:not(.reddit-search-approved),
             li.recent-search-item:not(.reddit-search-approved),
             #search-dropdown-results-container a[role="option"]:not(.reddit-search-approved),
@@ -1154,6 +1234,23 @@
             [data-testid="search-community"]:not(.reddit-search-approved) {
                 display: none !important;
                 visibility: hidden !important;
+            }
+
+            /* Popular Communities right rail: conceal the entire panel before
+               Reddit's async loader paints a single entry. */
+            aside.right-rail-popular-communities,
+            aside[aria-label="Suositut yhteisöt"],
+            aside[aria-label="Popular communities" i],
+            faceplate-loader[name^="PopularCommunities_"],
+            #popular-communities-list {
+                display: none !important;
+                visibility: hidden !important;
+                opacity: 0 !important;
+                height: 0 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                overflow: hidden !important;
+                pointer-events: none !important;
             }
             
             recent-posts,
@@ -1464,7 +1561,9 @@
         "community-highlight-carousel shreddit-gallery-carousel",
         "in-feed-community-recommendations",
         "in-feed-community-recommendations h3",
-        "community-recommendation"
+        "community-recommendation",
+        "aside.right-rail-popular-communities",
+        "faceplate-loader[name^=\"PopularCommunities_\"]"
     ];
 
     // --- OPTIMIZED MEMORY MANAGEMENT ---
@@ -1478,6 +1577,7 @@
 
     const processedElements = new WeakSet();
     const processedSearchItems = new WeakSet();
+    const communityTypeaheadSignatures = new WeakMap();
     const bannedSubredditCache = new Map();
     const contentBannedCache = new Map();
     const shadowRootsProcessed = new WeakSet();
@@ -1637,7 +1737,7 @@
             // Also restore previously observed shadow roots after a real suspend.
             for (const [root, mo] of shadowRootObservers) {
                 if (root.host?.isConnected) {
-                    mo.observe(root, { childList: true, subtree: true, attributes: false, characterData: false });
+                    mo.observe(root, getShadowRootObserverOptions(root));
                     observerInstances.add(mo);
                 } else {
                     shadowRootObservers.delete(root);
@@ -1876,7 +1976,8 @@
             const textToTest = textVariants[t];
             if (!textToTest) continue;
 
-            if (mentionsPremiumAdultPlatform(textToTest) ||
+            if (isRestrictedWrestlingContent(textToTest) ||
+                mentionsPremiumAdultPlatform(textToTest) ||
                 isBlockedByRedditRegexesV295(textToTest, allowOrdinaryAdultWords)) {
                 contentBannedCache.set(cacheKey, true);
                 return true;
@@ -2229,6 +2330,13 @@
         // whitelisted communities. Individual post pages remain exempt.
         if (postMentionsPremiumAdultPlatform(element, fullContent)) return true;
 
+        // Apply this before safe-subreddit exemptions: sexualized wrestling
+        // material is blocked even when the title says only "NSFW" and the
+        // wrestling context comes from its community name or URL metadata.
+        const wrestlingText = fullContent + ' ' + (getSubredditForAnyRedditPost(element) || '');
+        if (isRestrictedWrestlingContent(wrestlingText) ||
+            (hasWrestlingContext(wrestlingText) && isExplicitlyNSFWPost(element))) return true;
+
         // The front page remains tech-only regardless of an originating
         // community's safe status; direct subreddit feeds use its exemption.
         if (isHomeFeedContext() &&
@@ -2352,16 +2460,21 @@
             return;
         }
         if (processedElements.has(post)) {
-            if (post.classList.contains('reddit-approved') &&
-                (postMentionsPremiumAdultPlatform(post, extractCompletePostContent(post)) ||
-                 isSuggestedJoinFeedCard(post) ||
-                 (isHomeFeedContext() && (isExplicitlyNSFWPost(post) ||
-                    hasHomeFeedSubredditTopic(post) ||
-                    hasHomeFeedTopic(extractCompletePostContent(post)))))) {
-                post.classList.remove('reddit-approved');
-                post.classList.add('reddit-banned', 'prehide');
-                safelyHideElement(post);
-                return;
+            if (post.classList.contains('reddit-approved')) {
+                const latestContent = extractCompletePostContent(post);
+                const latestSubreddit = getSubredditForAnyRedditPost(post) || '';
+                const wrestlingText = latestContent + ' ' + latestSubreddit;
+                if (postMentionsPremiumAdultPlatform(post, latestContent) ||
+                    isRestrictedWrestlingContent(wrestlingText) ||
+                    (isExplicitlyNSFWPost(post) && hasWrestlingContext(wrestlingText)) ||
+                    isSuggestedJoinFeedCard(post) ||
+                    (isHomeFeedContext() && (isExplicitlyNSFWPost(post) ||
+                        hasHomeFeedSubredditTopic(post) || hasHomeFeedTopic(latestContent)))) {
+                    post.classList.remove('reddit-approved');
+                    post.classList.add('reddit-banned', 'prehide');
+                    safelyHideElement(post);
+                    return;
+                }
             }
             // Shreddit can replace the child custom element without replacing ARTICLE,
             // or a guest-feed mutation can leave an approved inner SHREDDIT-POST under
@@ -2416,6 +2529,7 @@
         const content = (body.innerText || body.textContent || '').slice(0, 9000);
         const author = comment.getAttribute('author') || comment.getAttribute('data-author') || '';
         const banned = checkTextForKeywords(author + ' ' + content) ||
+            isRestrictedWrestlingContent(content, window.location.pathname.match(/^\/r\/([^/]+)/i)?.[1] || '') ||
             isNameBannedByPrefixSuffix(author);
         if (banned) {
             comment.classList.remove('reddit-comment-approved');
@@ -2467,6 +2581,151 @@
         }
     }
 
+    function setCommunitySuggestionScreened(node, banned) {
+        if (!node) return;
+        processedSearchItems.add(node);
+        if (banned) {
+            node.classList.remove('reddit-search-approved');
+            node.classList.add('reddit-search-banned', 'prehide');
+            node.style.setProperty('display', 'none', 'important');
+        } else {
+            node.classList.remove('reddit-search-banned', 'prehide');
+            if (node.style.getPropertyValue('display') === 'none' &&
+                node.style.getPropertyPriority('display') === 'important') node.style.removeProperty('display');
+            node.classList.add('reddit-search-approved');
+        }
+    }
+
+    function screenCommunityTypeaheadSuggestions(root = document) {
+        // The telemetry JSON is available before Reddit paints its nested LI.
+        // Check community names and query suggestions before approving wrappers.
+        const searchShadowRoot = root.host &&
+            (root.host.matches?.('reddit-search-large, reddit-search-small, faceplate-search-dropdown, shreddit-search-dropdown, search-telemetry-tracker[data-type="search-dropdown-item"]') ||
+             root.querySelector('search-telemetry-tracker[data-type="search-dropdown-item"], li[data-testid="search-sdui-typeahead-suggestion"]'));
+        if (searchShadowRoot && !root.querySelector('#nr-community-shadow-prehide')) {
+            const style = document.createElement('style');
+            style.id = 'nr-community-shadow-prehide';
+            style.textContent = `
+                :host([data-type="search-dropdown-item"]:not(.reddit-search-approved)),
+                search-telemetry-tracker[data-type="search-dropdown-item"]:not(.reddit-search-approved),
+                li[data-testid="search-sdui-typeahead-suggestion"]:not(.reddit-search-approved),
+                li[data-testid="search-sdui-query-autocomplete"]:not(.reddit-search-approved) {
+                    display: none !important;
+                    visibility: hidden !important;
+                }
+            `;
+            root.prepend(style);
+        }
+        const trackerSelector = 'search-telemetry-tracker[data-type="search-dropdown-item"]';
+        const rowSelector = 'li[data-testid="search-sdui-typeahead-suggestion"], ' +
+            'search-telemetry-tracker[data-type="search-dropdown-item"] li[role="presentation"]:has(a[data-search-scope-id][href^="/r/"])';
+        const queryRowSelector = 'li[data-testid="search-sdui-query-autocomplete"]';
+        const trackers = [];
+        const rows = [];
+        const queryRows = [];
+        if (root.matches?.(trackerSelector)) trackers.push(root);
+        if (root.matches?.(rowSelector)) rows.push(root);
+        if (root.matches?.(queryRowSelector)) queryRows.push(root);
+        if (root.querySelectorAll) {
+            trackers.push(...root.querySelectorAll(trackerSelector));
+            rows.push(...root.querySelectorAll(rowSelector));
+            queryRows.push(...root.querySelectorAll(queryRowSelector));
+        }
+
+        const handledRows = new Set();
+        function screenRow(row, tracker = null, metadataName = '') {
+            const link = row?.querySelector('a[data-search-scope-id][href^="/r/"], a[href^="/r/"]');
+            const label = row?.querySelector('[data-type="search-dropdown-item-label-text"]');
+            const href = link?.getAttribute('href') || '';
+            const slug = href.match(/^\/r\/([^/?#]+)/i)?.[1] || '';
+            const visibleName = (label?.textContent || '').trim().replace(/^r\//i, '');
+            const names = [metadataName, slug, visibleName].filter(Boolean);
+            // Keep incomplete suggestions hidden; a stable subreddit name is
+            // required before approving a result for display.
+            if (!names.length) return;
+            const banned = names.some(name => isSubredditNameBanned(name) || isSearchTextBanned(name));
+            if (row) {
+                setCommunitySuggestionScreened(row, banned);
+                communityTypeaheadSignatures.set(row, names.join('\0') + '\0' + regexKeywordsToHide.length);
+                handledRows.add(row);
+            }
+            // A banned item must lose its telemetry wrapper too; otherwise
+            // React can leave an empty clickable row or repaint a recycled LI.
+            if (tracker && (row || banned)) setCommunitySuggestionScreened(tracker, banned);
+        }
+
+        function screenQueryRow(row, tracker = null, metadataQueries = []) {
+            const href = row?.querySelector('a[href*="/search/"]')?.getAttribute('href') || '';
+            const encodedQuery = href.match(/[?&]q=([^&#]+)/i)?.[1] || '';
+            let hrefQuery = '';
+            try { hrefQuery = decodeURIComponent(encodedQuery.replace(/\+/g, ' ')); } catch {}
+            const label = row?.querySelector('[data-type="search-dropdown-item-label-text"]')?.textContent || '';
+            const queries = [...metadataQueries, row?.getAttribute('data-label'), hrefQuery, label]
+                .filter(Boolean);
+            // Keep incomplete queries covered by the no-glimpse rule until
+            // Reddit supplies text or the telemetry metadata.
+            if (!queries.length) return;
+            const banned = queries.some(query => isSearchTextBanned(query));
+            if (row) {
+                setCommunitySuggestionScreened(row, banned);
+                handledRows.add(row);
+            }
+            if (tracker && (row || banned)) setCommunitySuggestionScreened(tracker, banned);
+        }
+
+        for (const tracker of new Set(trackers)) {
+            let metadataName = '';
+            let metadataType = '';
+            let metadataQueries = [];
+            try {
+                const metadata = JSON.parse(tracker.getAttribute('data-faceplate-tracking-context') || '{}');
+                metadataName = String(metadata?.subreddit?.name || '');
+                metadataType = String(metadata?.action_info?.type || '');
+                metadataQueries = [metadata?.meta_search?.raw_query, metadata?.meta_search?.display_query]
+                    .filter(query => typeof query === 'string' && query.trim());
+            } catch {}
+            const row = tracker.querySelector(rowSelector) || tracker.shadowRoot?.querySelector(rowSelector);
+            const queryRow = tracker.querySelector(queryRowSelector) || tracker.shadowRoot?.querySelector(queryRowSelector);
+            const isCommunity = !!metadataName || metadataType === 'subreddit' ||
+                !!row?.querySelector('a[href^="/r/"]');
+            if (isCommunity) screenRow(row, tracker, metadataName);
+            else if (metadataType === 'query_suggestion' || queryRow) {
+                screenQueryRow(queryRow, tracker, metadataQueries);
+            } else if (metadataType) {
+                // Other suggestion types remain under their existing rules.
+                setCommunitySuggestionScreened(tracker, false);
+            }
+        }
+
+        for (const row of new Set(rows)) {
+            if (!handledRows.has(row)) screenRow(row);
+        }
+        for (const row of new Set(queryRows)) {
+            if (!handledRows.has(row)) screenQueryRow(row);
+        }
+    }
+
+    function observeCommunityTypeaheadTrackers(root = document) {
+        const selector = 'search-telemetry-tracker[data-type="search-dropdown-item"]';
+        const trackers = [];
+        if (root.matches?.(selector)) trackers.push(root);
+        if (root.querySelectorAll) trackers.push(...root.querySelectorAll(selector));
+        for (const tracker of trackers) {
+            if (tracker.__searchObserved) continue;
+            const observer = new MutationObserver(() => screenCommunityTypeaheadSuggestions(tracker));
+            try {
+                observer.observe(tracker, {
+                    childList: true, subtree: true, characterData: true,
+                    attributes: true,
+                    attributeFilter: ['href', 'data-label', 'data-search-scope-id', 'data-faceplate-tracking-context']
+                });
+                observerInstances.add(observer);
+                tracker.__searchObserved = true;
+                searchDropdownObserverTargetsV295.add(tracker);
+            } catch {}
+        }
+    }
+
     function processSearchCommunities() {
         const communities = document.querySelectorAll('[data-testid="search-community"]:not(.reddit-search-approved):not(.prehide)');
         for (let i = 0; i < communities.length; i++) {
@@ -2510,11 +2769,22 @@
     }
 
     function hideBannedSubredditsFromSearch() {
+        screenCommunityTypeaheadSuggestions();
+        observeCommunityTypeaheadTrackers();
+        // Reddit's live search suggestions live directly inside this open
+        // shadow root, outside the main document's querySelectorAll and CSS.
+        const liveSearches = document.querySelectorAll('reddit-search-large, reddit-search-small');
+        for (const search of liveSearches) {
+            if (!search.shadowRoot) continue;
+            screenCommunityTypeaheadSuggestions(search.shadowRoot);
+            observeCommunityTypeaheadTrackers(search.shadowRoot);
+            observeShadowRootOnce(search.shadowRoot);
+        }
         // Do not classify the site's normal navigation or feed LI elements as search results.
-        const searchUi = '#search-dropdown-results-container, faceplate-search-dropdown, shreddit-search-dropdown';
+        const searchUi = '#search-dropdown-results-container, reddit-search-large, reddit-search-small, faceplate-search-dropdown, shreddit-search-dropdown';
         const onSearchPage = /^\/search(?:\/|$)/i.test(window.location.pathname);
         if (!onSearchPage && !document.querySelector(searchUi) &&
-            !document.querySelector('[data-testid="search-community"], li[data-testid="search-sdui-query-autocomplete"]')) return;
+            !document.querySelector('[data-testid="search-community"], li[data-testid="search-sdui-query-autocomplete"], li[data-testid="search-sdui-typeahead-suggestion"]')) return;
         const allSearchItems = [
             ...Array.from(document.querySelectorAll('[data-type="search-dropdown-item-label-text"]')),
             ...Array.from(document.querySelectorAll('#search-dropdown-results-container span.font-semibold.text-12.uppercase, faceplate-search-dropdown span.font-semibold.text-12.uppercase, shreddit-search-dropdown span.font-semibold.text-12.uppercase')),
@@ -2525,6 +2795,10 @@
         
         for (let i = 0; i < allSearchItems.length; i++) {
             const item = allSearchItems[i];
+            // Each Communities typeahead row is screened from its actual r/slug.
+            // A nested label must not hide its parent telemetry wrapper or
+            // accidentally re-approve a banned row.
+            if (item.closest?.('li[data-testid="search-sdui-typeahead-suggestion"], search-telemetry-tracker[data-type="search-dropdown-item"] li[role="presentation"]')) continue;
             if (processedSearchItems.has(item)) continue;
             processedSearchItems.add(item);
             
@@ -2550,6 +2824,13 @@
             for (let ni = 0; ni < addedLimit; ni++) {
                 const node = mutation.addedNodes[ni];
                 if (node && node.nodeType === 1) {
+                    if (node.matches?.('search-telemetry-tracker[data-type="search-dropdown-item"], li[data-testid="search-sdui-typeahead-suggestion"]') ||
+                        node.closest?.('search-telemetry-tracker[data-type="search-dropdown-item"]') ||
+                        node.querySelector?.('search-telemetry-tracker[data-type="search-dropdown-item"], li[data-testid="search-sdui-typeahead-suggestion"]')) {
+                        const root = node.getRootNode?.();
+                        if (root?.host) processShadowSearchItems(root);
+                        else screenCommunityTypeaheadSuggestions(mutation.target);
+                    }
                     screenPremiumAdultLinks(node);
                     processShadowSearchItems(mutation.target);
                     // A feed's shadow root can receive posts after its initial
@@ -2574,11 +2855,30 @@
         }
     }, 100);
 
+    function getShadowRootObserverOptions(root) {
+        if (root.host?.matches?.('reddit-search-large, reddit-search-small')) {
+            return {
+                childList: true, subtree: true, characterData: true,
+                attributes: true,
+                attributeFilter: ['href', 'data-label', 'data-search-scope-id', 'data-faceplate-tracking-context']
+            };
+        }
+        return { childList: true, subtree: true, attributes: false, characterData: false };
+    }
+
     function observeShadowRootOnce(root) {
         if (!root || shadowRootObservers.has(root)) return;
         try {
-            const mo = new MutationObserver(throttledShadowRootHandler);
-            mo.observe(root, { childList: true, subtree: true, attributes: false, characterData: false });
+            // Search suggestions are replaced as the user types. Screen them
+            // synchronously in the mutation microtask, before the next paint.
+            const callback = root.host?.matches?.('reddit-search-large, reddit-search-small')
+                ? () => {
+                    screenCommunityTypeaheadSuggestions(root);
+                    observeCommunityTypeaheadTrackers(root);
+                }
+                : throttledShadowRootHandler;
+            const mo = new MutationObserver(callback);
+            mo.observe(root, getShadowRootObserverOptions(root));
             shadowRootObservers.set(root, mo);
             observerInstances.add(mo);
         } catch (e) {}
@@ -2605,6 +2905,10 @@
 
     function processShadowSearchItems(root) {
         if (!root || !root.querySelectorAll) return;
+        // Nested header/search shadow roots do not always have a recognized
+        // dropdown host. Screen their Community results before the host guard.
+        screenCommunityTypeaheadSuggestions(root);
+        observeCommunityTypeaheadTrackers(root);
         const host = root.host || (root.nodeType === 1 ? root : null);
         if (host && !host.matches?.('faceplate-search-dropdown, shreddit-search-dropdown, #search-dropdown-results-container') &&
             !host.closest?.('faceplate-search-dropdown, shreddit-search-dropdown, #search-dropdown-results-container')) return;
@@ -2613,6 +2917,7 @@
         
         for (let i = 0; i < searchItems.length; i++) {
             const item = searchItems[i];
+            if (item.closest?.('li[data-testid="search-sdui-typeahead-suggestion"], search-telemetry-tracker[data-type="search-dropdown-item"] li[role="presentation"]')) continue;
             if (processedSearchItems.has(item)) continue;
             processedSearchItems.add(item);
             
@@ -2633,7 +2938,9 @@
         // Restrict shadow-root discovery to search surfaces and their descendants.
         hideBannedSubredditsFromSearch();
         const dropdowns = document.querySelectorAll(
-            'faceplate-search-dropdown, shreddit-search-dropdown, #search-dropdown-results-container'
+            'reddit-search-large, reddit-search-small, faceplate-search-dropdown, shreddit-search-dropdown, #search-dropdown-results-container, ' +
+            'reddit-header, #reddit-header, header[role="banner"], [role="search"], ' +
+            'faceplate-search-input, shreddit-search-input'
         );
         const visitedRoots = new Set();
         function scanSearchSubtree(host, depth = 0) {
@@ -2658,13 +2965,19 @@
         const container = document.getElementById('search-dropdown-results-container');
         if (container && !container.__searchObserved) {
             const observer = new MutationObserver(() => {
+                // Run before the next paint, including when Reddit recycles an
+                // approved LI and replaces its name with a banned subreddit.
+                screenCommunityTypeaheadSuggestions(container);
                 batchProcess(() => {
                     hideBannedSubredditsFromSearch();
                     hideBannedSubredditsFromAllSearchDropdowns();
                 });
             });
             observerInstances.add(observer);
-            observer.observe(container, { childList: true, subtree: true });
+            observer.observe(container, {
+                childList: true, subtree: true, characterData: true,
+                attributes: true, attributeFilter: ['href', 'data-search-scope-id']
+            });
             container.__searchObserved = true;
             searchDropdownObserverTargetsV295.add(container);
         }
@@ -2677,6 +2990,7 @@
             searchDropdownObserverTargetsV295.add(dropdown);
             
             const observer = new MutationObserver(() => {
+                screenCommunityTypeaheadSuggestions(dropdown.shadowRoot || dropdown);
                 batchProcess(() => {
                     if (dropdown.shadowRoot) {
                         processShadowSearchItems(dropdown.shadowRoot);
@@ -2684,7 +2998,7 @@
                 });
             });
             observerInstances.add(observer);
-            observer.observe(dropdown, { childList: true, subtree: true });
+            observer.observe(dropdown, { childList: true, subtree: true, characterData: true });
         }
     }
 
@@ -2712,6 +3026,12 @@
             // 2. Check Active Search Input Box (Clear it if on homepage, redirect otherwise)
             const searchInputs = document.querySelectorAll('input[name="q"], input[type="search"]');
             for (let i = 0; i < searchInputs.length; i++) {
+                if (searchInputs[i].value && isRestrictedWrestlingContent(searchInputs[i].value)) {
+                    searchInputs[i].value = '';
+                    isRedirecting = true;
+                    window.location.replace('https://www.reddit.com/');
+                    return;
+                }
                 if (searchInputs[i].value && isSearchTextBanned(searchInputs[i].value)) {
                     devLog(`Banned text in search box: ${searchInputs[i].value}. Clearing...`);
                     searchInputs[i].value = ''; // Silently clear it
@@ -2760,11 +3080,12 @@
         const searchInput = document.querySelector('input[name="q"]');
         if (searchInput && !eventListenersAdded.has(searchInput)) {
             const inputHandler = debounce(() => {
-                if (isSearchTextBanned(searchInput.value)) {
+                const restrictedWrestlingSearch = isRestrictedWrestlingContent(searchInput.value);
+                if (restrictedWrestlingSearch || isSearchTextBanned(searchInput.value)) {
                     searchInput.value = '';
-                    if (window.location.pathname !== '/' && window.location.pathname !== '') {
+                    if (restrictedWrestlingSearch || (window.location.pathname !== '/' && window.location.pathname !== '')) {
                         isRedirecting = true;
-                        window.location.replace('https://www.reddit.com');
+                        window.location.replace('https://www.reddit.com/');
                     }
                 }
             }, 200);
@@ -2779,11 +3100,12 @@
             const submitHandler = (event) => {
                 const formData = new FormData(searchForm);
                 const query = (formData.get('q') || '').toLowerCase();
-                if (isSearchTextBanned(query)) {
+                const restrictedWrestlingSearch = isRestrictedWrestlingContent(query);
+                if (restrictedWrestlingSearch || isSearchTextBanned(query)) {
                     event.preventDefault();
-                    if (window.location.pathname !== '/' && window.location.pathname !== '') {
+                    if (restrictedWrestlingSearch || (window.location.pathname !== '/' && window.location.pathname !== '')) {
                         isRedirecting = true;
-                        window.location.replace('https://www.reddit.com');
+                        window.location.replace('https://www.reddit.com/');
                     }
                 }
             };
@@ -3294,17 +3616,21 @@
                 // They must not trigger a whole search-dropdown sweep for each
                 // React commit. Actual dropdowns and search results still do.
                 if (node.matches?.(
-                    '#search-dropdown-results-container, faceplate-search-dropdown, ' +
+                    '#search-dropdown-results-container, reddit-search-large, reddit-search-small, faceplate-search-dropdown, ' +
                     'shreddit-search-dropdown, [data-testid="search-community"], ' +
                     '[data-testid="search-dropdown-item"], ' +
+                    'li[data-testid="search-sdui-typeahead-suggestion"], ' +
+                    'search-telemetry-tracker[data-type="search-dropdown-item"], ' +
                     'li[data-testid="search-sdui-query-autocomplete"], ' +
                     'li.recent-search-item, [data-type="search-dropdown-item-label-text"]'
                 ) || node.closest?.(
-                    '#search-dropdown-results-container, faceplate-search-dropdown, shreddit-search-dropdown'
+                    '#search-dropdown-results-container, reddit-search-large, reddit-search-small, faceplate-search-dropdown, shreddit-search-dropdown'
                 ) || node.querySelector?.(
-                    '#search-dropdown-results-container, faceplate-search-dropdown, ' +
+                    '#search-dropdown-results-container, reddit-search-large, reddit-search-small, faceplate-search-dropdown, ' +
                     'shreddit-search-dropdown, [data-testid="search-community"], ' +
                     '[data-testid="search-dropdown-item"], ' +
+                    'li[data-testid="search-sdui-typeahead-suggestion"], ' +
+                    'search-telemetry-tracker[data-type="search-dropdown-item"], ' +
                     'li[data-testid="search-sdui-query-autocomplete"]'
                 )) {
                     needsSearchUpdate = true;
@@ -3350,6 +3676,7 @@
 
         if (needsSearchUpdate) {
             batchProcess(() => {
+                observeSearchDropdown();
                 hideBannedSubredditsFromSearch();
                 hideBannedSubredditsFromAllSearchDropdowns();
                 processSearchCommunities();
