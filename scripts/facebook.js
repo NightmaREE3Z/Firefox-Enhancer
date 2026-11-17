@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         FBCleaner
-// @version	 29.9.4
-// @date	 2026-11-16
+// @version	 29.9.5
+// @date	 2026-11-17
 // @description  Makes my Facebook experience less terrible.
 // @match        *://*.facebook.com/*
 // @grant        none
@@ -10,6 +10,44 @@
 
 (() => {
 'use strict';
+
+// v331: extend The 434's supported-Page policy to wrestling Page timelines.
+// Match Page identities, not arbitrary post text, search results or group names.
+const FB_WRESTLING_PAGE_SLUG_V331 = /(?:^|[._-])(?:wwe|aew|tna|njpw|prowrestling|wrestling)(?:$|[._-])|^(?:wwe|aew|tna|njpw|prowrestl|wrestl(?:ing|e(?!ss))|allelitewrestling|newjapanprowrestling)/i;
+const FB_WRESTLING_PAGE_NAME_V331 = /\b(?:WWE|AEW|TNA|NJPW|Pro[\s-]*Wrestling|Professional Wrestling|Wrestling|All Elite Wrestling|New Japan Pro Wrestling)\b/i;
+const FB_WRESTLING_NON_PAGE_ROOTS_V331 = new Set([
+    'groups', 'search', 'friends', 'marketplace', 'messages', 'messenger',
+    'notifications', 'watch', 'reel', 'reels', 'stories', 'events', 'gaming',
+    'settings', 'help', 'share', 'photo', 'photos', 'videos', 'video',
+    'permalink.php', 'story.php', 'home.php', 'people', 'pages'
+]);
+const isFBWrestlingPagePathV331 = (pathname = location.pathname) => {
+    const segments = String(pathname || '/').toLowerCase().split('/').filter(Boolean);
+    if (segments[0] === 'pages')
+        return segments.length >= 2 && segments.length <= 4 &&
+            FB_WRESTLING_PAGE_SLUG_V331.test(segments[1]);
+    return !!segments.length && segments.length <= 3 &&
+        !FB_WRESTLING_NON_PAGE_ROOTS_V331.has(segments[0]) &&
+        FB_WRESTLING_PAGE_SLUG_V331.test(segments[0]);
+};
+let __fbWrestlingPageHeadingCacheV331 = { path: '', at: 0, matched: false };
+const isFBWrestlingPageHeadingV331 = (pathname = location.pathname) => {
+    try {
+        const segments = String(pathname || '/').toLowerCase().split('/').filter(Boolean);
+        if (!segments.length || segments.length > (segments[0] === 'pages' ? 4 : 3) ||
+            (segments[0] === 'pages' ? segments.length < 2 : FB_WRESTLING_NON_PAGE_ROOTS_V331.has(segments[0]))) return false;
+        const path = segments.join('/');
+        const now = Date.now();
+        if (__fbWrestlingPageHeadingCacheV331.path === path &&
+            now - __fbWrestlingPageHeadingCacheV331.at < 400)
+            return __fbWrestlingPageHeadingCacheV331.matched;
+        const heading = document.querySelector?.('[role="main"] h1, main h1');
+        const matched = !!heading && !heading.closest?.('[role="feed"], [role="article"], [role="dialog"]') &&
+            FB_WRESTLING_PAGE_NAME_V331.test(String(heading.textContent || '').slice(0, 180));
+        __fbWrestlingPageHeadingCacheV331 = { path, at: now, matched };
+        return matched;
+    } catch (e) { return false; }
+};
 
 // v321: actual document-start navigation prehide for refresh and SPA hydration.
 // F5 creates a fresh document even while staying on the same URL. The normal
@@ -194,11 +232,18 @@ const syncFBEarlyFeedGateV311 = () => {
         if (!html) return false;
         const path = (location.pathname || '/').replace(/\/+$/, '').toLowerCase() || '/';
         const home = path === '/' || path === '/home.php';
-        const supported = ['/four3four', '/itsstillrealtousdammit',
+        const paramsV331 = new URLSearchParams(location.search);
+        const notificationOpenedPostV331 = paramsV331.has('notif_id') ||
+            paramsV331.has('notif_t') || paramsV331.get('ref') === 'notif';
+        const supported = !notificationOpenedPostV331 && (['/four3four', '/itsstillrealtousdammit',
             '/prowrestlingworld', '/weirdimagesworthseeing']
-            .some(page => path === page || path.startsWith(page + '/'));
+            .some(page => path === page || path.startsWith(page + '/')) ||
+            isFBWrestlingPagePathV331(path) || isFBWrestlingPageHeadingV331(path));
+        const postSurface = !notificationOpenedPostV331 &&
+            !/^\/(?:messages|messenger|notifications|ilmoitukset|search)(?:\/|$)/.test(path);
         html.classList.toggle('fb-early-home-feed-v311', home);
         html.classList.toggle('fb-early-supported-page-v311', supported);
+        html.classList.toggle('fb-early-post-surface-v331', postSurface);
         // v327: protect the exact known PYMK profile module for BOTH accounts.
         // Dad's additional policy applies to profile-like routes only; it does not
         // enable the broad Haukkis-only cosmetics on Dad's account.
@@ -248,12 +293,10 @@ const syncFBEarlyFeedGateV311 = () => {
                 animation: none !important;
                 transition: none !important;
             }
-            /* v329: This exact PYMK feed carousel is already unwanted. A
-               visibility-only prehide left its FeedUnit occupying a blank slot.
-               Remove only this identified recommendation unit from layout. */
+            /* Hide the captured PYMK *feed carousel* before classification; JS then
+               bans the whole FeedUnit and collapses its safe one-post slot. */
             html.fb-early-home-feed-v311 [role="feed"] div[data-pagelet^="FeedUnit_"]:has([role="region"][aria-label="Ihmisiä, jotka saatat tuntea"]),
             html.fb-early-home-feed-v311 [role="feed"] div[data-pagelet^="FeedUnit_"]:has([role="region"][aria-label="People You May Know"]) {
-                display: none !important;
                 visibility: hidden !important;
                 opacity: 0 !important;
                 pointer-events: none !important;
@@ -261,8 +304,12 @@ const syncFBEarlyFeedGateV311 = () => {
             /* Only feed post units, never header, search, comments, dialogs or chat. */
             html.fb-early-home-feed-v311 :is([role="feed"] div[aria-posinset], [role="feed"] > [role="article"], div[data-pagelet^="FeedUnit_"], div[data-pagelet^="TimelineFeedUnit_"]):not(.fb-post-approved):not(.fb-feed-unit-approved):not(.fb-post-banned):not(.fb-element-banned):not([data-fb-v25-scan-complete="1"]):not(:has(.fb-post-approved, .fb-feed-unit-approved)):is(:not(:has([data-visualcompletion="loading-state"])), :has([data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"])),
             html.fb-early-supported-page-v311 :is([role="feed"] div[aria-posinset], [role="feed"] > [role="article"], div[data-pagelet^="FeedUnit_"], div[data-pagelet^="TimelineFeedUnit_"]):not(.fb-post-approved):not(.fb-feed-unit-approved):not(.fb-post-banned):not(.fb-element-banned):not([data-fb-v25-scan-complete="1"]):not(:has(.fb-post-approved, .fb-feed-unit-approved)):is(:not(:has([data-visualcompletion="loading-state"])), :has([data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"])),
+            /* All genuine Facebook post feeds receive the same document-start paint gate.
+               No navigation, Messenger, comment dialogs or React loading skeletons. */
+            html.fb-early-post-surface-v331:not(.fb-trusted-profile-timeline-v50) :is([role="feed"] div[aria-posinset], [role="feed"] > [role="article"], div[data-pagelet^="FeedUnit_"], div[data-pagelet^="TimelineFeedUnit_"]):not(.fb-post-approved):not(.fb-feed-unit-approved):not(.fb-post-banned):not(.fb-element-banned):not([data-fb-v25-scan-complete="1"]):not(:has(.fb-post-approved, .fb-feed-unit-approved)):has([data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"]),
             /* v317: link-preview-only Page articles may have no story_message. Gate them too. */
-            html.fb-early-supported-page-v311 [role="main"] [role="article"]:not(:where([role="article"] [role="article"], [role="dialog"] [role="article"], [data-pagelet*="Comment" i] [role="article"], [data-pagelet*="Notification" i] [role="article"])):has([data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"], [data-ad-rendering-role="profile_name"], a[href] img, [role="link"] img, video, [data-ad-rendering-role*="attachment" i]):not(.fb-post-approved):not(.fb-feed-unit-approved):not(.fb-post-banned):not(.fb-element-banned):not([data-fb-v25-scan-complete="1"]):not(:has(.fb-post-approved, .fb-feed-unit-approved)) {
+            html.fb-early-supported-page-v311 [role="main"] [role="article"]:not(:where([role="article"] [role="article"], [role="dialog"] [role="article"], [data-pagelet*="Comment" i] [role="article"], [data-pagelet*="Notification" i] [role="article"])):has([data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"], [data-ad-rendering-role="profile_name"], a[href] img, [role="link"] img, video, [data-ad-rendering-role*="attachment" i]):not(.fb-post-approved):not(.fb-feed-unit-approved):not(.fb-post-banned):not(.fb-element-banned):not([data-fb-v25-scan-complete="1"]):not(:has(.fb-post-approved, .fb-feed-unit-approved)),
+            html.fb-early-post-surface-v331:not(.fb-trusted-profile-timeline-v50) [role="main"] [role="article"]:not(:where([role="article"] [role="article"], [role="dialog"] [role="article"], [data-pagelet*="Comment" i] [role="article"], [data-pagelet*="Notification" i] [role="article"])):has([data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"]):not(.fb-post-approved):not(.fb-feed-unit-approved):not(.fb-post-banned):not(.fb-element-banned):not([data-fb-v25-scan-complete="1"]):not(:has(.fb-post-approved, .fb-feed-unit-approved)) {
                 visibility: hidden !important;
                 opacity: 0 !important;
                 pointer-events: none !important;
@@ -1081,7 +1128,15 @@ const isCurrentSpecificProfileSurface = (inputUrl = window.location.href) => {
 };
 
 const isCurrentSpecificUrlSurface = (inputUrl = window.location.href) => {
-    try { return isSupportedFacebookPage(inputUrl, FB_SPECIFIC_URL_SURFACES); }
+    try {
+        const url = new URL(inputUrl, location.origin);
+        if (!/(^|\.)facebook\.com$/i.test(url.hostname)) return false;
+        if (url.searchParams.has('notif_id') || url.searchParams.has('notif_t') ||
+            url.searchParams.get('ref') === 'notif') return false;
+        if (isSupportedFacebookPage(inputUrl, FB_SPECIFIC_URL_SURFACES)) return true;
+        return isFBWrestlingPagePathV331(url.pathname) ||
+            (url.href === window.location.href && isFBWrestlingPageHeadingV331(url.pathname));
+    }
     catch (e) { return false; }
 };
 
@@ -3902,12 +3957,19 @@ const applyCachedFBProfileCardDecision = (card) => {
 };
 
 // ===== HOME FEED CTA / REELS SCRUBBER v23 =====
-const FB_RESTRICTED_FEED_CTA_TEXT = new Set(['liity', 'join', 'seuraa', 'follow']);
+const FB_RESTRICTED_FEED_CTA_TEXT = [/^liity$/i, /^join$/i, /^seuraa$/i, /^follow$/i];
 const FB_RESTRICTED_FEED_SUGGESTION_TEXT_V65 = [
-    'sinulle ehdotettua', 'sinulle ehdotettu', 'sinulle suositeltua', 'sinulle suositeltu',
-    'suggested for you', 'recommended for you', 'suggested post',
-    'suositeltu sinulle', 'ehdotettu sinulle'
+    /sinulle ehdotettua/i, /sinulle ehdotettu/i, /sinulle suositeltua/i, /sinulle suositeltu/i,
+    /suggested for you/i, /recommended for you/i, /suggested post/i,
+    /suositeltu sinulle/i, /ehdotettu sinulle/i
 ];
+const matchesFBTextRegexListV331 = (patterns, value) => {
+    const text = String(value || '');
+    return !!text && patterns.some(pattern => {
+        pattern.lastIndex = 0;
+        return pattern.test(text);
+    });
+};
 const FB_CANONICAL_POST_SELECTOR_V65 = [
     '[role="feed"] div[aria-posinset]',
     'div[data-pagelet^="FeedUnit_"]',
@@ -3916,8 +3978,10 @@ const FB_CANONICAL_POST_SELECTOR_V65 = [
     // v29.5.2: The supported-Page no-glimpse CSS also gates standalone articles
     // without a role=feed / FeedUnit parent. The scanner MUST claim that exact
     // article shape, or safe Page posts remain invisible forever. The html class
-    // confines this fallback to the four explicitly supported Page timelines.
-    'html.fb-early-supported-page-v311 [role="main"] [role="article"]:not(:where([role="article"] [role="article"], [role="dialog"] [role="article"], [data-pagelet*="Comment" i] [role="article"], [data-pagelet*="Notification" i] [role="article"])):has([data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"], [data-ad-rendering-role="profile_name"], a[href] img, [role="link"] img, video, [data-ad-rendering-role*="attachment" i])'
+    // confines this fallback to supported Page timelines; the second selector
+    // claims caption-bearing standalone posts on other safe Facebook routes.
+    'html.fb-early-supported-page-v311 [role="main"] [role="article"]:not(:where([role="article"] [role="article"], [role="dialog"] [role="article"], [data-pagelet*="Comment" i] [role="article"], [data-pagelet*="Notification" i] [role="article"])):has([data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"], [data-ad-rendering-role="profile_name"], a[href] img, [role="link"] img, video, [data-ad-rendering-role*="attachment" i])',
+    'html.fb-early-post-surface-v331:not(.fb-trusted-profile-timeline-v50) [role="main"] [role="article"]:not(:where([role="article"] [role="article"], [role="dialog"] [role="article"], [data-pagelet*="Comment" i] [role="article"], [data-pagelet*="Notification" i] [role="article"])):has([data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"])'
 ].join(',');
 
 const getFBFeedUnitWrapper = (seed) => {
@@ -3937,10 +4001,10 @@ const getFBFeedUnitWrapper = (seed) => {
 // ===== v327: semantic post-level sponsored/shopping policy (both accounts) =====
 // The global post rule is intentionally NOT put in globalRegex: a user talking
 // ABOUT a sponsored post or saying "buy" in a normal caption isn't an ad.
-const FB_GLOBAL_AD_LABELS_V327 = new Set(['sponsoroitu', 'sponsored', 'suositeltu', 'recommended']);
-const FB_GLOBAL_BUY_CTA_TEXT_V327 = new Set([
-    'osta', 'osta nyt', 'buy', 'buy now', 'shop now'
-]);
+const FB_GLOBAL_AD_LABELS_V327 = [/^sponsoroitu$/i, /^sponsored$/i, /^suositeltu$/i, /^recommended$/i];
+const FB_GLOBAL_BUY_CTA_TEXT_V327 = [
+    /^osta$/i, /^osta nyt$/i, /^buy$/i, /^buy now$/i, /^shop now$/i
+];
 const isFBGlobalAdControlSafeV327 = (control) => {
     try {
         return !!control && !control.closest?.('[role="dialog"], [role="menu"], [role="navigation"], [role="complementary"], [data-pagelet*="Comment" i], [data-pagelet*="Notification" i]') &&
@@ -3961,7 +4025,7 @@ const getFBGlobalAdOrShoppingReasonV327 = (seed) => {
             if (!isFBGlobalAdControlSafeV327(link)) continue;
             const label = String(link.getAttribute('aria-label') || link.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
             const href = String(link.getAttribute('href') || '').toLowerCase();
-            if (href.includes('/ads/about/') || FB_GLOBAL_AD_LABELS_V327.has(label)) return 'sponsored disclosure v327';
+            if (href.includes('/ads/about/') || matchesFBTextRegexListV331(FB_GLOBAL_AD_LABELS_V327, label)) return 'sponsored disclosure v327';
         }
         // This includes late-hydrated CTA wrappers from Facebook's ad carousel.
         // Exact aria labels are accepted outside CTA wrappers too, but never post text.
@@ -3975,10 +4039,10 @@ const getFBGlobalAdOrShoppingReasonV327 = (seed) => {
             const control = controls[i];
             if (!isFBGlobalAdControlSafeV327(control)) continue;
             const label = String(control.getAttribute('aria-label') || '').replace(/\s+/g, ' ').trim().toLowerCase();
-            if (FB_GLOBAL_BUY_CTA_TEXT_V327.has(label)) return 'shopping CTA v327';
+            if (matchesFBTextRegexListV331(FB_GLOBAL_BUY_CTA_TEXT_V327, label)) return 'shopping CTA v327';
             if (control.closest('[data-ad-rendering-role^="cta-"]')) {
                 const text = String(control.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
-                if (FB_GLOBAL_BUY_CTA_TEXT_V327.has(text)) return 'shopping CTA text v327';
+                if (matchesFBTextRegexListV331(FB_GLOBAL_BUY_CTA_TEXT_V327, text)) return 'shopping CTA text v327';
             }
         }
     } catch (e) {}
@@ -4579,7 +4643,14 @@ const isProbablyHomeFeedUnit = (el) => {
         if (isProfileHeaderProtectedArea && isProfileHeaderProtectedArea(el)) return false;
         if (isTopLeftSearchDropdownElement && isTopLeftSearchDropdownElement(el)) return false;
         if (el.closest('[role="banner"], [role="navigation"]')) return false;
-        return !!(el.closest('[role="feed"]') || el.matches?.('div[data-pagelet^="FeedUnit_"], div[data-pagelet^="TimelineFeedUnit_"]'));
+        if (el.closest('[role="feed"]') ||
+            el.matches?.('div[data-pagelet^="FeedUnit_"], div[data-pagelet^="TimelineFeedUnit_"]')) return true;
+        // The 434 and wrestling Pages may mount their post as a standalone
+        // article, without a role=feed. Apply the same post-level CTA/recommendation
+        // policies only to a positively identified, top-level Page story.
+        return !!(isCurrentSpecificUrlSurface() && el.matches?.('[role="article"]') &&
+            el.closest?.('[role="main"]') && !el.parentElement?.closest?.('[role="article"]') &&
+            el.querySelector?.('[data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"]'));
     } catch (e) {
         return false;
     }
@@ -4671,11 +4742,11 @@ const isFBMidFeedReelsCarousel = (seed) => {
 // Captured Facebook markup exposes the disclosure as an exact role=button label:
 // "Tekoälytiedot". Match only exact button/ARIA/title labels so ordinary discussion
 // about AI, computers, games, or generated-content policy is not collateral damage.
-const FB_AI_INFO_BUTTON_LABELS = new Set([
-    'tekoälytiedot',
-    'ai info',
-    'ai information'
-]);
+const FB_AI_INFO_BUTTON_LABELS = [
+    /^tekoälytiedot$/i,
+    /^ai info$/i,
+    /^ai information$/i
+];
 
 const postHasAIInfoTag = (seed) => {
     try {
@@ -4697,7 +4768,7 @@ const postHasAIInfoTag = (seed) => {
 
             for (let j = 0; j < labels.length; j++) {
                 const label = fbNotifNorm(labels[j]);
-                if (FB_AI_INFO_BUTTON_LABELS.has(label)) return true;
+                if (matchesFBTextRegexListV331(FB_AI_INFO_BUTTON_LABELS, label)) return true;
             }
         }
     } catch (e) {}
@@ -4709,19 +4780,19 @@ const postHasAIInfoTag = (seed) => {
 // wrappers around the timestamp dot and Liity/Join/Seuraa/Follow button.
 // Require the exact header label AND a nearby timestamp separator; avoid
 // Facebook's generic obfuscated CSS classes and text elsewhere in the post.
-const FB_OWN_FEED_HEADER_CTA_TEXT_V77 = new Set(['liity', 'join', 'seuraa', 'follow']);
+const FB_OWN_FEED_HEADER_CTA_TEXT_V77 = [/^liity$/i, /^join$/i, /^seuraa$/i, /^follow$/i];
 const FB_OWN_FEED_HEADER_CTA_SELECTOR_V295 = 'span > div[role="button"], span > button[role="button"]';
 
 const getFBHeaderCTALabelV295 = button => {
     try {
         if (!button?.matches?.(FB_OWN_FEED_HEADER_CTA_SELECTOR_V295)) return '';
         const textLabel = fbNotifNorm(button.textContent || '');
-        if (FB_OWN_FEED_HEADER_CTA_TEXT_V77.has(textLabel)) return textLabel;
+        if (matchesFBTextRegexListV331(FB_OWN_FEED_HEADER_CTA_TEXT_V77, textLabel)) return textLabel;
         // Some Facebook headers label an empty button through ARIA first.
         // Never let an aria-label override unrelated visible button text.
         if (textLabel) return '';
         const ariaLabel = fbNotifNorm(button.getAttribute?.('aria-label') || '');
-        return FB_OWN_FEED_HEADER_CTA_TEXT_V77.has(ariaLabel) ? ariaLabel : '';
+        return matchesFBTextRegexListV331(FB_OWN_FEED_HEADER_CTA_TEXT_V77, ariaLabel) ? ariaLabel : '';
     } catch (e) { return ''; }
 };
 
@@ -4754,7 +4825,7 @@ const hasFBTimestampAdjacentHeaderCTAV77 = (unit, allowedLabels) => {
         const buttons = unit.querySelectorAll(FB_OWN_FEED_HEADER_CTA_SELECTOR_V295);
         for (let i = 0; i < buttons.length && i < 120; i++) {
             const button = buttons[i];
-            if (!allowedLabels.has(getFBHeaderCTALabelV295(button))) continue;
+            if (!matchesFBTextRegexListV331(allowedLabels, getFBHeaderCTALabelV295(button))) continue;
             if (isInsideComment(button) || isFBCommentSurfaceElement(button) ||
                 isNotificationPanelElement(button) || isFBInsideEmbeddedChatSurfaceV56(button) ||
                 button.closest?.('[role="dialog"], [role="menu"], [role="listbox"], [role="tooltip"]')) continue;
@@ -4816,17 +4887,13 @@ const installFBLateHeaderCTATextWatchV295 = () => {
                     };
                     inspectCaption(element.closest(selector) ||
                         (element.matches?.(selector) ? element : null));
-                    // v329: Facebook can insert an already-populated caption beneath
-                    // a generic wrapper. The mutation target itself is not then a
-                    // caption, so v311 missed the blocked words until a later sweep.
-                    // Check only new subtrees, never reopen the entire approved feed.
-                    if (!includeAddedDescendants || changedApprovedCaptionsV311.size >= 12 ||
-                        !element.querySelectorAll) return;
-                    const insertedCaptions = element.querySelectorAll(selector);
-                    for (let k = 0; k < insertedCaptions.length && k < 8 &&
-                        changedApprovedCaptionsV311.size < 12; k++) {
-                        inspectCaption(insertedCaptions[k]);
-                    }
+                    // Facebook can replace a whole caption beneath a generic wrapper.
+                    // Only inspect newly added caption roots, not the entire feed.
+                    if (!includeAddedDescendants || !element.querySelectorAll ||
+                        changedApprovedCaptionsV311.size >= 12) return;
+                    const captions = element.querySelectorAll(selector);
+                    for (let i = 0; i < captions.length && i < 8 &&
+                        changedApprovedCaptionsV311.size < 12; i++) inspectCaption(captions[i]);
                 };
                 const testButton = button => {
                     if (!button?.matches?.(buttonSelector)) return;
@@ -4856,7 +4923,7 @@ const installFBLateHeaderCTATextWatchV295 = () => {
                         inspectCaptionChangeV311(mutation.target);
                     }
                     if (mutation.type === 'characterData') {
-                        if (FB_OWN_FEED_HEADER_CTA_TEXT_V77.has(fbNotifNorm(mutation.target?.nodeValue || ''))) {
+                        if (matchesFBTextRegexListV331(FB_OWN_FEED_HEADER_CTA_TEXT_V77, fbNotifNorm(mutation.target?.nodeValue || ''))) {
                             inspectNode(mutation.target);
                         }
                         continue;
@@ -4872,7 +4939,7 @@ const installFBLateHeaderCTATextWatchV295 = () => {
                     for (let j = 0; added && j < added.length && j < 20 && posts.size < 10; j++) {
                         const node = added[j];
                         if (node.nodeType === 3) {
-                            if (FB_OWN_FEED_HEADER_CTA_TEXT_V77.has(fbNotifNorm(node.nodeValue || ''))) inspectNode(node);
+                            if (matchesFBTextRegexListV331(FB_OWN_FEED_HEADER_CTA_TEXT_V77, fbNotifNorm(node.nodeValue || ''))) inspectNode(node);
                         } else if (node.nodeType === 1) {
                             inspectNode(node);
                             inspectBlockedAttachmentV317(node);
@@ -4888,17 +4955,9 @@ const installFBLateHeaderCTATextWatchV295 = () => {
                 }
                 for (const post of changedApprovedCaptionsV311) {
                     try {
-                        // v312: do not retroactively ban an approved post merely because
-                        // the user expanded its native See more caption. Other posts and
-                        // late header Follow/Join checks remain fully active.
-                        if (__fbUserExpandedPostsV312.has(post)) {
-                            __fbShowMoreCaptionChecksSkippedV312++;
-                            continue;
-                        }
                         if (post.classList.contains('fb-post-banned') || !post.isConnected) continue;
-                        if (postCaptionMentionsStandaloneAIV96(post)) {
-                            banPostAfterScan(post, 'late caption edit: standalone AI');
-                        } else if (matchesAnyActiveRegex(collectPostTextForScan(post))) {
+                        if (auditFBApprovedVisibleCaptionV331(post)) continue;
+                        if (matchesAnyActiveRegex(collectPostTextForScan(post))) {
                             banPostAfterScan(post, 'late caption edit: blocked words/regex');
                         }
                     } catch (e) {}
@@ -4976,7 +5035,7 @@ const hasRestrictedFeedCTAOrReels = (seed) => {
             const recommendationText = typeof collectPostTextForScan === 'function'
                 ? collectPostTextForScan(unit)
                 : normalizeFBText(unit.textContent || unit.innerText || '');
-            if (FB_RESTRICTED_FEED_SUGGESTION_TEXT_V65.some(phrase => recommendationText.includes(phrase))) return true;
+            if (matchesFBTextRegexListV331(FB_RESTRICTED_FEED_SUGGESTION_TEXT_V65, recommendationText)) return true;
         } catch (e) {}
 
         // v38: only real mid-feed Reels/Kelat carousels are removed.
@@ -4995,13 +5054,13 @@ const hasRestrictedFeedCTAOrReels = (seed) => {
         for (let i = 0; i < buttons.length; i++) {
             const btn = buttons[i];
             const txt = getCompactLowerText(btn);
-            if (FB_RESTRICTED_FEED_CTA_TEXT.has(txt)) return true;
+            if (matchesFBTextRegexListV331(FB_RESTRICTED_FEED_CTA_TEXT, txt)) return true;
 
             // Extra structural path from uploaded snippets: exact inline text span inside the button.
             const labelSpan = btn.querySelector?.('span.x1fey0fg, span.x193iq5w');
             if (labelSpan) {
                 const label = getCompactLowerText(labelSpan);
-                if (FB_RESTRICTED_FEED_CTA_TEXT.has(label)) return true;
+                if (matchesFBTextRegexListV331(FB_RESTRICTED_FEED_CTA_TEXT, label)) return true;
             }
         }
 
@@ -6013,7 +6072,7 @@ const globalRegex = [
 	/Sexi/i, /Monroe/i, /Girlfriend/i, /Girl's/i, /Women's/i, /Woman's/i, /Lady's/i, /Ladies'/i, /Toni Harsunen/i, /Wikman/i, /Vikman/i, /Jaida Parker/i, /Kiana/i, /suositukset/i, 
 	/ehdotukset/i, /Kamitani/i, /Mira Immo/i, /Serrano/i, /Nina Immo/i, /heli kupa/i, /eikk turp/i, /20\. heinäkuu klo/i, /Jessika WWE/i, /Fallon Henley/i, /kendal.*(grey|gray)/i, 
 	/QTCinderella/i, /KaliArmstrong/i, /Kali Armstrong/i, /#Kali/i, /#KaliArmstrong/i, /DeepSeek/i, /Gail Kim/i, /leila.*(grey|gray)/i, /CJ Perry/i, /Elegance Brand/i, /By Elegance/i, 
-	/Jada Stone/i, /Sisältö ei ole käytettävissä tällä hetkellä/i, /sinulle ehdotettu/i, 
+	/Jada Stone/i, /Sisältö ei ole käytettävissä tällä hetkellä/i, /sinulle ehdotettu/i, /Fatal Influence/i, 
 	
 
      // AI-handling/regexes
@@ -6434,27 +6493,40 @@ const hideElementHard = (element, className = 'fb-element-banned') => {
 };
 
 const allowedWords = [
-//String based allowed words (global)
-	"Lähetä", "Viesti", "Lähetä viesti", "Send a message", "Send message", "Send", "message", "Battlefield", "BF", "BF6", "BF1", "BF4", "BF 1942", "BF2", "Battle field", "memes", "masterrace", "#itsevarmuus",
-	"#memes", "meme", "#meme", "Pearl", "Harbor", "Market", "Bro", "Brother", "Metallica", "Sabaton", "Joakim", "James", "Hetfield", "PC", "Build", "Memory", "Ram", "Motherboard", "Mobo", "Cooling", "pcmaster",
-	"AIO", "CPU", "GPU", "Radeon", "GeForce", "GTX", "RTX", "50", "60", "70", "80", "90", "X3D", "50TI", "60TI", "70TI", "80TI", "90TI", "Processor", "Graphics", "Card", "Intel", "AMD", "NVidia", "RGB", "cooler",
-	"#healing", "#heal", "#itsetunto", "😂", "🤣", "😭", "Lisa Su", "Jensen Huang", "Chip", "Android", "Huawei", "Tech", "Patch", "MSI", "Asus", "ROG", "Strix", "TUF", "Suprim", "Gaming", "OSRS", "RS3", "Jagex",
-	"Old School", "RuneScape",  "Sea Shanty 2", "Sailor's Dream", "Sailing", "Skilling", "Bossing", "Boss", "Mod Ash", "JMod", "Reddit", "Core", "Cores", "3DVCache", "VCache", "Inno3D", "Inno 3D", "Sapphire", "XFX",
-	"Nitro", "Pure", "Asus Prime", "X570", "B550", "B650", "B650E", "X670", "X670E", "B850", "X870", "X870E", "B450", "X470", "B350", "X370", "LGA", "1150", "1151", "1155", "AM4", "AM5", "AM6", "Corsair", "Kingston",
-	"PowerColor", "DDR5", "DDR4", "DDR3", "Computing", "Computer", "AData", "AM3", "AM3+", "AM2", "GSkill", "Memory", "Ram", "Turbo", "Overclock", "Overclocked", "Air cooling", "Radiator", "Pump", "Header", "Water",
-	"GTA", "Grand Theft Auto", "PlayStation", "PS1", "PS2", "PS3", "PS4", "PS5", "Xbox", "Series", "Pro", "Console", "Sega", "MegaDrive", "Genesis", "Nintendo", "Upgrade", "Room", "Setup", "Christmas", "Wordables",
-	"Wordable", "lifelearnedfeelings", "feel", "feelings", "feeling", "pcmasterrace_official", "pcmasterrace", "pc masterrace", "pc master race", "gaming", "game", "gamer", "Tarina", "Tarinat", "Story", "Stories",
-	"Vice City", "Liberty City", "San Andreas", "North Yankton", "Yankton", "Rockstar", "North", "South", "West", "East", "Johanna", "Jojo", "Lääkäri", "Lääke", "Lääkis", "Koulu", "Oppilaitos", "Sairaanhoitaja",
-	"Tohtori", "Professori", "Yliopisto", "Perho", "Perhon", "Perhonjokilaakso", "Jokilaakso", "Talouskauppa", "Ikiliikku", "KPO", "S-Market", "K-Market", "Tikkari", "Valkeinen", "OP", "Osuuspankki", "Pankki",
-	"Sairaus", "Sairas", "Sairastaa", "Sairastu", "Sairastuin", "Sairastuimme", "Korona", "Koronavirus", "Covid-19", "SARS-COV", "SARS-COV2", "Koronatesti", "Koronatestit", "Testi", "Testata", "Testissä", "Testit",
-	"Veikonkone", "Euromarket", "Taloustalo", "Kipakka", "Rautakauppa", "Kauppa", "Google", "Naamakirja", "Veispuuk", "Veispuukki", "naama kirja", "Lärvikirja", "Lärvi kirja", "Grilli", "Grilla", "Klaara", "Klara",
-	"Kappeli", "Botnia", "Makkara", "Makkaro", "Mauste", "Mausta", "Sipuli", "Valkosipuli", "Dippi", "Dippejä", "Dipit", "Dipata", "Dippaaminen", "Dippaus",  "K-Market", "S-Market", "KMarket", "SMarket", "Market",
-	"KPO", "Kesko", "Kuluttaja", "Tarjous", "Tarjoukset", "Etuus", "Osuus", "Pankki",
+// Regex-based allowed words (global); explicit blocked terms always win
+	/Lähetä/i, /Viesti/i, /Lähetä viesti/i, /Send a message/i, /Send message/i, /Send/i, /message/i, /Battlefield/i, /BF/i, /BF6/i, /BF1/i, /BF4/i, /BF 1942/i, /BF2/i, /Battle field/i, /memes/i, /masterrace/i, /#itsevarmuus/i,
+	/#memes/i, /meme/i, /#meme/i, /Pearl/i, /Harbor/i, /Market/i, /Bro/i, /Brother/i, /Metallica/i, /Sabaton/i, /Joakim/i, /James/i, /Hetfield/i, /PC/i, /Build/i, /Memory/i, /Ram/i, /Motherboard/i, /Mobo/i, /Cooling/i, /pcmaster/i,
+	/AIO/i, /CPU/i, /GPU/i, /Radeon/i, /GeForce/i, /GTX/i, /RTX/i, /50/i, /60/i, /70/i, /80/i, /90/i, /X3D/i, /50TI/i, /60TI/i, /70TI/i, /80TI/i, /90TI/i, /Processor/i, /Graphics/i, /Card/i, /Intel/i, /AMD/i, /NVidia/i, /RGB/i, /cooler/i,
+	/#healing/i, /#heal/i, /#itsetunto/i, /😂/i, /🤣/i, /😭/i, /Lisa Su/i, /Jensen Huang/i, /Chip/i, /Android/i, /Huawei/i, /Tech/i, /Patch/i, /MSI/i, /Asus/i, /ROG/i, /Strix/i, /TUF/i, /Suprim/i, /Gaming/i, /OSRS/i, /RS3/i, /Jagex/i,
+	/Old School/i, /RuneScape/i,  /Sea Shanty 2/i, /Sailor's Dream/i, /Sailing/i, /Skilling/i, /Bossing/i, /Boss/i, /Mod Ash/i, /JMod/i, /Reddit/i, /Core/i, /Cores/i, /3DVCache/i, /VCache/i, /Inno3D/i, /Inno 3D/i, /Sapphire/i, /XFX/i,
+	/Nitro/i, /Pure/i, /Asus Prime/i, /X570/i, /B550/i, /B650/i, /B650E/i, /X670/i, /X670E/i, /B850/i, /X870/i, /X870E/i, /B450/i, /X470/i, /B350/i, /X370/i, /LGA/i, /1150/i, /1151/i, /1155/i, /AM4/i, /AM5/i, /AM6/i, /Corsair/i, /Kingston/i,
+	/PowerColor/i, /DDR5/i, /DDR4/i, /DDR3/i, /Computing/i, /Computer/i, /AData/i, /AM3/i, /AM3\+/i, /AM2/i, /GSkill/i, /Memory/i, /Ram/i, /Turbo/i, /Overclock/i, /Overclocked/i, /Air cooling/i, /Radiator/i, /Pump/i, /Header/i, /Water/i,
+	/GTA/i, /Grand Theft Auto/i, /PlayStation/i, /PS1/i, /PS2/i, /PS3/i, /PS4/i, /PS5/i, /Xbox/i, /Series/i, /Pro/i, /Console/i, /Sega/i, /MegaDrive/i, /Genesis/i, /Nintendo/i, /Upgrade/i, /Room/i, /Setup/i, /Christmas/i, /Wordables/i,
+	/Wordable/i, /lifelearnedfeelings/i, /feel/i, /feelings/i, /feeling/i, /pcmasterrace_official/i, /pcmasterrace/i, /pc masterrace/i, /pc master race/i, /gaming/i, /game/i, /gamer/i, /Tarina/i, /Tarinat/i, /Story/i, /Stories/i,
+	/Vice City/i, /Liberty City/i, /San Andreas/i, /North Yankton/i, /Yankton/i, /Rockstar/i, /North/i, /South/i, /West/i, /East/i, /Johanna/i, /Jojo/i, /Lääkäri/i, /Lääke/i, /Lääkis/i, /Koulu/i, /Oppilaitos/i, /Sairaanhoitaja/i,
+	/Tohtori/i, /Professori/i, /Yliopisto/i, /Perho/i, /Perhon/i, /Perhonjokilaakso/i, /Jokilaakso/i, /Talouskauppa/i, /Ikiliikku/i, /KPO/i, /S-Market/i, /K-Market/i, /Tikkari/i, /Valkeinen/i, /OP/i, /Osuuspankki/i, /Pankki/i,
+	/Sairaus/i, /Sairas/i, /Sairastaa/i, /Sairastu/i, /Sairastuin/i, /Sairastuimme/i, /Korona/i, /Koronavirus/i, /Covid-19/i, /SARS-COV/i, /SARS-COV2/i, /Koronatesti/i, /Koronatestit/i, /Testi/i, /Testata/i, /Testissä/i, /Testit/i,
+	/Veikonkone/i, /Euromarket/i, /Taloustalo/i, /Kipakka/i, /Rautakauppa/i, /Kauppa/i, /Google/i, /Naamakirja/i, /Veispuuk/i, /Veispuukki/i, /naama kirja/i, /Lärvikirja/i, /Lärvi kirja/i, /Grilli/i, /Grilla/i, /Klaara/i, /Klara/i,
+	/Kappeli/i, /Botnia/i, /Makkara/i, /Makkaro/i, /Mauste/i, /Mausta/i, /Sipuli/i, /Valkosipuli/i, /Dippi/i, /Dippejä/i, /Dipit/i, /Dipata/i, /Dippaaminen/i, /Dippaus/i,  /K-Market/i, /S-Market/i, /KMarket/i, /SMarket/i, /Market/i,
+	/KPO/i, /Kesko/i, /Kuluttaja/i, /Tarjous/i, /Tarjoukset/i, /Etuus/i, /Osuus/i, /Pankki/i, /Arthur(?!\s*Morgan)/i,
  ];
 
 const restrictedPhrases = [
-    "Ryhmiä Sinulle", "Liity", "Meta AI", "Ihmisiä,", "Joita saatat tuntea", "Ihmisiä, joita saatat tuntea", "Kun lisäät kavereita, näet tässä listan ihmisistä, jotka saatat tuntea.", "Lisää kavereita saadaksesi suosituksia", "Sisältö ei ole käytettävissä tällä hetkellä", "sinulle ehdotettu", "sinulle ehdotettua",
-].map(s => s.toLowerCase());
+    /Ryhmiä Sinulle/i, /Liity/i, /Meta AI/i, /Ihmisiä,/i, /Joita saatat tuntea/i, /Ihmisiä, joita saatat tuntea/i, /Kun lisäät kavereita, näet tässä listan ihmisistä, jotka saatat tuntea\./i, /Lisää kavereita saadaksesi suosituksia/i, /Sisältö ei ole käytettävissä tällä hetkellä/i, /sinulle ehdotettu/i, /sinulle ehdotettua/i,
+    /sinulle suositeltua/i, /suositeltua/i, /tilaa/i,
+];
+
+// Allowed-word regexes are positive classification signals only. Never let a
+// generic term such as /PC/i or /Pro/i override a blocked name or restricted CTA.
+const matchesAnyAllowedWordRegex = (value) => {
+    const text = String(value || '');
+    return !!text && allowedWords.some(pattern => testRegexPattern(pattern, text));
+};
+
+const matchesAnyRestrictedPhraseRegex = (value) => {
+    const text = String(value || '');
+    return !!text && restrictedPhrases.some(pattern => testRegexPattern(pattern, text));
+};
 
 // Function to check if current path is excluded
 const isExcludedPath = (path) => excludedRegexPatterns.some((pattern) => {
@@ -8121,7 +8193,7 @@ const getFBRouteKey = (inputUrl = window.location.href) => {
         // v66: on designated protected Page surfaces, Facebook mutates query/hash state during
         // ordinary timeline hydration. That is not a navigation boundary and must not reset
         // BraveFox route-bound state or re-run Page prehide/profile-screening lifecycle work.
-        if (isSupportedFacebookPage(url.href, FB_SPECIFIC_URL_SURFACES)) {
+        if (isCurrentSpecificUrlSurface(url.href)) {
             const path = String(url.pathname || '/').replace(/\/+$/, '') || '/';
             return path;
         }
@@ -8942,6 +9014,22 @@ const getFBVisibleCaptionTextV96 = (post) => {
 const postCaptionMentionsStandaloneAIV96 = (post) =>
     FB_VISIBLE_CAPTION_AI_WORD_V96.test(getFBVisibleCaptionTextV96(post));
 
+// v331: a post approved from a shortened preview must be checked again when
+// Facebook reveals more caption text. Only veto a proven blocked caption;
+// clean native See more interactions retain their existing approval/layout.
+const auditFBApprovedVisibleCaptionV331 = (post) => {
+    try {
+        if (!post?.isConnected || !isFBPostScannerSafeCandidateV65(post) ||
+            !post.classList.contains('fb-post-approved') ||
+            post.getAttribute('data-fb-v25-scan-complete') !== '1') return false;
+        const caption = getFBVisibleCaptionTextV96(post);
+        if (!caption || !(matchesAnyActiveRegex(caption) ||
+            FB_VISIBLE_CAPTION_AI_WORD_V96.test(caption))) return false;
+        banPostAfterScan(post, 'blocked text revealed in approved caption v331');
+        return true;
+    } catch (e) { return false; }
+};
+
 const postOrNetworkCaptionMentionsStandaloneAIV96 = (post, passiveCaption = '') =>
     postCaptionMentionsStandaloneAIV96(post) ||
     (!!passiveCaption && FB_VISIBLE_CAPTION_AI_WORD_V96.test(passiveCaption));
@@ -8949,12 +9037,14 @@ const postOrNetworkCaptionMentionsStandaloneAIV96 = (post, passiveCaption = '') 
 const isExactPostShowMoreControl = (btn) => {
     try {
         if (!btn || isInsideComment(btn) || isNotificationPanelElement(btn)) return false;
-        const text = fbNotifNorm([
+        const labels = [
             btn.textContent || btn.innerText || '',
             btn.getAttribute && btn.getAttribute('aria-label') || '',
             btn.getAttribute && btn.getAttribute('title') || ''
-        ].join(' '));
-        if (!/^(näytä lisää|see more|show more)$/.test(text)) return false;
+        ];
+        // Facebook frequently duplicates the visible label in aria-label/title.
+        // Comparing their concatenation made a genuine See more button fail.
+        if (!labels.some(label => /^(näytä lisää|see more|show more)$/.test(fbNotifNorm(label)))) return false;
         const realLink = btn.closest && btn.closest('a[href]');
         if (realLink) {
             const href = String(realLink.getAttribute('href') || realLink.href || '').toLowerCase();
@@ -8974,6 +9064,31 @@ const getShowMoreButtonsForPost = (post) => {
     } catch (e) {
         return [];
     }
+};
+
+// Native See more can be a sibling of the caption or inside a wrapper next to
+// it; it is not invariably a descendant of story_message. Stay within the
+// caption's immediate wrappers so a comment or unrelated post cannot trigger it.
+const hasFBTruncatedPostCaptionV331 = (post, caption) => {
+    try {
+        if (!post?.contains?.(caption)) return false;
+        const controls = getShowMoreButtonsForPost(post);
+        if (!controls.length) return false;
+        return controls.some(button => {
+            if (caption.contains(button)) return true;
+            let holder = caption.parentElement;
+            for (let depth = 0; holder && holder !== post && depth < 3;
+                depth++, holder = holder.parentElement) {
+                if (holder.contains(button)) return true;
+            }
+            // Some post renderers put the expander in a separate sibling branch.
+            // An expander in the SAME article still belongs to its single caption;
+            // comments and nested articles are rejected by the button classifier.
+            const article = caption.closest?.('[role="article"]');
+            return !!article && article === button.closest?.('[role="article"]') &&
+                article.contains(button) && !isInsideComment(button);
+        });
+    } catch (e) { return false; }
 };
 
 // ===== v46 ONE-SHOT POST HYDRATION STATE =====
@@ -9115,11 +9230,11 @@ const getFBIntrinsicStablePostKeysV55 = (post) => {
     return Array.from(keys).sort().slice(0, 6);
 };
 
-// ===== v313/v314: passive full-caption cache and read-only availability audit =====
-// The MAIN-world observer emits bounded GraphQL/Relay caption records. This
-// listener ONLY caches them; it never changes the DOM or invokes a scanner.
-// v314 lets the existing Classic scanner consult exact-ID data at approval time
-// on The 434, without network-triggered rescans, waits or See more clicks.
+// ===== v313/v314/v331: passive full-caption cache and availability audit =====
+// The MAIN-world observer emits bounded GraphQL/Relay caption records. The
+// Classic scanner consults exact-ID captions before approval on post surfaces.
+// A bounded, deferred viewport audit also catches captions received after an
+// approval; no network content is altered and no See more control is clicked.
 const FB_PASSIVE_DIAG_MESSAGE_V313 = 'bravefox-fb-passive-caption-v295';
 const FB_PASSIVE_DIAG_MAX_AGE_V313 = 35 * 60 * 1000;
 const FB_PASSIVE_DIAG_MAX_KEYS_V313 = 600;
@@ -9147,10 +9262,15 @@ const getFBPassiveDiagRouteV313 = () => {
     try {
         const path = (location.pathname || '/').replace(/\/+$/, '').toLowerCase() || '/';
         if (path === '/' || path === '/home.php') return '/';
-        return ['/four3four', '/itsstillrealtousdammit', '/prowrestlingworld',
-            '/weirdimagesworthseeing'].includes(path) ? path : '';
+        if (/^\/(?:messages|messenger|notifications)(?:\/|$)/.test(path)) return '';
+        return path;
     } catch (e) { return ''; }
 };
+
+// v331: full-caption verification applies to genuine posts on every Facebook
+// route. Messenger and notifications remain outside the post scanner.
+const isFBStrictFullCaptionRouteV330 = (route = syncFBPassiveDiagRouteV313()) =>
+    !!route;
 
 const syncFBPassiveDiagRouteV313 = () => {
     const route = getFBPassiveDiagRouteV313();
@@ -9173,6 +9293,35 @@ const normalizeFBPassiveDiagTextV313 = (value) => String(value || '')
     .replace(/\s+/g, ' ').trim()
     .replace(/(?:\s*(?:Näytä lisää|See more|Show more))$/iu, '')
     .replace(/[.…\s]+$/u, '').trim();
+
+// React renders caption emoji as <img alt="…">. Plain textContent omits that
+// emoji, so a perfectly matching network caption can appear to have a different
+// prefix. Read visible text and inline emoji in DOM order, without clicking,
+// cloning the post or borrowing control/button text as caption content.
+const getFBPassiveVisibleCaptionPrefixV330 = (caption) => {
+    try {
+        const parts = [];
+        const walker = document.createTreeWalker(caption,
+            NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
+        let node;
+        let examined = 0;
+        while ((node = walker.nextNode()) && examined++ < 400 && parts.length < 240) {
+            if (node.nodeType === 3) {
+                const parent = node.parentElement;
+                if (!parent || parent.closest('button, [role="button"], script, style, template, noscript')) continue;
+                parts.push(node.nodeValue || '');
+            } else if (node.nodeType === 1 && !node.closest('button, [role="button"]')) {
+                if (node.matches?.('img[alt]')) parts.push(node.getAttribute('alt') || '');
+                // Separate visible paragraph/line boundaries without inserting
+                // spaces inside inline spans or split hashtags and names.
+                else if (node.matches?.('div, p, br, li')) parts.push(' ');
+            }
+        }
+        return normalizeFBPassiveDiagTextV313(parts.join(''));
+    } catch (e) {
+        return normalizeFBPassiveDiagTextV313(caption?.textContent || '');
+    }
+};
 
 const getFBPassiveDiagPostKeysV313 = (post) => {
     const keys = new Set(getFBIntrinsicStablePostKeysV55(post)
@@ -9214,6 +9363,35 @@ const trimFBPassiveDiagCacheV313 = () => {
             __fbPassivePageConflictingKeysV314.size > FB_PASSIVE_DIAG_MAX_KEYS_V313)
             __fbPassivePageConflictingKeysV314.delete(key);
     }
+};
+
+// v331: reconcile a bounded viewport sample after a complete network-caption
+// record arrives. Exact DOM post keys AND visible-prefix agreement are still
+// mandatory. This never clicks, expands, or modifies Facebook's network data.
+let __fbLateNetworkCaptionAuditQueuedV331 = false;
+const queueFBLateNetworkCaptionAuditV331 = () => {
+    try {
+        if (__fbLateNetworkCaptionAuditQueuedV331 || document.hidden || isFBNoPostScanUrl()) return;
+        __fbLateNetworkCaptionAuditQueuedV331 = true;
+        const generation = getFBSpaGeneration();
+        addTimeout(() => {
+            __fbLateNetworkCaptionAuditQueuedV331 = false;
+            if (!isFBSpaGenerationCurrent(generation) || document.hidden || isFBNoPostScanUrl()) return;
+            for (const post of getFBVisibleCanonicalPostsV69(14)) {
+                try {
+                    if (!post?.isConnected || !isFBPostScannerSafeCandidateV65(post) ||
+                        post.classList.contains('fb-post-banned')) continue;
+                    const verdict = getFBPassivePageCaptionVerdictV314(post);
+                    if (!verdict) continue;
+                    if (verdict.blocked) {
+                        banPostAfterScan(post, 'late exact-ID blocked full caption without See more v331');
+                    } else if (!post.classList.contains('fb-post-approved')) {
+                        screenFBCanonicalPostNowV65(post, true, generation);
+                    }
+                } catch (e) {}
+            }
+        }, 60);
+    } catch (e) { __fbLateNetworkCaptionAuditQueuedV331 = false; }
 };
 
 const installFBPassiveDiagListenerV313 = () => {
@@ -9263,6 +9441,7 @@ const installFBPassiveDiagListenerV313 = () => {
                     try { noteFBPassiveTimingArrivalV315(keys, record.text, at); } catch (e) {}
                 }
                 trimFBPassiveDiagCacheV313();
+                queueFBLateNetworkCaptionAuditV331();
             } catch (e) { /* Instrumentation must never affect the feed. */ }
         });
     } catch (e) {}
@@ -9273,7 +9452,7 @@ const inspectFBPassiveDiagPostV313 = (post) => {
         if (!post?.isConnected || !isFBPostScannerSafeCandidateV65(post)) return null;
         const caption = post.querySelector?.('[data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"]');
         if (!caption) return null;
-        const truncated = getShowMoreButtonsForPost(post).some(btn => caption.contains(btn));
+        const truncated = hasFBTruncatedPostCaptionV331(post, caption);
         const preview = normalizeFBPassiveDiagTextV313(caption.textContent || '');
         const keys = getFBPassiveDiagPostKeysV313(post);
         const now = Date.now();
@@ -9336,7 +9515,7 @@ const auditFBPassiveCaptionsV313 = () => {
     try {
         const route = syncFBPassiveDiagRouteV313();
         if (!route) return { route: location.pathname, available: false,
-            note: 'Audit available on Home and the four supported Pages only' };
+            note: 'Post-caption audit disabled on Messenger and notifications' };
         trimFBPassiveDiagCacheV313();
         const posts = [], seen = new Set();
         const candidates = document.querySelectorAll(FB_CANONICAL_POST_SELECTOR_V65);
@@ -9356,7 +9535,7 @@ const auditFBPassiveCaptionsV313 = () => {
         }
         const unique = new Set(Array.from(__fbPassiveDiagRecordsV313.values(), entry => entry.identity));
         return {
-            mode: 'READ-ONLY-AUDIT+FOUR3FOUR-EXACT-PREAPPROVAL', route,
+            mode: 'READ-ONLY-AUDIT+ALL-POST-SURFACES-EXACT-PREAPPROVAL', route,
             observerEvents: __fbPassiveDiagEventsV313,
             observerRecordsAccepted: __fbPassiveDiagReceivedV313,
             observerRecordsRejected: __fbPassiveDiagRejectedV313,
@@ -9373,15 +9552,16 @@ const auditFBPassiveCaptionsV313 = () => {
             unmatchedReasons: byReason, byMatch,
             sample: truncated.slice(-24),
             pagePreapprovalV314: {
-                enabled: route === '/four3four',
+                enabled: isFBStrictFullCaptionRouteV330(route),
                 ...__fbPassivePagePreapprovalStatsV314,
                 conflictingCachedKeys: __fbPassivePageConflictingKeysV314.size
             },
             pageArrivalTimingV315: getFBPassiveTimingAuditV315(route),
-            pageNoGlimpseV317: { enabled: route === '/four3four',
-                maxCaptionGraceMs: FB_434_CAPTION_GRACE_MS_V317,
+            pageNoGlimpseV317: { enabled: isFBStrictFullCaptionRouteV330(route),
+                maxCaptionGraceMs: route === '/' || !isCurrentSpecificUrlSurface()
+                    ? FB_HOME_CAPTION_GRACE_MS_V330 : FB_434_CAPTION_GRACE_MS_V317,
                 ...__fb434NoGlimpseStatsV317 },
-            note: 'The audit is read-only. On /four3four the scanner uses exact-ID caption preapproval plus a finite 440ms ceiling for truncated captions; unverified ones are quarantined. The observer never initiates DOM updates or clicks.'
+            note: 'The report is read-only. Across post surfaces the scanner verifies full captions by exact ID and quarantines unverifiable truncated captions. A bounded late-arrival audit may reject newly verified blocked captions without clicking or expanding posts.'
         };
     } catch (e) { return { error: 'Passive caption audit unavailable' }; }
 };
@@ -9413,11 +9593,10 @@ const installFBPassiveDiagAuditBridgeV313 = () => {
 installFBPassiveDiagListenerV313();
 installFBPassiveDiagAuditBridgeV313();
 
-// ===== v314: FOUR3FOUR exact-ID, approval-time full-caption veto =====
-// Reuse the v313 cache, but NEVER trigger DOM scans from the network listener.
-// Only the regular Classic scanner can act, on a post that it was already going
-// to screen and that has NOT been approved. No timer, wait, expanded-click action,
-// or fresh CSS/DOM gate is introduced by this feature. Home remains audit-only.
+// ===== v314/v330/v331: all post surfaces, exact-ID approval-time caption veto =====
+// Reuse the v313 cache. This preapproval check runs in the Classic scanner;
+// the separate bounded late-arrival audit only checks exact-ID captions that
+// missed the initial approval boundary. No expanded-click action is introduced.
 const __fbPassivePagePreapprovalStatsV314 = {
     checks: 0, exactPreviewMatches: 0, blockedBeforeApproval: 0,
     hiddenOnlyBlocked: 0, matchedClean: 0, noExactRecord: 0,
@@ -9593,11 +9772,11 @@ const getFBPassiveTimingAuditV315 = (route) => {
 };
 
 const getFBPassivePageCaptionVerdictV314 = (post) => {
-    if (syncFBPassiveDiagRouteV313() !== '/four3four' || !post?.isConnected) return null;
+    if (!isFBStrictFullCaptionRouteV330() || !post?.isConnected) return null;
     try {
         const caption = post.querySelector?.(
             '[data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"]');
-        if (!caption || !getShowMoreButtonsForPost(post).some(btn => caption.contains(btn))) return null;
+        if (!caption || !hasFBTruncatedPostCaptionV331(post, caption)) return null;
         __fbPassivePagePreapprovalStatsV314.checks++;
 
         // DOM post ID is mandatory. A unique caption prefix alone NEVER bans a post.
@@ -9624,7 +9803,7 @@ const getFBPassivePageCaptionVerdictV314 = (post) => {
         }
         // Confirm that the network message is THIS post's caption, not a linked
         // story or attachment whose ID happened to be present on the same card.
-        const visible = normalizeFBPassiveDiagTextV313(caption.textContent || '').toLowerCase();
+        const visible = getFBPassiveVisibleCaptionPrefixV330(caption).toLowerCase();
         const complete = normalizeFBPassiveDiagTextV313(entry.text).toLowerCase();
         if (visible.length < 24 || complete.length <= visible.length + 10) {
             __fbPassivePagePreapprovalStatsV314.tooShortOrNotLonger++; return null;
@@ -9649,15 +9828,16 @@ const getFBPassivePageCaptionVerdictV314 = (post) => {
     } catch (e) { return null; }
 };
 
-// Installation is near the existing startup hooks. Inspect explicitly in DevTools;
-// incoming messages only populate the bounded cache, never trigger a DOM sweep.
+// Installation is near the existing startup hooks. Network observations populate
+// the bounded caption cache and may queue one small, exact-ID viewport recheck.
 
-// ===== v317: fail-closed preapproval for truncated 434 captions =====
+// ===== v317/v330/v331: fail-closed preapproval for truncated post captions =====
 // No one can reliably exclude hidden banned words if the full caption is not
 // verifiable. Give the early streaming reader a very short, finite opportunity;
-// then collapse ONLY that unverified truncated Page post. Never reveal it first,
+// then collapse ONLY that unverified truncated post. Never reveal it first,
 // and never tie its visibility to a network event after approval.
 const FB_434_CAPTION_GRACE_MS_V317 = 420;
+const FB_HOME_CAPTION_GRACE_MS_V330 = 900;
 const __fb434CaptionFirstCheckV317 = new WeakMap();
 const __fb434NoGlimpseStatsV317 = {
     verifiedAllowed: 0,
@@ -9669,10 +9849,11 @@ const __fb434NoGlimpseStatsV317 = {
 };
 const getFB434StrictCaptionResultV317 = (post, verdict, expectedGeneration) => {
     try {
-        if (syncFBPassiveDiagRouteV313() !== '/four3four') return 'not-applicable';
+        const route = syncFBPassiveDiagRouteV313();
+        if (!isFBStrictFullCaptionRouteV330(route)) return 'not-applicable';
         const caption = post.querySelector?.(
             '[data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"]');
-        if (!caption || !getShowMoreButtonsForPost(post).some(button => caption.contains(button)))
+        if (!caption || !hasFBTruncatedPostCaptionV331(post, caption))
             return 'not-applicable';
         if (verdict) {
             __fb434CaptionFirstCheckV317.delete(post);
@@ -9689,6 +9870,8 @@ const getFB434StrictCaptionResultV317 = (post, verdict, expectedGeneration) => {
             return 'visible-blocked';
         }
         const now = Date.now();
+        const graceMs = route === '/' || !isCurrentSpecificUrlSurface()
+            ? FB_HOME_CAPTION_GRACE_MS_V330 : FB_434_CAPTION_GRACE_MS_V317;
         let first = __fb434CaptionFirstCheckV317.get(post);
         if (!first) {
             first = now;
@@ -9698,21 +9881,21 @@ const getFB434StrictCaptionResultV317 = (post, verdict, expectedGeneration) => {
             addTimeout(() => {
                 try {
                     if (!isFBSpaGenerationCurrent(expectedGeneration) || !post.isConnected ||
-                        syncFBPassiveDiagRouteV313() !== '/four3four' ||
+                        syncFBPassiveDiagRouteV313() !== route ||
                         post.classList.contains('fb-post-approved') ||
                         post.classList.contains('fb-post-banned') ||
                         post.classList.contains('fb-element-banned')) return;
                     screenFBCanonicalPostNowV65(post, true, expectedGeneration);
                 } catch (e) {}
-            }, FB_434_CAPTION_GRACE_MS_V317 + 20);
+            }, graceMs + 20);
         }
-        if (now - first < FB_434_CAPTION_GRACE_MS_V317) {
+        if (now - first < graceMs) {
             __fb434NoGlimpseStatsV317.heldForFullCaption++;
             applyFBPostScreeningClassV60(post, true);
             return 'pending';
         }
-        // A *missing or conflicting* complete caption is NOT a proven policy hit.
-        // It is quarantined because a truly no-glimpse policy cannot approve it.
+        // A missing/conflicting caption is not a proven banned-word hit, but a
+        // no-glimpse feed cannot safely approve its unverified hidden text.
         __fb434NoGlimpseStatsV317.unverifiableQuarantined++;
         __fb434CaptionFirstCheckV317.delete(post);
         return 'unverifiable';
@@ -10027,13 +10210,13 @@ const screenFBCanonicalPostNowV65 = (seed, forceRecheck = false, expectedGenerat
                 // without first hiding and then re-approving an unchanged post.
                 // v317: a new blocked attachment/link on an approved card must
                 // be rejected in the SAME childList mutation turn, not 45ms later.
-                // User-triggered caption expansion alone does not enter this lane.
+                // An explicit recheck must still catch an expanded caption.
                 if (postHasBlockedLinksOrFbids(post)) {
                     banPostAfterScan(post, 'new blocked link/FBID in approved post v317');
                     __fb434NoGlimpseStatsV317.blockedLinkBeforePaint++;
                     return true;
                 }
-                if (forceRecheck && !__fbUserExpandedPostsV312.has(post)) {
+                if (forceRecheck) {
                     let reason = '';
                     if (postHasAIInfoTag(post)) reason = 'updated policy: Facebook AI-info disclosure';
                     else if (postCaptionMentionsStandaloneAIV96(post)) reason = 'updated policy: standalone AI caption term';
@@ -10058,7 +10241,7 @@ const screenFBCanonicalPostNowV65 = (seed, forceRecheck = false, expectedGenerat
             return true;
         }
 
-        // v314: only The 434, only before a terminal approval, and only when
+        // v314/v330: Home and The 434, only before a terminal approval, and only when
         // exact-ID network text already exists and agrees with the visible preview.
         // Check BEFORE cached approvals, which otherwise bypass normal content scans.
         // No match means the Classic path proceeds immediately, without waiting.
@@ -10070,8 +10253,8 @@ const screenFBCanonicalPostNowV65 = (seed, forceRecheck = false, expectedGenerat
             banPostAfterScan(post, strictCaptionV317 === 'blocked'
                 ? 'exact-ID full network caption before approval v314'
                 : strictCaptionV317 === 'visible-blocked'
-                ? 'blocked term in visible 434 caption before approval v317'
-                : 'unverifiable truncated 434 caption quarantined before approval v317');
+                ? 'blocked term in visible truncated caption before approval v317'
+                : 'unverifiable truncated caption quarantined before approval v330');
             __fbPostScanRetryCountV65.delete(post);
             return true;
         }
@@ -10294,7 +10477,7 @@ const queueFBPostForSingleScan = (seed, delay = 90, expectedGeneration = getFBSp
     } catch (e) {}
 };
 
-const approvePostAfterScan = (post) => {
+const approvePostAfterScan = (post, reason = '') => {
     try {
         noteFBPassiveTimingTerminalV315(post, 'approved');
         forgetFBNativeSkeletonSnapshotV81(post);
@@ -10316,7 +10499,7 @@ const approvePostAfterScan = (post) => {
         });
         markFBFeedUnitApproved(post);
         rememberApprovedPostForBrowsing(post);
-        rememberFBElementDecision(post, 'post', 'approved');
+        rememberFBElementDecision(post, 'post', 'approved', reason);
         rememberFBStablePostDecisionV55(post, 'approved');
     } catch (e) {}
 };
@@ -10492,7 +10675,10 @@ const evaluatePostForBan = (post) => {
             return true;
         }
 
-        approvePostAfterScan(post);
+        // A positive allowlist hit is recorded only after every hard-block
+        // check has passed. It never overrides a blocked person, URL or CTA.
+        approvePostAfterScan(post, matchesAnyAllowedWordRegex(fullPostText)
+            ? 'allowed word/regex (no blocked signals)' : 'no blocked signals');
         return true;
     } catch (e) {
         // v65 fail closed. Keep the no-glimpse screen and let the bounded retry lane try again.
@@ -10955,15 +11141,6 @@ const deleteRestrictedPhrases = () => {
             return;
         }
         if (!isFBCosmeticElementHidingAllowed()) return;
-        // Cache restricted phrases in lowercase for faster matching
-        const restrictedPhrasesLower = [
-            "liity", "sinulle suositeltua", "suositeltua", "tilaa", "ryhmiä sinulle", "Meta AI", "ihmisiä,", "joita saatat tuntea", "ihmisiä, joita saatat tuntea",
-            "kun lisäät kavereita, näet tässä listan ihmisistä, jotka saatat tuntea.", "lisää kavereita saadaksesi suosituksia", "Sisältö ei ole käytettävissä tällä hetkellä", "sinulle ehdotettua",
-        ];
-
-        // Use a Set for faster lookups
-        const restrictedPhrasesSet = new Set(restrictedPhrasesLower);
-
         // Cache processed header elements across runs to avoid re-processing
         const processedElements = __fbRestrictedPhraseHeadersChecked;
 
@@ -11000,7 +11177,7 @@ const deleteRestrictedPhrases = () => {
                     }
                 );
                 const normalizedBtnText = String(btnText || '').replace(/\s+/g, ' ').trim().toLowerCase();
-                if (FB_RESTRICTED_FEED_CTA_TEXT.has(normalizedBtnText)) {
+                if (matchesFBTextRegexListV331(FB_RESTRICTED_FEED_CTA_TEXT, normalizedBtnText)) {
                     shouldRemove = true;
                 }
             }
@@ -11030,13 +11207,7 @@ const deleteRestrictedPhrases = () => {
                         }
                     );
 
-                    // Check for exact restricted phrases
-                    for (let i = 0; i < restrictedPhrasesLower.length; i++) {
-                        if (text.includes(restrictedPhrasesLower[i])) {
-                            shouldRemove = true;
-                            break;
-                        }
-                    }
+                    if (matchesAnyRestrictedPhraseRegex(text)) shouldRemove = true;
                 }
             }
 
@@ -11092,11 +11263,7 @@ const deleteRestrictedPhrases = () => {
 
             // Check if this is a restricted header
             let isRestricted = false;
-            for (let i = 0; i < restrictedPhrasesLower.length && !isRestricted; i++) {
-                if (headerText.includes(restrictedPhrasesLower[i])) {
-                    isRestricted = true;
-                }
-            }
+            if (matchesAnyRestrictedPhraseRegex(headerText)) isRestricted = true;
 
             if (isRestricted) {
                 // Find the parent section/container
@@ -11335,11 +11502,11 @@ const hideSpecificUrlNonFeedModule = (element) => {
 
 
 // ===== v67 SPECIFIC PAGE SEMANTIC CHROME COLLAPSE =====
-const FB_SPECIFIC_PAGE_RECOMMENDATION_HEADINGS_V67 = new Set([
-    'suositeltu', 'suositellut', 'suositeltua', 'suositukset',
-    'recommended', 'recommendations', 'suggested'
-]);
-const FB_SPECIFIC_PAGE_POST_HEADINGS_V67 = new Set(['julkaisut', 'posts']);
+const FB_SPECIFIC_PAGE_RECOMMENDATION_HEADINGS_V67 = [
+    /^suositeltu$/i, /^suositellut$/i, /^suositeltua$/i, /^suositukset$/i,
+    /^recommended$/i, /^recommendations$/i, /^suggested$/i
+];
+const FB_SPECIFIC_PAGE_POST_HEADINGS_V67 = [/^julkaisut$/i, /^posts$/i];
 
 const getFBExactHeadingTextV67 = (element) => {
     try { return fbNotifNorm(element?.innerText || element?.textContent || ''); }
@@ -11362,7 +11529,7 @@ const getFBSpecificPageRecommendationShellV67 = (heading) => {
             const headings = capturedCard.querySelectorAll?.('h1,h2,h3,h4,[role="heading"]') || [];
             let containsPostsHeading = false;
             for (let i = 0; i < headings.length && i < 40; i++) {
-                if (FB_SPECIFIC_PAGE_POST_HEADINGS_V67.has(getFBExactHeadingTextV67(headings[i]))) {
+                if (matchesFBTextRegexListV331(FB_SPECIFIC_PAGE_POST_HEADINGS_V67, getFBExactHeadingTextV67(headings[i]))) {
                     containsPostsHeading = true;
                     break;
                 }
@@ -11381,7 +11548,7 @@ const getFBSpecificPageRecommendationShellV67 = (heading) => {
             const headings = current.querySelectorAll?.('h1,h2,h3,h4,[role="heading"]') || [];
             let containsPostsHeading = false;
             for (let i = 0; i < headings.length && i < 40; i++) {
-                if (FB_SPECIFIC_PAGE_POST_HEADINGS_V67.has(getFBExactHeadingTextV67(headings[i]))) {
+                if (matchesFBTextRegexListV331(FB_SPECIFIC_PAGE_POST_HEADINGS_V67, getFBExactHeadingTextV67(headings[i]))) {
                     containsPostsHeading = true;
                     break;
                 }
@@ -11438,7 +11605,7 @@ const scrubFBSpecificPageRecommendationModulesV67 = (root = document) => {
 
         headings.forEach(heading => {
             const text = getFBExactHeadingTextV67(heading);
-            if (!FB_SPECIFIC_PAGE_RECOMMENDATION_HEADINGS_V67.has(text)) return;
+            if (!matchesFBTextRegexListV331(FB_SPECIFIC_PAGE_RECOMMENDATION_HEADINGS_V67, text)) return;
             const shell = getFBSpecificPageRecommendationShellV67(heading);
             if (shell) hideFBSpecificPageShellV67(shell, 'fb-specific-url-recommended-shell-hidden-v67');
         });
@@ -11584,13 +11751,12 @@ const isSpecificUrlDangerousGlobal = (el) => {
 const injectSpecificUrlPrehideCSS = () => {
     try {
         const currentUrl = window.location.href;
-        const supportedUrls = FB_SPECIFIC_URL_SURFACES;
 
         // Keep the scoped prehide stylesheet installed on all Facebook routes. Removing it
         // outside a supported Page introduces a race on SPA navigation: Facebook can paint
         // the target Page before its recommended/left-column rules get re-injected.
         // On other routes these rules remain entirely dormant behind the html class.
-        if (!isSupportedFacebookPage(currentUrl, supportedUrls)) {
+        if (!isCurrentSpecificUrlSurface(currentUrl)) {
             try {
                 document.documentElement?.classList.remove('fb-specific-url-noglimpse-v26');
             } catch (e) {}
@@ -12360,7 +12526,10 @@ const scheduleFBViewportRescueV69 = () => {
             getFBVisibleCanonicalPostsV69(10).forEach(post => {
                 try {
                     if (post.classList.contains('fb-post-approved') &&
-                        post.getAttribute('data-fb-v25-scan-complete') === '1') return;
+                        post.getAttribute('data-fb-v25-scan-complete') === '1') {
+                        auditFBApprovedVisibleCaptionV331(post);
+                        return;
+                    }
                     screenFBCanonicalPostNowV65(post, false, generation);
                 } catch (e) {}
             });
@@ -12381,20 +12550,13 @@ const noteFBUserInteractionV53 = (event) => {
     scheduleFBViewportRescueV69();
 };
 
-// ===== v312: stable, native See more expansion experiment =====
-// The old capture click handler revoked approval and hid a whole post BEFORE
-// Facebook revealed its longer caption. That caused approved posts to disappear
-// or jump as soon as they were clicked. For this isolated baseline, expanding an
-// already-approved post remains Facebook-native; no status reset, forced rescan,
-// replacement slot, timer or DOM adjustment is performed on the click.
-// Prevent the separate caption-mutation watcher from undoing that experiment:
-// a user-expanded, already-approved post is not retrospectively banned because
-// its newly shown caption happens to include a blocked term. This exemption is
-// scoped to this DOM post and is cleared when Facebook recycles that post.
+// ===== v312/v331: native See more with fallback blocked-caption recheck =====
+// Main prevention happens BEFORE approval through exact-ID network captions.
+// If Facebook later inserts blocked text anyway, veto only that proven caption.
 const __fbUserExpandedPostsV312 = new WeakSet();
 let __fbShowMoreStableHandlerInstalledV312 = false;
 let __fbShowMoreNativeClicksV312 = 0;
-let __fbShowMoreCaptionChecksSkippedV312 = 0;
+let __fbShowMoreCaptionChecksRunV331 = 0;
 const installFBStableShowMoreClickV312 = () => {
     try {
         if (__fbShowMoreStableHandlerInstalledV312) return;
@@ -12410,13 +12572,21 @@ const installFBStableShowMoreClickV312 = () => {
                     post.getAttribute('data-fb-v25-scan-complete') !== '1') return;
                 __fbUserExpandedPostsV312.add(post);
                 __fbShowMoreNativeClicksV312++;
-                // Facebook handles this click normally. No visibility/approval change here.
+                // The mutation watcher checks before paint when Facebook inserts
+                // caption text; this bounded fallback covers asynchronous commits.
+                const generation = getFBSpaGeneration();
+                addTimeout(() => {
+                    if (!isFBSpaGenerationCurrent(generation) || !post.isConnected) return;
+                    __fbShowMoreCaptionChecksRunV331++;
+                    auditFBApprovedVisibleCaptionV331(post);
+                }, 130);
             } catch (e) {}
         }, true);
         window.__FBCleanerExpansionBaselineV312 = () => ({
-            mode: 'native-click-no-expanded-caption-rescreen',
+            mode: 'native-click-conditional-caption-recheck',
             markedClicks: __fbShowMoreNativeClicksV312,
-            captionMutationChecksSkipped: __fbShowMoreCaptionChecksSkippedV312
+            captionMutationChecksSkipped: 0,
+            captionRechecksRun: __fbShowMoreCaptionChecksRunV331
         });
     } catch (e) {}
 };

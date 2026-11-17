@@ -1,4 +1,4 @@
-// BraveFox Enhancer 29.9.4 — passive Facebook caption observer, MAIN world.
+// BraveFox Enhancer 29.9.5 — passive Facebook caption observer, MAIN world.
 // Reads bounded feed GraphQL responses and initial Relay JSON; never changes
 // requests, cursors, response objects, post DOM, scroll position, or approvals.
 (() => {
@@ -8,9 +8,9 @@ if (window[INSTALLED]) return;
 Object.defineProperty(window, INSTALLED, { value: true });
 
 const TYPE = 'bravefox-fb-passive-caption-v295';
-// A response may contain many small Relay JSON lines. Bound the whole stream
-// independently from each parsed line so large feed batches remain observable
-// without constructing or JSON-parsing an oversized object on the main thread.
+// Facebook's home-feed GraphQL batches can exceed 2 MB. Bound the full
+// response separately from each individual Relay JSON line, without retaining
+// the entire batch in memory just to extract its captions.
 const MAX_BYTES = 64 * 1024 * 1024;
 const MAX_LINE_BYTES = 8 * 1024 * 1024;
 const MAX_RELAY_BYTES = 8 * 1024 * 1024;
@@ -18,13 +18,15 @@ const MAX_RELAY_SCAN_BYTES = 16 * 1024 * 1024;
 const MAX_POSTS = 70;
 const PAGE = /^(?:(?:Profile|Page|CometPage).*(?:TimelineFeed|TilesFeed|PostsFeed|PagePosts)|CometSinglePage.*Feed).*(?:Query|Pagination|Refetch)$/i;
 const HOME = /^(?:(?:Comet|Home|News).*(?:Feed|Timeline)|(?:Feed|NewsFeed)).*(?:Query|Pagination|Refetch)$/i;
+// v331: feed GraphQL operations on groups, searches, profile timelines and
+// wrestling Pages can use different friendly names from Home/The 434.
+const POST_FEED_V331 = /(?:Feed|Timeline|Posts?|Stories?|Group|Reels?|Videos?).*(?:Query|Pagination|Refetch)$/i;
 
 function route() {
     const path = location.pathname.replace(/\/+$/, '').toLowerCase() || '/';
     if (path === '/' || path === '/home.php') return '/';
-    if (['/four3four', '/itsstillrealtousdammit', '/prowrestlingworld',
-        '/weirdimagesworthseeing'].includes(path)) return path;
-    return '';
+    if (/^\/(?:messages|messenger|notifications)(?:\/|$)/.test(path)) return '';
+    return path;
 }
 function isGraphQL(url) {
     try { return new URL(String(url), location.origin).pathname === '/api/graphql/'; }
@@ -47,7 +49,7 @@ function observe(url, body) {
     const r = route();
     if (!r) return '';
     const name = friendly(body);
-    return name && (r === '/' ? HOME.test(name) : PAGE.test(name)) ? r : '';
+    return name && (HOME.test(name) || PAGE.test(name) || POST_FEED_V331.test(name)) ? r : '';
 }
 function urlKey(value) {
     try {
