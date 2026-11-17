@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         IGCleaner's Main World Script
-// @version	 29.8.0
-// @date	 2026-11-09
+// @version	 29.9.4
+// @date	 2026-11-17
 // @description  Trying to make my Instagram experience tolerable.
 // @match        *://www.instagram.com/*
 // @match        *://www.instagram.com/?next=%2F/*
@@ -1310,11 +1310,16 @@
                     const variables = JSON.parse(rawVariables);
                     if (!variables || typeof variables !== 'object' || variables.variant !== 'home') return body;
 
-                    // Only widen true pagination requests. Initial Home loading remains
-                    // completely native; the server still creates the cursor/page_info.
-                    if (!variables.after || !Number.isFinite(Number(variables.first))) return body;
+                    // Widen both fresh Home queries and true pagination requests. SPA
+                    // returns to / can otherwise receive a small initial batch that the
+                    // sanitizer legitimately filters down to zero, which makes Instagram
+                    // render its native full-page Suggested-for-you fallback. The server
+                    // still owns cursor/page_info; this only requests more raw candidates.
+                    if (!Number.isFinite(Number(variables.first))) return body;
                     const first = Number(variables.first);
-                    const target = Math.max(PAGINATION_FIRST_MIN, paginationFirstTarget);
+                    const target = variables.after
+                        ? Math.max(PAGINATION_FIRST_MIN, paginationFirstTarget)
+                        : PAGINATION_FIRST_MIN;
                     if (first >= target) return body;
                     variables.first = target;
                     params.set('variables', JSON.stringify(variables));

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         IGCleaner
-// @version	 29.8.3
-// @date	 2026-11-13
+// @version	 29.9.4
+// @date	 2026-11-17
 // @description  Trying to make my Instagram experience tolerable.
 // @match        *://www.instagram.com/*
 // @match        *://www.instagram.com/?next=%2F/*
@@ -16,6 +16,306 @@
 
 (function() {
 'use strict';
+
+// ===== v29.9.4 V351: earliest possible floating Friends/chat no-glimpse kill =====
+// This runs before the large keyword/account tables below. The previous V350 CSS
+// was correct in principle, but it was not injected until ~1,200 lines into startup,
+// leaving Instagram a small first-paint window for the Friends launcher.
+//
+// The two selectors below are the captured OUTER shells of Instagram's optional
+// floating Friends launcher and 360px floating chat portal. They are not the native
+// /direct/inbox/ or /direct/t/... page containers, so hiding these exact shells does
+// not need to wait for a route marker or for their message/avatar children to hydrate.
+(function ig2955InstallFloatingFriendsPrepaintV351() {
+    try {
+        if (location.hostname !== 'www.instagram.com') return;
+        const styleId = 'ig-floating-friends-prepaint-v351';
+
+        function sync() {
+            try {
+                const html = document.documentElement;
+                if (!html) return false;
+                let style = document.getElementById(styleId);
+                if (!style) {
+                    style = document.createElement('style');
+                    style.id = styleId;
+                    style.textContent = `
+                        /* CLOSED Friends launcher: captured outer shell. */
+                        div.x3h4tne.x145d82y.xixxii4,
+                        /* OPEN / mini conversation: captured 360px floating portal. */
+                        div.x7vuprf.x1mg3h75.x1y0lptx.x1wp8tw6.x1ve1609.xtpu1e1[style*="--x-width: 360px"],
+                        /* V355: Meta's native duplicate Create row, identified by its own
+                           structural anchor rather than by climbing from animated label text.
+                           This is the exact href="#" nav entry containing the New-post icon.
+                           The separate "Create post / Julkaise" entry is not matched. */
+                        nav div.x1n2onr6:has(> span.html-span a[href="#"] svg[aria-label="Uusi julkaisu"]),
+                        nav div.x1n2onr6:has(> span.html-span a[href="#"] svg[aria-label="New post"]),
+                        [role="navigation"] div.x1n2onr6:has(> span.html-span a[href="#"] svg[aria-label="Uusi julkaisu"]),
+                        [role="navigation"] div.x1n2onr6:has(> span.html-span a[href="#"] svg[aria-label="New post"]),
+                        nav a[href="#"]:has(svg[aria-label="Uusi julkaisu"]),
+                        nav a[href="#"]:has(svg[aria-label="New post"]),
+                        [role="navigation"] a[href="#"]:has(svg[aria-label="Uusi julkaisu"]),
+                        [role="navigation"] a[href="#"]:has(svg[aria-label="New post"]),
+                        /* Keep Meta's separately animated hover label invisible if it is
+                           remounted while an older sidebar tree is still alive. */
+                        div.x6s0dn4.x78zum5.xnnlda6.x6ikm8r.xpdmqnj.x1g0dm76.xuxw1ft.xlshs6z,
+                        div.x6s0dn4.x78zum5.xnnlda6.x6ikm8r.xpdmqnj.x1g0dm76.xuxw1ft.xlshs6z + div.x103rrm9.x1c4vz4f.xs83m0k.x2lwn1j[aria-hidden="true"],
+                        /* V359: November 2026 More-menu "Also from Meta" section.
+                           Match the captured section by its three first-party external links,
+                           not by broad menu ancestry, so Settings and the rest of the menu stay native. */
+                        div:has(> div.xwib8y2.x1y1aw1k.xpdmqnj.x1g0dm76):has(> span a[href^="https://www.meta.ai/"]):has(> span a[href^="https://www.whatsapp.com/"]):has(> span a[href*="threads.com"]),
+                        div:has(> div.xwib8y2.x1y1aw1k.xpdmqnj.x1g0dm76):has(> span a[href^="https://www.meta.ai/"]):has(> span a[href^="https://www.whatsapp.com/"]):has(> span a[href*="threads.net"]),
+                        /* Collapse the dedicated separator/ghost spacer immediately after that block. */
+                        div:has(> div.xwib8y2.x1y1aw1k.xpdmqnj.x1g0dm76):has(> span a[href^="https://www.meta.ai/"]):has(> span a[href^="https://www.whatsapp.com/"]):has(> span a[href*="threads.com"]) + div.x1pylafk.xols6we.x1xmf6yo.x1w5wx5t.x1e56ztr.x1qfufaz:empty,
+                        div:has(> div.xwib8y2.x1y1aw1k.xpdmqnj.x1g0dm76):has(> span a[href^="https://www.meta.ai/"]):has(> span a[href^="https://www.whatsapp.com/"]):has(> span a[href*="threads.net"]) + div.x1pylafk.xols6we.x1xmf6yo.x1w5wx5t.x1e56ztr.x1qfufaz:empty,
+                        /* V358: exact empty spacer used by Meta's duplicate Create-new row.
+                           No adjacency or ancestor assumptions: hide this captured empty shell itself. */
+                        div.x103rrm9.x1c4vz4f.xs83m0k.x2lwn1j[aria-hidden="true"]:empty,
+                        /* V361: text-verified Notifications suggestion module.
+                           JS applies this marker before paint; the marker is removed if
+                           React recycles the same wrapper for another Notifications tab. */
+                        div[data-ig-notifications-suggested-v361="1"] {
+                            display: none !important;
+                            visibility: hidden !important;
+                            opacity: 0 !important;
+                            pointer-events: none !important;
+                            content-visibility: hidden !important;
+                            height: 0 !important;
+                            min-height: 0 !important;
+                            max-height: 0 !important;
+                            margin: 0 !important;
+                            padding: 0 !important;
+                            border: 0 !important;
+                            flex: 0 0 0 !important;
+                            overflow: hidden !important;
+                            transition: none !important;
+                            animation: none !important;
+                        }
+                    `;
+                    html.appendChild(style);
+                }
+                return true;
+            } catch { return false; }
+        }
+
+        window.__ig2955SyncFloatingFriendsPrepaintV351 = sync;
+        if (!sync() && !window.__ig2955FloatingFriendsRootWaitV351) {
+            const firstRoot = new MutationObserver(() => {
+                if (!document.documentElement) return;
+                try { firstRoot.disconnect(); } catch {}
+                window.__ig2955FloatingFriendsRootWaitV351 = null;
+                sync();
+            });
+            window.__ig2955FloatingFriendsRootWaitV351 = firstRoot;
+            firstRoot.observe(document, { childList: true });
+        }
+    } catch {}
+})();
+
+// ===== v29.9.4 V361: reversible Notifications suggestion-module prepaint =====
+// Instagram reuses the same wrapper classes for several Notifications tabs.
+// Never hide by wrapper class + Follow button alone. Verify the local heading and
+// row-list shape first, then mark only that small module. If React recycles the
+// wrapper for Merkitty / Tagged or Seuraamasi henkilöt / People you follow, remove
+// the marker immediately so the native tab content remains visible.
+(function ig2955InstallNotificationSuggestionsGuardV361() {
+    try {
+        if (location.hostname !== 'www.instagram.com') return;
+        const ATTR = 'data-ig-notifications-suggested-v361';
+        const SELECTOR = 'div.xx4vt8u.xmzvs34.xf159sx';
+        const LABELS = new Set([
+            'sinulle ehdotettua',
+            'sinulle ehdotettu',
+            'suggested for you',
+            'recommended for you'
+        ]);
+
+        const normalize = value => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
+
+        function qualifies(section) {
+            try {
+                if (!section?.matches?.(SELECTOR)) return false;
+                const first = section.firstElementChild;
+                const second = first?.nextElementSibling;
+                if (!first || !second) return false;
+
+                const heading = first.querySelector('h4, [role="heading"]');
+                if (!heading || !LABELS.has(normalize(heading.textContent))) return false;
+
+                if (!second.querySelector('button._aswp._aswr._aswu._asw_._asx2')) return false;
+                if (!second.querySelector('div.x1qnrgzn.x1cek8b2.xb10e19.x19rwo8q')) return false;
+
+                // Extra guard against ever marking the Notifications shell itself.
+                if (section.querySelector(':scope > [role="tablist"], :scope > div [role="tablist"]')) return false;
+                return true;
+            } catch { return false; }
+        }
+
+        function syncSection(section) {
+            try {
+                if (!section?.matches?.(SELECTOR)) return;
+                if (qualifies(section)) section.setAttribute(ATTR, '1');
+                else section.removeAttribute(ATTR);
+            } catch {}
+        }
+
+        function syncFrom(node) {
+            try {
+                if (!node || node.nodeType !== 1) return;
+                const candidates = new Set();
+                if (node.matches?.(SELECTOR)) candidates.add(node);
+                const owner = node.closest?.(SELECTOR);
+                if (owner) candidates.add(owner);
+                node.querySelectorAll?.(SELECTOR).forEach(section => candidates.add(section));
+                candidates.forEach(syncSection);
+            } catch {}
+        }
+
+        function syncAll() {
+            try { document.querySelectorAll(SELECTOR).forEach(syncSection); } catch {}
+        }
+
+        window.__ig2955SyncNotificationSuggestionsV361 = syncAll;
+
+        const start = () => {
+            try {
+                syncAll();
+                if (window.__ig2955NotificationSuggestionsObserverV361) return;
+                const observer = new MutationObserver(mutations => {
+                    for (const mutation of mutations) {
+                        const target = mutation.target?.nodeType === 1 ? mutation.target : mutation.target?.parentElement;
+                        if (target) syncFrom(target);
+                        for (const node of mutation.addedNodes || []) syncFrom(node);
+                    }
+                });
+                observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+                window.__ig2955NotificationSuggestionsObserverV361 = observer;
+            } catch {}
+        };
+
+        if (document.documentElement) {
+            start();
+        } else {
+            const rootWait = new MutationObserver(() => {
+                if (!document.documentElement) return;
+                try { rootWait.disconnect(); } catch {}
+                start();
+            });
+            rootWait.observe(document, { childList: true });
+        }
+    } catch {}
+})();
+
+// ===== v29.9.4 V355: duplicate Create row handled structurally in prepaint CSS =====
+// No persistent owner-climbing observer: it could capture the whole navigation stack.
+
+// ===== v29.9.4 V356/V358: exact-text Create-new shell + exact-spacer guard =====
+// Meta has a second sidebar variant where "Luo uusi / Create new" is rendered as
+// a text-only animated shell instead of the older href="#" + New-post SVG row.
+// Never climb into nav ancestors here. Hide only the exact text-bearing shell (and
+// the exact captured empty spacer independently, so the rest of the left navigation cannot be
+// affected even if Instagram remounts the label during hover expansion.
+(function ig2955InstallCreateNewTextShellGuardV356() {
+    try {
+        if (location.hostname !== 'www.instagram.com') return;
+
+        const KNOWN_SHELL = 'div.x6s0dn4.x78zum5.xnnlda6.x6ikm8r.xpdmqnj.x1g0dm76.xuxw1ft.xlshs6z';
+        const LABEL_SPAN = 'span.x1lliihq.x193iq5w.x6ikm8r.x10wlt62.xlyipyv.xuxw1ft';
+        const SPACER = 'div.x103rrm9.x1c4vz4f.xs83m0k.x2lwn1j[aria-hidden="true"]';
+        const LABELS = new Set(['luo uusi', 'create new']);
+
+        function normalize(value) {
+            try { return String(value || '').replace(/\s+/g, ' ').trim().toLowerCase(); }
+            catch { return ''; }
+        }
+
+        function hideNode(node) {
+            try {
+                if (!node || node.nodeType !== 1) return;
+                node.style.setProperty('display', 'none', 'important');
+                node.style.setProperty('visibility', 'hidden', 'important');
+                node.style.setProperty('opacity', '0', 'important');
+                node.style.setProperty('pointer-events', 'none', 'important');
+                node.style.setProperty('transition', 'none', 'important');
+                node.style.setProperty('animation', 'none', 'important');
+            } catch {}
+        }
+
+        function hideLabel(label) {
+            try {
+                if (!label || !LABELS.has(normalize(label.textContent))) return false;
+
+                // Preferred target: Meta's exact captured text shell. This is the
+                // element the hover animation remounts in the current sidebar.
+                const shell = label.matches?.(KNOWN_SHELL) ? label : label.closest?.(KNOWN_SHELL);
+                if (shell) {
+                    hideNode(shell);
+                    const spacer = shell.nextElementSibling;
+                    if (spacer?.matches?.(SPACER)) hideNode(spacer);
+                    return true;
+                }
+
+                // Fallback for a class churn: hide only the exact label span itself.
+                // Do NOT climb to a parent nav row; preserving the sidebar is more
+                // important than collapsing a possible empty slot.
+                hideNode(label);
+                return true;
+            } catch { return false; }
+        }
+
+        function scan(root) {
+            try {
+                if (!root) return;
+                if (root.nodeType === 3) {
+                    const parent = root.parentElement;
+                    if (parent?.matches?.(LABEL_SPAN)) hideLabel(parent);
+                    return;
+                }
+                if (root.nodeType !== 1) return;
+
+                if (root.matches?.(KNOWN_SHELL) && LABELS.has(normalize(root.textContent))) hideLabel(root);
+                if (root.matches?.(LABEL_SPAN)) hideLabel(root);
+                if (root.matches?.(SPACER)) hideNode(root);
+
+                root.querySelectorAll?.(`${KNOWN_SHELL}, ${LABEL_SPAN}`).forEach(hideLabel);
+                root.querySelectorAll?.(SPACER).forEach(hideNode);
+            } catch {}
+        }
+
+        function install() {
+            try {
+                const html = document.documentElement;
+                if (!html || window.__ig2955CreateNewTextShellGuardV356) return false;
+                window.__ig2955CreateNewTextShellGuardV356 = true;
+
+                scan(html);
+                const observer = new MutationObserver((mutations) => {
+                    try {
+                        for (const mutation of mutations) {
+                            if (mutation.type === 'characterData') {
+                                scan(mutation.target);
+                                continue;
+                            }
+                            for (const node of mutation.addedNodes || []) scan(node);
+                        }
+                    } catch {}
+                });
+                observer.observe(html, { subtree: true, childList: true, characterData: true });
+                window.__ig2955CreateNewTextShellObserverV356 = observer;
+                return true;
+            } catch { return false; }
+        }
+
+        if (!install()) {
+            const firstRoot = new MutationObserver(() => {
+                if (!document.documentElement) return;
+                try { firstRoot.disconnect(); } catch {}
+                install();
+            });
+            firstRoot.observe(document, { childList: true });
+        }
+    } catch {}
+})();
 
 // ======== Unified keyword regex filter ========
 // One source of truth for text/content keyword filtering. Literal keywords from the old list
@@ -82,7 +382,7 @@ const keywordsToHide = [
 	/\bSex\b/i, /\bAlexis\b/i, /\bHomo\b/i, /\bGay\b/i, /\bDeep\b/i, /\bFake\b/i, /\bBrie\b/i, /\bGirls\b/i, /\bGirly\b/i, /\bGirlie\b/i, /\bGirl's\b/i, /\bTorres\b/i, 
 	/\bEve WWE\b/i, /\bManna\b/i, /\bNanna\b/i, /\bAava\b/i, /\bAva\b/i, /\bRaine\b/i, /\bGrok\b/i, /\bJensku\b/i, /\bSanna\b/i, /\bHanna\b/i, /\bHenna\b/i, /\bNiina\b/i, 
 	/\bSandra\b/i, /\bMilla\b/i, /\bMirka\b/i, /\bZoey\b/i, /\bViola\b/i, /\bMinka\b/i, /\bRoosa\b/i, /\bPeppi\b/i, /\bEveliina\b/i, /\bJimi\b/i, /\bJulle\b/i, /\bNox\b/i, 
-	/\bLana\b/i, /\bMenni\b/i, /\bGlna\b/i, /\bvsco\b/i, /\bElon\b/i, /\bMusk\b/i,  /\bAltman\b/i, /\bTara\b/i, /\bKairi\b/i, /\bIzzi\b/i,
+	/\bLana\b/i, /\bMenni\b/i, /\bGlna\b/i, /\bvsco\b/i, /\bElon\b/i, /\bMusk\b/i,  /\bAltman\b/i, /\bTara\b/i, /\bKairi\b/i, /\bIzzi\b/i, /\bHeli\b/i,
 
 
 	// Boundaried Regex Hashtags
@@ -114,10 +414,11 @@ const instagramAccountsToHide = [
   'heidih', 'heidit', 'grok', 'erikavikman', 'erika.helin', 'hikaru_shida', 'jjuliakristiina_', 'mafiaprinsessa', 'riho_ringstar', 'gailkimitsme', 'deonnapurrazzo', 'jordynnegrace', 'mickiejames', 'trinity_fatu',
   'm1mmuska', 'mimmi', 'juliaerikaaz', 'dvondivawwe', 'suyung', 'madisonraynewrestling', 'katariinapohjoiskangas', 'angelinalove', 'velvet_sky', 'brookeadams', 'tessblanchard', 'thetayavalkyrie', 'havokdeathmachine', 
   'killerkellywrestling', 'kierahogan', 'diamante_lax', 'ladyfrost', 'taryn_terrell', 'rebeltanea', 'martimichellewwe', 'jaderedeww',  'alishawrestling', 'savannah_evanswrestling', 'jazzygabert', 'masha_slamovich', 
-  'paigewwe', 'kayfabe_kayla', 'roxanne_perez', 'cora.jade', 'piia_barlund', 'lottapupu', 'giuliawrestler', 'starkz_wrestler', 'thedollhousewrestling', 'holidead', 'tessafblanchard', 'thealliebunny', 'taya_valkyrie',
+  'paigewwe', 'kayfabe_kayla', 'roxanne_perez', 'cora.jade', 'piia_barlund', 'mirauu', 'hellunana', 'ninajessika', 'lottapupu', 'giuliawrestler', 'starkz_wrestler', 'thedollhousewrestling', 'holidead',  'taya_valkyrie',
   'thedemonbunny', 'rhearipley_wwe', 'rosemarythehive', 'siennawrestling', 'madisonrayne', 'kimber_lee90', 'kiera_hogan', 'diamantelax', 'realtenille', 'stephaniemcmahon', 'stephanie_buttermore', 'stephanie.vaquer', 
   'julianarasikannas', 'wiltsuboe', 'emiliaaq96', 'wwe_asuka', 'kairi_sane_wwe', 'wwe_mandyrose', 'stephaniesanzo', 'shaqwrestling', 'jadecargill', 'emimatsumoto', 'yukisakazaki', 'gina.adams', 'mizuki_wrestler',
-  'miskaawq9', 'misk33', 'misk33waaa', 'misk33waa', 'misk33wa', 'misk3waa', 'misk3waaa', 'misk3wa', 'misk4', 'misaaqw', 'lovable.dev', 'lovable', 'lovable.ai', 'izzi_wwe', 'chantelmonroe',
+  'miskaawq9', 'misk33', 'misk33waaa', 'misk33waa', 'misk33wa', 'misk3waa', 'misk3waaa', 'misk3wa', 'ninnuuw', 'misk4', 'misaaqw', 'lovable.dev', 'lovable', 'lovable.ai', 'izzi_wwe', 'chantelmonroe', 'thealliebunny', 
+  'tessafblanchard', 
 
   // v29.5.5 wrestling-account expansion: exact published handles only (no guessed variants).
   'kelani_wwe', // NXT: handle specifically referenced in wwenxt caption.
@@ -798,8 +1099,8 @@ function ig2955TrustedHomeAuthorV326(article) {
                    also concealed unresolved/placeholder rows forever while they
                    continued to reserve virtual-list space. Wait for an actual
                    profile identity anchor, then screen before it can paint. */
-                :is([role="dialog"], [aria-modal="true"]) div.x1qnrgzn.x1cek8b2.xb10e19.x19rwo8q.x1lliihq.x193iq5w.xh8yej3:has(a[role="link"][href^="/"] img[alt], a[role="link"].notranslate[href^="/"]):not([data-ig-account-list-approved-v341="1"]):not([data-ig-account-list-banned]),
-                :is([role="dialog"], [aria-modal="true"]) div.x1qnrgzn.x1cek8b2.xb10e19.x19rwo8q.x1lliihq.x193iq5w.xh8yej3[data-ig-account-list-banned] {
+                :is([role="dialog"], [aria-modal="true"]):not([aria-label="Tykkäykset" i]):not([aria-label="Likes" i]) div.x1qnrgzn.x1cek8b2.xb10e19.x19rwo8q.x1lliihq.x193iq5w.xh8yej3:has(a[role="link"][href^="/"] img[alt], a[role="link"].notranslate[href^="/"]):not([data-ig-account-list-approved-v341="1"]):not([data-ig-account-list-banned]),
+                :is([role="dialog"], [aria-modal="true"]):not([aria-label="Tykkäykset" i]):not([aria-label="Likes" i]) div.x1qnrgzn.x1cek8b2.xb10e19.x19rwo8q.x1lliihq.x193iq5w.xh8yej3[data-ig-account-list-banned] {
                     visibility: hidden !important;
                     opacity: 0 !important;
                     pointer-events: none !important;
@@ -875,7 +1176,32 @@ function ig2955TrustedHomeAuthorV326(article) {
                     animation: none !important;
                 }
 
-                                /* Myös Metalta / Meta AI. This is not feed-media related, so broader aria/title matching is safe enough. */
+                                /* V361: Notifications drawer suggested accounts.
+                   The early text/shape verifier applies this reversible marker. Never hide
+                   the reused Notifications wrapper from classes or Follow buttons alone. */
+                div[data-ig-notifications-suggested-v361="1"] {
+                    display: none !important;
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                    position: absolute !important;
+                    left: -10000px !important;
+                    top: -10000px !important;
+                    width: 0 !important;
+                    min-width: 0 !important;
+                    max-width: 0 !important;
+                    height: 0 !important;
+                    min-height: 0 !important;
+                    max-height: 0 !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    overflow: hidden !important;
+                    content-visibility: hidden !important;
+                    transition: none !important;
+                    animation: none !important;
+                }
+
+                /* Myös Metalta / Meta AI. This is not feed-media related, so broader aria/title matching is safe enough. */
                 a[href="/ai/"],
                 a[href="/meta-ai/"],
                 a[aria-label*="Meta AI"],
@@ -1199,6 +1525,7 @@ function ig2955TrustedHomeAuthorV326(article) {
     }
     injectMinimalNoGlimpseNavCSS();
     injectHomeFeedHybridGateCSS();
+    ig2955EnsureFloatingFriendsHiddenV349();
 
     // ===== Feed gate: hide feed articles until the caption scan approves them =====
     function isMetaManglerHomeFeedPath() {
@@ -1210,13 +1537,92 @@ function ig2955TrustedHomeAuthorV326(article) {
         } catch { return false; }
     }
 
+    // A native post viewer can change history to /p/<id> while the original
+    // Home story tray and feed remain mounted underneath. That is not a
+    // standalone permalink page, and must never be treated as one by scanners.
+    function ig2955HomeBehindPostViewerV348() {
+        try {
+            if (!/^\/(?:[A-Za-z0-9._]+\/)?(?:p|reel|tv)\/[A-Za-z0-9_-]+\/?$/i.test(location.pathname || '')) return false;
+            return !!document.querySelector('div[data-pagelet="story_tray"]');
+        } catch { return false; }
+    }
+    function ig2955HomeSurfaceV348() {
+        return isMetaManglerHomeFeedPath() || ig2955HomeBehindPostViewerV348();
+    }
+
+    // The floating Friends drawer is optional. Hide its OPEN 360px shell and
+    // its CLOSED avatar launcher on Home/profile views only. The real Direct
+    // inbox and conversations retain every existing rule and control.
+    function ig2955HideFloatingFriendsRouteV349() {
+        try {
+            if (location.hostname !== 'www.instagram.com') return false;
+            if (ig2955HomeSurfaceV348()) return true;
+            const parts = (location.pathname || '/').split('/').filter(Boolean);
+            if (!parts.length || parts.length > 2) return false;
+            const reserved = new Set(['direct', 'accounts', 'explore', 'reels', 'p', 'reel', 'tv', 'stories', 'archive', 'search', 'ai', 'meta-ai', 'about', 'help', 'legal']);
+            if (reserved.has(parts[0].toLowerCase())) return false;
+            return parts.length === 1 || ['reels', 'tagged'].includes(parts[1].toLowerCase());
+        } catch { return false; }
+    }
+    function ig2955EnsureFloatingFriendsHiddenV349() {
+        try {
+            try { window.__ig2955SyncFloatingFriendsPrepaintV351?.(); } catch {}
+            const html = document.documentElement;
+            if (!html) {
+                // Userscripts may run before <html> even exists. Observe the
+                // parser's first insertion so the CSS lands before first paint.
+                if (!window.__ig2955FloatingFriendsRootWaitV350) {
+                    const firstRoot = new MutationObserver(() => {
+                        if (!document.documentElement) return;
+                        try { firstRoot.disconnect(); } catch {}
+                        window.__ig2955FloatingFriendsRootWaitV350 = null;
+                        ig2955EnsureFloatingFriendsHiddenV349();
+                    });
+                    window.__ig2955FloatingFriendsRootWaitV350 = firstRoot;
+                    firstRoot.observe(document, { childList: true });
+                }
+                return;
+            }
+            if (ig2955HideFloatingFriendsRouteV349()) html.setAttribute('data-ig-hide-floating-friends-v349', '1');
+            else html.removeAttribute('data-ig-hide-floating-friends-v349');
+            let style = document.getElementById('ig-floating-friends-noglimpse-v349');
+            if (!style) {
+                style = document.createElement('style');
+                style.id = 'ig-floating-friends-noglimpse-v349';
+                style.textContent = `
+                    /* V350: The two captured floating-portal OUTER shells.
+                       Match them before their avatars, inbox or chat contents hydrate.
+                       No route flag: Direct -> Home can mount the old chat before
+                       Instagram notifies route listeners. These are not the native
+                       /direct/inbox/ or /direct/t/ message-page containers. */
+                    div.x3h4tne.x145d82y:has(> div[role="button"] > div[aria-label="Viestit"]),
+                    div.x3h4tne.x145d82y:has(> div[role="button"] > div[aria-label="Messages"]),
+                    div.x7vuprf.x1mg3h75.x1y0lptx.x1wp8tw6.x1ve1609.xtpu1e1[style*="--x-width: 360px"],
+                    /* Open Messages popup (inbox list or a conversation). */
+                    html[data-ig-hide-floating-friends-v349="1"] div[style*="--x-width: 360px"]:has([data-pagelet="IGDInboxThreadListScrollableAreaPagelet"]),
+                    html[data-ig-hide-floating-friends-v349="1"] div[style*="--x-width: 360px"]:has([aria-label="Laajenna"]):has([aria-label="Sulje"]),
+                    html[data-ig-hide-floating-friends-v349="1"] div[style*="--x-width: 360px"]:has([aria-label="Expand"]):has([aria-label="Close"]),
+                    /* Collapsed Friends launcher, identified by its avatar list. */
+                    html[data-ig-hide-floating-friends-v349="1"] div[role="button"]:has(> div[aria-label="Viestit"]):has([aria-label*="avatar" i]):not(nav *):not([role="navigation"] *),
+                    html[data-ig-hide-floating-friends-v349="1"] div[role="button"]:has(> div[aria-label="Messages"]):has([aria-label*="avatar" i]):not(nav *):not([role="navigation"] *) {
+                        display: none !important;
+                        visibility: hidden !important;
+                        pointer-events: none !important;
+                    }
+                `;
+                (document.head || html).appendChild(style);
+            }
+        } catch {}
+    }
+
     function updateMetaManglerFeedGateClass() {
         try {
             const root = document.documentElement;
             if (!root) return;
             root.classList.remove('metamangler-feed-gate');
-            if (isMetaManglerHomeFeedPath()) root.setAttribute('data-bf-ig-home-feed-hybrid', '1');
+            if (ig2955HomeSurfaceV348()) root.setAttribute('data-bf-ig-home-feed-hybrid', '1');
             else root.removeAttribute('data-bf-ig-home-feed-hybrid');
+            ig2955EnsureFloatingFriendsHiddenV349();
         } catch {}
     }
     updateMetaManglerFeedGateClass();
@@ -1257,7 +1663,7 @@ function ig2955TrustedHomeAuthorV326(article) {
             } else {
                 html.setAttribute('data-ig-profile-rec-prepaint-v329', '1');
             }
-            if (post) html.setAttribute('data-ig-post-prepaint-v324', '1');
+            if (post && !ig2955HomeBehindPostViewerV348()) html.setAttribute('data-ig-post-prepaint-v324', '1');
             else html.removeAttribute('data-ig-post-prepaint-v324');
             // This gate is limited to profile grids and related cards on
             // permalink routes, never Instagram Home or Stories.
@@ -2859,8 +3265,96 @@ function getPostIDFromArticle(article) {
     'section:has(div[role="button"][tabindex="0"]:has(> span.html-span))',
 ];
 
+function isInstagramLikesDialogV352(dialog) {
+    try {
+        if (!dialog?.matches?.('[role="dialog"], [aria-modal="true"]')) return false;
+        const label = String(dialog.getAttribute('aria-label') || '').trim();
+        if (/^(?:Tykkäykset|Likes)$/i.test(label)) return true;
+        const heading = dialog.querySelector('h1, h2, h3, [role="heading"]');
+        return !!heading && /^(?:Tykkäykset|Likes)$/i.test((heading.textContent || '').trim());
+    } catch { return false; }
+}
+
+function isInstagramLikesSurfaceElementV352(element) {
+    try {
+        if (!element || element.nodeType !== 1) return false;
+        const modal = element.closest?.('[role="dialog"], [aria-modal="true"]');
+        if (modal && isInstagramLikesDialogV352(modal)) return true;
+        const nested = element.querySelectorAll?.('[role="dialog"], [aria-modal="true"]');
+        if (!nested) return false;
+        for (const dialog of nested) {
+            if (isInstagramLikesDialogV352(dialog)) return true;
+        }
+        return false;
+    } catch { return false; }
+}
+
+
+// ===== v29.9.4 V362: Notifications drawer protection on profile routes =====
+// Instagram keeps the underlying profile URL active while the Notifications drawer
+// is open. The legacy non-Home/profile cleaners therefore still run and can mistake
+// tab content for ordinary profile-page suggested content. Detect the drawer by its
+// semantic shell (Notifications heading + multiple native filter tabs + close button)
+// and reserve it from every generic collapse path. The dedicated V361 suggestion
+// hider remains independent and can still remove only its verified recommendation module.
+function ig2955IsNotificationsSurfaceElementV362(element) {
+    try {
+        if (!element || element.nodeType !== 1) return false;
+        const HEADING = new Set(['ilmoitukset', 'notifications']);
+        const TAB_LABELS = new Set([
+            'kaikki', 'all',
+            'seuraamasi henkilöt', 'people you follow',
+            'seuraamiset', 'follows', 'following',
+            'merkitty', 'merkinnät', 'tagged', 'mentions'
+        ]);
+        const normalize = value => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
+
+        let candidate = element;
+        for (let level = 0; candidate && level < 12; level++, candidate = candidate.parentElement) {
+            if (candidate === document.body || candidate === document.documentElement) break;
+
+            const headings = candidate.querySelectorAll?.('h1, h2, h3, [role="heading"]') || [];
+            let hasHeading = false;
+            for (const heading of headings) {
+                if (HEADING.has(normalize(heading.textContent))) { hasHeading = true; break; }
+            }
+            if (!hasHeading) continue;
+
+            const close = candidate.querySelector?.(
+                'svg[aria-label="Sulje"], svg[aria-label="Close"], [aria-label="Sulje"][role="button"], [aria-label="Close"][role="button"]'
+            );
+            if (!close) continue;
+
+            let tabHits = 0;
+            const controls = candidate.querySelectorAll?.('button, [role="button"], [role="tab"]') || [];
+            for (const control of controls) {
+                const text = normalize(control.textContent);
+                const aria = normalize(control.getAttribute?.('aria-label'));
+                if (TAB_LABELS.has(text) || TAB_LABELS.has(aria)) {
+                    tabHits++;
+                    if (tabHits >= 2) break;
+                }
+            }
+            if (tabHits < 2) continue;
+
+            // Geometry is only an additional sanity guard. A full-page profile/main
+            // should never qualify as the left-side Notifications drawer.
+            const rect = candidate.getBoundingClientRect?.();
+            if (rect && rect.width > 0 && rect.height > 0) {
+                const maxWidth = Math.min(720, Math.max(420, (window.innerWidth || 1400) * 0.55));
+                if (rect.width > maxWidth) continue;
+                if (rect.left > 80) continue;
+            }
+            return true;
+        }
+    } catch {}
+    return false;
+}
+
 function isElementProtected(element) {
     if (!element || element.nodeType !== 1) return false;
+    if (isInstagramLikesSurfaceElementV352(element)) return true;
+    if (ig2955IsNotificationsSurfaceElementV362(element)) return true;
     
     if (element.tagName === 'FOOTER' || element.tagName === 'NAV' || element.tagName === 'MAIN' || element.tagName === 'BODY') return true;
     if (element.getAttribute('role') === 'feed' || element.getAttribute('role') === 'main' || element.getAttribute('role') === 'listbox') return true;
@@ -3094,12 +3588,25 @@ function isElementProtected(element) {
     function isPostOverlayOpen() {
         return !!document.querySelector('div[role="dialog"] article, section[role="dialog"] article, div[aria-modal="true"] article, div[role="dialog"] [data-testid="post"], [role="dialog"] li._a9zj._a9zl h1, [aria-modal="true"] li._a9zj._a9zl h1');
     }
+    let __igPostOverlayWasOpenV348 = false;
+    let __igPostOverlayRecoveryGenerationV348 = 0;
+    function ig2955RecheckHomeAfterModalV348(generation) {
+        try {
+            if (generation !== __igPostOverlayRecoveryGenerationV348 ||
+                !ig2955HomeSurfaceV348() || isPostOverlayOpen() || document.hidden) return;
+            // Reconcile through the existing Home ID-first coordinator.
+            // Never force-show a filtered/banned article after closing a modal.
+            __bf2760HomeV5EnsureObserver();
+            __bf2760HomeV5ReconcileVisible();
+        } catch {}
+    }
     function updateOverlayState() {
         try {
             const hasOverlay = isPostOverlayOpen();
             const target = document.body || document.documentElement;
             if (!target) return;
             if (hasOverlay) {
+                __igPostOverlayRecoveryGenerationV348++;
                 target.classList.add('ig-overlay-open');
                 document.querySelectorAll('div[role="dialog"], section[role="dialog"], div[aria-modal="true"]').forEach(dlg => {
                     dlg.querySelectorAll('*').forEach(el => {
@@ -3116,7 +3623,14 @@ function isElementProtected(element) {
                 });
             } else {
                 target.classList.remove('ig-overlay-open');
+                if (__igPostOverlayWasOpenV348) {
+                    const generation = ++__igPostOverlayRecoveryGenerationV348;
+                    addTimeout(() => ig2955RecheckHomeAfterModalV348(generation), 100);
+                    addTimeout(() => ig2955RecheckHomeAfterModalV348(generation), 550);
+                    addTimeout(() => ig2955RecheckHomeAfterModalV348(generation), 1450);
+                }
             }
+            __igPostOverlayWasOpenV348 = hasOverlay;
         } catch {}
     }
 
@@ -3763,6 +4277,9 @@ function isElementProtected(element) {
 
     function ig2955HideBlockedPostSurfaceV321(root, postID, isModal) {
         try {
+            // Instagram's modal can use /p/ in history while main is still Home.
+            // A standalone permalink collapse must never act on that Home main.
+            if (!isModal && ig2955HomeBehindPostViewerV348()) return;
             ig2955RememberCaptionBanV321(postID);
             if (isModal) {
                 if (root.getAttribute('data-ig-caption-banned-v321') === '1') return;
@@ -3913,7 +4430,7 @@ function isElementProtected(element) {
     function ig2955EnsureNonHomePrepaintObserverV324() {
         try {
             ig2955UpdatePostPrepaintRouteV324();
-            if (!isPermalinkView() && !ig2955GridScanRouteV322()) {
+            if (ig2955HomeBehindPostViewerV348() || (!isPermalinkView() && !ig2955GridScanRouteV322())) {
                 IG_NONHOME_SURFACE_OBSERVER_V324?.disconnect();
                 IG_NONHOME_SURFACE_OBSERVER_V324 = null;
                 IG_NONHOME_SURFACE_ROOT_V324 = null;
@@ -4176,7 +4693,7 @@ function isElementProtected(element) {
 
     function safelyHideFeedArticle(article) {
         if (!article) return;
-        if (isMetaManglerHomeFeedPath() && article.tagName === 'ARTICLE' && article.closest('main')) {
+        if (ig2955HomeSurfaceV348() && article.tagName === 'ARTICLE' && article.closest('main') && !isInPostOverlay(article)) {
             try {
                 const postID = __bf2760HomeV5GetArticlePostID(article) || getPostIDFromArticle(article) || '';
                 if (postID) __bf2760HomeV5Reject(article, postID, true);
@@ -4359,6 +4876,10 @@ function isElementProtected(element) {
             const match = location.pathname.match(/\/(?:p|reel|tv)\/([A-Za-z0-9_-]+)/);
             const postID = match ? match[1] : null;
 
+            // The blank/loading modal has no article yet. Its /p/ URL must
+            // not trigger the standalone scanner against the Home feed below.
+            if (ig2955HomeBehindPostViewerV348() && !isPostOverlayOpen()) return;
+
             // IMPORTANT: Instagram rewrites the URL to /reel/<id> *while the
             // profile-grid viewer modal is still open*. Modal must win over
             // permalink or the previous branch redirects away from the page.
@@ -4426,8 +4947,9 @@ function isElementProtected(element) {
                 if (pendingRecord) pendingRecord.expansionRunning = true;
                 expandAndScanNode(captionNode, postID).then(isClean => {
                     if (pendingRecord) pendingRecord.expansionRunning = false;
-                    if (!isClean) ig2955HideBlockedPostSurfaceV321(root, postID, false);
-                    else {
+                    if (!isClean) {
+                        if (!ig2955HomeBehindPostViewerV348()) ig2955HideBlockedPostSurfaceV321(root, postID, false);
+                    } else {
                         const article = root.tagName === 'ARTICLE' ? root : root.querySelector('article');
                         if (article) article.setAttribute('data-banned-scan', 'safe');
                         ig2955StartPostPanelGateV324(root, postID);
@@ -4723,7 +5245,34 @@ ${p}, ${p} * {
         });
     }
 
+    function hideNotificationsSuggestedAccountsV360() {
+        // V361 owns this now. Keep the old function name because several existing
+        // cleanup cycles call it, but make the operation reversible: only the early
+        // text/shape verifier may mark a suggestion module, and reused tab wrappers
+        // are automatically unmarked instead of receiving permanent inline styles.
+        try { window.__ig2955SyncNotificationSuggestionsV361?.(); } catch {}
+    }
+
     function hideMyosMetaltaElements() {
+        // V359: current November 2026 More/settings popover. Hide the whole
+        // "Myös Metalta / Also from Meta" section, then its captured empty spacer.
+        // This is intentionally structural: all three external Meta-family links must
+        // be direct children of the same section, so ordinary Settings rows are untouched.
+        try {
+            const currentSections = document.querySelectorAll(
+                'div:has(> div.xwib8y2.x1y1aw1k.xpdmqnj.x1g0dm76):has(> span a[href^="https://www.meta.ai/"]):has(> span a[href^="https://www.whatsapp.com/"]):has(> span a[href*="threads.com"]), ' +
+                'div:has(> div.xwib8y2.x1y1aw1k.xpdmqnj.x1g0dm76):has(> span a[href^="https://www.meta.ai/"]):has(> span a[href^="https://www.whatsapp.com/"]):has(> span a[href*="threads.net"])'
+            );
+            currentSections.forEach(section => {
+                if (!section || isElementProtected(section)) return;
+                collapseElement(section);
+                const spacer = section.nextElementSibling;
+                if (spacer?.matches?.('div.x1pylafk.xols6we.x1xmf6yo.x1w5wx5t.x1e56ztr.x1qfufaz:empty')) {
+                    collapseElement(spacer);
+                }
+            });
+        } catch {}
+
         const metaSvgs = document.querySelectorAll('svg[aria-label*="Myös Metalta"], svg[aria-label*="Also from Meta"]');
         metaSvgs.forEach(svg => {
             try {
@@ -4947,6 +5496,9 @@ function hideIGSuggestedContainerFromLabelV40(labelElement) {
     try {
         if (!labelElement || labelElement.nodeType !== 1) return false;
         if (isInPostOverlay(labelElement)) return false;
+        // V362: the dedicated Notifications V361 guard owns this surface.
+        // Generic profile-page suggestion cleanup must never climb its ancestors.
+        if (ig2955IsNotificationsSurfaceElementV362(labelElement)) return false;
 
         const article = labelElement.closest('article');
         if (article) {
@@ -5014,6 +5566,7 @@ function hideIGSuggestedContainerFromLabelV40(labelElement) {
 
 function hideAllIGSuggestedLabelsV40(root = document) {
     try {
+        if (root && root.nodeType === 1 && ig2955IsNotificationsSurfaceElementV362(root)) return;
         if (isMetaManglerHomeFeedPath()) {
             const node = root && root.nodeType === 1 ? root : document.documentElement;
             if (root === document || node?.closest?.('main') || node?.querySelector?.('main')) return;
@@ -5112,6 +5665,8 @@ function hideIGAccountEditSectionsV43(root = document) {
                 if (!span.textContent) return;
                 const txt = span.textContent.trim();
                 if (!isIGSuggestedLabelTextV40(txt)) return;
+                // V362: Notifications suggestion handling is owned exclusively by V361.
+                if (ig2955IsNotificationsSurfaceElementV362(span)) return;
 
                 if (hideIGSuggestedContainerFromLabelV40(span)) return;
 
@@ -5395,6 +5950,7 @@ injectInlineCSS();
             selectorsToHide.forEach((selector) => {
                 document.querySelectorAll(selector).forEach((el) => {
                     if (isInPostOverlay(el)) return;
+                    if (ig2955IsNotificationsSurfaceElementV362(el)) return;
                     if (!hiddenElements.has(el)) {
                         el.style.setProperty('visibility', 'hidden', 'important');
                         el.style.setProperty('display', 'none', 'important');
@@ -5411,6 +5967,7 @@ injectInlineCSS();
             hideSinulleEhdotettuaBlock();
             hideAllIGSuggestedLabelsV40();
         }
+        hideNotificationsSuggestedAccountsV360();
         hideMyosMetaltaElements();
         hideSettingsPageElements();
         hideUnwantedUIButtons();
@@ -6337,8 +6894,9 @@ injectInlineCSS();
 
     function isHomeFeedArticleContext(element) {
         try {
-            if (!isMetaManglerHomeFeedPath() || !element || element.nodeType !== 1) return false;
-            return !!(element.matches?.('article') || element.closest?.('article'));
+            if (!ig2955HomeSurfaceV348() || !element || element.nodeType !== 1) return false;
+            const article = element.matches?.('article') ? element : element.closest?.('article');
+            return !!(article && article.closest('main') && !isInPostOverlay(article));
         } catch {
             return false;
         }
@@ -6356,6 +6914,9 @@ injectInlineCSS();
     }
 
     function collapseElement(element) {
+        // V362: Notifications is an overlay surface even while a profile route remains active.
+        // Never let profile/general cleanup collapse its shell or tab contents.
+        if (ig2955IsNotificationsSurfaceElementV362(element)) return;
         // V341: Followers/Following popups are native territory. Only the
         // dedicated exact-account scanner may collapse their row containers.
         if (ig2955IsAccountListSurfaceElementV341(element)) return;
@@ -6485,7 +7046,7 @@ injectInlineCSS();
 
     function collapseElementsBySelectors(selectors) {
         if (isReelsPage()) return;
-        if (isMetaManglerHomeFeedPath()) return;
+        if (ig2955HomeSurfaceV348()) return;
         if (isPostOverlayOpen()) return;
         if (!selectors || !selectors.length) return;
         const allSelectors = selectors.join(',');
@@ -6509,7 +7070,7 @@ injectInlineCSS();
 
     function collapseElementsByKeywordsOrPaths(keywords, paths, selectors) {
         if (isReelsPage()) return;
-        if (isMetaManglerHomeFeedPath()) return;
+        if (ig2955HomeSurfaceV348()) return;
         if (isPostOverlayOpen()) return;
         if (!selectors || !selectors.length) return;
         const allSelectors = selectors.join(',');
@@ -6652,6 +7213,13 @@ injectInlineCSS();
             return;
         }
 
+        if (ig2955HomeBehindPostViewerV348()) {
+            __bf2760HomeV5EnsureObserver();
+            updateOverlayState();
+            scanPermalinkArticleAndAct();
+            return;
+        }
+
         if (isMetaManglerHomeFeedPath()) {
             try { __bf2760HomeV5EnsureObserver(); } catch {}
             hideUnwantedUIButtons();
@@ -6663,6 +7231,7 @@ injectInlineCSS();
         collapseElementsBySelectors(selectorsToHide);
         collapseElementsByKeywordsOrPaths(keywordsToHide, instagramBannedPaths, selectorsToMonitor);
         checkForRedirectElements();
+        hideNotificationsSuggestedAccountsV360();
         hideMyosMetaltaElements();
         hideSettingsPageElements();
         hideSinulleEhdotettuaBlock();
@@ -7256,6 +7825,7 @@ injectInlineCSS();
     }
 
     function fastSynchronousHider(mutations) {
+        if (ig2955HomeBehindPostViewerV348()) return;
         const path = location.pathname.toLowerCase();
         const isNightmareStory = path.includes('/stories/nightmaree3z') || path.includes('/archive/');
         const targets = ['poista', 'delete', 'remove', 'poista seuraaja', 'remove follower', 'lopeta seuraaminen', 'unfollow', 'estä', 'block'];
@@ -7718,7 +8288,7 @@ injectInlineCSS();
     function resetHomeFeedArticleState(article) {
         try {
             if (!article) return;
-            if (isMetaManglerHomeFeedPath() && article.tagName === 'ARTICLE' && article.closest('main')) {
+            if (ig2955HomeSurfaceV348() && article.tagName === 'ARTICLE' && article.closest('main') && !isInPostOverlay(article)) {
                 article.removeAttribute('data-bf-home-feed-scan-state');
                 article.removeAttribute('data-feed-scan-done');
                 article.removeAttribute('data-banned-scan');
@@ -7741,6 +8311,7 @@ injectInlineCSS();
     function processFeedPostsForScanning(articleList = null) {
         try {
             if (isReelsPage() || isExcludedPath()) return 0;
+            if (ig2955HomeBehindPostViewerV348()) return 0;
 
             if (isMetaManglerHomeFeedPath()) {
                 // V6E hard invariant: the dedicated ID-first coordinator is the only
@@ -7957,7 +8528,8 @@ injectInlineCSS();
             if (location.hostname.includes('instagram.com')) {
                 hideInstagramBannedContent();
                 checkForRedirectElements();
-                hideMyosMetaltaElements();
+                hideNotificationsSuggestedAccountsV360();
+        hideMyosMetaltaElements();
                 hideSinulleEhdotettuaBlock();
                 hideAllIGSuggestedLabelsV40();
                 hideIGAccountEditSectionsV43();
@@ -8137,7 +8709,7 @@ injectInlineCSS();
     function setHomeFeedArticleGateV2760(article, gated) {
         try {
             if (!article || article.nodeType !== 1) return;
-            if (isMetaManglerHomeFeedPath() && article.tagName === 'ARTICLE' && article.closest('main')) {
+            if (ig2955HomeSurfaceV348() && article.tagName === 'ARTICLE' && article.closest('main') && !isInPostOverlay(article)) {
                 article.removeAttribute('data-bf-home-feed-gated');
                 return;
             }
@@ -8161,7 +8733,7 @@ injectInlineCSS();
                    let freshly mounted banned articles flash for 1-2 frames while the
                    MutationObserver was still discovering them. Restrict this to Home;
                    permalink, profile, DMs and reels are completely unaffected. */
-                html[data-bf-ig-home-feed-hybrid="1"] main article:not([data-bf-home-paint-ready]) {
+                html[data-bf-ig-home-feed-hybrid="1"] main article:not([data-bf-home-paint-ready]):not([role="dialog"] article):not([aria-modal="true"] article) {
                     visibility: hidden !important;
                     pointer-events: none !important;
                 }
@@ -8337,6 +8909,12 @@ injectInlineCSS();
         updateMetaManglerFeedGateClass();
         updateMetaManglerAccountEditClassV43();
         ig2955UpdatePostPrepaintRouteV324();
+        if (ig2955HomeBehindPostViewerV348()) {
+            __bf2760HomeV5EnsureObserver();
+            updateOverlayState();
+            scanPermalinkArticleAndAct();
+            return;
+        }
         injectMinimalNoGlimpseNavCSS();
         ig2955HandlePrivateProfileV327();
         ig2955EnsureNonHomePrepaintObserverV324();
@@ -8383,7 +8961,8 @@ injectInlineCSS();
             if (!isMetaManglerHomeFeedPath()) hideInstagramBannedContent();
             // genericAggressiveHider(); // disabled in regular home path to reduce churn/RAM
             checkForRedirectElements();
-            hideMyosMetaltaElements();
+            hideNotificationsSuggestedAccountsV360();
+        hideMyosMetaltaElements();
             hideSettingsPageElements();
             if (!isMetaManglerHomeFeedPath()) {
                 hideSinulleEhdotettuaBlock();
@@ -8411,6 +8990,12 @@ injectInlineCSS();
             updateMetaManglerFeedGateClass();
             updateMetaManglerAccountEditClassV43();
             checkSPARouting(); 
+            if (ig2955HomeBehindPostViewerV348()) {
+                __bf2760HomeV5EnsureObserver();
+                updateOverlayState();
+                scanPermalinkArticleAndAct();
+                return;
+            }
             patchIGSelfStoryShortcutV44();
             if (location.hostname.includes('instagram.com')) {
                 ensureInstagramStoryTrayObserverV48();
@@ -8483,6 +9068,12 @@ injectInlineCSS();
         updateMetaManglerFeedGateClass();
         updateMetaManglerAccountEditClassV43();
         ig2955UpdatePostPrepaintRouteV324();
+        if (ig2955HomeBehindPostViewerV348()) {
+            __bf2760HomeV5EnsureObserver();
+            updateOverlayState();
+            scanPermalinkArticleAndAct();
+            return;
+        }
         ig2955HandlePrivateProfileV327();
         ig2955EnsureNonHomePrepaintObserverV324();
         ig2955EnsureExploreObserverV328();
@@ -8511,7 +9102,8 @@ injectInlineCSS();
             mainHandler();
             hideProfileThreadsTags();
             hideHomeFeedFooterLinks();
-            hideMyosMetaltaElements();
+            hideNotificationsSuggestedAccountsV360();
+        hideMyosMetaltaElements();
             hideSettingsPageElements();
             if (!isMetaManglerHomeFeedPath()) {
                 hideSinulleEhdotettuaBlock();
@@ -8590,7 +9182,7 @@ injectInlineCSS();
     }
 
     function __bf2760HomeV5Active() {
-        try { return isMetaManglerHomeFeedPath(); } catch { return false; }
+        try { return ig2955HomeSurfaceV348(); } catch { return false; }
     }
 
     function __bf2760HomeV5Normalize(value) {
@@ -9311,6 +9903,7 @@ injectInlineCSS();
     function __bf2760HomeV5ReconcileArticle(article, allowQueue = true) {
         try {
             if (!__bf2760HomeV5Active() || !article?.isConnected || article.tagName !== 'ARTICLE') return;
+            if (isInPostOverlay(article)) return;
             const state = __bf2760HomeV5State();
             article.removeAttribute('data-bf-home-feed-gated');
             article.removeAttribute('data-bf-home-feed-scan-state');
@@ -9503,6 +10096,7 @@ injectInlineCSS();
             let found = false;
             const add = (article) => {
                 if (!article?.isConnected || article.tagName !== 'ARTICLE') return;
+                if (isInPostOverlay(article)) return;
                 state.mutationArticles.add(article);
                 found = true;
             };
@@ -10140,8 +10734,13 @@ injectInlineCSS();
 
     // ===== v27.6.0 V6E HOME-FEED OBSERVER OVERRIDE =====
     function observerCallback(mutationsList) {
-        const isHomeFeed = isMetaManglerHomeFeedPath();
+        const isHomeFeed = ig2955HomeSurfaceV348();
         if (document.hidden) return;
+        // During native Direct -> Home navigation, some React commits precede
+        // the route event. Sync the Home gate in this mutation microtask,
+        // before the restored feed or floating Friends portal can paint.
+        if (isHomeFeed && document.documentElement?.getAttribute('data-ig-hide-floating-friends-v349') !== '1')
+            ig2955EnsureFloatingFriendsHiddenV349();
         // V341: React mounts these overlays on profile URLs. Classify synchronously
         // during the MutationObserver microtask, before their first visible paint.
         if (!isHomeFeed && ig2955HasAccountListDialogV341()) {

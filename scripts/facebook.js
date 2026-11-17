@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         FBCleaner
-// @version	 29.8.2
-// @date	 2026-11-10
+// @version	 29.9.4
+// @date	 2026-11-16
 // @description  Makes my Facebook experience less terrible.
 // @match        *://*.facebook.com/*
 // @grant        none
@@ -248,10 +248,12 @@ const syncFBEarlyFeedGateV311 = () => {
                 animation: none !important;
                 transition: none !important;
             }
-            /* Hide the captured PYMK *feed carousel* before classification; JS then
-               bans the whole FeedUnit and collapses its safe one-post slot. */
+            /* v329: This exact PYMK feed carousel is already unwanted. A
+               visibility-only prehide left its FeedUnit occupying a blank slot.
+               Remove only this identified recommendation unit from layout. */
             html.fb-early-home-feed-v311 [role="feed"] div[data-pagelet^="FeedUnit_"]:has([role="region"][aria-label="Ihmisiä, jotka saatat tuntea"]),
             html.fb-early-home-feed-v311 [role="feed"] div[data-pagelet^="FeedUnit_"]:has([role="region"][aria-label="People You May Know"]) {
+                display: none !important;
                 visibility: hidden !important;
                 opacity: 0 !important;
                 pointer-events: none !important;
@@ -4800,18 +4802,31 @@ const installFBLateHeaderCTATextWatchV295 = () => {
                         }
                     } catch (e) {}
                 };
-                const inspectCaptionChangeV311 = node => {
+                const inspectCaptionChangeV311 = (node, includeAddedDescendants = false) => {
                     if (changedApprovedCaptionsV311.size >= 12) return;
                     const element = node?.nodeType === 3 ? node.parentElement : node;
                     if (!element?.closest) return;
                     const selector = '[data-ad-rendering-role="story_message"], [data-ad-preview="message"], [data-ad-comet-preview="message"]';
-                    const caption = element.closest(selector) ||
-                        (element.matches?.(selector) ? element : null);
-                    if (!caption || isInsideComment(caption) || isNotificationPanelElement(caption)) return;
-                    const post = getFBCanonicalPostV65(caption);
-                    if (post?.isConnected && post.classList?.contains('fb-post-approved') &&
-                        post.getAttribute('data-fb-v25-scan-complete') === '1' &&
-                        isFBPostScannerSafeCandidateV65(post)) changedApprovedCaptionsV311.add(post);
+                    const inspectCaption = caption => {
+                        if (!caption || isInsideComment(caption) || isNotificationPanelElement(caption)) return;
+                        const post = getFBCanonicalPostV65(caption);
+                        if (post?.isConnected && post.classList?.contains('fb-post-approved') &&
+                            post.getAttribute('data-fb-v25-scan-complete') === '1' &&
+                            isFBPostScannerSafeCandidateV65(post)) changedApprovedCaptionsV311.add(post);
+                    };
+                    inspectCaption(element.closest(selector) ||
+                        (element.matches?.(selector) ? element : null));
+                    // v329: Facebook can insert an already-populated caption beneath
+                    // a generic wrapper. The mutation target itself is not then a
+                    // caption, so v311 missed the blocked words until a later sweep.
+                    // Check only new subtrees, never reopen the entire approved feed.
+                    if (!includeAddedDescendants || changedApprovedCaptionsV311.size >= 12 ||
+                        !element.querySelectorAll) return;
+                    const insertedCaptions = element.querySelectorAll(selector);
+                    for (let k = 0; k < insertedCaptions.length && k < 8 &&
+                        changedApprovedCaptionsV311.size < 12; k++) {
+                        inspectCaption(insertedCaptions[k]);
+                    }
                 };
                 const testButton = button => {
                     if (!button?.matches?.(buttonSelector)) return;
@@ -4861,6 +4876,7 @@ const installFBLateHeaderCTATextWatchV295 = () => {
                         } else if (node.nodeType === 1) {
                             inspectNode(node);
                             inspectBlockedAttachmentV317(node);
+                            inspectCaptionChangeV311(node, true);
                         }
                     }
                 }

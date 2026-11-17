@@ -1,9 +1,10 @@
 // ==UserScript==
 // @name         YTClean
-// @version	 29.5.5
-// @date     	 2026-10-22
+// @version	 29.9.5
+// @date     	 2026-11-16
 // @description  Enhances my YouTube experience by blocking trackers and hiding garbage, such as shorts.
 // @match        https://*.youtube.com/*
+// @run-at       document-start
 // @grant        none
 // ==/UserScript==
 
@@ -13,6 +14,16 @@
     // ===== Critical no-glimpse hides: install before the heavier scanners initialize =====
     function injectYTCriticalHideCSS() {
         try {
+            if (!document.documentElement) {
+                const rootObserver = new MutationObserver((records, observer) => {
+                    if (!document.documentElement) return;
+                    observer.disconnect();
+                    injectYTCriticalHideCSS();
+                    injectYTCardHideCSS();
+                });
+                rootObserver.observe(document, { childList: true });
+                return;
+            }
             if (document.documentElement.querySelector('style[data-ytclean-critical-hide-css]')) return;
             const style = document.createElement('style');
             style.type = 'text/css';
@@ -78,6 +89,33 @@
                         yt-badge-view-model [aria-label="Jäsenille ensin" i],
                         svg path[d^="M6 .5a5.5 5.5"]
                     )
+                ) {
+                    display: none !important;
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                    height: 0 !important;
+                    min-height: 0 !important;
+                    max-height: 0 !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    overflow: hidden !important;
+                    content-visibility: hidden !important;
+                }
+
+                /* Hide promoted/recommendation and trial-price video cards before they
+                   can paint. Badge classes are available to CSS before text scanning;
+                   the JS classifier below also checks the Finnish label text. Collapse
+                   the outer rich-grid item, not just its thumbnail, to avoid gaps. */
+                :is(ytd-rich-item-renderer, ytd-video-renderer, ytd-grid-video-renderer,
+                    ytd-compact-video-renderer, ytd-compact-autoplay-renderer,
+                    ytd-compact-radio-renderer, ytd-compact-playlist-renderer,
+                    ytd-playlist-video-renderer, ytd-playlist-panel-video-renderer,
+                    ytm-rich-item-renderer, ytm-video-renderer,
+                    ytm-video-with-context-renderer, ytm-compact-video-renderer,
+                    yt-lockup-view-model, ytm-lockup-view-model,
+                    .ytLockupViewModelHost, .ytLockupViewModelWrapper):has(
+                    :is(.ytBadgeShapePromoted, .ytBadgeShapeCommerce)
                 ) {
                     display: none !important;
                     visibility: hidden !important;
@@ -1375,6 +1413,20 @@
 
     const ytMembersOnlyLabelPattern = /^(?:members?\s*(?:only|first)|vain\s+j[aä]senille|j[aä]senille\s+ensin|ensin\s+j[aä]senille)$/i;
 
+    // Text fallback for promoted cards using a different badge structure.
+    // Restrict this to actual badges so a video TITLE mentioning these words
+    // does not accidentally hide an unrelated recommendation.
+    const ytPromoLabelPattern = /(?:\byoutuben\s+suositus\b|\bkokeile\s+hintaan\b)/i;
+    const ytPromoBadgeNodes = [
+        '.ytBadgeShapePromoted',
+        '.ytBadgeShapeCommerce',
+        '.ytBadgeShapeText',
+        '[ytBadgeShapeText]',
+        'yt-badge-view-model',
+        'ytd-badge-supported-renderer',
+        'badge-shape'
+    ].join(', ');
+
     function getYTMemberCardRoot(target) {
         try {
             if (!target) return target;
@@ -1418,6 +1470,33 @@
                 for (const label of raw) {
                     const normalized = String(label || '').replace(/[\u200B-\u200D\uFEFF]/g, '').replace(/\s+/g, ' ').trim();
                     if (ytMembersOnlyLabelPattern.test(normalized)) return true;
+                }
+            }
+            return false;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function hasYTPromotionalBadge(target) {
+        try {
+            if (!target || isYTProtectedTextZone(target)) return false;
+            if (target.matches?.('.ytBadgeShapePromoted, .ytBadgeShapeCommerce')) return true;
+            if (target.querySelector?.('.ytBadgeShapePromoted, .ytBadgeShapeCommerce')) return true;
+
+            const badges = target.querySelectorAll?.(ytPromoBadgeNodes) || [];
+            for (const badge of badges) {
+                const labels = [
+                    badge.getAttribute?.('ytBadgeShapeText'),
+                    badge.getAttribute?.('aria-label'),
+                    badge.getAttribute?.('title'),
+                    badge.textContent
+                ];
+                for (const label of labels) {
+                    const normalized = String(label || '')
+                        .replace(/[\u200B-\u200D\uFEFF]/g, '')
+                        .replace(/\s+/g, ' ').trim();
+                    if (ytPromoLabelPattern.test(normalized)) return true;
                 }
             }
             return false;
@@ -1577,10 +1656,9 @@
                 if (!target || seen.has(target)) return;
                 seen.add(target);
 
-                // A members-only badge is a card-level exclusion, even for an otherwise safe
-                // channel. Always test it BEFORE previously approved card state or text bans.
-                // Full-card hiding avoids Home/channel grid gaps and includes watch suggestions.
-                if (hasYTMembersOnlyBadge(target)) {
+                // Badge exclusions apply even to otherwise whitelisted channels or previously
+                // approved cards. Hide the full rich-grid item to avoid gaps.
+                if (hasYTMembersOnlyBadge(target) || hasYTPromotionalBadge(target)) {
                     collapseBannedVideoCard(target);
                     hiddenCount++;
                     return;
@@ -1717,7 +1795,7 @@
                     if (mutation.type === 'characterData' || mutation.type === 'attributes') {
                         const changedElement = mutation.target.nodeType === 1 ? mutation.target : mutation.target.parentElement;
                         if (changedElement && !isYTProtectedTextZone(changedElement) &&
-                            changedElement.closest?.(ytMemberBadgeNodes)) {
+                            changedElement.closest?.(ytMemberBadgeNodes + ', ' + ytPromoBadgeNodes)) {
                             collectVideoCardCandidatesFromNode(changedElement).forEach(card => changedCards.add(card));
                         }
                         return;
@@ -1757,17 +1835,20 @@
                             }
                         });
                     }
-                    // A recycled video card can lose its membership badge. Restore the card
-                    // as soon as the old badge is removed, not on the periodic full scan.
+                    // A recycled video card can lose its membership/promotion badge. Restore
+                    // it as soon as the badge disappears, not on the periodic full scan.
                     if (mutation.removedNodes?.length > 0) {
                         mutation.removedNodes.forEach(node => {
                             try {
                                 const removedBadge = node.nodeType === 1 && (
-                                    node.matches?.(ytMemberBadgeNodes) ||
-                                    node.querySelector?.(ytMemberBadgeNodes)
+                                    node.matches?.(ytMemberBadgeNodes + ', ' + ytPromoBadgeNodes) ||
+                                    node.querySelector?.(ytMemberBadgeNodes + ', ' + ytPromoBadgeNodes)
                                 );
-                                const removedLabel = node.nodeType === 3 &&
-                                    ytMembersOnlyLabelPattern.test(String(node.textContent || '').replace(/\s+/g, ' ').trim());
+                                const removedText = String(node.textContent || '').replace(/\s+/g, ' ').trim();
+                                const removedLabel = node.nodeType === 3 && (
+                                    ytMembersOnlyLabelPattern.test(removedText) ||
+                                    ytPromoLabelPattern.test(removedText)
+                                );
                                 if (removedBadge || removedLabel) {
                                     collectVideoCardCandidatesFromNode(mutation.target).forEach(card => changedCards.add(card));
                                 }
@@ -2107,22 +2188,6 @@
         } catch (e) {}
     }
 
-    devLog('YouTube Enhancer initializing');
-
-    // Initial checks
-    enforceSanity();
-    enforceShortsRedirect();
-    installUrlChangeHooks();
-
-    observeUrlChanges();
-    observePopupChanges();
-    injectShortsCSS();
-    observeShortsDomChanges();
-    hideYouTubeNudgesAndShortsChips();
-    scheduleYTSearchScan('initial');
-    addOpenInWatchButton();
-    hideShortsGuideEntries();
-
     // Periodic tasks with lifecycle tracking
     function scheduleMainIntervals() {
         // Mutations classify new/recycled cards before paint. Keep a slower full-document
@@ -2153,34 +2218,57 @@
         });
     }
 
-    startIntervals(scheduleMainIntervals);
+    // Run CSS at document-start, but wait for <body> before attaching observers.
+    // Otherwise the popup/card MutationObserver misses the entire YouTube page.
+    function initializeYTClean() {
+        devLog('YouTube Enhancer initializing');
 
-    addTimeout(removeAdblockPopups, 1000);
-    addTimeout(handlePopupButtons, 2000);
-    addTimeout(removeShortsOnPage, 750);
-    addTimeout(hideShortsGuideEntries, 800);
-    addTimeout(hideYouTubeNudgesAndShortsChips, 250);
-    addTimeout(() => scheduleYTSearchScan('startup-timeout'), 120);
+        enforceSanity();
+        enforceShortsRedirect();
+        installUrlChangeHooks();
 
-    onEvent(document, 'visibilitychange', () => {
-        if (document.hidden) {
-            stopIntervals();
-        } else {
-            startIntervals(scheduleMainIntervals);
-            updateYTSearchSoftGateClass();
-            scheduleYTSearchScan('visibility');
-            hideBannedVideoCards();
-            enforceSanity();
-            hideYouTubeNudgesAndShortsChips();
-            removeShortsOnPage();
-            addOpenInWatchButton();
-            hideShortsGuideEntries();
-            enforceShortsRedirect();
-        }
-    }, false);
+        observeUrlChanges();
+        observePopupChanges();
+        injectShortsCSS();
+        observeShortsDomChanges();
+        hideYouTubeNudgesAndShortsChips();
+        scheduleYTSearchScan('initial');
+        addOpenInWatchButton();
+        hideShortsGuideEntries();
 
-    onEvent(window, 'pagehide', cleanup, false);
-    onEvent(window, 'beforeunload', cleanup, false);
+        startIntervals(scheduleMainIntervals);
+        addTimeout(removeAdblockPopups, 1000);
+        addTimeout(handlePopupButtons, 2000);
+        addTimeout(removeShortsOnPage, 750);
+        addTimeout(hideShortsGuideEntries, 800);
+        addTimeout(hideYouTubeNudgesAndShortsChips, 250);
+        addTimeout(() => scheduleYTSearchScan('startup-timeout'), 120);
 
-    devLog('YouTube Enhancer loaded');
+        onEvent(document, 'visibilitychange', () => {
+            if (document.hidden) {
+                stopIntervals();
+            } else {
+                startIntervals(scheduleMainIntervals);
+                updateYTSearchSoftGateClass();
+                scheduleYTSearchScan('visibility');
+                hideBannedVideoCards();
+                enforceSanity();
+                hideYouTubeNudgesAndShortsChips();
+                removeShortsOnPage();
+                addOpenInWatchButton();
+                hideShortsGuideEntries();
+                enforceShortsRedirect();
+            }
+        }, false);
+
+        onEvent(window, 'pagehide', cleanup, false);
+        onEvent(window, 'beforeunload', cleanup, false);
+        devLog('YouTube Enhancer loaded');
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initializeYTClean, { once: true });
+    } else {
+        initializeYTClean();
+    }
 })();

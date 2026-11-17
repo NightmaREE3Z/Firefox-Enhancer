@@ -2306,6 +2306,8 @@
 
       /* BraveFox ChatGPT navigation cleanup: old + new sidebar generations.
        * These selectors run at document_start so removed destinations never flash. */
+      /* The built-in Orbit/Oma dot entry is temporary while the sidebar hydrates. */
+      button[data-sidebar-destination="builtin:orbit"],
       button[data-sidebar-destination="builtin:customize"],
       button[data-sidebar-destination="builtin:skills"],
       button.sidebar-item[aria-haspopup="menu"]:has(svg path[d^="M4.1665 8.50146"]),

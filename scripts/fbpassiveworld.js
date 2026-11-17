@@ -1,4 +1,4 @@
-// BraveFox Enhancer 29.6.7 — passive Facebook caption observer, MAIN world.
+// BraveFox Enhancer 29.9.4 — passive Facebook caption observer, MAIN world.
 // Reads bounded feed GraphQL responses and initial Relay JSON; never changes
 // requests, cursors, response objects, post DOM, scroll position, or approvals.
 (() => {
@@ -8,7 +8,13 @@ if (window[INSTALLED]) return;
 Object.defineProperty(window, INSTALLED, { value: true });
 
 const TYPE = 'bravefox-fb-passive-caption-v295';
-const MAX_BYTES = 2 * 1024 * 1024;
+// A response may contain many small Relay JSON lines. Bound the whole stream
+// independently from each parsed line so large feed batches remain observable
+// without constructing or JSON-parsing an oversized object on the main thread.
+const MAX_BYTES = 64 * 1024 * 1024;
+const MAX_LINE_BYTES = 8 * 1024 * 1024;
+const MAX_RELAY_BYTES = 8 * 1024 * 1024;
+const MAX_RELAY_SCAN_BYTES = 16 * 1024 * 1024;
 const MAX_POSTS = 70;
 const PAGE = /^(?:(?:Profile|Page|CometPage).*(?:TimelineFeed|TilesFeed|PostsFeed|PagePosts)|CometSinglePage.*Feed).*(?:Query|Pagination|Refetch)$/i;
 const HOME = /^(?:(?:Comet|Home|News).*(?:Feed|Timeline)|(?:Feed|NewsFeed)).*(?:Query|Pagination|Refetch)$/i;
@@ -107,14 +113,15 @@ function makeCaptionStreamV316(fromRoute, source) {
     let seenChars = 0;
     let seenPosts = 0;
     let ended = false;
+    let skippingOversizedLine = false;
     const seenRecords = new Set();
     return {
+        get done() { return ended; },
         append(part = '', final = false) {
             try {
                 if (ended || !fromRoute || route() !== fromRoute) { ended = true; return; }
                 seenChars += part.length;
                 if (seenChars > MAX_BYTES) { ended = true; pending = ''; return; }
-                pending += part;
                 const posts = [];
                 const handleLine = line => {
                     if (!line || !line.startsWith('{') || seenPosts >= MAX_POSTS) return;
@@ -129,13 +136,23 @@ function makeCaptionStreamV316(fromRoute, source) {
                         seenPosts++;
                     }
                 };
-                let newline;
-                while ((newline = pending.indexOf('\n')) >= 0 && seenPosts < MAX_POSTS) {
-                    const line = pending.slice(0, newline).replace(/\r$/, '');
-                    pending = pending.slice(newline + 1);
-                    handleLine(line);
+                let offset = 0;
+                while (offset < part.length && seenPosts < MAX_POSTS) {
+                    const newline = part.indexOf('\n', offset);
+                    const end = newline < 0 ? part.length : newline;
+                    if (!skippingOversizedLine) {
+                        const fragment = part.slice(offset, end);
+                        if (pending.length + fragment.length <= MAX_LINE_BYTES) pending += fragment;
+                        else { pending = ''; skippingOversizedLine = true; }
+                    }
+                    if (newline < 0) break;
+                    if (!skippingOversizedLine) handleLine(pending.replace(/\r$/, ''));
+                    pending = '';
+                    skippingOversizedLine = false;
+                    offset = newline + 1;
                 }
-                if (final && seenPosts < MAX_POSTS) handleLine(pending);
+                if (final && !skippingOversizedLine && seenPosts < MAX_POSTS)
+                    handleLine(pending);
                 if (posts.length && route() === fromRoute) window.postMessage({
                     type: TYPE, route: fromRoute, posts,
                     captureSource: source, capturePhase: final ? 'complete' : 'stream'
@@ -148,7 +165,7 @@ function makeCaptionStreamV316(fromRoute, source) {
 
 function publish(payload, fromRoute) {
     try {
-        if (!fromRoute || route() !== fromRoute || !payload || payload.length > MAX_BYTES) return;
+        if (!fromRoute || route() !== fromRoute || !payload || payload.length > MAX_RELAY_BYTES) return;
         const stream = makeCaptionStreamV316(fromRoute, 'relay-bootstrap');
         stream.append(payload, true);
     } catch {}
@@ -171,6 +188,7 @@ try {
             // Read only responseText; never touch Facebook's handlers or response data.
             const onChunk = (final = false) => {
                 try {
+                    if (stream.done) return;
                     if (!final && this.readyState !== 3) return;
                     if (this.status < 200 || this.status >= 300 ||
                         (this.responseType && this.responseType !== 'text')) return;
@@ -227,6 +245,7 @@ try {
                             length += part.value.byteLength;
                             if (length > MAX_BYTES) { await reader.cancel(); return; }
                             stream.append(decoder.decode(part.value, { stream: true }), false);
+                            if (stream.done) { await reader.cancel(); return; }
                         }
                         stream.append(decoder.decode(), true);
                     } catch { try { await reader?.cancel(); } catch {} }
@@ -250,10 +269,11 @@ function scanInitialRelayBootstrap() {
         let inspected = 0;
         const scripts = document.querySelectorAll('script[type="application/json"], script[data-sjs]');
         for (const script of scripts) {
-            if (++inspected > 180 || bytes > 6 * 1024 * 1024) break;
+            if (++inspected > 180 || bytes >= MAX_RELAY_SCAN_BYTES) break;
             if (inspectedRelayScriptsV316.has(script)) continue;
             const value = script.textContent || '';
-            if (!value || value.length > MAX_BYTES) continue;
+            if (!value || value.length > MAX_RELAY_BYTES) continue;
+            if (bytes + value.length > MAX_RELAY_SCAN_BYTES) continue;
             bytes += value.length;
             if (!/post_id|timeline_list_feed_units/i.test(value)) continue;
             let parsed;
@@ -264,7 +284,7 @@ function scanInitialRelayBootstrap() {
             const visit = (value, depth = 0) => {
                 if (++walked > 12000 || depth > 28 || posts.length >= MAX_POSTS || !value) return;
                 if (typeof value === 'string') {
-                    if (value.length < MAX_BYTES && value.startsWith('{') &&
+                    if (value.length < MAX_RELAY_BYTES && value.startsWith('{') &&
                         /post_id|timeline_list_feed_units/.test(value)) {
                         try { visit(JSON.parse(value), depth + 1); } catch {}
                     }

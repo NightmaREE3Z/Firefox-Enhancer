@@ -32,9 +32,9 @@
 	/fans top/i, /topiafan/i, /topia fan/i, /topia-fan/i, /topifan/i, /topi fan/i, /twat/i, /topi-fan/i, /topaifan/i, /topai fan/i, /topai-fan/i, /fans-topia/i, /fans-topai/i, 
 	/softorbit/i, /softorbits/i, /VMWare/i, /soft-orbit/i, /soft-orbits/i, /VM Ware/i, /Virtual Machine/i, /Virtualbox/i, /Virtual box/i, /Virtual laatikko/i, /hypervisor/i, 
 	/Virtuaali laatikko/i, /Virtuaalilaatikko/i, /hyper v/i, /hyperv/i, /virtuaalimasiini/i, /virtuaali masiini/i, /virtuaali workstation/i, /virtual workstation/i, /\*/i,
-	/virtualworkstation/i, /virtuaaliworkstation/i, /hyper-v/i, /hyper visor/i,  /vbox/i, /virbox/i, /virtbox/i, /vir box/i, /virt box/i, /vrbox/i, /vibox/i, /virbox virtual/i, 
-	/virtbox virtual/i, /vibox virtual/i, /vbox virtual/i, /Cathy/i,  /virtmachine/i, /vmachine/i, /v machine/i, /vimachine/i, /vi-machine/i, /vi machine/i, /virmachine/i, 
-	/vir-machine/i, /vir machine/i, /virt machine/i, /v-machine/i, /Kathy/i, /virt-machine/i, /virtumachine/i, /vir mach/i, /virtu-machine/i, /virtu machine/i, /virtuamachine/i, 
+	/virtualworkstation/i, /virtuaaliworkstation/i, /hyper-v/i, /hyper visor/i, /vbox/i, /virbox/i, /virtbox/i, /vir box/i, /virt box/i, /vrbox/i, /vibox/i, /virbox virtual/i, 
+	/virtbox virtual/i, /vibox virtual/i, /vbox virtual/i, /Cathy/i,  /virtmachine/i, /vmachine/i, /v machine/i, /vimachine/i, /vi-machine/i, /vi machine/i, /virtuamachine/i,  
+	/vir-machine/i, /vir machine/i, /virt machine/i, /v-machine/i, /Kathy/i, /virt-machine/i, /virtumachine/i, /vir mach/i, /virtu-machine/i, /virtu machine/i, /virmachine/i, 
 	/virtua-machine/i, /virtua machine/i, /vi mach/i, /virtual machi/i, /virtuaali masiina/i, /virt mach/i, /virtu mach/i, /virtua mach/i, /virtual mach/i, /vi mac/i, /vir mac/i, 
 	/virt mac/i, /virtu mac/i, /virtua mac/i, /virtuaalimasiina/i, /Katherine/i, /Kazuki/i, /Yoshiko/i, /Yoshihiko/i, /Hirata/i, /birppis/i, /irpp4/i, /b1rppis/i, /birpp1s/i, 
 	/b1rpp1s/i, /comfyui/i, /Lily Adam/i, /Lilly Adam/i, /Dualipa/i, /comfy ui/i, /comfy ai/i, /comfyai/i, /comfy-ui/i, /comfy-ai/i, /Becky/i, /Becki/i, /Rebecca/i, /Amber Heard/i, 
@@ -85,11 +85,11 @@
 
 
    // Boundaried Regexes
-    	/\bAmber\b/i, /\bAlexa\b/i, /\bAleksa\b/i, /\blexi\b/i, /\bButt\b/i, /\bsexy\b/i, /\bKarr\b/i, /\bMina\b/i, /\bTisu\b/i, /\bTisut\b/i, /\bRinnat\b/i, /\bXoxo\b/i, /\bLGBT\b/i, /\bJazz\b/i, /\bKaina\b/i, 
-	/\bZoey\b/i, /\bKairi\b/i, /\bxAI\b/i,/\b50ft\b/i, /\bVidu\b/i, /\bJade\b/i, /\bmotion\b/i, /\bMachaine\b/i, /\bNyx\b/i, /\bMachiine\b/i, /\bLily\b/i, /\bMacheine\b/i, /\bLili\b/i, /\bAnt\b/i, /\bAva\b/i, 
-	/\bNox\b/i, /\bFuku\b/i, /\bAnswers BETA\b/i, /\bCarr\b/i, /\bTaya\b/i, /\bMachiene\b/i, /\bcam4\b/i, /\bGrok\b/i, /\bVM\b/i, /\bVMs\b/i, /\bTegan\b/i, /\bS0ft\b/i, /\bVMs\b/i, /\bRape\b/i, /\bEmma\b/i, 
-	/\bNiven\b/i,  /\bB-Fab\b/i, /\bB-Fab\b/i, /\bVM\b/i, /\bJaida\b/i, /\bSeksi\b/i, /\bRiho\b/i, /\bIzzi\b/i, /\bbra\b/i, /\bSlut\b/i, /\bTor\b/i,  /\bAi\b/i, /\bADM\b/i, /\bAis\b/i, /\b-Ai\b/i, /\bLita\b/i,
-	/\bJaida\b/i, /\bedit\b/i, /\bADMX\b/i, /\bSol\b/i, /\bAi-\b/i, /\bGina\b/i, /\bLiv\b/i, /\bDame\b/i, /\bTay\b/i, /\bIndi\b/i, /\bRoxy\b/i,
+    	/\bAmber\b/i, /\bAlexa\b/i, /\bAleksa\b/i, /\blexi\b/i, /\bButt\b/i, /\bsexy\b/i, /\bKarr\b/i, /\bMina\b/i, /\bXoxo\b/i, /\bLGBT\b/i, /\bJazz\b/i, /\bKaina\b/i, /\bZoey\b/i, /\bKairi\b/i, /\bxAI\b/i,
+	/\bVidu\b/i, /\bJade\b/i, /\bmotion\b/i, /\bMachaine\b/i, /\bNyx\b/i, /\bMachiine\b/i, /\bLily\b/i, /\bMacheine\b/i, /\bLili\b/i, /\bAnt\b/i, /\bAva\b/i, /\bNox\b/i, /\bFuku\b/i, /\bAnswers BETA\b/i, 
+	/\bCarr\b/i, /\bTaya\b/i, /\bMachiene\b/i, /\bcam4\b/i, /\bGrok\b/i, /\bVM\b/i, /\bVMs\b/i, /\bTegan\b/i, /\bS0ft\b/i, /\bVMs\b/i, /\bRape\b/i, /\bEmma\b/i, /\bNiven\b/i,  /\bB-Fab\b/i, /\bB-Fab\b/i, 
+	/\bVM\b/i, /\bJaida\b/i, /\bRiho\b/i, /\bIzzi\b/i, /\bbra\b/i, /\bSlut\b/i, /\bTor\b/i,  /\bAi\b/i, /\bADM\b/i, /\bAis\b/i, /\b-Ai\b/i, /\bLita\b/i, /\bJaida\b/i, /\bADMX\b/i, /\bSol\b/i, /\bAi-\b/i, 
+	/\bGina\b/i, /\bLiv\b/i, /\bDame\b/i, /\bTay\b/i, /\bIndi\b/i, /\bRoxy\b/i,
 
 
    // Nuclear/special regexes
