@@ -1,0 +1,10 @@
+/* NextDNS login: hide password-reset entry before the first page paint. */
+div.mt-1.text-end:has(> a[href="/reset-password"]),
+a[href="/reset-password"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  animation: none !important;
+  transition: none !important;
+}

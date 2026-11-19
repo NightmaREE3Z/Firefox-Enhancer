@@ -1,0 +1,7737 @@
+(function () {
+    'use strict';
+
+    // google.js of BraveFox Enhancer v29.7.5
+
+    // === CHROME WEB STORE: OWN RULES (independent of Google Search) ============
+    // THIS is the only place to edit Web Store-specific ID and search-term bans.
+    // BackgroundChrome/BackgroundFF load just this section from scripts/google.js:
+    // Google Search nuclearRegex, resultHideTerms and redirectHideLite are NOT used.
+    // Add regex LITERALS, not ordinary words/strings. Multiple comma-separated
+    // regex literals may share a line. No /g or /y flags (matching must be stateless).
+    // Searches are matched against decoded /search/... text ONLY.
+    const braveFoxWebStoreOnlyRules = (() => {
+        // BRAVEFOX_WEBSTORE_RULES_BEGIN
+        const webStoreBlockedExtensionIds = [
+		'hehijbfgiekmjfkfjpbkbammjbdenadd',
+		'moffahdcgnjnglbepimcggkjacdmpojc',
+		'dkhhkjpckbmkfdicijemmdaieaagkcco',
+		'looohpideggedchhpphemdmppnmdkgfd',
+		'eainiiiddlnijgnbngaoflannicnhaoj',
+		'jlhpdjlheiegpaipcgkbampjpcdebfeo',
+		'cbjepagibeiigblminajoejhcbifmpag',
+		'ppfgedmljembchpojncdbkiflelbiofj',
+		'njbjhijidkjaiakmnbdjmolgffoankbc',
+		'aajbiffdnglkofijhbnhklmhgllaefnp',
+		'andhbbnohkibikfppaihhoehnepflmne',
+        ];
+
+
+        // === WEB STORE SEARCH TERMS ============================================
+        // Web Store-only terms. Regular and boundary-aware expressions go into
+        // this SAME array, separated by comments (not separate variables).
+        // Write multiple comma-separated /pattern/i expressions per line if desired.
+        // These do not affect Google Search's existing filters, and the Google
+        // Search filters do not feed into this Web Store search rule list.
+        const webStoreSearchRegexes = [
+	    // Regular Web Store search regexes	
+		/brows/i, /tab-/i, /-tab/i, /firefox/i, /waterfox/i, /brave/i, /vivaldi/i, /edge/i,   
+		/msedge/i, /opera/i, /IE Tab/i, /IEbridge/i, /IEability/i, /IE View/i, /mozilla/i, 
+		/agent/i, /udif/i, /epnud/i, /ep nud/i, /ndres/i, /nude/i, /nudi/i, /open in ie/i, 
+
+
+		// Boundaried Web Store search regexes
+		/\bAI\b/i, /\bIE\b/i, /\bTab\b/i, /\bTOR\b/i, /\bGX\b/i,
+
+        ];
+
+        // BRAVEFOX_WEBSTORE_RULES_END
+        return {
+            extensionIds: new Set(webStoreBlockedExtensionIds),
+            searchRegexes: webStoreSearchRegexes
+        };
+    })();
+    // === END CHROME WEB STORE OWN RULES ========================================
+
+
+    function isGoogleMapsOrEarthUrl(value = window.location.href) {
+        try {
+            const parsed = new URL(String(value || ''));
+            const host = String(parsed.hostname || '')
+                .toLowerCase()
+                .replace(/\.$/, '')
+                .replace(/^www\./, '');
+            const pathname = String(parsed.pathname || '/').replace(/\/{2,}/g, '/').toLowerCase();
+            const googleBaseHost = /^google\.(?:[a-z]{2,3}|[a-z]{2,3}\.[a-z]{2})$/i;
+            const googleMapsOrEarthHost = /^(?:maps|earth)\.google\.(?:[a-z]{2,3}|[a-z]{2,3}\.[a-z]{2})$/i;
+
+            if (host === 'maps.app.goo.gl' || googleMapsOrEarthHost.test(host)) return true;
+            if (host === 'goo.gl') return pathname === '/maps' || pathname.startsWith('/maps/');
+            if (!googleBaseHost.test(host)) return false;
+
+            return pathname === '/maps' || pathname.startsWith('/maps/') ||
+                pathname === '/earth' || pathname.startsWith('/earth/');
+        } catch (e) {
+            return false;
+        }
+    }
+
+    // === INSTANT NON-SEARCH GOOGLE APP ABORT ===
+    // Gemini and Google Translate are standalone apps, not Google Search result pages.
+    // BraveFox does not filter or modify them at all.
+    const initialGoogleHostname = String(window.location.hostname || '')
+        .toLowerCase()
+        .replace(/\.$/, '');
+
+    if (initialGoogleHostname === 'gemini.google.com' ||
+        initialGoogleHostname.startsWith('translate.google.') ||
+        (/^(?:www\.)?google\.(?:[a-z]{2,3}|[a-z]{2,3}\.[a-z]{2})$/i.test(initialGoogleHostname) &&
+            window.location.pathname === '/goto') ||
+        isGoogleMapsOrEarthUrl()) {
+        return;
+    }
+
+    // === GOOGLE SHORT VIDEOS SEARCH TAB: DOCUMENT-START REMOVAL ===
+    // Hide the complete "Short videos" navigation item before it paints, including
+    // variants inserted later by Google's client-side navigation.
+    (function installGoogleShortVideosTabHider() {
+        try {
+            const styleId = 'googlejs-hide-short-videos-tab';
+            if (document.getElementById(styleId)) return;
+
+            const style = document.createElement('style');
+            style.id = styleId;
+            style.textContent = `
+                div[role="listitem"]:has(> a[href*="udm=short_vids"]),
+                div[role="listitem"] > a[href*="udm=short_vids"] {
+                    display: none !important;
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                }
+            `;
+            (document.head || document.documentElement).appendChild(style);
+        } catch (e) {}
+    })();
+
+    // === GOOGLE PAGINATION CSS SAFETY NET ===
+    // Google embeds its pagination rules inside ordinary .MjjYud result wrappers on some
+    // pages. When a blocked organic result is removed, its nested <style> can disappear
+    // with it, leaving #botstuff with intact but unstyled page numbers on page 2+.
+    // Restore the exact native pagination rules seen in vanilla Google as a low-priority
+    // cascade layer. Google's own unlayered CSS always wins when it is available.
+    // No result DOM nodes, search URLs, or pagination links are altered by this fallback.
+    (function installGooglePaginationStyleFallback() {
+        try {
+            const styleId = 'googlejs-pagination-native-fallback';
+            if (document.getElementById(styleId)) return;
+
+            const style = document.createElement('style');
+            style.id = styleId;
+            style.textContent = `@layer googlejs-pagination-fallback {
+                .gUbm5e a:link{display:block;color:var(--JKqx2);font-weight:normal}.gUbm5e td{padding:0;text-align:center}.dlnXYb{color:var(--YLNNHc);font-weight:normal;overflow:hidden}.gUbm5e{margin:30px auto 30px;}.zuSX,.KLlkp{max-width:calc(100vw - 32px - 335px + 55px);min-width:84px;overflow:hidden}@media (max-width:484px){.U8leG .bQkv1e:nth-child(11),.TOlhBe .bQkv1e:nth-child(2){display:none}}@media (max-width:464px){.U8leG .bQkv1e:nth-child(10),.TOlhBe .bQkv1e:nth-child(3){display:none}}@media (max-width:359px){.U8leG .bQkv1e:nth-child(9),.TOlhBe .bQkv1e:nth-child(4){display:none}}@media (max-width:339px){.U8leG .bQkv1e:nth-child(8),.TOlhBe .bQkv1e:nth-child(5){display:none}}.D2pCqd{background:url(/images/nav_logo321.webp) no-repeat;background-size:167px;overflow:hidden;background-position:0 0;height:40px;display:block}.CsrMc{cursor:pointer}.DHTy1e{clear:both;text-decoration:inherit}.KLlkp .DHTy1e{float:right}.DHTy1e{text-wrap:nowrap}
+            }`;
+            (document.head || document.documentElement).appendChild(style);
+        } catch (e) {}
+    })();
+
+    // === DOCUMENT-START ORGANIC RESULT DEFAULT GATE ===
+    // Central host classification is asynchronous, so "hide after detection" can still flash a
+    // server-rendered/hydrating result for a frame. Install the gate stylesheet before the rest of
+    // the filtering engine initializes: a recognisable organic result is invisible by default and
+    // becomes paintable only after google.js explicitly marks its result shell `ready`.
+    //
+    // Keep layout enabled while pending. Google can hydrate titles/snippets and lazy content normally;
+    // only paint/input are suppressed. This intentionally avoids content-visibility/display:none.
+    (function installGoogleCentralPolicyDocumentStartGate() {
+        try {
+            const styleId = 'googlejs-central-policy-default-gate';
+            if (document.getElementById(styleId)) return;
+
+            const primaryResultSignal = [
+                'a[jsname="UWckNb"][href]',
+                '.yuRUbf > a[href]',
+                'a[href] > h3',
+                'a[href] h3',
+                'h3 a[href]'
+            ].join(', ');
+            // Gate individual result structures only. Broad wrappers such as .MjjYud,
+            // .g, article and li can also be Google's SHARED results container. When
+            // Google hydrates/reclasses such a wrapper after first paint, :has(h3)
+            // hides every approved card underneath until a rescan happens. That is the
+            // intermittent full-results-area flash seen on later pages.
+            // Keep default-hidden coverage on known single-card/title shells, and
+            // retain the explicit pending state applied by our synchronous observer.
+            const shellSelectors = [
+                '.tF2Cxc', '.Gx5Zad', '.SoaBEf', '.M8OgIe', '.N54PNb',
+                '.Ww4FFb', '.kb0PBd', '.yuRUbf'
+            ];
+            const pendingSelectors = [];
+            for (const boundary of ['#search', '#rso', '#res']) {
+                for (const shell of shellSelectors) {
+                    pendingSelectors.push(
+                        `${boundary} ${shell}:has(${primaryResultSignal}):not([data-googlejs-central-policy-state="ready"])`
+                    );
+                }
+            }
+
+            const style = document.createElement('style');
+            style.id = styleId;
+            style.textContent = `
+                ${pendingSelectors.join(',\n                ')} {
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                    transition: none !important;
+                    animation: none !important;
+                }
+            `;
+            (document.documentElement || document.head).appendChild(style);
+        } catch (e) {}
+    })();
+
+    // === DEBUG CONFIG (0 = off, 1 = on) ===
+    const DEBUG = 0;
+
+    // --- State (Moved to top to prevent ReferenceError) ---
+    let isRedirecting = false;
+    let domObserver = null;
+    let ffAndroidScanInterval = null;
+    let ffAndroidScanAttempts = 0;
+    
+    let lastMatchDetails = null;
+    let lastRedirectInfo = null;
+    let __lastKnownUrl = window.location.href; // Track URL for strict SPA awareness
+
+    const SS_KEY = 'googlejs_last_redirect';
+    function persistRedirect(info) {
+        try { sessionStorage.setItem(SS_KEY, JSON.stringify(info || {})); } catch (e) {}
+    }
+    function readPersistedRedirect() {
+        try {
+            const raw = sessionStorage.getItem(SS_KEY);
+            if (!raw) return null;
+            const obj = JSON.parse(raw);
+            return obj && typeof obj === 'object' ? obj : null;
+        } catch (e) { return null; }
+    }
+    function clearPersistedRedirect() {
+        try { sessionStorage.removeItem(SS_KEY); } catch (e) {}
+    }
+
+    function getCurrentGoogleSearchText() {
+        try {
+            const url = new URL(window.location.href);
+            const q = url.searchParams.get('q');
+            if (q && q.trim()) return q.trim();
+        } catch (e) {}
+
+        try {
+            const active = document.activeElement;
+            if (active && active.tagName === 'INPUT') {
+                const value = active.value || '';
+                if (value.trim()) return value.trim();
+            }
+        } catch (e) {}
+
+        try {
+            const input = document.querySelector('input[name="q"]');
+            const value = input && input.value ? input.value : '';
+            if (value.trim()) return value.trim();
+        } catch (e) {}
+
+        return '';
+    }
+
+    function sendBraveFoxRedirectLog(source, blockedWord, attemptedSearch, context) {
+        try {
+            if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.sendMessage) return;
+            chrome.runtime.sendMessage({
+                type: 'BRAVEFOX_REDIRECT_LOG',
+                source: source || 'Google',
+                blockedWord: String(blockedWord || '').trim(),
+                attemptedSearch: String(attemptedSearch || '').trim(),
+                context: String(context || '').trim(),
+                pageUrl: window.location.href,
+                referrer: document.referrer || '',
+                timestamp: new Date().toISOString()
+            }, () => {
+                try { void chrome.runtime.lastError; } catch (e) {}
+            });
+        } catch (e) {}
+    }
+
+    function devLog(message, ...rest) {
+        if (!DEBUG) return;
+        try { console.log('[GOOGLE.JS]', message, ...rest); } catch (e) {}
+    }
+
+    const previousRedirect = readPersistedRedirect();
+    if (previousRedirect) {
+        devLog('Previous redirect detected. Reason:', previousRedirect);
+    }
+
+    function logRedirect(triggerContext, triggerTerm) {
+        try {
+            console.log('[GOOGLE.JS] *** logRedirect CALLED ***', triggerContext, triggerTerm);
+        } catch (e) {}
+        const attemptedSearch = getCurrentGoogleSearchText();
+        lastRedirectInfo = {
+            context: triggerContext || '',
+            term: String(triggerTerm || ''),
+            attemptedSearch: attemptedSearch,
+            url: window.location.href,
+            timestamp: new Date().toISOString(),
+            match: lastMatchDetails || null
+        };
+        persistRedirect(lastRedirectInfo);
+        sendBraveFoxRedirectLog('Google', triggerTerm, attemptedSearch, triggerContext);
+        devLog('REDIRECT by:', triggerTerm, 'context:', triggerContext, 'url:', window.location.href, 'match:', lastMatchDetails);
+    }
+
+    try {
+        window.GoogleJS = window.GoogleJS || {};
+        window.GoogleJS.getLastRedirectInfo = () => lastRedirectInfo || readPersistedRedirect();
+    } catch (e) {}
+
+    devLog('=== GOOGLE.JS SCRIPT STARTING ===');
+    devLog('Location: ' + window.location.href);
+
+    const ua = (typeof navigator !== 'undefined' && navigator.userAgent) ? navigator.userAgent : '';
+    const isFirefox = /Firefox/i.test(ua);
+    const isAndroid = /Android/i.test(ua);
+    const isFirefoxAndroid = isFirefox && isAndroid;
+    const isFirefoxPC = isFirefox && !isAndroid;
+    const isChromePC = !isFirefox && !isAndroid;
+    devLog('Platform: ' + (isFirefoxAndroid ? 'Firefox Android' : (isFirefox ? 'Firefox Desktop' : 'Chrome/Desktop or other')));
+
+    // === GOOGLE ACCOUNT SCOPE ===
+    // Tapio's account gets one narrow relaxation: an explicitly allowed result URL may
+    // rescue a soft resultHide match. Nuclear and hard URL/image denies never relax.
+    // Signed-out, unknown, non-Tapio, and ambiguous multi-account states remain fail-closed.
+    //
+    // Detection runs alongside Google filtering instead of blocking startup. It trusts only
+    // Google's account/header controls and never scans arbitrary result text for email addresses.
+    // A lightweight bootstrap observer waits for Google's header, then observation narrows to
+    // that trusted header/account area. Firefox/Fenix keep a longer background detection window.
+    const BRAVEFOX_TAPIO_GOOGLE_ACCOUNT = 'tapsa.hauki@gmail.com';
+    const BRAVEFOX_GOOGLE_ACCOUNT_EMAIL_RE = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/ig;
+
+    // Only an unambiguous, positive Tapio-account match gets the soft-result exception.
+    // Every other state keeps the normal protection path.
+    let braveFoxIsTapioAccount = false;
+    let braveFoxDetectedGoogleAccounts = [];
+
+    function braveFoxCollectAccountEmailsFromNode(node, found) {
+        if (!node || !found) return;
+        try {
+            const pieces = [
+                node.getAttribute && node.getAttribute('aria-label'),
+                node.getAttribute && node.getAttribute('data-email'),
+                node.getAttribute && node.getAttribute('data-identifier'),
+                node.getAttribute && node.getAttribute('data-account-email'),
+                node.getAttribute && node.getAttribute('data-user-email'),
+                node.getAttribute && node.getAttribute('title'),
+                node.getAttribute && node.getAttribute('href')
+            ];
+
+            pieces.forEach(value => {
+                if (!value) return;
+                BRAVEFOX_GOOGLE_ACCOUNT_EMAIL_RE.lastIndex = 0;
+                const matches = String(value).match(BRAVEFOX_GOOGLE_ACCOUNT_EMAIL_RE) || [];
+                matches.forEach(email => found.add(email.toLowerCase()));
+            });
+        } catch (e) {}
+    }
+
+    function braveFoxGetTrustedGoogleAccountRoots() {
+        const roots = [];
+        const seen = new Set();
+        const selectors = ['#gb', 'body > header', 'header[role="banner"]', '[role="banner"]'];
+
+        for (const selector of selectors) {
+            try {
+                document.querySelectorAll(selector).forEach(root => {
+                    if (!root || seen.has(root)) return;
+                    seen.add(root);
+                    roots.push(root);
+                });
+            } catch (e) {}
+        }
+        return roots;
+    }
+
+    function braveFoxExtractGoogleAccountEmails() {
+        const found = new Set();
+        const trustedRoots = braveFoxGetTrustedGoogleAccountRoots();
+
+        // Direct account controls seen across Google desktop/mobile layouts. Keep this selector
+        // pass narrow and attribute-only: no textContent is inspected anywhere.
+        const directSelectors = [
+            'a[aria-label][href*="accounts.google.com"]',
+            'a[aria-label][href*="myaccount.google.com"]',
+            'a[aria-label*="Google Account" i]',
+            'a[aria-label*="Google-tili" i]',
+            'button[aria-label][data-ogsr-up]',
+            '[data-ogsr-up][aria-label]',
+            '[data-email][data-authuser]',
+            '[data-email][role="link"]',
+            '[data-email][data-ogsr-up]'
+        ];
+
+        const trustedDescendantSelector = [
+            '[aria-label*="@"]',
+            '[title*="@"]',
+            '[data-email]',
+            '[data-identifier]',
+            '[data-account-email]',
+            '[data-user-email]',
+            'a[href*="accounts.google.com"]',
+            'a[href*="myaccount.google.com"]',
+            '[data-ogsr-up]'
+        ].join(',');
+
+        try {
+            document.querySelectorAll(directSelectors.join(',')).forEach(node => {
+                braveFoxCollectAccountEmailsFromNode(node, found);
+            });
+        } catch (e) {}
+
+        trustedRoots.forEach(root => {
+            braveFoxCollectAccountEmailsFromNode(root, found);
+            try {
+                root.querySelectorAll(trustedDescendantSelector).forEach(node => {
+                    braveFoxCollectAccountEmailsFromNode(node, found);
+                });
+            } catch (e) {}
+        });
+
+        return Array.from(found);
+    }
+
+    function braveFoxApplyDetectedAccountScope(emails) {
+        const previousTapioState = braveFoxIsTapioAccount;
+        braveFoxDetectedGoogleAccounts = Array.isArray(emails)
+            ? Array.from(new Set(emails.map(v => String(v).toLowerCase())))
+            : [];
+
+        // Fail closed on multiple/ambiguous account surfaces. The exception is granted only
+        // when the account detector sees exactly one account and it is Tapio's.
+        braveFoxIsTapioAccount = braveFoxDetectedGoogleAccounts.length === 1 &&
+            braveFoxDetectedGoogleAccounts[0] === BRAVEFOX_TAPIO_GOOGLE_ACCOUNT;
+
+        devLog('Google account mode:', braveFoxIsTapioAccount ? 'tapio' : 'restricted', braveFoxDetectedGoogleAccounts);
+
+        if (previousTapioState !== braveFoxIsTapioAccount) {
+            try {
+                if (typeof mainFilteringThrottled === 'function') mainFilteringThrottled();
+            } catch (e) {}
+        }
+        braveFoxPublishArchiveAccountScope();
+        return braveFoxIsTapioAccount ? 'tapio' : 'restricted';
+    }
+
+    // Archive reads only a recent, affirmative Google-account scope decision.
+    // No account addresses are stored here; unknown/ambiguous state stays restricted.
+    function braveFoxPublishArchiveAccountScope() {
+        try {
+            const storage = globalThis.browser?.storage?.local || globalThis.chrome?.storage?.local;
+            if (!storage?.set) return;
+            void storage.set({ bravefox_google_archive_scope_v1: {
+                scope: braveFoxIsTapioAccount ? 'tapio' : 'restricted',
+                checkedAt: Date.now()
+            } });
+        } catch (e) {}
+    }
+    function braveFoxRefreshGoogleAccountScopeNow() {
+        const emails = braveFoxExtractGoogleAccountEmails();
+        return braveFoxApplyDetectedAccountScope(emails);
+    }
+
+    function braveFoxAccountDetectionTimeoutMs() {
+        if (isFirefoxAndroid) return 1800;
+        if (isFirefoxPC) return 1200;
+        return 900;
+    }
+
+    function braveFoxWaitForGoogleAccountEmails(timeoutMs) {
+        return new Promise(resolve => {
+            let finished = false;
+            let bootstrapObserver = null;
+            let trustedObserver = null;
+            let pollTimer = null;
+            let timeoutTimer = null;
+            let scanTimer = null;
+            let observedTrustedRoots = [];
+
+            const cleanup = () => {
+                try { bootstrapObserver && bootstrapObserver.disconnect(); } catch (e) {}
+                try { trustedObserver && trustedObserver.disconnect(); } catch (e) {}
+                try { pollTimer && clearInterval(pollTimer); } catch (e) {}
+                try { timeoutTimer && clearTimeout(timeoutTimer); } catch (e) {}
+                try { scanTimer && clearTimeout(scanTimer); } catch (e) {}
+                try { document.removeEventListener('DOMContentLoaded', scanNow, true); } catch (e) {}
+                try { window.removeEventListener('load', scanNow, true); } catch (e) {}
+            };
+
+            const finish = emails => {
+                if (finished) return;
+                finished = true;
+                cleanup();
+                resolve(Array.isArray(emails) ? emails : []);
+            };
+
+            function observeTrustedRoots() {
+                if (finished) return;
+                const roots = braveFoxGetTrustedGoogleAccountRoots();
+                if (!roots.length) return;
+
+                const unchanged = roots.length === observedTrustedRoots.length &&
+                    roots.every((root, index) => root === observedTrustedRoots[index]);
+                if (unchanged) return;
+
+                observedTrustedRoots = roots;
+                try { trustedObserver && trustedObserver.disconnect(); } catch (e) {}
+                try {
+                    trustedObserver = new MutationObserver(scheduleScan);
+                    roots.forEach(root => {
+                        trustedObserver.observe(root, {
+                            childList: true,
+                            subtree: true,
+                            attributes: true,
+                            attributeFilter: [
+                                'aria-label', 'title', 'href', 'data-email', 'data-identifier',
+                                'data-account-email', 'data-user-email', 'data-authuser', 'data-ogsr-up'
+                            ]
+                        });
+                    });
+                    // Once Google's trusted header exists, the full-document bootstrap observer
+                    // is no longer needed.
+                    try { bootstrapObserver && bootstrapObserver.disconnect(); } catch (e) {}
+                    bootstrapObserver = null;
+                } catch (e) {}
+            }
+
+            function scanNow() {
+                if (finished) return;
+                observeTrustedRoots();
+                const emails = braveFoxExtractGoogleAccountEmails();
+                if (emails.length) finish(emails);
+            }
+
+            function scheduleScan() {
+                if (finished || scanTimer) return;
+                scanTimer = setTimeout(() => {
+                    scanTimer = null;
+                    scanNow();
+                }, 45);
+            }
+
+            // Immediate pass catches normal desktop account buttons without delay.
+            const immediate = braveFoxExtractGoogleAccountEmails();
+            if (immediate.length) {
+                finish(immediate);
+                return;
+            }
+
+            observeTrustedRoots();
+
+            // Before Google's header exists, watch only structural insertions and debounce the
+            // expensive selector scan. Attribute watching starts only inside the trusted header.
+            if (!observedTrustedRoots.length) {
+                try {
+                    bootstrapObserver = new MutationObserver(scheduleScan);
+                    bootstrapObserver.observe(document.documentElement, {
+                        childList: true,
+                        subtree: true
+                    });
+                } catch (e) {}
+            }
+
+            try { document.addEventListener('DOMContentLoaded', scanNow, true); } catch (e) {}
+            try { window.addEventListener('load', scanNow, true); } catch (e) {}
+
+            // Slow fallback only; normal detection should come from the immediate/event/header path.
+            pollTimer = setInterval(scanNow, 300);
+            timeoutTimer = setTimeout(() => finish(braveFoxExtractGoogleAccountEmails()), timeoutMs);
+        });
+    }
+
+    async function braveFoxResolveGoogleAccountScope() {
+        const emails = await braveFoxWaitForGoogleAccountEmails(braveFoxAccountDetectionTimeoutMs());
+        return braveFoxApplyDetectedAccountScope(emails);
+    }
+
+    function braveFoxCanUseAllowedResultRescue() {
+        return braveFoxIsTapioAccount;
+    }
+
+    // Resolve in the background from document_start. Filtering never waits for detection.
+    // Until Tapio is positively and unambiguously detected, no soft-result rescue exists.
+    let braveFoxInitialGoogleAccountScopeSettled = false;
+    const braveFoxInitialGoogleAccountScopePromise = braveFoxResolveGoogleAccountScope().catch(() => (braveFoxIsTapioAccount ? 'tapio' : 'restricted'));
+    braveFoxInitialGoogleAccountScopePromise.finally(() => {
+        braveFoxInitialGoogleAccountScopeSettled = true;
+        try { mainFilteringThrottled(); } catch (e) {}
+    });
+
+    try {
+        window.GoogleJS = window.GoogleJS || {};
+        window.GoogleJS.getGoogleAccountScope = () => (braveFoxIsTapioAccount ? 'tapio' : 'restricted');
+        window.GoogleJS.getDetectedGoogleAccounts = () => braveFoxDetectedGoogleAccounts.slice();
+        window.GoogleJS.recheckGoogleAccountScope = async () => {
+            await braveFoxResolveGoogleAccountScope();
+            return {
+                scope: braveFoxIsTapioAccount ? 'tapio' : 'restricted',
+                accounts: braveFoxDetectedGoogleAccounts.slice()
+            };
+        };
+    } catch (e) {}
+
+    // === RedirectHideLite, this never scans google's selectors, thus reducing false positives ===
+    const redirectHideLite = [
+
+    // Regular redirectHideRegexes
+	/Virtual laatikko/i, /Virtuaali laatikko/i, /Virtuaalilaatikko/i, /Virtuaalibox/i, /virtualmachine/i, /virtual machine/i, /kuvankäsittely/i, /OracleVM/i,
+	/virtuaali kone/i, /virtuaali tietokone/i, /virtuaalitietokone/i, /hyper-v/i, /hyper v/i, /virtuaalimasiina/i, /virtuaali masiina/i, /virtuaalimasiini/i, 
+	/virtuaali masiini/i, /virtuaali workstation/i, /virtual workstation/i, /virtualworkstation/i, /vrbox/i, /vibox/i, /virtuaaliworkstation/i, /hypervisor/i,   
+	/virbox/i, /virtbox/i, /vir box/i, /virt box/i, /virtual box/i, /vi-machine/i, /vi machine/i, /virmachine/i, /vir-machine/i, /virbox virtual/i, /v-machine/i, 
+	/hyper visor/i, /vibox virtual/i, /vbox virtual/i, /vmachine/i, /v machine/i, /vimachine/i, /vir machine/i, /virt machine/i,/virtmachine/i, /p1p4r/i, /VMWare/i,
+	/virtumachine/i, /virtu-machine/i, /virtu machine/i, /diiva/i, /virtuamachine/i, /virtua-machine/i, /virtua machine/i, /vi mach/i, /vir mach/i, /virt mach/i, 
+	/VM Ware/i, /Virtualbox/i, /Virtual box/i,/Machiine/i, /Macheine/i, /Machiene/i, /#/i, /##/i, /###/i, /@@/i, /#\*/i, /\*#/i, /@\*/i, /\*@/i, /#@/i, /@#/i,   
+	/vbox/i, /hyperv/i, /virtbox virtual/i, /vbox/i, /Virtual Machine/i, /virtu mach/i, /virt-machine/i, /virtuaalikone/i, /VM Ware/i,  
+
+
+    // Boundaried redirectHide regexes
+	/\bSol\b/i, /\bGemini\b/i, /\bClaude\b/i, /\bSonnet\b/i, /\bDALL[-\s]?E\b/i, /\bSora\b/i, /\bMidjourney\b/i, /\bGrok\b/i, /\bG!na\b/i, /\bGen\b/i, 
+	/\bStable[ -]?Diffusion\b/i, /\bComfy(?:UI|AI)\b/i, /\bmachine learning\b/i, /\bneural networks?\b/i, /\bMistral(?:[ -]?AI)?\b/i, /\bLlama(?:[ -]?[0-9.]+)?\b/i,
+	/\bteko[äa]ly\b/i, /\bLLMs?\b/i, /\bartificial intelligence\b/i, /\bgenerative AI\b/i, /\bPerplexity[ -]?AI\b/i, /\bMeta[ -]?AI\b/i, /\bAdobe[ -]?Firefly\b/i,
+	/\bRunComfy\b/i, /\bDeepSeek\b/i, /\bGrok\b/i, /\bAnthropic\b/i, /\bHugging[ -]?Face\b/i, /\bVM\b/i, /\bVMs\b/i, /\b5h3\b/i, /\bedit\b/i, /\bphotor\b/i, /\bGin4\b/i, 
+	/\bG1n4\b/i, /\bG1na\b/i, /\bGlna\b/i,  /\bAi-\b/i, /\b-Ai\b/i, /\bIA\b/i, /\bAI\b/i, /\bMLM\b/i, /\bLLM\b/i, /\bIas\b/i, /\b-Ia\b/i, /\bIa-\b/i, /\bM1mmusk4\b/i, 
+	/\bMimmusk4\b/i, /\bMimmuska\b/i, /\bM1mmi\b/i, /\bM1mmuska\b/i, /\bMimmi\b/i, /\bMimm1\b/i, /\btyttöjä\b/i, /\bGina\b/i, /\bnaisia\b/i, /\btytöt\b/i, /\bnaiset\b/i, 
+    ];
+
+
+    // === INSTANT WHITE OVERLAY ===
+    // A surviving overlay from an interrupted earlier content-script execution must
+    // be reused, not covered by a second overlay with the same ID. Otherwise the
+    // current instance removes its own cover but leaves the older full-screen cover.
+    let overlay = document.getElementById('google-blocker-blank') || document.createElement('div');
+    overlay.id = 'google-blocker-blank';
+    overlay.style.position = 'fixed';
+    overlay.style.top = '0';
+    overlay.style.left = '0';
+    overlay.style.width = '100vw';
+    overlay.style.height = '100vh';
+    overlay.style.background = '#fff';
+    overlay.style.zIndex = '2147483647';
+    overlay.style.pointerEvents = 'all';
+    overlay.style.transition = 'none';
+    overlay.style.display = 'block';
+    if (!overlay.isConnected) document.documentElement.appendChild(overlay);
+
+    try {
+        document.documentElement.style.background = '#fff';
+        document.body && (document.body.style.background = '#fff');
+    } catch (e) {}
+
+    let overlayRemoved = false;
+    // Visible in every DevTools execution world, even when content-script globals aren't.
+    try { document.documentElement.setAttribute('data-googlejs-startup-phase', 'overlay-active'); } catch (e) {}
+
+    // === HELPER: DETECT GOOGLE IMAGE SEARCH ===
+    function isGoogleImageSearch() {
+        try {
+            return /tbm=isch|udm=2/i.test(window.location.search) || 
+                   window.location.pathname.includes('/imgres') || 
+                   !!document.querySelector('.isv-r, #islsp, [data-b-rn="isch"]');
+        } catch(e) { return false; }
+    }
+
+    // === CLICK LOCK FOR GRID ITEMS ===
+    const clickedSignatures = new Set();
+
+    function getClickSignatures(node) {
+        if (!node || node.nodeType !== 1) return [];
+        let sigs = [];
+        const ved = node.getAttribute('data-ved');
+        if (ved) sigs.push('ved:' + ved);
+        
+        const docid = node.getAttribute('data-docid') || node.getAttribute('data-id');
+        if (docid) sigs.push('docid:' + docid);
+        
+        const ri = node.getAttribute('data-ri');
+        if (ri) sigs.push('ri:' + ri);
+
+        return sigs;
+    }
+
+    function isNodeClicked(node) {
+        if (!node || node.nodeType !== 1) return false;
+        if (node.dataset && node.dataset.googlejsClicked === '1') return true;
+        if (node.closest && node.closest('[data-googlejs-clicked="1"]')) return true;
+        
+        const sigs = getClickSignatures(node);
+        for (let i = 0; i < sigs.length; i++) {
+            if (clickedSignatures.has(sigs[i])) {
+                try { node.setAttribute('data-googlejs-clicked', '1'); } catch(e){}
+                return true;
+            }
+        }
+        
+        if (node.closest) {
+            const parent = node.closest('.isv-r, .rg_bx, .eA0Zlc, .wXeWr');
+            if (parent) {
+                if (parent.dataset && parent.dataset.googlejsClicked === '1') return true;
+                const pSigs = getClickSignatures(parent);
+                for (let i = 0; i < pSigs.length; i++) {
+                    if (clickedSignatures.has(pSigs[i])) {
+                        try { parent.setAttribute('data-googlejs-clicked', '1'); } catch(e){}
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    function markAsClicked(target) {
+        try {
+            if (!isGoogleImageSearch()) return;
+            const gridItem = target.closest('.isv-r, .rg_bx, .eA0Zlc, .wXeWr, a');
+            if (gridItem) {
+                gridItem.setAttribute('data-googlejs-clicked', '1');
+                getClickSignatures(gridItem).forEach(s => clickedSignatures.add(s));
+                
+                const parent = gridItem.closest('.isv-r, .rg_bx, .eA0Zlc');
+                if (parent) {
+                    parent.setAttribute('data-googlejs-clicked', '1');
+                    getClickSignatures(parent).forEach(s => clickedSignatures.add(s));
+                }
+            }
+        } catch (err) {}
+    }
+
+    document.addEventListener('mousedown', function(e) {
+        markAsClicked(e.target);
+    }, true);
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') markAsClicked(e.target);
+    }, true);
+
+    // === HIDE IMAGE RABBIT HOLES / PRE-SCAN GOOGLE IMAGES ===
+    try {
+        if (isGoogleImageSearch()) {
+            document.documentElement.classList.add('googlejs-image-search-active');
+        }
+
+        const hideStyle = document.createElement('style');
+        hideStyle.textContent = `
+            /* Keep the old non-image rabbit-hole tabs hidden, but do NOT globally hide Google's
+               random image classes (.gx72we / .VKHL9c / .kC8B4e). Normal signed-in Chrome can reuse
+               those wrappers for the real image grid, which is what blanked Image Search. */
+            div[role="listitem"]:has(a[href*="udm=39"]),
+            div[role="listitem"]:has(a[href*="udm=50"]) {
+                display: none !important; visibility: hidden !important;
+                opacity: 0 !important; pointer-events: none !important; height: 0 !important;
+            }
+
+            /* Uploaded Google Images HTML fingerprints the preview trap as an async imgv block.
+               Hide that whole block before it paints, without touching the actual opened image preview. */
+            html.googlejs-image-search-active div[id^="imgv-"][data-async-type="imgv"],
+            html.googlejs-image-search-active [data-async-type="imgv"][id^="imgv-"],
+            html.googlejs-image-search-active [data-async-type="imgv"] [data-snc="oJ14jb"],
+            html.googlejs-image-search-active div[id^="imgv-"] [data-snc="oJ14jb"] {
+                display: none !important; visibility: hidden !important;
+                opacity: 0 !important; pointer-events: none !important; height: 0 !important;
+                max-height: 0 !important; overflow: hidden !important;
+            }
+
+            /* Image Search inline related-search blocks ("Aiheeseen liittyvät haut" / "Related searches").
+               These are not image result cards; they are query rabbit holes embedded into the masonry grid.
+               Use the stable BA0zte + bqW4cb udm=2 fingerprint from the captured HTML instead of
+               Google's random outer class soup. */
+            html.googlejs-image-search-active .kb0PBd.cvP2Ce:has(> .BA0zte a.bqW4cb[href*="udm=2"]),
+            html.googlejs-image-search-active [data-snf][data-snm]:has(> .BA0zte a.bqW4cb[href*="udm=2"]),
+            html.googlejs-image-search-active .BA0zte:has(a.bqW4cb[href*="udm=2"]) {
+                display: none !important; visibility: hidden !important;
+                opacity: 0 !important; pointer-events: none !important; height: 0 !important;
+                max-height: 0 !important; overflow: hidden !important;
+            }
+
+            html.googlejs-image-search-active [data-googlejs-image-policy-pending="1"] {
+                visibility: hidden !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
+            }
+
+            /* Zero-glimpse first pass: image cards stay invisible until this script marks them clear.
+               This is scoped to Google Images only and excludes the right-side opened preview shell. */
+            html.googlejs-image-search-active .isv-r:not([data-googlejs-cleared="1"]):not([data-googlejs-hidden="1"]),
+            html.googlejs-image-search-active .eA0Zlc:not([data-googlejs-cleared="1"]):not([data-googlejs-hidden="1"]),
+            html.googlejs-image-search-active .rg_bx:not([data-googlejs-cleared="1"]):not([data-googlejs-hidden="1"]),
+            html.googlejs-image-search-active .wXeWr:not([data-googlejs-cleared="1"]):not([data-googlejs-hidden="1"]),
+            html.googlejs-image-search-active [data-snc][data-snm] > .kb0PBd:not([data-googlejs-cleared="1"]):not([data-googlejs-hidden="1"]) {
+                visibility: hidden !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
+            }
+        `;
+        document.documentElement.appendChild(hideStyle);
+    } catch (e) {}
+
+    // === SEARCH NAVIGATION POLISH / RECOMMENDED-CHIP SUPPRESSION ===
+    // Google's query-refinement chips (for example Game log / Reference / Stats) sit in a separate
+    // carousel beneath the search-mode tabs. Remove that carousel on every supported platform.
+    // On desktop-class browsers only, add a restrained blue hover state to the real Chrome tabs and
+    // the synthetic Firefox tabs. Firefox Android intentionally receives no hover-only styling.
+    try {
+        const searchNavPolishStyle = document.createElement('style');
+        searchNavPolishStyle.id = 'googlejs-search-navigation-polish';
+        searchNavPolishStyle.textContent = `
+            #hdtb-sc[data-id="trc"],
+            #bqHHPb:has(#hdtb-sc[data-id="trc"]),
+            .ZeeOc:has(.IUOThf[role="list"] a.nPDzT[jsname="VIftV"]),
+            [data-st-tgt="mode"][role="navigation"]:has(.IUOThf[role="list"] a.nPDzT[jsname="VIftV"]),
+            .TrmO7[data-st-cnt="mode"]:has(#hdtb-sc[data-id="trc"]),
+            .xhjkHe.CEXVle:has(#hdtb-sc[data-id="trc"]) {
+                display: none !important;
+                visibility: hidden !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
+                width: 0 !important;
+                height: 0 !important;
+                min-width: 0 !important;
+                min-height: 0 !important;
+                max-width: 0 !important;
+                max-height: 0 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                border: 0 !important;
+                overflow: hidden !important;
+            }
+
+            ${!isAndroid ? `
+            #googlejs-firefox-search-tabs > a,
+            #googlejs-firefox-search-tabs > button,
+            #googlejs-firefox-search-tabs > details > summary,
+            .googlejs-desktop-search-tab-hover {
+                position: relative !important;
+                isolation: isolate !important;
+                overflow: visible !important;
+                color: inherit !important;
+                transition: color 120ms ease-out !important;
+            }
+
+            /* Firefox's synthetic controls are label-width with zero horizontal padding, so
+               their tile must grow outward from the label rather than reuse Chrome's wrapper inset. */
+            ${isFirefoxPC ? `
+            #googlejs-firefox-search-tabs > a::before,
+            #googlejs-firefox-search-tabs > button::before,
+            #googlejs-firefox-search-tabs > details > summary::before,
+            .googlejs-desktop-search-tab-hover::before {
+                content: '' !important;
+                position: absolute !important;
+                left: -8px !important;
+                right: -8px !important;
+                top: 50% !important;
+                height: 30px !important;
+                transform: translateY(-50%) !important;
+                border-radius: 5px !important;
+                background: transparent !important;
+                box-shadow: none !important;
+                pointer-events: none !important;
+                z-index: -1 !important;
+                transition: background-color 120ms ease-out, box-shadow 120ms ease-out !important;
+            }
+            ` : ''}
+
+            /* Chrome's native controls already include horizontal wrapper padding. Inset the tile
+               inside that control so it remains centred around the actual label, not the full slot. */
+            ${isChromePC ? `
+            .googlejs-desktop-search-tab-hover::before {
+                content: '' !important;
+                position: absolute !important;
+                left: 6px !important;
+                right: 6px !important;
+                top: calc(50% + 2px) !important;
+                height: 30px !important;
+                transform: translateY(-50%) !important;
+                border-radius: 5px !important;
+                background: transparent !important;
+                box-shadow: none !important;
+                pointer-events: none !important;
+                z-index: -1 !important;
+                transition: background-color 120ms ease-out, box-shadow 120ms ease-out !important;
+            }
+            ` : ''}
+
+            #googlejs-firefox-search-tabs > a:hover,
+            #googlejs-firefox-search-tabs > button:hover,
+            #googlejs-firefox-search-tabs > details > summary:hover,
+            .googlejs-desktop-search-tab-hover,
+            .googlejs-desktop-search-tab-hover * {
+                color: #174ea6 !important;
+            }
+
+            #googlejs-firefox-search-tabs > a:hover::before,
+            #googlejs-firefox-search-tabs > button:hover::before,
+            #googlejs-firefox-search-tabs > details > summary:hover::before,
+            .googlejs-desktop-search-tab-hover::before {
+                background-color: rgba(26, 115, 232, 0.13) !important;
+                box-shadow: 0 1px 4px rgba(26, 115, 232, 0.18) !important;
+            }
+
+            .googlejs-desktop-search-tab-hover svg,
+            .googlejs-desktop-search-tab-hover path {
+                fill: #174ea6 !important;
+            }
+            ` : ''}
+        `;
+        document.documentElement.appendChild(searchNavPolishStyle);
+    } catch (e) {}
+
+    // Chrome desktop receives temporary hover classes only while the pointer is over a real
+    // search-mode control. No mutation observer or persistent tab tagging is used.
+    let chromeDesktopHoveredSearchTab = null;
+    let chromeDesktopSearchTabHoverInstalled = false;
+
+    function getChromeDesktopSearchTabControl(target) {
+        if (isFirefox || isAndroid || !target || !target.closest) return null;
+        try {
+            const control = target.closest('a[href], button, [role="button"], summary');
+            if (!control) return null;
+            if (control.closest('#hdtb-sc[data-id="trc"], .IUOThf[role="list"], #rso, #res, #search')) return null;
+
+            const navRoot = control.closest('#hdtb, #hdtb-msb, #top_nav, #slim_appbar, .MUFPAc, [role="navigation"]');
+            if (!navRoot) return null;
+            const rect = control.getBoundingClientRect();
+            const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 900;
+            if (rect.width < 12 || rect.height < 10 || rect.bottom < 35 || rect.top > Math.min(240, viewportHeight * 0.30)) return null;
+
+            const label = String(control.textContent || control.getAttribute('aria-label') || '')
+                .replace(/[▾▼⌄]/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+            const knownLabel = /^(?:Verkkohaku|Kuvahaku|Videot|Virikkeinen haku|Talous|Lisää|Työkalut|Uutiset|Ostokset|Kirjat|Kartat|Web|Images|Videos|All|All results|Finance|More|Tools|News|Shopping|Books|Maps)$/i;
+            if (!knownLabel.test(label)) return null;
+
+            // Always paint the actual labelled control. Painting Google's surrounding wrapper can
+            // fill the entire tab slot on Chrome, while Firefox's different wrapper can be too narrow.
+            // The shared ::before tile above supplies the same centred label-sized highlight on both.
+            return { control, paintTarget: control, needsCompactBox: false };
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function clearChromeDesktopSearchTabHover(state) {
+        const target = state?.paintTarget || state;
+        if (!target) return;
+        try {
+            target.classList.remove('googlejs-desktop-search-tab-hover', 'googlejs-desktop-search-tab-hover-compact');
+        } catch (e) {}
+        if (chromeDesktopHoveredSearchTab === state || chromeDesktopHoveredSearchTab?.paintTarget === target) {
+            chromeDesktopHoveredSearchTab = null;
+        }
+    }
+
+    function installChromeDesktopSearchTabHover() {
+        if (isFirefox || isAndroid || chromeDesktopSearchTabHoverInstalled) return;
+        chromeDesktopSearchTabHoverInstalled = true;
+
+        document.addEventListener('pointerover', event => {
+            const state = getChromeDesktopSearchTabControl(event.target);
+            if (!state) return;
+            if (chromeDesktopHoveredSearchTab?.paintTarget !== state.paintTarget) {
+                clearChromeDesktopSearchTabHover(chromeDesktopHoveredSearchTab);
+            }
+            chromeDesktopHoveredSearchTab = state;
+            try {
+                state.paintTarget.classList.add('googlejs-desktop-search-tab-hover');
+                if (state.needsCompactBox) state.paintTarget.classList.add('googlejs-desktop-search-tab-hover-compact');
+            } catch (e) {}
+        }, true);
+
+        document.addEventListener('pointerout', event => {
+            const state = chromeDesktopHoveredSearchTab;
+            if (!state) return;
+            const next = event.relatedTarget;
+            if (next && state.paintTarget.contains(next)) return;
+            clearChromeDesktopSearchTabHover(state);
+        }, true);
+
+        window.addEventListener('blur', () => clearChromeDesktopSearchTabHover(chromeDesktopHoveredSearchTab), true);
+    }
+
+    installChromeDesktopSearchTabHover();
+
+    // === REGIONAL TLD REDIRECTOR ===
+    function forceGoogleComAndFi() {
+        if (isGoogleMapsOrEarthUrl()) return false;
+        try {
+            const urlObj = new URL(window.location.href);
+            const hostname = urlObj.hostname.toLowerCase();
+            const match = hostname.match(/^(?:(.*)\.)?google\.([a-z]+(\.[a-z]+)?)$/i);
+            
+            if (match) {
+                const subdomain = match[1] ? match[1] + '.' : '';
+                const tld = match[2];
+                if (tld !== 'com' && tld !== 'fi') {
+                    if (!isFirefox) {
+                        const targetHref = urlObj.protocol + '//' + subdomain + 'google.com' + urlObj.pathname + urlObj.search + urlObj.hash;
+                        try { window.stop && window.stop(); } catch(e) {}
+                        window.location.replace(targetHref);
+                        return true;
+                    } else if (isFirefoxAndroid) {
+                        const targetHref = urlObj.protocol + '//' + subdomain + 'google.com' + urlObj.pathname + urlObj.search + urlObj.hash;
+                        let attempts = 0;
+                        const ffTimer = setInterval(() => {
+                            attempts++;
+                            try { window.location.replace(targetHref); } catch(e) {}
+                            try { window.location.href = targetHref; } catch(e) {}
+                            if (attempts > 50) clearInterval(ffTimer);
+                        }, 20);
+                        return true;
+                    } else {
+                        const doFFRedirect = () => {
+                            const freshUrl = new URL(window.location.href);
+                            const targetHref = freshUrl.protocol + '//' + subdomain + 'google.com' + freshUrl.pathname + freshUrl.search + freshUrl.hash;
+                            window.location.replace(targetHref);
+                        };
+                        if (document.readyState === 'loading') {
+                            document.addEventListener('DOMContentLoaded', doFFRedirect, { once: true });
+                        } else {
+                            doFFRedirect();
+                        }
+                        return true; 
+                    }
+                }
+            }
+        } catch (e) {}
+        return false;
+    }
+
+    // === FIREFOX-ONLY CHROME-STYLE WEB SEARCH DEFAULT ===
+    // Google can rank and shape results differently when the visible request carries Firefox-specific
+    // client/channel parameters. Keep the browser engine untouched, but normalize Firefox search URLs
+    // to the same public query parameters Chrome uses. Explicit Images/Videos/News/etc. modes remain
+    // intact, and source=lnms still protects the synthetic "All results" tab from the Web redirect.
+    function normalizeGooglePublicSearchUrl(url, removeFirefoxClientHints) {
+        let changed = false;
+
+        if (removeFirefoxClientHints) {
+            ['client', 'channel'].forEach(parameter => {
+                if (url.searchParams.has(parameter)) {
+                    url.searchParams.delete(parameter);
+                    changed = true;
+                }
+            });
+        }
+
+        const query = url.searchParams.get('q') || '';
+        // A native Google page-number link often omits oq/source even though it
+        // already carries safe=active, udm=14 and a valid start offset. Forcing
+        // those optional params triggers a SECOND network navigation on each click.
+        // Preserve the actual page, mode, and pagination hrefs instead.
+        const safeWebPageNumber = url.pathname === '/search' &&
+            /^(?:0|[1-9]\d*)$/.test(url.searchParams.get('start') || '') &&
+            url.searchParams.get('udm') === '14' &&
+            !url.searchParams.has('tbm') &&
+            url.searchParams.get('safe') === 'active';
+        const ensureParam = (name, value) => {
+            if (url.searchParams.get(name) !== value) {
+                url.searchParams.set(name, value);
+                changed = true;
+            }
+        };
+
+        if (query && !safeWebPageNumber) ensureParam('oq', query);
+        ensureParam('safe', 'active');
+
+        // Keep both browsers on the same stable, visible public-search parameters.
+        // Google either ignores or canonicalises pws/filter/num inconsistently across
+        // signed-in Firefox and signed-out Chrome, so retaining them can create reload
+        // churn without guaranteeing the same server-side result pool.
+        ['pws', 'filter', 'num'].forEach(parameter => {
+            if (url.searchParams.has(parameter)) {
+                url.searchParams.delete(parameter);
+                changed = true;
+            }
+        });
+
+        const source = url.searchParams.get('source') || '';
+        if (!safeWebPageNumber && source !== 'lnms' && source !== 'chrome') {
+            url.searchParams.set('source', 'chrome');
+            changed = true;
+        }
+
+        if (!url.searchParams.has('udm') && !url.searchParams.has('tbm') &&
+            url.searchParams.get('source') !== 'lnms') {
+            url.searchParams.set('udm', '14');
+            changed = true;
+        }
+
+        return changed;
+    }
+
+    // === FIREFOX-ONLY CHROME-STYLE WEB SEARCH DEFAULT ===
+    function forceFirefoxChromeStyleWebSearch() {
+        if (!isFirefox || isRedirecting) return false;
+        try {
+            const url = new URL(window.location.href);
+            if (!url.pathname.includes('/search') || !url.searchParams.has('q')) return false;
+            if (!normalizeGooglePublicSearchUrl(url, true)) return false;
+
+            isRedirecting = true;
+            if (overlay) overlay.style.display = 'block';
+            window.location.replace(url.toString());
+            return true;
+        } catch (e) {}
+        return false;
+    }
+
+    // === FORCE WEB SEARCH DEFAULT / PUBLIC-QUERY PARITY ===
+    function forceWebSearchDefault() {
+        if (isRedirecting || isFirefox) return false;
+        try {
+            const url = new URL(window.location.href);
+            if (!url.pathname.includes('/search') || !url.searchParams.has('q')) return false;
+            if (!normalizeGooglePublicSearchUrl(url, false)) return false;
+
+            isRedirecting = true;
+            if (overlay) overlay.style.display = 'block';
+            window.location.replace(url.toString());
+            return true;
+        } catch (e) {}
+        return false;
+    }
+
+    if (forceGoogleComAndFi()) return;
+    if (forceFirefoxChromeStyleWebSearch()) return;
+    if (forceWebSearchDefault()) return;
+
+    // === TLD HIDER LOGIC ===
+    const blockedTLDs = [
+        '.ai', '.app', '.art', '.io', '.makeup', '.off', '.club', '.id', '.it', '.best', '.cc', '.cn', '.click',
+        '.you', '.to', '.top', '.me', '.us', '.red', '.vip', '.online', '.hot', '.her', '.sex', '.xxx', '.nsfw',
+        '.porn', '.show', '.work', '.fit', '.tool', '.tools', '.system', '.systems', '.surf', '.review', '.asia',
+        '.tokyo', '.monster', '.info', '.机构', '.xn--nqv7f', '.xyz', '.zone', '.ee', '.in', '.gf', '.fox', '.fun',
+        '.fyi', '.fr', '.life', '.now', '.today', '.world', '.cu', '.su', '.exposed',
+    ];
+
+    function isBannedTLD(urlStr) {
+        if (!urlStr) return false;
+        try {
+            const hostname = new URL(urlStr, window.location.origin).hostname.toLowerCase();
+            return blockedTLDs.some(tld => hostname.endsWith(tld));
+        } catch(e) { return false; }
+    }
+
+    // --- Keyword arrays ---
+    // === DISTINCTIVE / CONTEXTUAL AI NUCLEAR SIGNATURES ===
+    // Shared across Chrome, Firefox desktop and Firefox Nightly Android.
+    // Keep recognizable AI terms aggressive, but avoid blanket matches on
+    // ordinary words (model, object, generator, diffusion). Nuclear still wins
+    // before searchAllowTerms and all result URL allowances.
+    const aiNuclearRegex = [
+        // Distinctive variants, including spaced/hyphenated/underscored spellings.
+        /deep[\s._-]*fak/i, /deep[\s._-]*nud/i, /deep[\s._-]*feik/i, /diip[\s._-]*feik/i,
+        /\b(?:midjourney|deepseek|anthropic|civitai|runcomfy|hugging[\s._-]*face|nightcafe|leonardo[\s._-]*ai)\b/i,
+        /\b(?:stable[\s._-]*diffusion|dall[\s._-]*e(?:[\s._-]*[23])?|automatic[\s._-]*1111)\b/i,
+
+        // Named AI techniques; standalone scientific "diffusion" remains ordinary.
+        /\b(?:artificial[\s._-]*intelligence|generative[\s._-]*ai|machine[\s._-]*learning|deep[\s._-]*learning|neural[\s._-]*networks?|natural[\s._-]*language[\s._-]*processing|large[\s._-]*language[\s._-]*models?|llms?)\b/i,
+        /teko[\s._-]*[äa]ly/i,
+        /\b(?:ai|llm|language|generative|diffusion|deepfake|machine[ -]?learning|image[ -]?generation|text[ -]?to[ -]?image)[\s._-]+models?\b/i,
+        /\bmodels?\s+(?:for\s+)?(?:ai|llm|deepfake|machine[ -]?learning|language[ -]?generation|face[ -]?swap|image[ -]?generation)\b/i,
+
+        // Generative media: do not block electrical/physical generators.
+        /\bgenerativ(?:e|ely|ity)\b/i,
+        /\b(?:image|photo|picture|video|text|music|voice|art)[\s._-]*generat(?:e|es|ed|ing|or|ors|ion|ions)\b/i,
+        /\b(?:text|prompt)[\s._-]*(?:to|2)[\s._-]*(?:image|video|audio|music|speech)\b/i,
+        /\b(?:image|photo|picture|video)[\s._-]*(?:to|2)[\s._-]*(?:image|video|gif)\b/i,
+        /\b(?:ai|ml|neural)[\s._-]*(?:image|photo|video|text|art|music|voice|content)[\s._-]*(?:generat|creat|edit|enhanc|model)/i,
+
+        // Object removal/editing, not ordinary JS objects or object-oriented code.
+        /\bobjects?[\s._-]*(?:remov(?:e|al|er|ing)|eras(?:e|er|ing)|delet(?:e|ion|er|ing))\b/i,
+        /\b(?:remov(?:e|ing)|eras(?:e|ing)|delet(?:e|ing))[\s._-]+(?:an?[\s._-]+)?objects?[\s._-]+(?:from|in|on)[\s._-]+(?:an?[\s._-]+)?(?:photos?|images?|pictures?|pics?)\b/i,
+        /\b(?:ai|photo|image|pic|picture)[\s._-]*(?:object[\s._-]*(?:remov|eras|delet)|(?:remov|eras|delet)[\s._-]*objects?)/i,
+    ];
+
+    // === DISTINCTIVE / CONTEXTUAL BROWSER NUCLEAR SIGNATURES ===
+    // Browser intent is Nuclear, but plain words and file-browser searches are not.
+    // Match browser brands with browser/selain context, plus distinctive full product names.
+    const browserNuclearRegex = [
+        // Brave browser / Brave-selain / Bravebrowser, and equivalent brand combinations.
+        /\b(?:brave|tor|opera(?:[\s._-]*gx)?|water[\s._-]*f(?:o|0|u)x|safari|mozilla(?:[\s._-]*firef(?:o|u)x)?|firef(?:o|u)x|chr0m\p{L}*|m1um|chrom(?:e|ium)|(?:ms|microsoft)[\s._-]*edge)[\s._-]*(?:(?:web|internet|netti)[\s._-]*)?(?:brows(?:er|ers|ing|e|i\p{L}*)|selai(?:n|m)\p{L}*)(?![\p{L}\p{N}])/iu,
+
+        // Browser Firefox / selain Brave: browser type before the brand.
+        /\b(?:brows(?:er|ers)|selai(?:n|m)\p{L}*)[\s._-]+(?:brave|tor|opera(?:[\s._-]*gx)?|water[\s._-]*f(?:o|0|u)x|safari|vivaldi|mozilla(?:[\s._-]*firef(?:o|u)x)?|firef(?:o|u)x|chr0m\p{L}*|m1um|chrom(?:e|ium)|(?:ms|microsoft)[\s._-]*edge)\b/iu,
+
+        // Internet selain / internetselaimet / web browser / nettiselain.
+        /\b(?:internet|netti|web)[\s._-]*(?:brows(?:er|ers|ing|e|i\p{L}*)|selai(?:n|m)\p{L}*)(?![\p{L}\p{N}])/iu,
+
+        // Distinctive full names are browser-specific even without an added browser word.
+        /\b(?:google[\s._-]*chrome|mozilla[\s._-]*firef(?:o|u)x|microsoft[\s._-]*edge|ms[\s._-]*edge|opera|vivaldi[\s._-]*gx|tor[\s._-]*browser)\b/iu,
+    ];
+
+    // NUCLEAR Regexes
+    	const nuclearRegex = [
+        ...aiNuclearRegex,
+        ...browserNuclearRegex,
+        /lex bl/i, /livmorgan/i, /zelina/i, /roxanne/i, /raquel/i, /stephanie/i, /woman/i, /women/i, /ladies/i, /ladye/i, /girls/i, /girly/i, /girli/i, /pussy/i, /vagin/i, /vagen/i, 
+	/vegane/i, /pussie/i, /deepn/i, /deeph/i, /deeps/i, /deepm/i, /deepb/i, /deept/i, /deepa/i, /nudi/i, /nude/i, /naked/i, /undre/i, /nude app/i, /dress/i, /face swap/i, /Stacy/i, 
+	/Staci/i, /Keibler/i, /inpaint/i, /art intel/i, /birpp/i,  /ismartta/i, /image enhanced/i, /palge/i, /RemovingAI/i, /bjob/i, /machinelearning/i, /sweee/i, /AI Fake/i, /F4k3/i, 
+	/deppn/i, /depenu/i, /depeni/i, /deipn/i, /diepn/i, /artifi/i, /artin/i, /iconicto/i, /-tool/i, /d3ppn/i, /d3penu/i, /d3p3nu/i, /dep3nu/i, /depeni/i,  /d3p3ni/i, /d3p3n1/i, 
+	/d3p3n!/i, /dep3n1/i, /dep3n!/i, /d3pen1/i, /d3pen!/i, /Br1tt/i, /Br!tt/i, /Sweee/i, /posing/i, /image enhancing/i, /virtual touchup/i, /ndif/i, /ndfy/i, /nd1f/i, /skirr/i, 
+	/nd!f/i, /ndlf/i, /shag/i, /d3peni/i, /edgin/i, /edgyi/i, /dreamstime/i, /Torrl/i, /wilson/i, /Kitty WWE/, /Dawn Marie/i, /soulgen/i, /soulgyn/i, /soulkyn/i, /Massaro/i, 
+	/fapif/i, /fappif/i, /skitr/i, /edgy1/i, /3dgy1/i, /3dgin/i, /edg1n/i, /edg1i/i, /edgi1/i, /3dg1i/i, /3dgi1/i, /edgiy/i, /edgye/i, /stripp/i, /strips/i, /stripz/i, /stripi/i, 
+	/striper/i, /stripes/i, /shetakeoff/i, /takeoffher/i, /takesoffher/i, /shetakesoff/i, /takingoff/i, /tookoffher/i, /shetookoff/i, /baring/i, /bares/i, /bliswwe/i, /retouch/i, 
+	/touchup/i, /touch up/i, /tush/i, /lex bl/i, /image ai/i, /edit ai/i, /deviant/i, /Lex Cabr/i, /Lex Carb/i, /Lex Kauf/i, /Lex Man/i, /nudecrawler/i, /unc1oth/i, /photo AI/i, 
+	/pict AI/i, /pics app/i, /picsart/i, /enhance image/i, /erootti/i, /vegi/i, /vegen/i, /faceswap/i, /DeepSeek/i, /deepnude ai/i, /deepnude-ai/i, /Roxan/i, /Perez/i, /female/i,
+	/Mickie/i, /Micky/i, /vagena/i, /birppis/i, /aitool/i, /Lana Perry/i, /Del Rey/i, /Tiffa/i, /Stratt/i, /puzzy/i, /vulv/i, /clito/i, /clita/i, /cl1t/i, /cloth/i, /uncloth/i, 
+	/decloth/i, /rem cloth/i, /del cloth/i, /babyg/i, /eras cloth/i, /Bella/i, /Tiffy/i, /StaphMc/i, /vagi/i, /vagene/i, /Del Ray/i, /CJ Lana/i, /playboy/i, /tor-selain/i, /Liv org/i,
+	/Stewart/i, /off pant/i, /rem pant/i, /Kristen Stewart/i, /Steward/i, /Brit Bake/i,  /pantie/i, /panty/i, /pants/i, /poses/i, /Sydnee/i, /del pant/i, /eras pant/i, /her pant/i, 
+	/she pant/i, /pussy/i, /Babe/i, /content adult/i, /porno/i, /editing/i, /AI Tool/i, /Chelsey/i, /Zel Veg/i, /Ch3l/i, /Sweeney/i, /input face/i, /upload face/i, /editor/i, /Twat/i,
+	/editation/i, /CJ Perry/i, /Lana WWE/i, /Lana Del Rey/i, /CJ WWE/i, /image app/i, /picture app/i, /edit app/i, /pic app/i, /photo app/i, /Perry WWE/i, /application/i, /Sxuel/i, 
+	/Sxual/i, /Sxu3l/i, /5xu3l/i, /5xuel/i, /5xu4l/i, /5xual/i, /dre4m/i, /dr34m/i, /bo0th/i, /izzi dame/i, /adult content/i, /penetration/i, /arxiv/i, /AI edit/i, /AI fantasy/i,   
+	/enhanced image/i, /joinface/i, /orrga/i, /orrgaa/i, /orgaa/i, /origas/i, /depn/i, /d3pn/i, /b0oth/i, /b0o7h/i, /bo07h/i, /b007h/i, /b00th/i, /booo/i, /b0oo/i, /bo0o/i, /skirt/i,
+	/boo0/i, /b000/i, /n000/i, /n00d/i, /no0d/i, /n0od/i, /Derriere/i, /Backside/i, /xray/i, /sheer/i, /clothes remover/i, /nsfw/i, /not safe for work/i, /AI unblur/i, /deblur/i, 
+	/nsfwgen/i, /bliswwe/i, /play boy/i, /uncensor app/i, /Mondomonger/i, /Mondo monger/i, /clothes remover/i, /nsfw/i, /not safe for work/i, /sexx/i, /sexual/i, /image enhancer/i,  
+	/Fantasy AI/i, /fantasy edit/i, /AI recreation/i, /synthetic model/i, /Margot/i, /Robbie/i, /Ana de Armas/i, /Ratajkowski/i, /vaatepoisto/i, /Emily/i, /Doja Cat/i, /skin view/i,
+	/Madelyn/i, /Salma Hayek/i, /Megan Fox/i, /Addison/i, /Emma Watson/i, /Taylor/i, /Nicki/i, /artificial model/i, /Minaj/i, /next-gen face/i, /smooth body/i, /TitsAI/i, /photo trick/i, 
+	/edit for fun/i, /realistic AI/i, /dream girl/i, /banned app/i, /filmora/i, /uncover/i, /Micki/i, /Stratusfaction/i, /m471c/i, /mat1c/i, /fisting/i, /pleasi/i, /Blendface/i, 
+	/pleasu/i, /herself/i, /her self/i, /delet bg/i, /fuck/i, /eras bg/i, /delet bg/i, /erase bg/i, /erasing bg/i, /bg delet/i, /bg erasing/i, /bg erase/i, /Blend face/i, /Steph/i, 
+	/morphi/i, /Blender face/i, /morfi/i, /fappi/i, /skin viewer/i, /skinviewer/i,  /cloth/i, /clothing/i, /clothes/i, /AI model$/i, /trained model$/i, /Reface/i, /DeepAI/i, /GFPGAN/i, 
+	/RestoreFormer/i, /FaceMagic/i, /desnudador/i, /des nudador/i, /pixary/i, /GAN-based/i, /latent/i, /prompt ex/i, /txt2img/i, /image to image/i, /image 2 image/i, /Fak3/i, /F4ke/i,
+	/imagetoimage/i, /image2image/i, /girl/i, /woman/i, /women/i, /babe/i, /waifu/i, /wife/i, /spouse/i, /celeb/i, /celebrit/i, /img2img/i, /boobs/i, /Comfy-UI/i, /ComfyAI/i, /TOR-/i,
+	/Comfy-AI/i, /CoAi/i, /ComAi/i, /ComfAi/i, /ComfoAi/i, /ComforAi/i, /ComfortAi/i, /Midjourney/i, /LTheory/i, /LuTheory/i, /edit pose/i, /Face Magic/i, /ex prompt/i, /example prompt/i, 
+	/prompt example/i, /toniwwe/i, /tonywwe/i, /fotor/i, /vercel/i, /venoi/i, /venic/i, /nsfw gen/i, /removebg/i, /remove bg/i, /Shiri/i, /remov bg/i, /removal bg/i, /ia onl/i, /cunt/i, 
+	/removalbg/i, /rembg/i, /rem background/i, /removbg/i, /del background/i, /eras background/i, /erase background/i, /erasing background/i, /butth/i, /buttc/i, /background eras/i, 
+	/background del/i, /background rem/i, /background off/i, /off background/i, /background out/i, /out background/i, /removebg/i, /ladies/i, /lady/i, /buttc/i, /butt c/i, /butt h/i, 
+	/sugarla/i, /butt s/i, /learn model/i, /mach model/i, /titten/i, /merg fac/i, /fac merg/i, /fac comb/i, /fac blend/i, /too merg/i, /merg too/i, /two fac/i, /two fac/i, /too fac/i, 
+	/too fac/i, /fac join/i, /join fac/i, /bg remov/i, /Trish/i, /Shir/i, /softw/i, /Stormwrestl/i, /Stormrassl/i, /Storm wrestl/i, /Storm rassl/i, /Toni AEW/i, /Storm AEW/i, /softw/i, 
+	/Toni WWE/i, /Toni AEW/i, /Genius of The Sky/i, /Shirakawa/i, /Shira/i,  /combin fac/i, /join 2 fac/i, /biscit/i, /bisci/i, /bisce/i, /biszit/i, /bizcit/i, /biskui/i, /bizkita/i, 
+	/bizkitb/i, /bizkitc/i, /bizkitd/i, /bizkitt/i, /bizkitx/i, /bizkitz/i, /bizkitn/i, /bizkitm/i, /buttz/i, /bizkito/i, /bizkity/i, /bizkith/i, /bizkitv/i, /bizkitå/i, /bizkitä/i, 
+	/bizkitö/i, /biscuita/i, /biscuitb/i, /biscuitc/i, /biscuitd/i, /biscuite/i, /biscuitf/i, /biscuitg/i, /biscuith/i, /biscuiti/i, /biscuitj/i, /Leona/i, /biscuitk/i, /biscuitl/i, 
+	/biscuitm/i, /biscuitn/i, /biscuito/i, /biscuitp/i, /biscuitq/i, /biscuitr/i, /biscuits/i, /biscuitt/i, /biscuitu/i, /biscuitv/i, /biscuitw/i, /biscuitx/i, /biscuity/i, /biscuitz/i, 
+	/biscuitå/i, /butts/i, /biscuitä/i, /biscuitö/i, /biscuitö/i, /butta/i, /buttb/i, /buttc/i, /buttd/i, /buttf/i, /buttg/i, /butth/i, /butti/i, /buttj/i, /buttk/i, /buttl/i, /buttm/i, 
+	/buttn/i, /butto/i, /buttp/i, /buttq/i, /buttr/i, /butts/i, /buttt/i, /buttu/i, /buttv/i, /buttw/i, /buttx/i, /butty/i, /buttz/i, /buttå/i, /buttä/i, /buttö/i, /Micky/i, /Mickie/i, 
+	/Mickie James/i, /Dixie/i, /Carter/i, /Gina Adams/i, /Valtez/i, /Gina Adam/i, /Adams WWE/i, /Gina WWE/i, /windsor/i, /alex wind/i, /Alex Windsor/i, /analsex/i, /The Kat/, /Nikki/i, 
+	/blisswwe/i, /bl15s/i, /bl1s5/i, /bl155/i, /bl1ss/i, /4lexa/i, /al3xa/i, /alex4/i, /4l3xa/i, /al3x4/i, /4l3x4/i, /4lex4/i, /bl15s/i, /bl1s5/i, /bl155/i, /blis5/i, /bli5s/i, /bli55/i,  
+	/lewdy/i, /lewdi/i, /lewdie's/i, /Torrie/i, /Dreamboot/i, /Dream boot/i, /dpnod/i, /dpnood/i, /dpnud/i, /depnud/i, /depnuud/i, /depenud/i, /depenuu/i, /dpepenud/i, /dpeepenud/i, 
+	/dpeepnud/i, /dpeependu/i, /dpeepndu/i, /softw/i, /img online/i, /photo online/i, /pic online/i, /Elina WWE/i, /Elyna WWE/i, /Elina Blac/i, /Elina Blak/i, /Fantop/i, /Fan top/i, 
+	/Fan-top/i, /Topfan/i, /Top fan/i, /Top-fan/i, /Top-fans/i, /fanstopia/i, /Jenni/i, /fans top/i, /topiafan/i, /topia fan/i, /topia-fan/i, /topifan/i, /topi fan/i, /topi-fan/i, 
+	/topaifan/i, /topai fan/i, /topai-fan/i, /fans-topia/i, /fans-topai/i, /Henni/i, /Lawren/i, /Lawrenc/i, /Lawrence/i, /Jennif/i, /softorbit/i, /soft orbit/i, /Staph McMahon/i,  
+	/MeekMahan/i, /MeekMahon/i, /MekMahon/i, /MekMahan/i, /MekMahaan/i, /Mek Mahaan/i, /4ut0/i, /Meek Mahaan/i, /nainen/i, /naikkoset/i, /mimmejä/i, /misu/i, /pimu/i, /lahiopekoni/i, 
+	/Meek Mahan/i, /Meek Mahon/i, /Mek Mahon/i, /Co-Ai/i, /Com-Ai/i, /CoAi/i, /ComAi/i, /ComfAi/i, /ComfoAi/i, /ComforAi/i, /ComfortAi/i, /ComfortaAi/i, /ComfortabAi/i, /ComfortablAi/i, 
+	/ComfortableAi/i, /Comf-Ai/i, /Comfo-Ai/i, /Comfor-Ai/i, /Comfort-Ai/i, /Comforta-Ai/i, /Comfortab-Ai/i, /Comfortabl-Ai/i, /Comfortable-Ai/i, /Runcomfy/i, /Run comfy/i, /Run-comfy/i, 
+	/Aut1111/i, /Becky/i, /Becki/i, /Rebecca/i, /Amber Heard/i, /without cloth/i, /without pant/i, /without tshirt/i, /without t-shirt/i, /without boxer/i, /b0x3r/i, /women without/i,  
+	/woman without/i,  /girl without/i, /lady without/i, /ladies without/i, /girlfriend/i, /boyfriend/i, /girl friend/i, /boy friend/i, /bikini/i, /linger/i, /under wear/i, /underwear/i, 	
+	/without dres/i, /Jazmyn/i, /Jaszmyn/i, /Jazsmyn/i, /Jazmin/i, /Dualipa/i, /Dua Lipa/i, /Dual Lipa/i, /Dual ipa/i, /chang pos/i, /selfie body/i, /belfie/i, /pos chang/i, /post chang/i, 
+	/change post/i, /change pose/i, /post change/i, /pose change/i, /pose change/i, /posture change/i, /Jasmin/i, /stefe/i, /postu edit/i, /pose edit/i, /edit postu/i, /editor postu/i, 
+	/editor pose/i, /postu editor/i, /pose editor/i, /postu modi/i, /pose modi/i, /pic online/i, /pict online/i, /img body/i, /twerk/i, /phot onli/i, /fhot onli/i, /body belfie/i, /wedgy/i,
+	/foto onli/i, /full body/i, /pic body/i, /pict body/i, /body selfie/i, /phot body/i, /image body/i, /postu tweak/i, /pose tweak/i, /pose swap/i, /post swap/i, /body swap/i, /LaPrima/i,  
+	/post adjust/i, /body adjust/i, /stefa/i, /adjust pose/i, /adjust posture/i, /pose trans/i, /post trans/i, /pose morph/i, /post morph/i, /body morph/i, /body reshape/i, /shape body/i, 
+	/repose edit/i, /pose adjust/i, /pose redo/i, /repose chang/i, /body editor/i, /body filter/i, /filter body/i, /angle chang/i, /change angle/i, /edit angle/i, /camera angle/i, /head turn/i, 
+	/body turn/i, /pose reconstruct/i, /reconstruct pose/i, /pose fix/i, /impoten/i, /fix pose/i, /body fix/i, /repose/i, /fix body/i, /edit selfie/i, /AIRemove/i, /RemoveAI/i, /RemovalAI/i, 
+	/selfie editor/i, /pose shift/i, /posture shift/i, /angle shift/i, /pic shift/i, /phot shift/i, /img shift/i, /ima shift/i, /promeai/i, /prome-ai/i, /openpose/i, /open pose/i, /open-pose/i, 
+	/AIRemov/i, /AIRemoving/i, /pose-open/i, /poseopen/i, /pos open/i, /Lily Adam/i, /Lilly Adam/i, /Toiviainen/i, /Tatujo/i, /PiFuHD/i, /Hirada/i, /Hirata/i, /Cathy/i, /Kathy/i, /Catherine/i, 
+	/AIRemoval/i, /Pramer/i, /Pramir/i, /LaPrime/i, /LaPrima/i, /LaPr1me/i, /Prim3r/i, /Primer/i, /stefe/i, /stefa/i, /Premare/i, /La Primare/i, /Julianne/i, /Juliane/i, /Juliana/i, /Julianna/i, 
+	/Rasikangas/i, /Rasikannas/i, /Jade Cargil/i, /Jade WWE/i, /cargil/i, /cargirl/i, /cargril/i, /gargril/i, /gargirl/i, /garcirl/i, /watanabe/i, /barlow/i, /Jad3 WWE/i, /Nikki/i, /Nikkita/i,
+	/Saya Kamitani/i, /Kamitani/i, /Katie/i, /Nikkita Lyons/i, /Lisa Marie/i, /Lisa Marie Varon/i, /Lisa Varon/i, /Marie Varon/i, /Amanda Huber/i, /cargil/i, /cargirl/i, /cargril/i, /gargril/i, 
+	/gargirl/i, /garcirl/i, /b-job/i, /Ruby Soho/i, /Monica/i, /Castillo/i, /Matsumoto/i, /Shino Suzuki/i, /Yamashita/i, /Nia Jax/i, /McQueen/i, /Kasie Cay/i, /fukk/i, /fukc/i, /join2fac/i,
+	/fucc/i, /Adriana/i, /flexclip/i, /pixelmator/i, /perfectcorp/i, /facejoin/i, /prompt/i, /Sherilyn/i, /headgen/i, /head gen/i, /genhead/i, /genhead/i, /HeyGen/i, /GenHey/i, /ai twerk/i, 
+	/Mafiaprinsessa/i, /twerk ai/i, /mangoanimat/i, /photo jiggle/i, /vid3/i, /boobi/i, /animat pho/i, /animat ima/i, /animat img/i, /pic animat/i, /pho animat/i, /animat ima/i, /animat pic/i, 
+	/animat pho/i,/animat ima/i, /animat img/i, /pic animat/i, /pho animat/i, /animat pic/i, /img animat/i, /ima animat/i, /photo animat/i, /image animat/i, /make pic mov/i, /make pho mov/i, 
+	/make img mov/i, /make ima mov/i, /gif pic/i, /gif pho/i, /gif img/i, /gif ima/i, /photo to gif/i, /image to gif/i, /pic to gif/i, /pic to vid/i, /photo to video/i, /image to video/i,  
+	/vld3/i, /v1d3/i, /g!f/i, /RemovingAI/i, /blowjob/i, /bjob/i, /mangoai/i, /mangoapp/i, /mango-app/i, /ai-app/i, /mangoanim/i, /mango anim/i, /mango-anim/i, /lantaai/i, /lantaaa/i, /EXGF/i,
+	/motionai/i, /changemotion/i, /swapmotion/i, /motionsw/i, /motionc/i, /poseai/i, /AIblow/i, /AIsuck/i, /AI-suck/i, /drool/i,/Down Marie/i, /lähiopekoni/i, /lähiöpekoni/i, /lahiöpekoni/i,
+	/blowjob/i, /BJob/i, /B-J0b/i, /B-Job/i, /Suckjob/i, /Suck-job/i,  /Suckj0b/i, /Suck-j0b/i, /SDuck/i, /Mouthjob/i, /Mouth-job/i, /MouthAI/i, /MouthinAI/i, /MouthingAI/i, /AIMouth/i, /wedge/i,
+	/BlowAI/i, /BlowsAI/i, /BlowingAI/i, /JobAI/i, /AIJob/i, /Mouthig/i, /ZuckCock/i, /ZuckC/i, /ZuckD/i, /ZuckP/i, /Zuckz/i, /Zucks/i, /Zuckc/i, /Zuzkc/i, /YouZuck/i, /EX-GF/i, /TitsAI/i,
+	/ZuckYou/i, /Cuck/i, /Guck/i, /Cheeks/i, /Sukc/i, /AISucc/i, /SuccAI/i, /Suqz/i, /Suqs/i, /Suqc/i, /Suqq/i, /Suqq/i, /Suqi/i, /Suqz/i, /Sucq/i, /cukc/i, /boob/i, /b0ob/i, /fagger/i, /wedgi/i,     
+	/titjob/i, /titti/i, /assjob/i, /buttjob/i, /wank/i, /w4nk/i, /tittt/i, /tiitt/i, /crotch/i, /thigh/i, /legjob/i, /asssex/i, /buttsex/i, /titsex/i, /buttsex/i, /ass sex/i, /butt sex/i, 
+        /butt sex/i, /buttstuff/i, /butt stuff/i, /p0rn/i, /redtube/i, /xhamster/i, /asstube/i, /butttube/i, /FapAI/i, /adulttube/i, /adult tube/i, /AroundAI/i, /HerAround/i, /AroundHer/i, /TurnHer/i, 
+	/HerTurn/i, /SheAround/i, /AroundShe/i, /TurnShe/i, /SheTurn/i, /-her/i, /her-/i, /-she/i, /she-/i, /AIFap/i, /AIHug/i, /FapAI/i,/HugAI/i, /AIAdult/i, /AIContent/i, /ContentAI/i, /AICreate/i, 
+	/CreateAI/i, /AICreating/i, /CreatingAI/i, /AICreation/i, /CreationAI/i, /AIMake/i, /MakeAI/i, /AIMaking/i, /MakingAI/i, /AIOut/i, /OutAI/i, /AIStuff/i, /StuffAI/i, /AdultAI/i, /LookingUpAI/i, 
+	/tit sex/i, /titty/i, /ZuckAI/i, /AIBlow/i, /Sukz/i, /b-job/i, /RemovAI/i, /selfie morph/i, /SpreadingHerLeg/i, /SpreadingLeg/i, /AssAI/i, /AIAss/i, /FindAI/i, /FinderAI/i, /FindingAI/i, 
+	/HerAi/i, /AiHer/i, /SheAi/i, /AIShe/i, /AIFind/i, /DirectoryAI/i, /AIDirect/i, /AILook/i, /LookAI/i, /LooksAI/i, /LookupAI/i, /Look-upAI/i,  /UpLookAI/i, /AIUpLook/i, /ButtAPP/i, /APPAI/i, 
+	/AIAPP/i, /AssAPP/i, /AppAss/i, /Ass-/i, /-Ass/i, /Butt-/i, /-Butt/i, /Cooch-/i, /-Cooch/i, /Coochie-/i, /Kewch-/i, /-Kewch/i, /Kewchie-/i, /Coachie/i, /cooch/i, /tush/i, /AITit/i, /TitAI/i, 
+	/b00b/i, /bo0b/i, /AIBoob/i, /BoobAI/i, /BoobsAI/i, /BoobieAI/i, /BoobiesAI/i, /BoobyAI/i, /BoobysAI/i, /titti/i, /titty/i, /AISketch/i, /SketchAI/i, /AIDraw/i, /AIDrew/i, /DrawAI/i, /DrewAI/i, 
+	/DrawsAI/i, /DrawingAI/i, /DrawingsAI/i, /PaintAI/i, /PaintsAI/i, /PaintingAI/i, /PaintingsAI/i, /AIPain/i, /OpenHerLegs/i, /OpenLegs/i, /OpeningLegs/i, /OpeningHerLegs/i, /OpensLegs/i, /cunnt/i,
+	/OpensHerLegs/i, /SpreadLeg/i, /SpreadHerLeg/i, /cunnn/i, /strips/i, /SpreadsLeg/i, /SpreadsHerLeg/i, /HerThig/i, /HerLeg/i, /HerThic/i, /SheThig/i, /SheLeg/i, /SheThic/i, /HerLeg/i, /HerThic/i, 
+	/LegShe/i, /LegsShe/i, /Thicc/i, /ThickShe/i, /fondl/i, /bdsm/i, /censor/i, /reveals all/i, /reveali/i, /revealing/i, /stripp/i, /strips/i, /stripz/i, /stripi/i, /striper/i, /stripes/i, /striped/i, 
+	/shetakeoff/i, /takeoffher/i, /takesoffher/i, /shetakesoff/i, /takingoff/i, /tookoffher/i, /shetookoff/i, /baring/i, /bares/i, /artintel/i, /Zendaya/i, /AIZuck/i, /Stratu/i, /Kairi/i, /artintel/i, 
+	 
+
+
+    // Symbols and emojis (Nuclear)
+	/🍑/i, /🍆/i, /💦/i, /👅/i, /🔞/i, /😈/i, /👙/i, /🩲/i, /👠/i, /🧼/i, /🧽/i, /\( \. \)\( \. \)/i, /\| \|/i, /\( o \)\( o \)/i, /\(!\)/i, /18\+/i, /\*\*\*/i, /\*\*/i,
+
+
+    // Boundaried Nuclear regexes
+	/\bgirl\b/i, /\blady\b/i, /\bshe\b/i, /\bher\b/i, /\banal\b/i, /\bsex\b/i, /\bbra\b/i, /\bass\b/i, /\bmorph\b/i, /\bVega\b/i, /\bSlut\b/i, /\bFap\b/i, /\bBoob\b/i, /\bTOR\b/i, 
+	/\bAMX\b/i, /\bAnal-\b/i, /\bAlexa\b/i, /\bAleksa\b/i, /\bADM\b/i, /\bADMX\b/i, /\bAis\b/i, /\b5he\b/i, /\b0rg\b/i, /\bg45m\b/i, /\bSX\b/i, /\bNud\b/i, /\bdpnod\b/i, /\bdp nod\b/i, 
+	/\bsh3\b/i, /\bGrils\b/i, /\bIzzi\b/i, /\bDame\b/i, /\bNox\b/i, /\bLiv\b/i, /\bEmma\b/i, /\bRiho\b/i, /\bJaida\b/i, /\bCum\b/i, /\bAnal\b/i, /\bTay\b/i, /\balexa wwe\b/i, /\bazz\b/i, 
+	/\bLana\b/i, /\bFuku\b/i, /\bMina\b/i, /\bMachaine\b/i, /\bjaida\b/i, /\bRembg\b/i, /\bRem bg\b/i, /\bDel bg\b/i, /\bDelbg\b/i, /\bMorf\b/i, /\bTits\b/i, /\bChaturbate\b/i, /\bToni\b/i, 
+	/\bStripchat\b/i, /\bGril\b/i,  /\bGail\b/i, /\bAshley\b/i, /\bPamela\b/i, /\bBrooke\b/i, /\bTylo\b/i, /\bCatherine\b/i, /\bBridget\b/i, /\bSally\b/i, /\bvsco\b/i, /\bdp nood\b/i, 
+	/\bdp nod\b/i, /\bdep nod\b/i, /\bFux\b/i, /\bButt\b/i, /\bLily\b/i, /\bLilly\b/i, /\bAmber\b/i, /\bFuk\b/i, /\bFuc\b/i, /\bmotion\b/i, /\bH3r\b/i, /\bS0ft\b/i, /\b50ft\b/i, /\bFag\b/i, 
+	/\bThekla\b/i, /\bTit\b/i, /\bShotzi\b/i, /\bPant\b/i, /\bElena\b/i, /\bExGF\b/i, /\bEx-GF\b/i, /\bZoey\b/i, /\bSuck\b/i, /\bSucks\b/i,
+	
+
+    // Finnish Nuclear regex list
+	/paneminen/i, /poista vaatteet/i, /vaatepoisto/i, /vaatteidenpoisto/i, /vaateiden poisto/i, /poista vaatteet/i, /poista vaat/i, /vaatteidenpoist/i, /poistavaat/i, /erotic/i,	/poistovaat/i, 
+	/seksuaali/i, /sexuaali/i, /seksuaalisuus/i, /eroottinen/i, /yhdyntäkuvia/i, /yhdyntä kuvia/i, /läpinäkyvä/i, /erotiikka/i, /Emilia/i, /sukupuoliyhteys/i, /seksikuva/i, /seksikuvi/i, /prostit/i,
+	/nussimista/i, /panevat/i, /riisu/i, /paneminen/i, /panemis/i, /paneskelu/i, /nussi/i, /nussinta /i, /nussia/i, /nussiminen/i, /poista vaatteet/i, /vaatteiden poisto/i, /tekoäly/i, /yhdynnässä/i, 
+	/seksikuva/i, /seksivideo/i, /seksi kuvia/i, /l4st0n/i, /seksikuvia/i, /panovideo/i, /pano video/i, /panokuva/i, /pano kuva/i, /pano kuvia/i, /panokuvia/i, /masturb/i, /näpitys/i, /itsetyydy/i, 
+	/itse tyydytys/i, /itsetyydytysvid/i, /tuhero/i, /tissi/i, /runkku/i, /runkkaus/i, /runkata/i, /pimpp!/i, /runkkualbumi/i, /nakukuva/i, /nakuna/i, /runkka/i, /näpittäminen/i, /sormetus/i, /-aukko/i,  
+	/sormitta/i, /sormetta/i, /sormettamiskuv/i, /sormittamiskuv/i, /sormettamiskuv/i, /fistaaminen/i, /näpityskuv/i, /näpittämiskuv/i, /sormettamisvid/i, /näpitysvid/i, /kotijynkky/i, /jynkkykuv/i, 
+	/jynkkyvid/i, /aikuisviihde/i, /fistaus/i, /fistaaminen/i, /fistata/i, /fistaus/i, /kuvaton/i, /aikuis viihde/i, /aikuissisältö/i, /aikuis sisältö/i, /aikuiskontsa/i, /aikuiskontentti/i, /yhdyntä/i, 
+	/aikuis kontentti/i, /aikuiskontentti/i, /aikuis contentti/i, /kuvankäsittely/i, /applikaatio/i, /4l4ston/i, /last0n/i, /pillu/i, /huora/i, /huoru/i, /horats/i, /ilotyttå/i, /ilotyttö/i, /ilötyttö/i, 
+	/ilötytto/i, /ilötalo/i, /erooti/i, /erotii/i, /erootii/i, /kuvakenet/i, /il0talo/i, /iløtalå/i, /ilötalå/i, /ilotalø/i, /pimpp/i, /Diipfeikki/i, /Diipfeik/i, /deep feik/i, /deepfeik/i, /Diip feik/i, 
+	/klita/i, /peppu/i, /pimppi/i, /pinppi/i, /Peba/i, /persreikä/i, /perse reikä/i, /pers reikä/i, /pyllyn reikä/i, /viagr/i, /vaatteet pois/i, /pylly reikä/i, /pyllynreikä/i, /pyllyreikä/i, /Feikki/i,
+	/klito/i, /persau/i, /vaatepoist/i, /pers a/i, /anusa/i, /anus a/i, /pers-/i, /pylly-/i, /-kolo/i, /pinpp/i, /pinpi/i, /syva vaarennos/i, /syvä vaarennos/i, /perse/i, /pylly/i, /pyllyn-/i, /-reikä/i,  
+	/pimpe/i, /pimpi/i, /pimps/i, /pimsu/i, /pimsa/i, /pimps/i, /pilde/i, /pilper/i, /tussu/i, /emätin/i, /penetraatio/i, /syvavaarennos/i, /syvä väärennös/i, /pimpp!/i, /syväväärennös/i, /kikkeli/i, 
+	/Perze/i, /huora/i, /huoru/i, /itsetyydytyskuv/i, /alaston/i, /Aikusviihde/i, /Aikus viihde/i, /Diip feikki/i, /sormitus/i, /erotii/i, /lortto/i, /lutka/i, /lumppu/i, /narttu/i, /römpsä/i, /römpsä/i, 
+	/rompsä/i, /römpsa/i, /rompsa/i, /tussu/i, /tusspa/i, /tuspand/i, /pilde/i, /pilpe/i, /persaus/i, /persvako/i, /aimaito/i, /maitoai/i, /persevako/i, /kyrpa/i, /persreikä/i, /penis/i, /kulli/i, /kyrpä/i,  
+	/-aukko/i, /pippeli/i, /persereikä/i, /perseaukko/i, /generativ/i, /anusaukko/i, /anus-aukko/i, /anus aukko/i, /pers aukko/i, /persaukko/i, /perseaukko/i, /perse aukko/i, /perse-aukko/i, /pers-aukko/i, 
+	/tekoäly/i, /teko äly/i,
+
+
+    // Finnish boundaried Nuclear regex list 
+	/\bRinnat\b/i, /\bTatu\b/i, /\bTissi\b/i, /\bTisu\b/i, /\bTisut\b/i, /\bAnus\b/i, /\bAnaali\b/i, /\bSeksi\b/i, /\bHoro\b/i, /\bGa5m\b/i, /\bG4sm\b/i, /\b@$\b/i, /\bkuvake\b/i, /\bKim\b/i, 
+	/\bLili\b/i, /\bLilli\b/i, /\bDiva\b/i,  
+        
+
+    // Special Nuclear regexes
+        
+	/deep.*(nude|naked|fake|job|ai)/i,
+        /nudif(?:y|ier|ying|ication|ications)?/i, /undress(?:ing|ify|ifying|ified|ed)?/i,
+        /un\s*[-_ ]?\s*cloth(?:e|es|ing|ed)?/i, /decloth(?:e|es|ing|ed)?/i,
+        /clothes?\s*[-_ ]?\s*(?:remov|eras|delet|del|off|out)/i, /clothing\s*[-_ ]?\s*(?:remov|eras|delet|del|off|out)/i,
+        /(?:remov|eras|delet|del)\s*[-_ ]?\s*(?:clothes?|clothing|dress|outfit|garment)/i,
+        /(?:strip|stripp|bare|reveal)\s*[-_ ]?\s*(?:ai|app|tool|filter|generator|image|photo|pic)/i,
+        /(?:nude|naked|nsfw)\s*[-_ ]?\s*(?:ai|app|tool|generator|gen|filter|editor|site)/i,
+        /(?:ai|deep|text\s*2|text\s*to)\s*[-_ ]?\s*(?:nude|nudify|undress|uncloth|decloth)/i,
+        /x\s*[-_ ]?\s*ray\s*[-_ ]?\s*(?:cloth|clothes|body|image|photo)/i,
+        /see\s*[-_ ]?\s*through\s*[-_ ]?\s*(?:cloth|clothes|clothing|image|photo)/i,
+	/\bstable[\s_-]*diffu/i,    
+	/\bunstable[\s_-]*diffu/i,  
+        /syv[aä]\s*[-_ ]?\s*v[aä][aä]renn[oö]s/i,
+        /diip\s*[-_ ]?\s*feik/i,
+        /face\s*[-_ ]?\s*(?:swap|morph|fusion|replace|replacement|merge|blend|join|remap)/i,
+        /(?:faceswap|facefusion|facereplace|faceblend|facejoin|joinface)/i,
+        /synthetic\s*[-_ ]?\s*(?:face|media|avatar|model|person|portrait)/i,
+        /(?:txt2img|img2img|image\s*2\s*image|image\s*to\s*image)/i,
+        /(?:image|photo|pic|img)\s*[-_ ]?\s*(?:to|2)\s*[-_ ]?\s*(?:video|vid|gif)/i,
+        /(?:video|vid|gif)\s*[-_ ]?\s*(?:image|photo|pic|img)/i,
+        /(?:ai|photo|image|body|pose)\s*[-_ ]?\s*(?:twerk|jiggle|bounce|motion|repose|pose\s*change)/i,
+        /(?:ai|adult|nsfw)\s*[-_ ]?\s*(?:blow|suck|mouth|fap|boob|tit|ass|porn)/i,
+        /(?:porn|adult|nsfw)\s*[-_ ]?\s*(?:ai|generator|tool|app|site|tube)/i,
+        /(?:onlyfans|fansly|chaturbate|stripchat|redgifs|xhamster|redtube|brazzers|bangbros)/i,
+        /(?:nude|naked|nsfw|porn|adult)\s*[-_ ]?\s*(?:image|photo|pic|video|vid|content|site|app)/i,
+        /(?:vaat|vaatte|alusvaat|pait|liiv|hous).*pois/i,
+        /(?:poista|poisto|poistaminen|poistamis).*vaat/i,
+        /(?:alaston|alasti|vaatteeton|paljas)\s*[-_ ]?\s*(?:kuva|kuvia|video|sivu|app|teko[aä]ly)/i,
+        /(?:seksikuva|seksivideo|aikuissis[aä]lt[oö]|aikuisviihde|jynkky|runkku)/i,
+        /(?:pillu|pimppi|tuhero|em[aä]tin|tussu|r[oö]mps[aä]|kyrp[aä]|kulli|kikkeli)/i,
+        /(?:boob|boobs|tits|titty|pussy|vagina|cock|dick|penis|blowjob|handjob|titjob|assjob)/i,
+	/(?:poista|poisto|poistaminen|poistamis)[ -]?(?:vaatteet|vaatteiden)/i,
+	/(?:nud|naked|nakde|n4ked|nak3d|n4k3d|AI|Artificial)[ -]?(?:scan|app)/i,
+	/(?:AI|Art|Intel)[ -]?(?:nude|nudi|naked|nakde)/i,
+	/see[- ]?through/i,
+	/vaat.*pois/i,
+	/\b(?:tiktok|tik[\s._-]?tok)\b/i,
+	/^(?=[\s\S]*\b(?:instagram|insta|ig|snapchat|snap)\b)(?=[\s\S]*\b(?:story|stories|tarina(?:n|t|a)?|tarinoita)\b)(?=[\s\S]*\b(?:view(?:er|ing)?|watch(?:er|ing)?|download(?:er|ing)?|sav(?:e|er|ing)|anonymous(?:ly)?|katso(?:a)?|lataa|tallenn(?:a|us))\b)/i,
+	/(?:stories?(?:ig|insta)|(?:ig|insta)(?:story|stories)(?:viewer|saver|downloader)?|(?:anon|anonymous)(?:story|stories)(?:viewer|saver)?|(?:story|stories)(?:viewer|saver|downloader))/i,
+];
+
+
+    // Regexes of result/link/card-only terms. These never redirect a search by themselves.
+    const resultHideTerms = [
+	/ilåtyttå/i, /ilåtyttö/i, /iløtyttö/i, /iløtytto/i, /iløtyttø/i, /il0tyttö/i, /il0tytto/i, /il0tytt0/i, /il0tyttå/i, /1lotyttö/i, /1lotytto/i, /!lotyttö/i, /0nli/i,
+	/ilotyttø/i, /ilotytt0/i, /ilotytto/i, /kuvake\.net/i, /ilåtalå/i, /ilotalå/i, /li1vi/i, /p3rs aukko/i, /p3r5 aukko/i, /per5 aukko/i, /p3rs-aukko/i, /p3r5 aukko/i,  
+	/p3rse/i, /pers3/i, /p3rs3/i, /per5e/i, /per53/i, /p3r5e/i, /p3r53/i, /rints/i, /r1nts/i, /r1nt5/i, /rint5/i, /pip4r/i, /p1par/i, /rintalii/i, /rinta lii/i, /r1nta/i, 
+	/r1nt4/i, /rint4/i, /l1ivi/i, /sexi/i, /liiv1/i, /l1iv1/i, /li1v1/i, /l11v1/i, /l11vi/i, /mat1c/i, /m4tic/i, /ma7ic/i, /ma71c/i, /m4tic/i, /ComfyUI/i, /ma7ic/i, /0r9g4/i, 
+	/0r1q4/i, /0r1qa/i, /0rlg4h/i, /or1g@h/i,/0rg4/i, /org4/i, /orgy/i, /orgi/i, /org@/i, /0rg@/i, /0rgi/i, /0riga/i, /0r1g4/i, /0rlg4/i, /orlg4/i, /0rlg@/i, /orlg@/i, /or1ga/i, 
+	/orig4/i, /0rlga/i, /0rrg4/i, /orrg4/i, /or1g@/i, /0r1g@/i, /0r1ga/i, /0r!g@/i, /0r!g4/i, /d!c/i, /0r9ga/i, /booba/i, /Waaa/i, /V14gr/i, /w333d/i, /w3333/i, /wemen's/i,
+	/we333/i, /w3e33/i, /w33e3/i, /w333e/i, /we33e/i, /we3e3/i, /w3e3e/i, /weee/i, /f4gg/i, /fagg3/i, /wedg1/i, /wedg!/i, /w3dg/i, /w33d/i, /we3d/i, /w3ed/i, /wemen/i, /pr0/i,
+	/ldaies/i, /laadie/i, /laadis/i, /leydis/i, /5uck/i, /Beba/i, /Bepa/i, /al4ston/i,  /p4in/i, /p!mppi/i, /V1agr/i, /V!agr/i, /V!4gr/i, /Vi4gr/i, /V14gr/i, /Viagr/i, /c3n5o/i, 
+	/zen5o/i, /z3n5o/i, /s3n5o/i, /sen5o/i, /s3nso/i, /s3nc/i, /ph0t/i, /p1c/i, /picc/i, /im4g/i, /image online/i, /d!ck/i, /dlck/i, /wemons/i, /d1c/i, /d!k/i, /c0ck/i, /d!c/i, 
+	/onl1/i, /fappp/i, /p05/i, /po5/i, /p0s/i, /postur/i, /posin/i, /Anthr/i, /Antro/i, /s0ftw/i, /w4r3/i, /p41n/i, /pa1n/i, /Elyina/i, /Eliyna/i, /bik1/i, /0nl1/i, /t0ol/i,
+	/to0l/i, /t00l/i, /70ol/i, /7o0l/i, /700l/i, /Elayna/i, /Eleyna/i, /Elyna/i, /Sxuel/i, /Sxual/i, /Sxu3l/i, /5xu3l/i, /5xu4l/i, /5xual/i, /dre4m/i, /dr34m/i, /bo0th/i, 
+	/b0oth/i, /b0o7h/i, /bo07h/i, /b007h/i, /b00th/i, /booo/i, /b0oo/i, /bo0o/i, /boo0/i, /b000/i, /booo/i, /n000/i, /no0d/i, /n0od/i, /K3wc/i, /7ush/i, /7u5h/i, /tu5h/i, 
+	/b4re/i, /bar3/i, /b4r3/i, /b4r1/i, /bar1/i, /4ppl1/i, /appl1/i, /pr0gram/i, /progr4m/i, /pr0gr4m/i, /wemon's/i, /zenzor/i, /cencor/i, /cenzor/i, /cens0/i, /c3ns/i, 
+	/cen5/i, /c3n5/i, /cen5o/i, /sencor/i, /zencor/i, /zensor/i, /leydies/i, /b4re/i, /j0b/i, /w0rk/i, /bj0b/i, /dr0ol/i, /dro0l/i, /dr00l/i, /BJAI/i, /AIBJ/i, /BJ0b/i, 
+	/M4rie/i, /Mar1e/i, /ph0t/i, /pho7/i, /ph07/i, /1m4g/i, /im4g/i, /1mag/i, /!m4g/i, /!mg/i, /v1d3/i, /bl0w/i, /striped/i, /b4ri/i, /v3rc/i, /v3rz/i, /v3rs/i, /v3r5/i, 
+	/sk1r/i, /5kir/i, /5k1r/i, /Mouthj0b/i, /M0uthjob/i, /M0uthj0b/i, /Mouth-j0b/i, /M0uth/i, /Mou7h/i,  /Prim3r/i, /Pr1m3r/i, /Pr1mer/i, /Primar/i, /Pr1m4r/i, /Pr1mar/i, 
+	/LaPr1ma/i, /L4Pr1ma/i, /LaPr1m4/i, /LaPrim4/i, /LaPrim3/i, /LaPr1m3/i, /w4re/i, /Jenn1/i, /J3nn1/i, /J3nni/i, /b0xer/i, /4uto/i, /J3nn4/i, /b0x3r/i, /Jenn4/i, /M0u7h/i, 
+	/5hag/i, /5h4g/i, /sh4g/i, /3dg1n/i, /ed!t/i, /edi7/i, /3d!7/i, /pa!g/i, /3d!t/i, /P4IG3/i, /Paig3/i, /P4ige/i, /pa1g/i, /3dit/i, /ed1t/i, /Tw4t/i, /Brltt/i, /St3ph/i, 
+	/her0/i, /h3r0/i, /h3ro/i, /pr0mpt/i, /pr0mp7/i, /Chel5/i, /3d1t/i, /5k1r/i, /m4tic/i, /wuhmans/i, /wahmans/i, /wehmans/i, /Torr1/i, /Torr!/i, /0rig4/i, /per5 aukko/i, 
+	/il0tyttø/i, /pa!g/i, /iløtalo/i, /0rga5m/i, /m47ic/i, /m471c/i, /ma71c/i, /0rig@/i, /Aut0/i, /ed!7/i, /5xuel/i, /n00d/i, /gr4m/i, /4ppli/i, /war3/i, /0rg@5m/i, /d1ck/i,
+	/ed17/i, /p!llu/i, /blowj0b/i, /3d17/i, /promp7/i, /wee3e/i, /5yvä/i, /v1de/i, /!mag/i, /!m4g/i, /palg3/i, /M0uth-job/i,
+
+
+	// Boundaried link result regexes
+	/\bSuck\b/i, /\bSucks\b/i,
+    ];
+
+
+
+
+
+
+    // --- NEW: DYNAMIC WRESTLER BANS FROM WRESTLING.JS ---
+    function applyDynamicWrestlerBans() {
+        if (typeof chrome !== 'undefined' && chrome.storage) {
+            try {
+                chrome.storage.local.get(['wrestling_women_urls'], function(result) {
+                    if (result.wrestling_women_urls && Array.isArray(result.wrestling_women_urls)) {
+                        let addedCount = 0;
+                        let skippedDuplicateCount = 0;
+
+                        // Core exclusions to prevent global bans
+                        const localExclusions = ['melina', 'aj'];
+
+                        function escapeRegexLiteral(value) {
+                            return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                        }
+
+                        function makeFlexibleNamePattern(name) {
+                            return String(name || '')
+                                .trim()
+                                .split(/\s+/)
+                                .filter(Boolean)
+                                .map(escapeRegexLiteral)
+                                .join('[\\s_\\-]+');
+                        }
+
+                        function visibleLetterCount(name) {
+                            return String(name || '').replace(/[^0-9A-Za-zÀ-ÖØ-öø-ÿ]/g, '').length;
+                        }
+
+                        function nuclearTermExists(source) {
+                            return nuclearRegex.some(rx => rx && rx.source === source);
+                        }
+
+                        result.wrestling_women_urls.forEach(url => {
+                            const parts = String(url || '').split('/').filter(Boolean);
+                            const slug = String(parts[parts.length - 1] || '').toLowerCase();
+                            if (!slug) return;
+
+                            if (localExclusions.includes(slug)) return;
+
+                            const name = slug.replace(/-/g, ' ').trim();
+                            if (!name) return;
+
+                            const namePattern = makeFlexibleNamePattern(name);
+                            if (!namePattern) return;
+
+                            // SmackDownHotel women wrestler names are nuclear now.
+                            // 5 visible letters/digits or less -> boundaried nuclear regex.
+                            // Longer names -> regular full nuclear regex.
+                            const shouldBoundary = visibleLetterCount(name) <= 5;
+                            const regexSource = shouldBoundary ? ('\\b' + namePattern + '\\b') : namePattern;
+
+                            // Prevent exact duplicate dynamic nuclear entries.
+                            if (nuclearTermExists(regexSource)) {
+                                skippedDuplicateCount++;
+                                return;
+                            }
+
+                            nuclearRegex.push(new RegExp(regexSource, 'i'));
+                            addedCount++;
+                        });
+
+                        if (addedCount > 0) {
+                            devLog(`Dynamically added ${addedCount} wrestler names from shared storage to nuclearRegex. Skipped duplicates: ${skippedDuplicateCount}.`);
+                            // Re-run main filtering immediately to apply new nuclear rules
+                            if (typeof mainFiltering === 'function') {
+                                mainFiltering();
+                            }
+                        }
+                    }
+                });
+            } catch(e) {}
+        }
+    }
+    // Execute immediately
+    applyDynamicWrestlerBans();
+
+    // Special query-redirect regexes, kept separate for readability.
+    const specialRedirectRegexes = [
+        /gr[a4][i1l]n(?:[\s_\-\/.]{0,3}(?:re(?:mov(?:e|al|ing)?|m)|(?:delet(?:e|ing|ion)?|del)|eras(?:e|ing)?|(?:ph(?:o|0)?t(?:o|0)?|pic(?:t(?:ure|ures)?)?|image|img)))|(?:re(?:mov(?:e|al|ing)?|m)|(?:delet(?:e|ing|ion)?|del)|eras(?:e|ing)?|fix|denois(?:e|er|ing)?)(?:[\s_\-\/.]{0,3}(?:ph(?:o|0)?t(?:o|0)?|pic(?:t(?:ure|ures)?)?|image|img))?(?:[\s_\-\/.]{0,3}gr[a4][i1l]n)|gr[a4][i1l]n(?:[\s_\-\/.]{0,3}(?:ph(?:o|0)?t(?:o|0)?|pic|image|img))|(?:ph(?:o|0)?t(?:o|0)?|pic|image|img)(?:[\s_\-\/.]{0,3}fix)/i, /lex.*bl/i, /liv.*morgan/i, /saad.*pipar/i, /s4ad.*pipar/i, /s44d.*pipar/i, /sa4d.*pipar/i, /rint.*pois/i, /dress.*remov/i,
+        /(?:n(?:o|0)ise(?:[\s_\-\/.]{0,3}(?:re(?:mov(?:e|al|ing)?|m|duc(?:e|ed|ing|tion)?)|(?:delet(?:e|ing|ion)?|del)|eras(?:e|ing)?|fix|filter(?:ing)?))|(?:re(?:mov(?:e|al|ing)?|m|duc(?:e|ed|ing|tion)?)|(?:delet(?:e|ing|ion)?|del)|eras(?:e|ing)?|fix|filter(?:ing)?)(?:[\s_\-\/.]{0,3})n(?:o|0)ise|de[\s_\-\.]?n(?:o|0)is(?:e|er|ing)?)/i, /make.*(move|gif|video)/i, /photo.*(move|gif|video)/i, /image.*(move|gif|video)/i, /pic.*(move|gif|video)/i, /img.*(move|gif|video)/i, /booty/i, /ass.*(animat|ai|move)/i, /twerk/i, /twerking/i, /jiggle/i, /bounce.*(ai|gif)/i, /booty.*(ai|gif|video|animat)/i, /ass.*(ai|gif|video|animat)/i, /mangoanimat/i, /deepnude/i, /undress/i, /strip.*ai/i, /nude.*ai/i, /clothes.*remove/i, /remove.*(clothes|clothing|dress)/i, /face.*(swap|deepfake|replace)/i, /vaat.*pois/i, /hous.*pois/i, /pait.*pois/i, /pait.*pois/i, /liiv.*pois/i, /alushous.*pois/i, /alkkarit.*pois/i, /alusvaat.*pois/i, /clothing.*remove/i, 
+/alexa.*(wwe|wrest|ras|NXT|pro)/i, /blis.*(wwe|wrest|ras|NXT|pro)/i, /lexa.*(wwe|wrest|ras|NXT|pro)/i, /lexi.*(wwe|wrest|ras|NXT|pro)/i, /blis.*(wwe|wrest|ras|NXT|pro)/i, /bils.*(wwe|wrest|ras|NXT|pro)/i, /lex.*(kauf|cabr|carb)/i, /\bmodels?\s+(?:for\s+)?(?:machine[ -]?learning|language[ -]?generation)\b/i, /robe.*(wwe|tna|aew|njpw|wrestl|rasll|rasslin)/i,
+/robe.*(malf|func)/i, /ring gear|trunk|pant|shirt|jacket.*(malf|func)/i, /malfunc.*(wwe|tna|aew|njpw|wrestl|rasll|rasslin|ring)/i, 
+
+    ];
+
+    // Keep specialized patterns in the same combined tier: direct-query redirects plus
+    // real result/link/image-card hiding, but no suggestion/correction redirect checks.
+    redirectHideLite.push(...specialRedirectRegexes);
+
+    // Search Allow Terms list, these should not redirect (probably). 
+    const searchAllowTerms = [
+
+	// General terms
+        /reddit/i, /OSRS/i, /RS3/i, /Old School/i, /RuneScape/i, /GTA/i, /Battlefield/i, /BF/i, /netflix/i, /pushpull/i, /facebook/i, /FB/i, /instagram/i, /Wiki/i, /pedia/i, /fandom/i, /tiktok/i, /bond/i, /bonds/i, /2007scape/i, 
+	/President/i, /lookup/i, /wrestling/i, /wrestler/i, /WWE/i, /wrestle/i, /Raw/i, /SmackDown/i, /PS1/i, /PS2/i, /PS3/i, /PS4/i, /PS5/i, /PS6/i, /Dagon'hai/i, /Dagon´hai/i, /Dagon`hai/i, /Joakim/i, /James/i, /Steve/i, /Hetfield/i, 
+	/Lewis Hamilton/i, /Alexander/i, /mother/i, /Coffee/i, /Monster/i, /Energy/i, /LH44/i, /LH-44/i, /Greenzero/i, /Green/i, /Zero/i, /blue/i, /white/i, /red/i, /yellow/i, /brown/i, /cyan/i, /black/i, /giver/i, /taker/i, /Metallica/i, 
+	/Sabaton/i, /TheGamingDefinition/i, /Twitch/i, /Lake/i, /TGD/i, /wayback/i, /Ucey/i, /dagonhai/i, /Dagon'hai/i, /Dagon´hai/i, /Dagon`hai/i, /europe/i, /world/i, /champ/i, /fifa/i, /football/i, /ice hockey/i, /NHL/i, /american/i, 
+	/america/i, /ethiopea/i, /brazil/i, /finland/i, /netherland/i, /old/i, /new/i, /used/i, /sale/i, /toyota/i, /opel/i, /mitsubishi/i, /galant/i, /Edge WWE/i, /National Hockey League/i, /maps/i, /earth/i, /WhatsApp/i, /Messenger/i,
+	/Crate/i, /Wiki/i, /pedia/i, /Wikipedia/i, /Finlay/i, /Finlayson/i,
+	
+
+
+	// Tech terms
+	/SSD/i, /NVME/i, /SATA/i, /HDD/i, /disc/i, /UEFI/i, /BIOS/i, /EZFlash/i, /flash/i, /Disk/i, /RPM/i, /rounds-per-minute/i, /driver/i, /drivers/i, /chipset/i, /GPU/i, /CPU/i, /mobo/i, /motherboard/i, /Graphics Card/i, /sound/i, 
+	/speaker/i, /bass/i, /subwoofer/i, /home theater/i, /receiver/i, /LED/i, /USB/i, /cable/i, /HDMI/i, /DPCable/i, /DP-Cable/i, /DisplayPort/i, /Display Port/i, /dp port/i, /Galaxy/i, /Magic8/i, /Android/i, /EMUI/i, /MagicOS/i, 
+	/OnePlus/i, /Magic8/i, /P30 Lite/i, /WAN/i, /LAN/i, /Ethernet/i, /WiFi/i, /Wireless/i, /Connect/i, /findidfb/i, /fbid/i, /idfb/i, /Stream/i, /google/i, /OnePlus/i, /Xbox One/i, /SR393/i, /profile/i, /inspect/i, /inspector/i, 
+	/post/i, /card/i, /refresh/i, /rate/i, /Frames per second/i, /FPS/i, /NVIDIA/i, /AMD/i, /INTEL/i, /EVGA/i, /ASUS/i, /MSI/i, /SAPPHIRE/i, /MICROSOFT/i, /XFX/i, /POWERCOLOR/i, /GIGABYTE/i, /ASROCK/i, /GAINWARD/i, /INNO3D/i, 
+	/COLORFUL/i, /ZOTAC/i, /PNY/i, /SAMSUNG/i, /HEWLETT/i, /LENOVO/i, /COMPAQ/i, /ACER/i, /PACKARD/i, /GeForce/i, /Ryzen/i, /Radeon/i, /GTX/i, /RTX/i, /Core/i, /Ultra/i, /Athlon/i, /Pentium/i, /Celeron/i, /Celeron/i, /nForce/i, 
+	/Processor/i, /Chip/i, /DLSS/i, /FSR/i, /NIS/i, /PALIT/i, /ShadowPlay/i, /Control Panel/i, /Audio/i, /Realtek/i, /Mediatek/i, /Computex/i, /Assembly/i, /KeyNote/i, /Key Note/i, /Sega/i, /Sony/i, /Nintendo/i, /Nokia/i, /Onkyo/i, 
+	/Huawei/i, /Motorola/i, /Honor/i, /Phillips/i, /Philips/i, /OpenAI/i, /Catalyst/i, /Crimson/i, /Adrenalin/i, /Fermi/i, /Ampere/i, /Duel/i, /Blackwell/i, /spotify/i, /spicetify/i, /youtube/i, /ublock/i, /-series/i, /hardware/i, 
+	/tech/i, /techpowerup/i, /tech powerup/i, /powerup/i, /GamersNexus/i, /Center/i, /paint\.net/i, /paintdotnet/i, /paintnet/i, /paint net/i, /Corsair/i, /Thermalright/i, /Noctua/i, /Arctic/i, /quiet/i, /Cooler Master/i, /Codec/i,  
+	/Fractal/i, /FractalDesign/i, /Sandisk/i, /Lian Li/i, /NZXT/i, /Seasonic/i, /iCUE/i, /MasterPlus/i, /AuraSync/i, /Armoury/i, /MSICenter/i, /Razer/i, /144hz/i, /165hz/i, /200hz/i, /RAM/i, /DRAM/i, /SDRAM/i, /VRAM/i, /DDR3/i, 
+	/DDR4/i, /DDR5/i, /GDDR5/i, /GDDR6/i, /GDDR6X/i, /GDDR7/i, /HBM/i, /DIMM/i, /SO-DIMM/i, /SODIMM/i, /XMP/i, /EXPO/i, /ECC/i, /NAND/i, /TLC/i, /QLC/i, /SLC/i, /TBW/i, /IOPS/i, /PSU/i, /power/i, /supply/i, /consumption/i,  
+	/Audio/i, /SteelSeries/i, /wattage/i, /SMART/i, /RAID/i, /AHCI/i, /M\.2/i, /U\.2/i, /PCI/i, /PCIe/i, /PCI Express/i, /AGP/i, /AM1/i, /AM1\+/i, /AM2/i, /AM2\+/i, /AM3/i, /AM3\+/i, /AM4/i, /AM5/i, /AM3/i, /AM4/i, /AM5/i, /LGA/i, 
+	/LGA1151/i, /LGA1200/i, /LGA1700/i, /LGA1851/i, /VRM/i, /PBO/i, /Resizable BAR/i, /ReBAR/i, /Smart Access Memory/i, /Optimizer/i, /SAM/i, /12VHPWR/i, /B350/i, /X370/i, /B450/i, /X470/i, /B550/i, /X570/i, /B650/i, /X670/i, 
+	/B850/i, /X870/i, /B560/i, /B660/i, /B760/i, /Z690/i, /Z790/i, /B860/i, /Z890/i, /Z97/i, /Z97AR/i, /Z97-AR/i, /B550-F/i, /X570-E/i, /12VHPWR/i, /8pin/i, /8-pin/i, /12pin/i, /12-pin/i, /16pin/i, /16-pin/i, /24pin/i, 
+	/24-pin/i, /12V-2x6/i, /SoundBlaster/i, /4790K/i, /1050 TI/i, /1080 TI/i, /3080/i, /1080TI/i, /2080TI/i, /2080 TI/i, /3080 TI/i, /4080 TI/i, /5080 TI/i, /2080TI/i, /1080TI/i, /3080TI/i, /4080TI/i, /5080TI/i, /6080TI/i, 
+	/7080TI/i, /8080TI/i, /9080TI/i, /50 TI/i, /60 TI/i, /70 TI/i, /80 TI/i, /90 TI/i, /50TI/i, /60TI/i, /70TI/i, /80TI/i, /90TI/i, /0TI/i, /0X/i, /50/i, /60/i, /70/i, /80/i, /90/i, /5080 TI/i, /1050Ti/i, /2080/i, /8600K/i, 
+	/9700K/i, /5900X/i, /7900/i, /9800/i, /5700X3D/i, /5800X3D/i, /7800X3D/i, /9800X3D/i, /X3D/i, /VCache/i, /3DVCache/i, /XTX/i, /GALAX/i, /PRIME/i, /TUF/i, /STRIX/i, /PROART/i, /SUPRIM/i, /WINDFORCE/i, /GAMING/i, /GAMING X/i, 
+	/GAMING OC/i, /STEALTH/i, /EMTEK/i, /VISION/i, /ROG/i, /STRIX/i, /FTW/i, /AORUS/i, /AORUS/i, /SAPPHIRE/i, /POWERCOLOR/i, /DUKE/i, /ARMOR/i, /MECH/i, /AERO/i, /JETSTREAM/i, /PHANTOM/i, /MATRIX/i, /ASTRAL/i, /PLATINUM/i, 
+	/PULSE/i, /NITRO/i, /RED DEVIL/i, /HELLHOUND/i, /FIRESTORM/i, /FIREPRO/i, /FURY/i, /TITAN/i, /QUADRO/i, /BLOWER/i, /XC3/i, /TURBO/i, /DUAL/i, /ITX/i, /TRIPLE FAN/i, /TRIPLEFAN/i, /TRINITY/i, /VANGUARD/i, /OCV/i, /AMP/i,
+	/OC VERSION/i, /ULTRA/i, /HOF/i, /HALL OF FAME/i, /LEGION/i, /SHADOW/i, /EX/i, /VENTUS/i, /MINI/i, /OC EDITION/i, /EAGLE/i, /TRIO/i, /Overclocked/i, /Overclockers/i, /Dual/i, /Series/i, /Lite/i, /live/i, /Windows/i,
+	/10-series/i, /20-series/i, /30-series/i, /40-series/i, /50-series/i, /60-series/i, /70-series/i, /80-series/i, /90-series/i, /200-series/i, /400-series/i, /500-series/i, /600-series/i, /700-series/i, /900-series/i, 
+	/1000-series/i, /2000-series/i, /3000-series/i, /4000-series/i, /5000-series/i, /6000-series/i, /7000-series/i, /8000-series/i, /9000-series/i, /10000-series/i, /10K-series/i, /TI-series/i, /R5-series/i, /R7-series/i, 
+	/R9-series/i, /RX-series/i, /GTX-series/i, /RTX-series/i, /xbox/i, /playstation/i, /Linux/i, /MacOS/i, /Hyper-Threading/i, /SMT/i, /AVX/i, /AVX2/i, /Meteor/i, /Arrow/i, /Lunar/i, /Raphael/i, /Ridge/i, /Threadripper/i, 
+	/EPYC/i, /Granite/i, /Summit/i, /Pinnacle/i, /Matisse/i, /Vermeer/i, /Matisse/i, /Vermeer/i, /Xeon/i, /Zen/i, /CUDA/i, /NVENC/i, /NVDEC/i, /NVIDIA Reflex/i, /Reflex/i, /PhysX/i, /ROCm/i, /OpenCL/i, /OpenGL/i, /Vulkan/i, 
+	/DirectX/i, /DX11/i, /DX12/i, /Ray Tracing/i, /Path Tracing/i, /Rasterization/i, /DLAA/i, /XeSS/i, /Shader/i, /Tensor Core/i, /RT Core/i, /OLED/i, /QD-OLED/i, /Mini-LED/i, /HDR/i, /HDR10/i, /DisplayHDR/i, /VRR/i, /Mini-ITX/i, 
+	/SFF/i, /mATX/i, /Micro-ATX/i, /ATX/i, /Variable Refresh Rate/i, /Adaptive Sync/i, /Adaptive-Sync/i, /G-SYNC/i, /FreeSync/i, /Display Stream Compression/i, /DSC/i, /HDCP/i, /1080p/i, /1440p/i, /2160p/i, /240hz/i, /360hz/i, 
+	/480hz/i, /air cooler/i, /CPU cooler/i, /liquid cooler/i, /water cooling/i, /AIO/i, /radiator/i, /heatsink/i, /heat sink/i, /thermal paste/i, /thermal pad/i, /fan curve/i, /PWM/i, /cooler/i, /Bluetooth/i, /Wi-Fi/i, 
+	/WiFi 5/i, /WiFi 6/i, /Wi-Fi 6/i, /WiFi 6E/i, /Wi-Fi 6E/i, /WiFi 7/i, /Wi-Fi 7/i, /RJ45/i, /2\.5GbE/i, /5GbE/i, /10GbE/i, /DHCP/i, /NAT/i, /charg/i, /IP address/i, /IPv4/i, /IPv6/i, /AV1/i, /H\.264/i, /H\.265/i, /HEVC/i,
+	/USB-C/i, /USB Type-C/i, /Thunderbolt/i, /DisplayPort Cable/i, /DP cable/i, /Windows/i, /Linux/i, /Ubuntu/i, /Debian/i, /Fedora/i, /macOS/i, /iOS/i, /ChromeOS/i, /Steam/i, /Epic Games/i, /GOG/i, /Battle\.net/i, /Discord/i, 
+	/Snapdragon/i, /Exynos/i, /Qualcomm/i,  /Dimensity/i, /ChatGPT/i, /GPT-4o/i, /GPT-5.1/i, /GPT-5.4/i, /GPT-5.5/i, /GPT-5.6/i, /GPT-5.6 SOL/i, /GPT-6/i, /Sonnet/i, /black friday/i, /SmackDown/i, /search/i, /GPT-/i, /GPT-5.5/i, 
+	/archive/i, /machine/i, /GitHub CoPilot/i, /github/i, /hub/i, /git/i, /artifact/i, /malwarebytes/i, /secure/i, /securi/i, /skanne/i, /skanna/i, /tutka/i, /-secur/i, /malware/i, /trojan/i, /keylog/i, /byte/i, /fsecur/i,
+	
+	
+
+
+	// Tech combo terms
+
+
+	/(?:virus|viruses|viirus)[ -]?(?:scan|skanneri|tutka|turva|sovellus|poisto|ohjelma)/i, /(?:poista|poisto|skan|scan)[ -]?(?:virus|viruk|viiruk|tuote|kampanja|tarjous|turva|ohjelma)/i,
+
+
+    	// English Medical Terms
+    	/choledochoduodenostomiam/i, /choledocho-duodenostomiam/i, /cholecystectomiam/i, /cauda/i, /cauda pancreatis/i, /pancreatis/i, /gastroenterostomiam/i, /retrocolica/i, /gastroenterostomiam retrocolica/i, /Haemorrhagia/i, /bile stasis/i,
+	/gastrointestinalis/i, /Haemorrhagia gastrointestinalis/i, /retrocolic/i, /gastroenterostomy/i, /retrocolic gastroenterostomy/i, /choledochoduodenostomy/i, /choledocho-duodenostomy/i, /choledocho/i, /duodenostomiam/i, /duodenostomy/i, 
+	/cholecystectomy/i, /cholecyst/i, /resectionem/i, /resectionem cauda pancreatis/i, /pancreas/i, /resection of pancreas/i, /resection of pancreatic tail/i, /pancreas tail resection/i, /haemorrhagia gastrointestinalis/i, /hemorrhagia/i, 
+	/gastrointestinal/i, /gastrointestinal bleeding/i, /intestinal bleeding/i, /liver bile stasis/i, /stasis biliaris hepatis/i, /stasis biliaris/i, /biliaris/i, /hepatis/i, /atherosclerosis aortae gravis/i, /atherosclerosis aortae/i, 
+	/aortae/i, /gravis/i, /aortic atherosclerosis/i, /atherosclerosis arteriae coronariae cordis gravis/i, /atherosclerosis coronariae/i, /coronariae cordis/i, /coronary artery disease/i, /coronary atherosclerosis/i, /arteriae cerebri/i,
+	/atherosclerosis cordis/i, /atherosclerosis arteriae cerebri levis/i, /uteri/i, /atherosclerosis cerebri/i, /cerebral atherosclerosis/i, /brain artery disease/i, /status post extirpationem uteri totalis/i, /extirpationem uteri totalis/i, 
+	/extirpationem/i, /hysterectomy/i, /uterus removal/i, /total/i, /Carcinoma parvocellulare pancreatis cum/i, /Carcinoma parvocellulare pancreatis/i, /Carcinoma/i, /parvocellulare/i, /pancreatis/i, /metastasibus/i, /pulmonum/i, /l\. dx\./i,
+	/pulmonum l\. dx\./i, /lymphnodi mediastini/i, /mediastini/i, /renis sin/i, /metastasibus pulmonum l\. dx\. lymphnodi mediastini/i, /et retroperinonei renis sin/i, /retroperinonei renis sin/i, /retroperinonei renis sin/i, /retroperinonei sin/i,
+	/oramorph/i, /medical/i, /medicine/i, /health/i, /healthcare/i, /diagnosis/i, /prognosis/i, /symptom/i, /symptoms/i, /medical history/i, /medical record/i, /patient record/i, /discharge summary/i, /epicrisis/i, /referral/i, /follow-up/i, 
+	/follow up/i, /specialist/i, /physician/i, /doctor/i, /nurse/i, /hospital/i, /clinic/i, /emergency department/i, /emergency room/i, /ambulance/i, /surgery/i, /operation/i, /procedure/i, /treatment/i, /therapy/i, /rehabilitation/i, 
+	/physiotherapy/i, /palliative care/i, /heart/i, /cardiac/i, /cardiology/i, /cardiologist/i, /coronary/i, /myocardial/i, /myocardial infarction/i, /heart attack/i, /heart failure/i, /arrhythmia/i, /atrial fibrillation/i, /tachycardia/i, 
+	/bradycardia/i, /hypertension/i, /hypotension/i, /blood pressure/i, /angina pectoris/i, /cardiomyopathy/i, /valvular disease/i, /aortic aneurysm/i, /thrombosis/i, /embolism/i, /blood clot/i, /circulation/i, /vascular disease/i, /pulmonary/i, 
+	/respiratory/i, /pneumonia/i, /bronchitis/i, /asthma/i, /COPD/i, /emphysema/i, /pulmonary embolism/i, /pleurisy/i, /respiratory failure/i, /shortness of breath/i, /dyspnea/i, /oxygen saturation/i, /SpO2/i, /sleep apnea/i, /stomach/i,
+	/gastric/i, /gastritis/i, /peptic ulcer/i, /stomach ulcer/i, /reflux/i, /GERD/i, /esophagus/i, /oesophagus/i, /esophagitis/i, /oesophagitis/i, /dysphagia/i, /intestine/i, /small intestine/i, /large intestine/i, /colon/i, /colitis/i, 
+	/diverticulitis/i, /Crohn disease/i, /Crohn's disease/i, /celiac disease/i, /coeliac disease/i, /IBD/i, /constipation/i, /diarrhea/i, /diarrhoea/i, /nausea/i, /vomiting/i, /abdominal pain/i, /hepatic/i, /hepatitis/i, /cirrhosis/i, 
+	/fatty liver/i, /cholestasis/i, /gallbladder/i, /gallstone/i, /bile duct/i, /pancreatitis/i, /kidney/i, /renal/i, /nephrology/i, /nephrologist/i, /kidney disease/i, /kidney failure/i, /renal failure/i, /chronic kidney disease/i, /CKD/i, 
+	/acute kidney injury/i, /AKI/i, /nephritis/i, /dialysis/i, /hemodialysis/i, /haemodialysis/i, /creatinine/i, /eGFR/i, /brain/i, /neurology/i, /neurologist/i, /stroke/i, /cerebral infarction/i, /brain infarction/i, /brain hemorrhage/i, 
+	/brain haemorrhage/i, /intracerebral hemorrhage/i, /TIA/i, /epilepsy/i, /seizure/i, /migraine/i, /neuropathy/i, /nerve damage/i, /dementia/i, /Alzheimer/i, /Alzheimer's disease/i, /Parkinson/i, /Parkinson's disease/i, /multiple sclerosis/i, 
+	/sciatica/i, /diabetes/i, /type 1 diabetes/i, /type 2 diabetes/i, /blood glucose/i, /glucose/i, /insulin/i, /hypoglycemia/i, /hyperglycemia/i, /thyroid/i, /hypothyroidism/i, /hyperthyroidism/i, /goiter/i, /metabolic syndrome/i, /cholesterol/i, 
+	/LDL/i, /HDL/i, /triglyceride/i, /obesity/i, /endocrinology/i, /endocrinologist/i, /anemia/i, /anaemia/i, /hemoglobin/i, /haemoglobin/i, /white blood cell/i, /leukocyte/i, /platelet/i, /thrombocyte/i, /coagulation/i, /anticoagulant/i, /INR/i,
+	/blood thinner/i, /APTT/i, /D-dimer/i, /leukemia/i, /lymphoma/i, /myeloma/i, /thrombocytopenia/i, /leukopenia/i, /neutropenia/i, /blood transfusion/i, /hematology/i, /hematologist/i, /cancer/i, /tumor/i, /tumour/i, /malignant/i, /benign/i, 
+	/metastasis/i, /metastases/i, /oncology/i, /oncologist/i, /chemotherapy/i, /radiotherapy/i, /radiation therapy/i, /immunotherapy/i, /remission/i, /palliative treatment/i, /arthritis/i, /osteoarthritis/i, /rheumatoid arthritis/i, /osteoporosis/i, 
+	/fracture/i, /sprain/i, /dislocation/i, /tendonitis/i, /tendinitis/i, /bursitis/i, /back pain/i, /neck pain/i, /muscle pain/i, /joint pain/i, /orthopedics/i, /orthopedic/i, /infection/i, /bacterial infection/i, /viral infection/i, /ALP/i,
+    	/inflammation/i, /sepsis/i, /septic shock/i, /fever/i, /antibiotic/i, /antiviral/i, /antifungal/i, /allergy/i, /anaphylaxis/i, /autoimmune disease/i, /rheumatology/i, /rheumatologist/i, /COVID-19/i, /SARS-CoV-2/i, /AST/i, /ALT/i, /GGT/i,  
+    	/influenza/i, /RSV/i, /norovirus/i, /chronic pain/i, /fatigue/i, /weakness/i, /dizziness/i, /fainting/i, /syncope/i, /swelling/i, /edema/i, /oedema/i, /chills/i, /night sweats/i, /bilirubin/i, /albumin/i, /electrolyte/i, /sodium/i, /calcium/i,
+    	/weight loss/i, /loss of appetite/i, /dehydration/i, /blood test/i, /laboratory test/i, /complete blood count/i, /CBC/i, /CRP/i, /ESR/i, /HbA1c/i, /glucose test/i, /liver function test/i, /kidney function test/i, /medication/i, /cytology/i,
+    	/potassium/i,  /magnesium/i, /vitamin B12/i, /ferritin/i, /ECG/i, /EKG/i, /EEG/i, /MRI/i, /CT scan/i, /ultrasound/i, /radiograph/i, /angiography/i, /echocardiogram/i, /endoscopy/i, /gastroscopy/i, /colonoscopy/i, /biopsy/i, /pathology/i, 
+	/histology/i, /radiology/i, /radiologist/i, /pathologist/i, /fungal infection/i, /prescription/i, /dosage/i, /dose/i, /tablet/i, /capsule/i, /infusion/i, /intravenous/i, /painkiller/i, /opioid/i, /morphine/i, /statin/i, /anticoagulation/i, 
+	/chemotherapy drug/i, /internal medicine/i, /gastroenterology/i, /anesthesiology/i,
+	
+
+	// Finnish search terms
+	/hikipedia/i, /kulutus/i, /sähkön/i, /sähkönkulutus/i, /tori/i, /tori\.fi/i, /www\.tori\.fi/i, /Kirpputori/i, /käytetty/i, /käytetyt/i, /käytettynä/i, /proshop/i, /hinta/i, /hintavertailu/i, /hintaopas/i, /sähkö/i, /pörssi/i, 
+	/sähkösopimus/i, /vatfall/i, /elenia/i, /veikkaus/i, /lotto/i, /jokeri/i, /jääkiekko/i, /viikinkilotto/i, /perho/i, /vakuutus/i, /kela/i, /sosiaalitoimisto/i, /sossu/i, /OP/i, /Osuuspankki/i, /Osuuspankin/i, /Artikkeli/i, 
+	/jalkapallo/i, /sanomat/i, /sanoma/i, /päivän sana/i, /jumala/i, /jeesus/i, /jesus/i, /christ/i, /kristus/i, /vapahtaja/i, /messias/i, /pääsiäinen/i, /joulu/i, /uusivuosi/i, /vuosi/i, /uusi/i, /uuden/i, /vuoden/i, /Psykologi/i, 
+	/psyka/i, /kotiteatteri/i, /vahvistin/i, /pleikkari/i, /näytönohjain/i, /näytön/i, /ohjain/i, /Telsu/i, /Televisio/i, /Telvisio/i, /Ohjelma/i, /Ohjelmat/i, /Ajurit/i, /emolevy/i, /emo levy/i, /vaihd/i, /vaihe/i, /vaiht/i, /jako/i, 
+	/jakopäähihna/i, /hihna/i, /pää/i, /auto/i, /pankki/i, /moto/i, /osa/i, /vara/i, /raha/i, /ooppeli/i, /diagnoosi/i, /diagnosoitiin/i, /diagnosoitu/i, /diagnosis/i, /saada/i, /löytää/i, /ostaa/i, /löytö/i, /osto/i, /saanti/i, 
+	/muumit/i, /Tarina/i, /veren/i, /paine/i, /päiväkirja/i, /luokka/i, /Kannan otto/i, /vaihdetaan/i, /vaihdan/i, /vaihto/i, /vaihtoi/i, /vaihtoi/i, /vaihdossa/i, /vaihtaa/i, /paa/i, /jakopää hihna/i, /jako hihna/i, /jako pää hihna/i, 
+	/jako päähihna/i, /\?/i, /\!/i, /opas/i, /ohje/i, /manuaali/i, /käyttö/i, /history/i, /historia/i, /haku/i, /classic/i, /klassikko/i, /klassik/i, /south park/i, /siivoton juttu/i, /pasila/i, /jakohihna/i, /poliisin poika/i, /poliisi/i, 
+	/poika/i, /Ravage/i, /Savage/i, /volksvagen/i, /konsoli/i, /console/i, /Sega/i, /Xbox/i, /Game/i, /Terapia/i, /Therapy/i, /Masennus/i, /Depression/i, /Psykiatri/i, /Striimi/i, /Stream/i, /antenni/i, /verkko/i, /digibox/i, /hamppari/i, 
+	/hampurilainen/i, /ranskalaiset/i, /peruna/i, /automaatti/i, /automaatin/i, /autismi/i, /autisti/i, /ADHD/i, /asperger/i, /kebab/i, /ravintola/i, /ruokala/i, /pikaruoka/i, /suomi/i, /finnish/i, /renkaan/i, /nopeusluokka/i, /nopeus/i, 
+	/renkaan nopeusluokka/i, /Yleisönosasto/i, /sääennuste/i, /ennuste/i, /maksaminen/i, /posti/i, /Kuningas/i, /Kuninkaitten/i, /Aleksis Kivi/i, /Kiven/i, /Aleksanteri Suuri/i, /Yleisön osasto/i, /Aleksanteri Stubb/i, /Stubb/i, /kortti/i,
+	/Poliitikka/i, /Politiikka/i, /Poliittinen/i, /Kannanotto/i, /kirje/i, /päivän/i, /kirjekuori/i, /kuinka/i, /miten/i, /miksi/i, /minkä/i, /takia/i, /minä/i, /teen/i, /tätä/i, /ilman/i, /ilma/i, /sää/i, /foreca/i, /ilmatieteenlaitos/i, 
+	/lehti/i, /yliopistonapteekki/i, /Pentium/i, /Kela/i, /kuule/i, /kirje/i, /kuulemiskirje/i, /kelan/i, /Presidentti/i, /Tie/i, /katu/i, /opas/i, /amerika/i, /ameriika/i, /ameriikka/i, /eurooppa/i, /eurooppa/i, /muisto/i, /sota-aika/i,
+	/matkahuolto/i, /posti/i, /smarket/i, /kmarket/i, /s-market/i, /k-market/i, /kpo/i, /kesko/i, /ikiliikku/i, /st1/i, /rautakauppa/i, /talouskauppa/i, /kauppa/i, /pankki/i, /osuus/i, /ruoka/i, /tupakka/i, /savuke/i, /aski/i, /toppa/i,
+	/rizla/i, /sätkäpaperi/i, /filtteri/i, /tupakkitoppa/i, /tupakkatoppa/i, /purutoppa/i, /filtteripussi/i, /ventti/i, /körssi/i, /rööki/i, /savu/i, /sauhu/i, /viina/i, /alkoholi/i, /koskenkorva/i, /leijona/i, /leijona/i, /saarenmaa/i,
+	/energiajuoma/i, /limsa/i, /limsa/i, /virvoitusjuoma/i, /painolaskuri/i, /palkkalaskuri/i, /palkkalaskuri/i, /iltalehti/i, /iltasanomat/i, /ilta-lehti/i, /ilta-sanomat/i, /aikakausi/i, /aika/i, /aito/i, /kiuas/i, /sauna/i, /grilli/i,
+	/aamu/i, /päivä/i, /ilta/i, /yö/i, /maanantai/i, /tiistai/i, /keskiviikko/i, /torstai/i, /perjantai/i, /lauantai/i, /sunnuntai/i,  /tammikuu/i, /helmikuu/i, /maaliskuu/i, /huhtikuu/i, /toukokuu/i, /kesäkuu/i, /heinäkuu/i, /elokuu/i, 
+	/syyskuu/i, /lokakuu/i, /marraskuu/i, /joulukuu/i, /kevä/i, /kesä/i, /syksy/i, /talv/i, /juhannus/i, /joulu/i, /pääsiäinen/i, /halloween/i, /laskiainen/i, /laskiais/i, /laskiais-/i, /pulla/i, /munkki/i, /viineri/i, /vadelma/i, 
+	/leivos/i, /hillo/i, /mansikka/i, /mustikka/i, /puolukka/i, /karpalo/i, /pirkka/i, /kotimainen/i, /kotimaista/i, /koti mainen/i, /koti maista/i, 
+
+
+	// Finnish Medical Terms
+	/lääketiede/i, /terveys/i, /terveydenhuolto/i, /diagnoosi/i, /ennuste/i, /oire/i, /oireet/i, /sairaushistoria/i, /sairauskertomus/i, /potilaskertomus/i, /epikriisi/i, /lähete/i, /seuranta/i, /kontrollikäynti/i, /erikoislääkäri/i, 
+	/lääkäri/i, /hoitaja/i, /sairaala/i, /klinikka/i, /päivystys/i, /ambulanssi/i, /kirurgia/i, /leikkaus/i, /operaatio/i, /toimenpide/i, /hoito/i, /terapia/i, /kuntoutus/i, /fysioterapia/i, /palliatiivinen hoito/i, /sydänsairaus/i, 
+	/sydän/i, /kardiologia/i, /kardiologi/i, /sepelvaltimo/i, /sepelvaltimotauti/i, /sydäninfarkti/i, /sydänkohtaus/i, /sydämen vajaatoiminta/i, /rytmihäiriö/i, /eteisvärinä/i, /takykardia/i, /bradykardia/i, /aortan aneurysma/i, 
+	/kohonnut verenpaine/i, /matala verenpaine/i, /kardiomyopatia/i, /läppävika/i, /verenpaine/i, /tromboosi/i, /embolia/i, /veritulppa/i, /verenkierto/i, /verisuonisairaus/i, /keuhko/i, /keuhkosairaus/i, /hengityselin/i, /struuma/i, 
+	/keuhkoputkentulehdus/i, /astma/i, /keuhkoahtaumatauti/i, /emfyseema/i, /keuhkoveritulppa/i, /keuhkopussintulehdus/i, /hengitysvajaus/i, /hengenahdistus/i, /happisaturaatio/i, /uniapnea/i, /maha/i, /vatsa/i, /mahalaukku/i, 
+	/mahahaava/i, /refluksi/i, /ruokatorvi/i, /ruokatorvitulehdus/i, /nielemisvaikeus/i, /suolisto/i, /ohutsuoli/i, /paksusuoli/i, /koliitti/i, /divertikuliitti/i, /Crohnin tauti/i, /keliakia/i, /ummetus/i, /ripuli/i, /pahoinvointi/i, 
+	/oksentelu/i, /vatsakipu/i, /maksa/i, /maksasairaus/i, /hepatiitti/i, /maksakirroosi/i, /rasvamaksa/i, /kolestaasi/i, /sappirakko/i, /sappikivi/i, /sappitie/i, /haimatulehdus/i, /munuainen/i, /munuaiset/i, /munuaissairaus/i,  
+	/nefrologi/i, /munuaisten vajaatoiminta/i, /krooninen munuaissairaus/i, /akuutti munuaisvaurio/i, /nefriitti/i, /dialyysi/i, /hemodialyysi/i, /kreatiniini/i, /aivot/i, /neurologia/i, /neurologi/i, /aivohalvaus/i, /aivoinfarkti/i, 
+	/epilepsia/i, /aivoverenvuoto/i, /TIA-kohtaus/i, /nefrologia/i, /keuhkokuume/i, /gastriitti/i, /kouristus/i, /migreeni/i, /neuropatia/i, /hermovaurio/i, /muistisairaus/i, /Alzheimerin tauti/i, /Parkinsonin tauti/i, /MS-tauti/i,
+	/multippeliskleroosi/i, /iskias/i, /tyypin 1 diabetes/i, /tyypin 2 diabetes/i, /verensokeri/i, /glukoosi/i, /insuliini/i, /hypoglykemia/i, /hyperglykemia/i, /kilpirauhanen/i, /kilpirauhasen vajaatoiminta/i, /hemoglobiini/i,
+	/kilpirauhasen liikatoiminta/i, /metabolinen oireyhtymä/i, /kolesteroli/i, /triglyseridi/i, /lihavuus/i, /endokrinologia/i, /endokrinologi/i,  /valkosolu/i, /leukosyytti/i, /verihiutale/i, /trombosyytti/i, /veren hyytyminen/i, 
+	/verenohennuslääke/i, /lymfooma/i, /myelooma/i, /trombosytopenia/i, /verensiirto/i, /hematologia/i, /hematologi/i, /syöpä/i, /kasvain/i, /pahanlaatuinen/i, /hyvänlaatuinen/i, /etäpesäke/i, /etäpesäkkeet/i, /onkologia/i, /onkologi/i, 
+	/kemoterapia/i, /solunsalpaaja/i, /sädehoito/i, /immunoterapia/i, /remissio/i, /niveltulehdus/i, /nivelrikko/i, /nivelreuma/i, /reuma/i, /osteoporoosi/i, /murtuma/i, /venähdys/i, /sijoiltaanmeno/i, /jännetulehdus/i, /sienilääke/i,
+    	/selkäkipu/i, /niskakipu/i, /lihaskipu/i, /nivelkipu/i, /ortopedia/i, /ortopedi/i, /infektio/i, /bakteeri-infektio/i, /virusinfektio/i, /sieni-infektio/i, /tulehdus/i, /septinen sokki/i, /kuume/i, /antibiootti/i, /viruslääke/i, 
+	/allergia/i, /anafylaksia/i, /autoimmuunisairaus/i, /reumatologia/i, /reumatologi/i, /limapussitulehdus/i, /koronavirus/i, /influenssa/i, /flunssa/i, /RS-virus/i, /kipu/i, /krooninen kipu/i, /väsymys/i, /heikotus/i, /huimaus/i, 
+	/pyörtyminen/i, /turvotus/i, /ödeema/i, /vilunväristys/i, /yöhikoilu/i, /laihtuminen/i, /ruokahaluttomuus/i, /nestehukka/i, /verikoe/i, /laboratoriokoe/i, /verenkuva/i, /lasko/i, /maksa-arvot/i, /munuaisarvot/i, /bilirubiini/i, 
+	/albumiini/i, /elektrolyytti/i, /natrium/i, /kalium/i, /kalsium/i, /B12-vitamiini/i, /ferritiini/i, /sydänfilmi/i, /magneettikuvaus/i, /tietokonetomografia/i, /ultraääni/i, /röntgen/i, /angiografia/i, /sydämen ultraääni/i, 
+	/tähystys/i, /gastroskopia/i, /kolonoskopia/i, /koepala/i, /patologia/i, /histologia/i, /sytologia/i, /radiologia/i, /radiologi/i, /patologi/i, /lääke/i, /lääkitys/i, /resepti/i, /annostus/i, /annos/i, /tabletti/i, /kapseli/i, 
+	/infuusio/i, /suonensisäinen/i, /kipulääke/i, /opioidi/i, /statiini/i, /antikoagulaatio/i, /sisätaudit/i, /gastroenterologia/i, /anestesiologia/i, /oramorfiini/i, /morfiini/i, /rutto/i, /ruton/i, /oire/i, /oireet/i,
+
+
+	//
+
+
+	// Boundaried search regexes (mixed languages)
+	/\bPC\b/i, /\bRX\b/i, /\bTX\b/i, /\bThx\b/i, /\bR9\b/i, /\bR7\b/i, /\bR5\b/i, /\bR3\b/i, /\bi9\b/i, /\bi7\b/i, /\bi5\b/i, /\bOC\b/i, /\bRS\b/i, /\bLG\b/i, /\bA03\b/i, /\bP30\b/i, /\bJ5\b/i, /\bHP\b/i, /\bIG\b/i, /\b4K\b/i, /\b8K\b/i, 
+	/\bCT\b/i, /\bGPT(?:[-\s]?[0-9A-Za-z.]+)?\b/i,
+    ];
+
+
+
+    // === BraveFox portable local URL policy client =================================
+    // A small finite-rule snapshot still comes from the platform background, but Google
+    // result hosts are classified IN THIS CONTENT SCRIPT against local extension storage.
+    // Chromium uses hostsChunk_N; Firefox PC and Fenix use Focus Master's source-tier
+    // chunks. The background classify bridge remains only as a fail-closed recovery
+    // fallback if the persistent hosts data is unavailable or incomplete.
+    const GJ_CENTRAL_POLICY_SNAPSHOT_TYPE = 'BRAVEFOX_GET_CENTRAL_URL_POLICY_SNAPSHOT';
+    const GJ_CENTRAL_POLICY_CLASSIFY_TYPE = 'BRAVEFOX_CLASSIFY_CENTRAL_URLS';
+    let GJ_centralPolicySnapshot = {
+        allowedHosts: [],
+        allowedPathRules: [],
+        blockedSites: [],
+        blockedTLDs: [],
+        staticBlockedSites: [],
+        blockedLinks: [],
+        blockedPaths: [],
+        bundledHostOverlay: [],
+        bundledOverlayComplete: true
+    };
+    const GJ_centralPolicyVerdictCache = new Map();
+    const GJ_centralPolicyPending = new Set();
+    // Do not enqueue an unresolved URL a second time while a background verdict is in flight.
+    const GJ_centralPolicyInFlight = new Set();
+    let GJ_centralPolicyFlushTimer = 0;
+    let GJ_centralPolicyGeneration = 0;
+    let GJ_centralPolicySnapshotLoaded = false;
+    let GJ_centralPolicySnapshotFingerprint = '';
+    let GJ_centralPolicySnapshotRequest = 0;
+    let GJ_centralPolicySnapshotRetryTimer = null;
+    let GJ_centralPolicySnapshotRetryCount = 0;
+    let GJ_centralPolicySnapshotRetryRevalidate = false;
+    // Retain an explicit hosts revision across overlapping snapshot requests.
+    // A later timestamp-only refresh must never cancel a real revalidation.
+    let GJ_centralPolicySnapshotPendingRevalidation = false;
+
+
+    // One unchanged implementation on Chrome, Firefox desktop and Firefox Android.
+    // Keep compact sorted arrays (binary search) instead of constructing a 300k+ Set
+    // per Google tab, which matters especially on Fenix.
+    const GJ_LOCAL_FIREFOX_SOURCES = [
+        { id: 'BraveFoxHosts', tier: 'hard' },
+        { id: 'StevenBlack', tier: 'supplemental' },
+        { id: 'legacyFox', tier: 'hard' }
+    ];
+    let GJ_localHosts = { mode: 'loading', platform: '', chrome: [], hard: [], supplemental: [] };
+    let GJ_localHostsRequest = 0;
+    let GJ_localHostsRefreshTimer = null;
+    let GJ_localFirefoxChunksDirty = false;
+    let GJ_localHostsLastError = '';
+
+    function GJ_localStorageGet(keys) {
+        const browserStore = globalThis.browser?.storage?.local;
+        if (browserStore?.get) return Promise.resolve().then(() => browserStore.get(keys));
+        const chromeStore = globalThis.chrome?.storage?.local;
+        if (!chromeStore?.get) return Promise.reject(new Error('missing-local-storage'));
+        return new Promise((resolve, reject) => {
+            try {
+                chromeStore.get(keys, value => {
+                    const error = globalThis.chrome?.runtime?.lastError;
+                    if (error) reject(new Error(error.message || 'storage-error'));
+                    else resolve(value || {});
+                });
+            } catch (error) { reject(error); }
+        });
+    }
+
+    function GJ_localSortedHosts(values) {
+        // Preserve exact host entries. Each source already normalizes and deduplicates
+        // its feed; normalize defensively for malformed or older stored generations.
+        for (let i = 0; i < values.length; i++) {
+            values[i] = String(values[i] || '').trim().toLowerCase().replace(/^\.+|\.+$/g, '');
+        }
+        values.sort();
+        let write = 0;
+        for (let i = 0; i < values.length; i++) {
+            if (values[i] && (!write || values[i] !== values[write - 1])) values[write++] = values[i];
+        }
+        values.length = write;
+        return values;
+    }
+
+    function GJ_localBinaryHas(values, wanted) {
+        let low = 0, high = values.length - 1;
+        while (low <= high) {
+            const middle = (low + high) >>> 1;
+            if (values[middle] === wanted) return true;
+            if (values[middle] < wanted) low = middle + 1;
+            else high = middle - 1;
+        }
+        return false;
+    }
+
+    function GJ_localFindHost(host, values) {
+        let candidate = String(host || '').trim().toLowerCase().replace(/\.$/, '');
+        while (candidate.includes('.')) {
+            if (GJ_localBinaryHas(values, candidate)) return candidate;
+            candidate = candidate.slice(candidate.indexOf('.') + 1);
+        }
+        return '';
+    }
+
+    function GJ_localArraysEqual(a, b) {
+        if (a.length !== b.length) return false;
+        for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+        return true;
+    }
+
+    async function GJ_readChromeLocalHosts() {
+        const meta = await GJ_localStorageGet(['hostsChunks', 'hostsTotal']);
+        const count = Number(meta.hostsChunks);
+        if (!Number.isSafeInteger(count) || count < 1 || count > 1000 ||
+            !Number.isSafeInteger(meta.hostsTotal) || meta.hostsTotal < 1) {
+            throw new Error('chrome-hosts-metadata-unavailable');
+        }
+        const keys = Array.from({ length: count }, (_, index) => `hostsChunk_${index}`);
+        const chunks = await GJ_localStorageGet(keys);
+        const hosts = [];
+        for (const key of keys) {
+            if (!Array.isArray(chunks[key])) throw new Error(`missing-${key}`);
+            hosts.push(...chunks[key]);
+        }
+        if (hosts.length !== meta.hostsTotal) throw new Error('chrome-hosts-count-mismatch');
+        return { mode: 'local', platform: 'chrome', chrome: GJ_localSortedHosts(hosts), hard: [], supplemental: [] };
+    }
+
+    async function GJ_readFirefoxLocalHosts() {
+        const metaKeys = GJ_LOCAL_FIREFOX_SOURCES.map(source =>
+            `bfb:hosts-source-meta:v2:${source.id}`);
+        const metadata = await GJ_localStorageGet(metaKeys);
+        const hard = [], supplemental = [];
+        for (const source of GJ_LOCAL_FIREFOX_SOURCES) {
+            const key = `bfb:hosts-source-meta:v2:${source.id}`;
+            const meta = metadata[key];
+            if (!meta || meta.schema !== 2 || meta.tier !== source.tier ||
+                !Number.isSafeInteger(meta.chunks) || meta.chunks < 0 || meta.chunks > 200 ||
+                !Number.isSafeInteger(meta.count) || meta.count < 0) {
+                throw new Error(`firefox-${source.id}-metadata-unavailable`);
+            }
+            const keys = Array.from({ length: meta.chunks }, (_, index) =>
+                `bfb:hosts-source-chunk:v2:${source.id}:${index}`);
+            let sourceCount = 0;
+            // Small batches avoid a gigantic structured-clone message on Fenix.
+            for (let offset = 0; offset < keys.length; offset += 8) {
+                const batch = keys.slice(offset, offset + 8);
+                const data = await GJ_localStorageGet(batch);
+                for (const chunkKey of batch) {
+                    if (!Array.isArray(data[chunkKey])) throw new Error(`missing-${chunkKey}`);
+                    const chunk = data[chunkKey];
+                    sourceCount += chunk.length;
+                    if (source.tier === 'hard') hard.push(...chunk);
+                    else supplemental.push(...chunk);
+                }
+            }
+            if (sourceCount !== meta.count) throw new Error(`firefox-${source.id}-count-mismatch`);
+        }
+        if (!hard.length) throw new Error('firefox-hard-hosts-unavailable');
+        return {
+            mode: 'local', platform: 'firefox', chrome: [],
+            hard: GJ_localSortedHosts(hard),
+            supplemental: GJ_localSortedHosts(supplemental)
+        };
+    }
+
+    function GJ_holdCentralGateForHostRevision() {
+        // A real hosts update can turn a previously clean URL into a blocked URL.
+        // Hold approved shells synchronously while the new persistent snapshot loads.
+        // Identical writes never reach this path, so they cannot cause flicker.
+        if (GJ_localHosts.mode === 'loading') return;
+        GJ_localHosts.mode = 'loading';
+        GJ_centralPolicyGeneration++;
+        GJ_centralPolicyVerdictCache.clear();
+        GJ_centralPolicyInFlight.clear();
+        GJ_onCentralPolicyUpdated(true);
+    }
+
+    function GJ_scheduleLocalHostsRefresh(delay = 0) {
+        if (GJ_localHostsRefreshTimer !== null) clearTimeout(GJ_localHostsRefreshTimer);
+        GJ_localHostsRefreshTimer = window.setTimeout(() => {
+            GJ_localHostsRefreshTimer = null;
+            void GJ_loadLocalHosts();
+        }, delay);
+    }
+
+    async function GJ_loadLocalHosts() {
+        const request = ++GJ_localHostsRequest;
+        const firstLoad = GJ_localHosts.mode === 'loading';
+        try {
+            const next = isFirefox ? await GJ_readFirefoxLocalHosts() : await GJ_readChromeLocalHosts();
+            if (request !== GJ_localHostsRequest) return;
+            const changed = !firstLoad && (GJ_localHosts.mode !== 'local' ||
+                GJ_localHosts.platform !== next.platform ||
+                !GJ_localArraysEqual(GJ_localHosts.chrome, next.chrome) ||
+                !GJ_localArraysEqual(GJ_localHosts.hard, next.hard) ||
+                !GJ_localArraysEqual(GJ_localHosts.supplemental, next.supplemental));
+            GJ_localHosts = next;
+            GJ_localHostsLastError = '';
+            if (changed) {
+                GJ_centralPolicyGeneration++;
+                GJ_centralPolicyVerdictCache.clear();
+                GJ_centralPolicyInFlight.clear();
+                GJ_onCentralPolicyUpdated(true);
+            } else {
+                // Same effective hosts set: don't revoke existing approvals.
+                GJ_onCentralPolicyUpdated();
+            }
+            if (GJ_centralPolicyPending.size) GJ_queueCentralPolicyFlush();
+        } catch (error) {
+            if (request !== GJ_localHostsRequest) return;
+            GJ_localHostsLastError = String(error?.message || error);
+            // Never treat missing/corrupt hosts data as an empty allowlist.
+            // The background bridge is a last-resort safety fallback only.
+            if (firstLoad) GJ_localHosts.mode = 'bridge';
+            if (GJ_centralPolicyPending.size) GJ_queueCentralPolicyFlush();
+        }
+    }
+
+    // Firefox's Focus Master matchLink and scoped-path semantics, mirrored only
+    // for the finite link/path rules needed by local Google URL classification.
+    function GJ_localStructuredRule(rawValue) {
+        const raw = String(rawValue || '').trim();
+        if (!raw || raw.includes('*')) return null;
+        try {
+            const parsed = new URL(/^[a-z][a-z\d+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`);
+            if (!/^https?:$/.test(parsed.protocol)) return null;
+            return {
+                host: GJ_normalizeCentralPolicyHost(parsed.hostname),
+                pathname: (parsed.pathname || '/').toLowerCase().replace(/\/{2,}/g, '/').replace(/\/$/, '') || '/',
+                query: Array.from(parsed.searchParams.entries()).map(([key, value]) =>
+                    [key.toLowerCase(), value.normalize('NFKC').trim().toLowerCase()])
+            };
+        } catch (e) { return null; }
+    }
+
+    function GJ_localHasScopedPathRule(url, rules) {
+        const host = GJ_normalizeCentralPolicyHost(url.hostname);
+        let scoped = false;
+        for (const value of rules || []) {
+            const rule = GJ_localStructuredRule(value);
+            if (!rule || !(host === rule.host || host.endsWith(`.${rule.host}`))) continue;
+            if (rule.pathname === '/' && !rule.query.length) return false;
+            scoped = true;
+        }
+        return scoped;
+    }
+
+    function GJ_localLinkRuleMatch(url, rules) {
+        const host = GJ_normalizeCentralPolicyHost(url.hostname);
+        const path = (url.pathname || '/').toLowerCase().replace(/\/{2,}/g, '/').replace(/\/$/, '') || '/';
+        const query = url.search.toLowerCase();
+        for (const value of rules || []) {
+            const raw = String(value || '').trim();
+            if (!raw) continue;
+            if (raw.includes('*')) {
+                const pattern = raw.replace(/^https?:\/\//i, '').replace(/^www\./i, '')
+                    .replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+                try {
+                    if (new RegExp(`^${pattern}(?:$|[/?#].*)`, 'i')
+                        .test(host + (path === '/' ? '' : path) + query)) return true;
+                } catch (e) {}
+                continue;
+            }
+            const rule = GJ_localStructuredRule(raw);
+            if (!rule || !(host === rule.host || host.endsWith(`.${rule.host}`))) continue;
+            if (rule.pathname !== '/' && path !== rule.pathname && !path.startsWith(`${rule.pathname}/`)) continue;
+            if (rule.query.some(([key, value]) => {
+                const values = Array.from(url.searchParams.entries())
+                    .filter(([rawKey]) => rawKey.toLowerCase() === key)
+                    .map(([, v]) => v.normalize('NFKC').trim().toLowerCase());
+                return !values.length || (value && !values.includes(value));
+            })) continue;
+            return true;
+        }
+        return false;
+    }
+
+    function GJ_localClassifyURL(href) {
+        if (GJ_localHosts.mode !== 'local' || !GJ_centralPolicySnapshotLoaded) return '';
+        let parsed;
+        try { parsed = new URL(href); } catch (e) { return 'none'; }
+        // The fetched hosts feeds do not strip www.: an exact www-only deny
+        // must not be accidentally lost during local classification.
+        const rawHost = String(parsed.hostname || '').toLowerCase().replace(/\.$/, '');
+        const host = GJ_normalizeCentralPolicyHost(parsed.hostname);
+        const snapshot = GJ_centralPolicySnapshot;
+        if (GJ_localHosts.platform === 'firefox') {
+            // Unlike Chrome, Firefox's hard-host floor outranks Trusted Sites.
+            if ((snapshot.staticBlockedSites || []).some(rule => rule && href.includes(String(rule)))) return 'block';
+            if (GJ_localFindHost(rawHost, GJ_localHosts.hard)) return 'block';
+            // A finite trusted exemption precedes the supplemental hosts layer.
+            const allowedHosts = snapshot.allowedHosts || [];
+            if (allowedHosts.some(value => {
+                const domain = GJ_normalizeCentralPolicyHost(value);
+                return domain && (host === domain || host.endsWith(`.${domain}`));
+            })) return 'allow';
+            const pathname = parsed.pathname || '/';
+            for (const rule of snapshot.allowedPathRules || []) {
+                const domain = GJ_normalizeCentralPolicyHost(rule?.host);
+                const prefix = String(rule?.pathPrefix || '/').replace(/\/{2,}/g, '/').replace(/\/$/, '') || '/';
+                if (host === domain && (pathname === prefix || pathname.startsWith(`${prefix}/`))) return 'allow';
+            }
+            const tldBlocked = (snapshot.blockedTLDs || []).some(value => {
+                let tld = String(value || '').trim().toLowerCase().replace(/^\.+/, '');
+                if (!tld) return false;
+                try {
+                    const punycode = new URL(`https://bravefox-test.${tld}/`).hostname;
+                    if (punycode.startsWith('bravefox-test.')) tld = punycode.slice(14);
+                } catch (e) {}
+                return host === tld || host.endsWith(`.${tld}`);
+            });
+            if (tldBlocked || GJ_localLinkRuleMatch(parsed, snapshot.blockedLinks) ||
+                GJ_localLinkRuleMatch(parsed, snapshot.blockedPaths)) return 'block';
+            if (!GJ_localHasScopedPathRule(parsed, snapshot.blockedPaths) &&
+                GJ_localFindHost(rawHost, GJ_localHosts.supplemental)) return 'block';
+            return 'none';
+        }
+        // Chrome's high-priority complete exclusions intentionally outrank hosts.
+        const finite = GJ_centralPolicySnapshotVerdict(href);
+        if (finite === 'allow' || finite === 'block') return finite;
+        return GJ_localFindHost(rawHost, GJ_localHosts.chrome) ||
+            GJ_localFindHost(rawHost, snapshot.bundledHostOverlay || []) ? 'block' : 'none';
+    }
+
+    try {
+        window.GoogleJS = window.GoogleJS || {};
+        window.GoogleJS.getLocalHostsDebug = () => ({
+            mode: GJ_localHosts.mode, platform: GJ_localHosts.platform,
+            chromeHosts: GJ_localHosts.chrome.length, hardHosts: GJ_localHosts.hard.length,
+            supplementalHosts: GJ_localHosts.supplemental.length,
+            lastError: GJ_localHostsLastError, generation: GJ_centralPolicyGeneration
+        });
+    } catch (e) {}
+
+    function GJ_centralPolicyRuntime() {
+        try {
+            if (globalThis.browser?.runtime?.sendMessage) return globalThis.browser.runtime;
+            if (globalThis.chrome?.runtime?.sendMessage) return globalThis.chrome.runtime;
+        } catch (e) {}
+        return null;
+    }
+
+    const GJ_centralPolicyDebug = {
+        lastMessageType: '',
+        lastResponseAt: 0,
+        lastError: '',
+        fetchedHostsCount: 0,
+        bundledHostsCount: 0
+    };
+
+    function GJ_sendCentralPolicyMessage(message, retry = 0) {
+        const runtime = GJ_centralPolicyRuntime();
+        if (!runtime) return Promise.resolve(null);
+
+        GJ_centralPolicyDebug.lastMessageType = String(message?.type || '');
+        GJ_centralPolicyDebug.lastError = '';
+
+        return new Promise(resolve => {
+            let settled = false;
+            let timeoutId = 0;
+
+            const finish = (response, error = '') => {
+                if (settled) return;
+                settled = true;
+                if (timeoutId) window.clearTimeout(timeoutId);
+                if (error) GJ_centralPolicyDebug.lastError = String(error);
+                if (response) {
+                    GJ_centralPolicyDebug.lastResponseAt = Date.now();
+                    GJ_centralPolicyDebug.fetchedHostsCount = Number(response?.fetchedHostsCount || response?.snapshot?.fetchedHostsCount || 0);
+                    GJ_centralPolicyDebug.bundledHostsCount = Number(response?.bundledHostsCount || response?.snapshot?.bundledHostsCount || 0);
+                }
+                resolve(response || null);
+            };
+
+            timeoutId = window.setTimeout(() => finish(null, 'central-policy-timeout'), 6000);
+
+            try {
+                let callbackUsed = false;
+                const callback = response => {
+                    callbackUsed = true;
+                    let runtimeError = '';
+                    try { runtimeError = globalThis.chrome?.runtime?.lastError?.message || ''; } catch (e) {}
+                    finish(response, runtimeError);
+                };
+
+                const maybePromise = runtime.sendMessage(message, callback);
+                if (maybePromise && typeof maybePromise.then === 'function') {
+                    maybePromise.then(response => finish(response)).catch(error => {
+                        if (!callbackUsed) finish(null, error?.message || String(error));
+                    });
+                }
+            } catch (firstError) {
+                try {
+                    const maybePromise = runtime.sendMessage(message);
+                    if (maybePromise && typeof maybePromise.then === 'function') {
+                        maybePromise.then(response => finish(response)).catch(error => finish(null, error?.message || String(error)));
+                    } else {
+                        finish(null, firstError?.message || String(firstError));
+                    }
+                } catch (secondError) {
+                    finish(null, secondError?.message || firstError?.message || String(secondError || firstError));
+                }
+            }
+        }).then(response => {
+            if (response || retry >= 1) return response;
+            return new Promise(resolve => window.setTimeout(resolve, 120))
+                .then(() => GJ_sendCentralPolicyMessage(message, retry + 1));
+        });
+    }
+
+    try {
+        window.GoogleJS = window.GoogleJS || {};
+        window.GoogleJS.getCentralPolicyDebug = () => ({ ...GJ_centralPolicyDebug });
+        window.GoogleJS.testCentralPolicy = async value => {
+            const href = GJ_normalizeCentralPolicyURL(value);
+            if (!href) return { ok: false, error: 'invalid-url', value: String(value || '') };
+            const response = await GJ_sendCentralPolicyMessage({
+                type: GJ_CENTRAL_POLICY_CLASSIFY_TYPE,
+                urls: [href]
+            });
+            return {
+                ok: Boolean(response?.ok),
+                href,
+                verdict: Array.isArray(response?.verdicts) ? response.verdicts[0] || null : null,
+                debug: { ...GJ_centralPolicyDebug }
+            };
+        };
+    } catch (e) {}
+
+    function GJ_normalizeCentralPolicyHost(value) {
+        return String(value || '').trim().toLowerCase().replace(/^www\./, '').replace(/\.$/, '');
+    }
+
+    function GJ_normalizeCentralPolicyURL(value) {
+        const raw = String(value || '').trim();
+        if (!raw) return '';
+        try {
+            let parsed = null;
+            if (/^https?:\/\//i.test(raw)) {
+                parsed = new URL(raw);
+            } else if (/^\/\//.test(raw)) {
+                parsed = new URL(`https:${raw}`);
+            } else if (/^(?:[a-z0-9-]+\.)+[a-z]{2,}(?:[\/:?#]|$)/i.test(raw)) {
+                parsed = new URL(`https://${raw}`);
+            } else if (raw.startsWith('/')) {
+                parsed = new URL(raw, window.location.origin);
+            } else {
+                return '';
+            }
+            if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '';
+            return parsed.href;
+        } catch (e) {
+            return '';
+        }
+    }
+
+
+    // Google increasingly renders a clean destination hostname while the clickable anchor can be
+    // a Google-owned tracking/translation wrapper. Hosts-file policy must therefore inspect both
+    // the actual href and the destination text that Google presents to the user.
+    function GJ_extractCentralPolicyURLsFromText(value) {
+        const input = String(value || '');
+        if (!input) return [];
+
+        const found = new Set();
+        const add = rawValue => {
+            const raw = String(rawValue || '').trim().replace(/[),.;:!?]+$/g, '');
+            if (!raw) return;
+            const href = GJ_normalizeCentralPolicyURL(raw);
+            if (href) found.add(href);
+        };
+
+        try {
+            const explicitUrls = input.match(/https?:\/\/[^\s"'<>\[\]{}()]+/gi) || [];
+            explicitUrls.forEach(add);
+        } catch (e) {}
+
+        try {
+            // Covers Google's breadcrumb/display form too (for example runway.com or
+            // app.runwayml.com) when the scheme is omitted from rendered text.
+            const bareHostPattern = /\b(?:www\.)?(?:[a-z0-9](?:[a-z0-9-]{0,62})\.)+[a-z]{2,63}\b/gi;
+            for (const match of input.matchAll(bareHostPattern)) {
+                const host = match[0];
+                const trailingText = input.slice(match.index + host.length);
+                // Google's result shells can contain inline JavaScript in textContent.
+                // Date.now(), performance.now(), etc. are callable properties, not
+                // publisher domains. Fully qualified http(s) URLs are still collected
+                // by the separate explicit-URL scan above, and actual link hrefs remain
+                // subject to every normal URL, host and blocked-TLD rule.
+                if (/^\s*\(/.test(trailingText)) continue;
+                add(`https://${host}`);
+            }
+        } catch (e) {}
+
+        return Array.from(found);
+    }
+
+    // Keep the finite background.js blockedSites rules hostname-aware. Search-result
+    // URLs must never be blocked just because their query/markup mentions a blocked
+    // publisher; real path and query exclusions remain effective.
+    let GJ_centralBlockedSiteRules = [];
+    function GJ_parseCentralBlockedSiteRule(entry) {
+        const text = String(entry || '').trim();
+        if (!text) return null;
+        if (text.startsWith('?')) {
+            try { return { kind: 'query', params: [...new URLSearchParams(text.slice(1))] }; }
+            catch (e) { return null; }
+        }
+        const isPathOnly = !/^[a-z0-9-]+(?:\.[a-z0-9-]+)+/i.test(text) ||
+            /^[^/?]+\.html?(?:[/?]|$)/i.test(text);
+        try {
+            const parsed = new URL(`https://${isPathOnly ? 'bravefox.invalid/' : ''}${text.replace(/^\//, '')}`);
+            return {
+                kind: isPathOnly ? 'path' : 'host',
+                host: isPathOnly ? '' : parsed.hostname.toLowerCase(),
+                path: parsed.pathname.replace(/\/{2,}/g, '/'),
+                params: [...parsed.searchParams]
+            };
+        } catch (e) { return null; }
+    }
+
+    function GJ_matchesCentralBlockedSiteRule(parsed, rule) {
+        if (rule.kind === 'query') {
+            return rule.params.every(([key, value]) => parsed.searchParams.getAll(key).includes(value));
+        }
+        const host = parsed.hostname.toLowerCase().replace(/\.$/, '');
+        if (rule.kind === 'host' && !(host === rule.host || host.endsWith(`.${rule.host}`))) return false;
+        const pathname = parsed.pathname.replace(/\/{2,}/g, '/');
+        const path = rule.path === '/' ? '/' : rule.path.replace(/\/$/, '');
+        if (path !== '/' && !(pathname === path || pathname.startsWith(`${path}/`))) return false;
+        return rule.params.every(([key, value]) => parsed.searchParams.getAll(key).includes(value));
+    }
+
+    function GJ_centralPolicySnapshotVerdict(value) {
+        const href = GJ_normalizeCentralPolicyURL(value);
+        if (!href) return '';
+
+        try {
+            const parsed = new URL(href);
+            const host = GJ_normalizeCentralPolicyHost(parsed.hostname);
+            const pathname = String(parsed.pathname || '/').replace(/\/{2,}/g, '/');
+
+            for (const domainValue of GJ_centralPolicySnapshot.allowedHosts || []) {
+                const domain = GJ_normalizeCentralPolicyHost(domainValue);
+                if (domain && (host === domain || host.endsWith(`.${domain}`))) return 'allow';
+            }
+
+            for (const rule of GJ_centralPolicySnapshot.allowedPathRules || []) {
+                const ruleHost = GJ_normalizeCentralPolicyHost(rule?.host);
+                let prefix = String(rule?.pathPrefix || '/').trim();
+                if (!prefix.startsWith('/')) prefix = `/${prefix}`;
+                prefix = prefix.replace(/\/{2,}/g, '/').replace(/\/$/, '') || '/';
+                if (host === ruleHost && (pathname === prefix || pathname.startsWith(`${prefix}/`))) return 'allow';
+            }
+
+            for (const rule of GJ_centralBlockedSiteRules) {
+                if (GJ_matchesCentralBlockedSiteRule(parsed, rule)) return 'block';
+            }
+
+            const lowerHost = host.toLowerCase();
+            for (const tld of GJ_centralPolicySnapshot.blockedTLDs || []) {
+                if (tld && lowerHost.endsWith(String(tld).toLowerCase())) return 'block';
+            }
+        } catch (e) {}
+
+        return '';
+    }
+
+    function GJ_centralPolicyCachedVerdict(value) {
+        const href = GJ_normalizeCentralPolicyURL(value);
+        if (!href) return '';
+        if (GJ_centralPolicyVerdictCache.has(href)) {
+            return GJ_centralPolicyVerdictCache.get(href) || '';
+        }
+        if (GJ_localHosts.mode === 'local' && GJ_centralPolicySnapshotLoaded &&
+            GJ_centralPolicySnapshot.bundledOverlayComplete !== false) {
+            const action = GJ_localClassifyURL(href);
+            if (action) {
+                GJ_centralPolicyVerdictCache.set(href, action);
+                return action;
+            }
+        }
+        // Neither incomplete local data nor a missing finite policy grants approval.
+        GJ_queueCentralPolicyURL(href);
+        return '';
+    }
+
+    function GJ_onCentralPolicyUpdated(invalidateResultCaches = false) {
+        // A newly resolved URL needs another pass, but not a destructive organic-card
+        // refresh. Other cached links and image cards still need their async hard-deny
+        // verdicts reapplied as soon as the background classification comes back.
+        try {
+            document.querySelectorAll('[data-gj-cache], [data-gj-cache-img]').forEach(node => {
+                if (!invalidateResultCaches && node.hasAttribute('data-googlejs-organic-card')) return;
+                node.removeAttribute('data-gj-cache');
+                node.removeAttribute('data-gj-cache-img');
+            });
+        } catch (e) {}
+        // The pending gate already hides unverified results; schedule the recheck
+        // directly instead of spending another event-loop turn on a zero-ms timer.
+        try { mainFilteringThrottled(); } catch (e) {}
+    }
+
+    function GJ_flushCentralPolicyURLs() {
+        GJ_centralPolicyFlushTimer = 0;
+        if (!GJ_centralPolicyPending.size) return;
+        // No per-result background messages when the local hosts snapshot is ready.
+        // Wait for both independent data sources rather than declaring missing data clean.
+        if (!GJ_centralPolicySnapshotLoaded || GJ_localHosts.mode === 'loading') return;
+        if (GJ_localHosts.mode === 'local' &&
+            GJ_centralPolicySnapshot.bundledOverlayComplete !== false) {
+            const urls = Array.from(GJ_centralPolicyPending).slice(0, 192);
+            let changed = false;
+            for (const url of urls) {
+                GJ_centralPolicyPending.delete(url);
+                const action = GJ_localClassifyURL(url);
+                if (!action) {
+                    GJ_centralPolicyPending.add(url);
+                    continue;
+                }
+                const previous = GJ_centralPolicyVerdictCache.get(url);
+                GJ_centralPolicyVerdictCache.set(url, action);
+                if (previous !== action) changed = true;
+            }
+            if (changed) GJ_onCentralPolicyUpdated();
+            if (GJ_centralPolicyPending.size) GJ_queueCentralPolicyFlush();
+            return;
+        }
+
+        const urls = Array.from(GJ_centralPolicyPending).slice(0, 192);
+        const generation = GJ_centralPolicyGeneration;
+        urls.forEach(url => {
+            GJ_centralPolicyPending.delete(url);
+            GJ_centralPolicyInFlight.add(url);
+        });
+
+        GJ_sendCentralPolicyMessage({ type: GJ_CENTRAL_POLICY_CLASSIFY_TYPE, urls }).then(response => {
+            // A policy revision invalidates all in-flight work from the older generation.
+            if (generation !== GJ_centralPolicyGeneration) return;
+            urls.forEach(url => GJ_centralPolicyInFlight.delete(url));
+            let changed = false;
+
+            if (response?.ok && Array.isArray(response.verdicts)) {
+                const requested = new Set(urls);
+                for (const verdict of response.verdicts) {
+                    const href = GJ_normalizeCentralPolicyURL(verdict?.url);
+                    if (!href || !requested.has(href)) continue;
+                    const action = verdict?.action === 'allow' || verdict?.action === 'block' ? verdict.action : 'none';
+                    const previous = GJ_centralPolicyVerdictCache.get(href);
+                    GJ_centralPolicyVerdictCache.set(href, action);
+                    // `none` is a validated clean result; it must also trigger release.
+                    if (previous !== action) changed = true;
+                }
+                // An incomplete reply is not permission to reveal any omitted URL.
+                urls.forEach(url => {
+                    if (!GJ_centralPolicyVerdictCache.has(url)) GJ_centralPolicyPending.add(url);
+                });
+            } else {
+                // Service-worker failures remain fail-closed until a real verdict returns.
+                urls.forEach(url => {
+                    if (!GJ_centralPolicyVerdictCache.has(url)) GJ_centralPolicyPending.add(url);
+                });
+            }
+
+            if (changed) GJ_onCentralPolicyUpdated();
+            if (GJ_centralPolicyPending.size) {
+                if (!response?.ok || urls.some(url => !GJ_centralPolicyVerdictCache.has(url))) {
+                    window.setTimeout(GJ_queueCentralPolicyFlush, 300);
+                } else {
+                    GJ_queueCentralPolicyFlush();
+                }
+            }
+        }).catch(() => {
+            if (generation !== GJ_centralPolicyGeneration) return;
+            urls.forEach(url => {
+                GJ_centralPolicyInFlight.delete(url);
+                if (!GJ_centralPolicyVerdictCache.has(url)) GJ_centralPolicyPending.add(url);
+            });
+            if (GJ_centralPolicyPending.size) window.setTimeout(GJ_queueCentralPolicyFlush, 300);
+        });
+    }
+
+    function GJ_queueCentralPolicyFlush() {
+        if (GJ_centralPolicyFlushTimer) return;
+        GJ_centralPolicyFlushTimer = 1;
+        queueMicrotask(GJ_flushCentralPolicyURLs);
+    }
+
+    function GJ_queueCentralPolicyURL(value) {
+        const href = GJ_normalizeCentralPolicyURL(value);
+        if (!href || GJ_centralPolicyVerdictCache.has(href) ||
+            GJ_centralPolicyPending.has(href) || GJ_centralPolicyInFlight.has(href)) return;
+        GJ_centralPolicyPending.add(href);
+        GJ_queueCentralPolicyFlush();
+    }
+
+    function GJ_centralPolicySnapshotKey(snapshot) {
+        // Host-list ordering can change without the effective finite policy changing.
+        // A stable fingerprint avoids throwing away already validated results for that.
+        const sorted = values => values.map(value => String(value)).sort();
+        return JSON.stringify({
+            allowedHosts: sorted(snapshot.allowedHosts),
+            allowedPathRules: snapshot.allowedPathRules.map(rule =>
+                JSON.stringify([String(rule?.host || ''), String(rule?.pathPrefix || '')])).sort(),
+            blockedSites: sorted(snapshot.blockedSites),
+            blockedTLDs: sorted(snapshot.blockedTLDs),
+            staticBlockedSites: sorted(snapshot.staticBlockedSites || []),
+            blockedLinks: sorted(snapshot.blockedLinks || []),
+            blockedPaths: sorted(snapshot.blockedPaths || []),
+            bundledHostOverlay: sorted(snapshot.bundledHostOverlay || []),
+            bundledOverlayComplete: snapshot.bundledOverlayComplete !== false
+        });
+    }
+
+    function GJ_loadCentralPolicySnapshot(revalidateFetchedHosts = false) {
+        if (revalidateFetchedHosts) GJ_centralPolicySnapshotPendingRevalidation = true;
+        const request = ++GJ_centralPolicySnapshotRequest;
+        GJ_sendCentralPolicyMessage({ type: GJ_CENTRAL_POLICY_SNAPSHOT_TYPE }).then(response => {
+            if (request !== GJ_centralPolicySnapshotRequest) return;
+            if (!response?.ok || !response.snapshot) {
+                GJ_centralPolicySnapshotRetryRevalidate ||= revalidateFetchedHosts;
+                // Retry on a background/service-worker startup failure, but keep all
+                // unverified results hidden until a valid snapshot actually arrives.
+                if (GJ_centralPolicySnapshotRetryTimer === null) {
+                    const delay = Math.min(4000, 250 * (2 ** Math.min(4, GJ_centralPolicySnapshotRetryCount++)));
+                    GJ_centralPolicySnapshotRetryTimer = window.setTimeout(() => {
+                        GJ_centralPolicySnapshotRetryTimer = null;
+                        GJ_loadCentralPolicySnapshot(GJ_centralPolicySnapshotRetryRevalidate || revalidateFetchedHosts);
+                    }, delay);
+                }
+                return;
+            }
+            if (GJ_centralPolicySnapshotRetryTimer !== null) {
+                clearTimeout(GJ_centralPolicySnapshotRetryTimer);
+                GJ_centralPolicySnapshotRetryTimer = null;
+            }
+            GJ_centralPolicySnapshotRetryCount = 0;
+            // A forced refresh can be superseded by a later non-forced snapshot call.
+            // Apply it only after a valid response, regardless of which call finishes.
+            revalidateFetchedHosts ||= GJ_centralPolicySnapshotRetryRevalidate ||
+                GJ_centralPolicySnapshotPendingRevalidation;
+            GJ_centralPolicySnapshotRetryRevalidate = false;
+            GJ_centralPolicySnapshotPendingRevalidation = false;
+            const nextSnapshot = {
+                allowedHosts: Array.isArray(response.snapshot.allowedHosts) ? response.snapshot.allowedHosts.slice() : [],
+                allowedPathRules: Array.isArray(response.snapshot.allowedPathRules) ? response.snapshot.allowedPathRules.map(rule => ({ ...rule })) : [],
+                blockedSites: Array.isArray(response.snapshot.blockedSites) ? response.snapshot.blockedSites.slice() : [],
+                blockedTLDs: Array.isArray(response.snapshot.blockedTLDs) ? response.snapshot.blockedTLDs.slice() : [],
+                staticBlockedSites: Array.isArray(response.snapshot.staticBlockedSites) ? response.snapshot.staticBlockedSites.slice() : [],
+                blockedLinks: Array.isArray(response.snapshot.blockedLinks) ? response.snapshot.blockedLinks.slice() : [],
+                blockedPaths: Array.isArray(response.snapshot.blockedPaths) ? response.snapshot.blockedPaths.slice() : [],
+                bundledHostOverlay: Array.isArray(response.snapshot.bundledHostOverlay) ?
+                    GJ_localSortedHosts(response.snapshot.bundledHostOverlay.slice()) : [],
+                bundledOverlayComplete: response.snapshot.bundledOverlayComplete !== false
+            };
+            const fingerprint = GJ_centralPolicySnapshotKey(nextSnapshot);
+            const firstSnapshot = !GJ_centralPolicySnapshotLoaded;
+            const finitePolicyChanged = !firstSnapshot && fingerprint !== GJ_centralPolicySnapshotFingerprint;
+            GJ_centralPolicySnapshot = nextSnapshot;
+            GJ_centralBlockedSiteRules = nextSnapshot.blockedSites
+                .map(GJ_parseCentralBlockedSiteRule).filter(Boolean);
+            GJ_centralPolicySnapshotFingerprint = fingerprint;
+            GJ_centralPolicySnapshotLoaded = true;
+
+            // The first snapshot arrives asynchronously, often AFTER clean results were
+            // classified. Never discard those verdicts simply because it arrived.
+            // Later unchanged snapshots likewise need no destructive refresh. A real
+            // hosts-file update (which is not represented in the finite snapshot) DOES.
+            if (finitePolicyChanged || (revalidateFetchedHosts && GJ_localHosts.mode === 'bridge')) {
+                GJ_centralPolicyGeneration++;
+                GJ_centralPolicyVerdictCache.clear();
+                GJ_centralPolicyPending.clear();
+                GJ_centralPolicyInFlight.clear();
+                GJ_onCentralPolicyUpdated(true);
+            } else if (firstSnapshot) {
+                GJ_onCentralPolicyUpdated();
+            }
+            if (GJ_centralPolicyPending.size) GJ_queueCentralPolicyFlush();
+        }).catch(() => {});
+    }
+
+    GJ_loadCentralPolicySnapshot();
+    void GJ_loadLocalHosts();
+    // Hosts refresh notifications are not synonymous with a changed blocklist.
+    // Chrome writes lastUpdate and all hostsChunk_N values even when a download
+    // produces precisely the same hosts. Invalidating *every* approved Google
+    // result for that no-op makes the entire results area flash while URLs are
+    // classified again. Compare the stored policy payload before invalidating.
+    // Metadata timestamps are hints to re-fetch the finite snapshot, NOT proof that
+    // the large fetched-hosts dataset changed. Actual host chunks, counts, or an
+    // opaque/semantic revision still force authoritative fail-closed revalidation.
+    const googleCentralHostStorageEvents = [];
+    let googleCentralLastExplicitHostRevisionAt = 0;
+    function GJ_recordHostStorageEvent(action, changes) {
+        googleCentralHostStorageEvents.push({
+            at: new Date().toISOString(),
+            action,
+            keys: Object.keys(changes || {}).filter(key =>
+                key === 'lastUpdate' || key === 'hostsChunks' || key === 'hostsTotal' ||
+                key === 'bfb:hosts-meta:v1' || key === 'bfb:local-dataset' ||
+                key.startsWith('bfb:hosts-source-') || key.startsWith('hostsChunk_')).slice(0, 24),
+            generation: GJ_centralPolicyGeneration
+        });
+        if (googleCentralHostStorageEvents.length > 30) googleCentralHostStorageEvents.shift();
+    }
+    function GJ_hostsStorageValuesDiffer(before, after) {
+        if (before === after) return false;
+        if (Array.isArray(before) && Array.isArray(after)) {
+            if (before.length !== after.length) return true;
+            let exactlyEqual = true;
+            for (let index = 0; index < before.length; index++) {
+                if (before[index] !== after[index]) { exactlyEqual = false; break; }
+            }
+            if (exactlyEqual) return false;
+            // Hosts chunk reordering alone does not change its blocking policy.
+            // Comparing sets avoids unnecessary approvals resets on reordered writes.
+            const beforeSet = new Set(before);
+            if (beforeSet.size !== new Set(after).size) return true;
+            for (const value of after) if (!beforeSet.has(value)) return true;
+            return false;
+        }
+        // Exact payload comparison for hosts chunks and counts: never discard an
+        // actual blocking-list change, including changes of equal string length.
+        if (before && after && typeof before === 'object' && typeof after === 'object') {
+            return JSON.stringify(before) !== JSON.stringify(after);
+        }
+        return true;
+    }
+
+    function GJ_hostMetaPolicyFingerprint(value) {
+        // Strip only known clock/bookkeeping fields. Retain all unknown keys,
+        // nested dataset fields, revisions and checksums: any change to one of
+        // those still invalidates the authoritative fetched-hosts verdict cache.
+        const clockKeys = new Set([
+            'lastupdate', 'lastupdated', 'lastupdatedat', 'updatedat',
+            'lastchecked', 'lastcheckedat', 'checkedat', 'lastcheck',
+            'lastfetch', 'lastfetched', 'lastfetchedat', 'fetchedat',
+            'lastrefresh', 'lastrefreshed', 'lastrefreshedat', 'refreshedat',
+            'lastsync', 'lastsynced', 'lastsyncedat', 'syncedat',
+            'lastattempt', 'lastattemptat', 'timestamp', 'lasttimestamp'
+        ]);
+        const normalize = (input, depth = 0) => {
+            if (depth > 12) return input;
+            if (Array.isArray(input)) return input.map(item => normalize(item, depth + 1));
+            if (!input || typeof input !== 'object') return input;
+            const output = {};
+            for (const key of Object.keys(input).sort()) {
+                if (clockKeys.has(key.toLowerCase())) continue;
+                output[key] = normalize(input[key], depth + 1);
+            }
+            return output;
+        };
+        return JSON.stringify(normalize(value ?? {}));
+    }
+
+    function GJ_isClockOnlyLegacyHostUpdate(value) {
+        if (value instanceof Date) return Number.isFinite(value.getTime());
+        if (typeof value === 'number') return Number.isFinite(value) && value >= 1000000000;
+        if (typeof value !== 'string') return false;
+        const text = value.trim();
+        if (/^\d{10,16}$/.test(text)) return true;
+        return /^\d{4}-\d{2}-\d{2}[T\s]/.test(text) &&
+            Number.isFinite(Date.parse(text));
+    }
+    try {
+        window.GoogleJS = window.GoogleJS || {};
+        window.GoogleJS.getCentralHostRefreshHistory = () =>
+            googleCentralHostStorageEvents.map(event => ({ ...event, keys: event.keys.slice() }));
+    } catch (e) {}
+    try {
+        const storageApi = globalThis.browser?.storage || globalThis.chrome?.storage;
+        storageApi?.onChanged?.addListener((changes, areaName) => {
+            if (areaName !== 'local' || !changes) return;
+
+            const hostChunkKeys = Object.keys(changes).filter(key => /^hostsChunk_\d+$/.test(key));
+            const firefoxSourceChunks = Object.keys(changes).filter(key =>
+                key.startsWith('bfb:hosts-source-chunk:v2:'));
+            const firefoxSourceMeta = Object.keys(changes).filter(key =>
+                key.startsWith('bfb:hosts-source-meta:v2:'));
+            const firefoxChunksChanged = firefoxSourceChunks.some(key =>
+                GJ_hostsStorageValuesDiffer(changes[key]?.oldValue, changes[key]?.newValue));
+            if (firefoxChunksChanged) {
+                GJ_localFirefoxChunksDirty = true;
+                GJ_holdCentralGateForHostRevision();
+            }
+            const firefoxCountChanged = firefoxSourceMeta.some(key =>
+                changes[key]?.oldValue?.count !== changes[key]?.newValue?.count ||
+                changes[key]?.oldValue?.chunks !== changes[key]?.newValue?.chunks);
+            if (firefoxSourceMeta.length && (GJ_localFirefoxChunksDirty || firefoxCountChanged)) {
+                if (firefoxCountChanged) GJ_holdCentralGateForHostRevision();
+                GJ_localFirefoxChunksDirty = false;
+                GJ_recordHostStorageEvent('firefox-source-revision-local', changes);
+                GJ_scheduleLocalHostsRefresh(25);
+            } else if (firefoxSourceMeta.length) {
+                GJ_recordHostStorageEvent('firefox-identical-source-no-revalidation', changes);
+            }
+            if (changes['bfb:local-dataset']) {
+                GJ_recordHostStorageEvent('finite-dataset-refresh', changes);
+                GJ_loadCentralPolicySnapshot(false);
+            }
+
+            const contentChanged = hostChunkKeys.some(key =>
+                GJ_hostsStorageValuesDiffer(changes[key]?.oldValue, changes[key]?.newValue));
+            const countsChanged = ['hostsChunks', 'hostsTotal'].some(key =>
+                changes[key] && GJ_hostsStorageValuesDiffer(changes[key].oldValue, changes[key].newValue));
+            const focusMasterChanged = Boolean(changes['bfb:hosts-meta:v1'] &&
+                GJ_hostMetaPolicyFingerprint(changes['bfb:hosts-meta:v1'].oldValue) !==
+                GJ_hostMetaPolicyFingerprint(changes['bfb:hosts-meta:v1'].newValue));
+            const hasContentPayload = hostChunkKeys.length > 0 ||
+                Boolean(changes.hostsChunks || changes.hostsTotal);
+
+            if (contentChanged || countsChanged || focusMasterChanged) {
+                googleCentralLastExplicitHostRevisionAt = Date.now();
+                GJ_recordHostStorageEvent('policy-changed-revalidate', changes);
+                // Real dataset revisions must remain fail-closed, including updates
+                // that leave the finite policy snapshot unchanged.
+                // Local host reload compares complete sorted sets; identical data
+                // must not invalidate previously approved results.
+                if (contentChanged || countsChanged) {
+                    GJ_holdCentralGateForHostRevision();
+                    GJ_scheduleLocalHostsRefresh(0);
+                    // The background can stop using the emergency overlay once
+                    // the committed chunks catch up with its in-memory policy.
+                    GJ_loadCentralPolicySnapshot(false);
+                }
+                if (focusMasterChanged) GJ_loadCentralPolicySnapshot(false);
+                return;
+            }
+            if (hasContentPayload) {
+                GJ_recordHostStorageEvent('identical-hosts-no-revalidation', changes);
+                return;
+            }
+            if (changes['bfb:hosts-meta:v1'] && !changes.lastUpdate) {
+                GJ_recordHostStorageEvent('metadata-only-no-revalidation', changes);
+                return;
+            }
+            if (changes.lastUpdate && GJ_hostsStorageValuesDiffer(
+                changes.lastUpdate.oldValue, changes.lastUpdate.newValue)) {
+                if (Date.now() - googleCentralLastExplicitHostRevisionAt < 2000) {
+                    GJ_recordHostStorageEvent('duplicate-legacy-signal-ignored', changes);
+                    return;
+                }
+                if (GJ_isClockOnlyLegacyHostUpdate(changes.lastUpdate.newValue)) {
+                    // Timestamp-only event: ask for the authoritative finite rules.
+                    // A changed snapshot still invalidates approvals, but unchanged
+                    // host payloads do not force an unnecessary global reclassification.
+                    GJ_recordHostStorageEvent('legacy-clock-snapshot-only', changes);
+                    GJ_loadCentralPolicySnapshot(false);
+                } else {
+                    // Opaque legacy revision IDs are meaningful even when the
+                    // storage event has no accompanying hostsChunk_N payload.
+                    GJ_recordHostStorageEvent('legacy-revision-revalidate', changes);
+                    GJ_loadCentralPolicySnapshot(GJ_localHosts.mode === 'bridge');
+                    GJ_scheduleLocalHostsRefresh(0);
+                }
+            }
+        });
+    } catch (e) {}
+
+    // Result URL allowances use plain domains or domain/path prefixes, without protocols or www.
+    // A normal domain matches itself and www.; *.domain matches that domain plus all subdomains.
+    // A /path suffix limits the exception to that path and its children. The actual URL hostname
+    // is parsed first, so lookalike hosts and URLs nested in another site's query cannot match.
+    // Nuclear, hard URL, image, central-hosts, and priority denies still take precedence.
+    const allowedResultURLs = [
+        '*.archive.org',
+        'iltalehti.fi',
+        'is.fi',
+        'youtube.com',
+        'm.youtube.com',
+        '*.wikipedia.org',
+        'netflix.com',
+        'runescape.wiki',
+        'oldschool.runescape.wiki',
+        'github.com/paintdotnet',
+        'getpaint.net',
+        'runescape.com',
+        'oldschool.runescape.com',
+        'openai.com',
+        'status.openai.com',
+        'reddit.com',
+        'old.reddit.com',
+        'new.reddit.com',
+        'spotify.com',
+        'thesmackdownhotel.com',
+        '*.wiktionary.org',
+        'wwe.com',
+        'amd.com',
+        'nvidia.com',
+        'intel.com',
+        'techpowerup.com',
+        'guru3d.com',
+        'chatgpt.com',
+        'github.com/copilot',
+        'jimms.fi',
+        'verkkokauppa.com',
+        'motonet.fi',
+        'datatronic.fi',
+        'multitronic.fi',
+        'proshop.fi',
+        'tori.fi',
+        'huuto.net',
+        'hintaopas.fi',
+        'yliopistonapteekki.fi',
+        'findidfb.com',
+        'lookup-id.com',
+        'terve.fi',
+    ];
+
+    // Precise deny paths on otherwise allowed hosts. Keep this list anchored and
+    // narrow: these rules outrank allowedResultURLs without giving broad fragments
+    // such as /x\.com/i or /ai\./i the same power.
+    const priorityBlockedResultURLPatterns = [
+        // Strongly identified blocked hosts outrank generic URL allowances on every account.
+        /^https?:\/\/(?:[a-z0-9-]+\.)*tiktok\.com(?:[\/:?#]|$)/i,
+        /^https?:\/\/(?:(?:www|old|new)\.)?reddit\.com\/r\/(?:comfyui|stablediffusion|machinelearning|grok)(?:[\/?#]|$)/i,
+    ];
+
+    const blockedResultURLPatterns = [
+        /github\.com\/best-deepnude-ai-apps/i,
+        /github\.com\/AI-Reviewed\/tools\/blob\/main\/Nude%20AI%20:%205%20Best%20AI%20Nude%20Generators%20-%20AIReviewed\.md/i,
+        /github\.com\/nudify-ai/i,
+        /github\.com\/BrowserWorks/i,
+        /github\.com\/comfyanonymous/i,
+        /github\.com\/Top-AI-Apps/i,
+        /github\.com\/Anthropic/i,
+        /github\.com\/HorizonMW\/HorizonMW-Client/i,
+        /github\.com\/HorizonMW\/[^\/]+/i,
+        /github\.com\/Top-AI-Apps\/Review\/blob\/main\/Top%205%20DeepNude%20AI%3A%20Free%20%26%20Paid%20Apps%20for%20Jan%202025%20-%20topai\.md/i,
+        /chromewebstore\.google\.com\/detail\/tor-selain\/eaoamcgoidmhaficdbmcbamiedeklfol/i,
+        /www\.opera\.com/i,
+        /www\.bing\.com/i,
+        /aka\.ms/i,
+        /microsoft\.com\/en-us\/edge\//i,
+        /microsoft\.com\/fi-fi\/edge\//i,
+        /explore\.microsoft\.com/i,
+        /github\.com\/microsoftedge/i,
+        /brave\.com/i,
+        /aitoolfor\.org/i,
+        /aitoolfor\./i,
+        /aitool4\./i,
+        /aitool4u\./i,
+        /aitool\./i,
+        /gemini\./i,
+        /remove\.bg/i,
+        /folio\.procreate\./i,
+        /procreate\./i,
+        /folio\.procreate\.com\/deepnude-ai/i,
+        /support\.microsoft\.com\/fi-fi\/microsoft-edge/i,
+        /apps\.microsoft\.com\/detail\/xpdbz4mprknn30/i,
+        /apps\.microsoft\.com\/detail\/xp8cf6s8g2d5t6/i,
+        /apps\.microsoft\.com\/detail\/xpfftq037jwmhs/i,
+        /apps\.microsoft\.com\/detail\/9nzvdkpmr9rd/i,
+        /apps\.microsoft\.com\/detail\/9nrtvfllggtv/i,
+        /researchgate\.net/i,
+        /thefacemerge\.net/i,
+        /faceplusplus\.net/i,
+        /microsoft\.com\/fi-fi\/edge/i,
+        /google\.com\/intl\/fi_fi\/chrome\//i,
+        /play\.google\.com\/store\/apps\/details\?id=com\.microsoft\.emmx/i,
+        /apps\.apple\.com\/us\/app\/microsoft-edge-ai-browser\/id1288723196/i,
+        /torproject\.org/i,
+        /tor\.app/i,
+        /mozilla\.org/i,
+        /mozilla\.fi/i,
+        /tiktok\.com/i,
+        /browser\./i,
+        /porn\./i,
+        /.\porn/i,
+        /tiktok\./i,
+        /download\.fi/i,
+        /evercast\.us/i,
+        /avclabs\.com/i,
+        /wondershare\.com/i,
+        /wondershare\.net/i,
+        /wondershare\.ai/i,
+        /risingmax\.com/i,
+        /gizmodo\.com/i,
+        /comfy\.org/i,
+        /runcomfy\.com/i,
+        /picsart\.com/i,
+        /capcut\.com/i,
+        /canva\.com/i,
+        /topazlabs\.com/i,
+        /online\.visual-paradigm\.com/i,
+        /skylum\.com/i,
+        /stable-diffusion-art\.com/i,
+        /comfyui\.org/i,
+        /thinkdiffusion\.com/i,
+        /comfyuiweb\.com/i,
+        /horizonmw\.org/i,
+        /pinterest\.com/i,
+        /irc-galleria\.fi/i,
+        /irc-galleria\.net/i,
+        /irc-galleria\./i,
+        /lite\.irc-galleria\./i,
+        /irc-galleria\.fi/i,
+        /irc\.fi/i,
+	/commentpicker\.com/i,
+        /smallseotools\.com/i,
+        /ai-apps-directory\/tools\/blob\/main\/Top%209%20Deepnude%20AI%20Apps%20In%202025%3A%20Ethical%20Alternatives%20%26%20Cutting-Edge%20Tools\.md/i,
+        /aitoolfor\.org\/tools\/deepnude-ai/i,
+        /eeebuntu\.org\/apk\/deepnude-latest-version/i,
+        /aitoolfor\.org\/tools\/undress-ai-app-deepnude-nudify-free-undress-ai/i,
+        /merlio\.app\/blog\/free-deepnude-ai-alternatives/i,
+        /gitlab\.com\/ai-image-and-text-processing\/DeepNude-an-Image-to-Image-technology/i,
+        /aitoptools\.com\/tool\/deepnude-by-deepany-ai/i,
+        /gitee\.com\/cwq126\/open-deepnude/i,
+        /gitlab\.com\/ai-image-and-text-processing\/DeepNude-an-Image-to-Image-technology\/-\/tree\/master\/DeepNude_software_itself/i,
+        /facetuneapp\.com\/\?srd=[\w-]+/i,
+        /facetuneapp\.com\/$/i,
+        /facetune\./i,
+        /facetuneapp\./i,
+        /play\.google\.com\/store\/apps\/details\?id=com\.lightricks\.facetune\.free/i,
+        /apps\.apple\.com\/us\/app\/facetune-video-photo-editor\/id1149994032/i,
+        /lunapic\.com/i,
+        /azure\./i,
+        /vidu\./i,
+        /vidyu\./i,
+        /viduy\./i,
+        /videy\./i,
+        /vidio\./i,
+        /vsco\./i,
+        /soulgyn\./i,
+        /pixelixe\.com/i,
+        /picresize\.com/i,
+        /replicate\.ai/i,
+        /kuvake\.net/i,
+        /reddit\.com\/r\/comfyui\/?/i,
+        /reddit\.com\/r\/stablediffusion\/?/i,
+        /facebook\.com\/tatu\.toiviainen\//i,
+        /viewverio\.com/i,
+        /irc\.fi/i,
+        /kelleyhoaglandphotography\.com/i,
+        /nude\./i,
+        /naked\./i,
+        /photopea\./i,
+        /123rf\./i,
+        /virtualbox\./i,
+        /oracle\./i,
+        /play\.google\./i,
+        /formulae\./i,
+        /rem\./i,
+        /remove\./i,
+        /remover\./i,
+        /removing\./i,
+        /arxiv\./i,
+        /osboxes\./i,
+        /vmware\./i,
+        /face25\./i,
+        /face26\./i,
+        /anthropic\./i,
+        /writecream\./i,
+        /waterfox\./i,
+        /pixelmator\./i,
+        /flexclip\./i,
+        /uptodown\./i,
+        /perfectcorp\./i,
+        /idphotodiy\./i,
+        /imagetools\./i,
+        /image-tools\./i,
+        /img-tools\./i,
+        /imgtools\./i,
+        /pictools\./i,
+        /pic-tools\./i,
+        /grok\./i,
+        /grokai\./i,
+        /grok-ai\./i,
+        /yahoo\./i,
+        /pict-tools\./i,
+        /picttools\./i,
+        /phototools\./i,
+        /photools\./i,
+        /photo-tools\./i,
+        /picture-tools\./i,
+        /picturetools\./i,
+        /workintool\./i,
+        /sports\.yahoo\./i,
+        /workintools\./i,
+        /workin-tool\./i,
+        /workin-tools\./i,
+        /workingtool\./i,
+        /workingtools\./i,
+        /working-tool\./i,
+        /working-tools\./i,
+        /videoaihug\./i,
+        /aihugvideo\./i,
+        /fotor\./i,
+        /imyfone\./i,
+        /aihug\./i,
+        /hugai\./i,
+        /ai-hug\./i,
+        /hug-ai\./i,
+        /aihugging\./i,
+        /huggingai\./i,
+        /ai-hugging\./i,
+        /hugging-ai\./i,
+        /ai-videogenerator\./i,
+        /aivideogenerator\./i,
+        /videogeneratorai\./i,
+        /videogenerator-ai\./i,
+        /any-video\./i,
+        /anyvideo\./i,
+        /any-video-convert\./i,
+        /anyvideoconvert\./i,
+        /any-videoconvert\./i,
+        /anyvideo-convert\./i,
+        /any-video-converter\./i,
+        /anyvideoconverter\./i,
+        /any-videoconverter\./i,
+        /anyvideo-converter\./i,
+        /ai‑directories\./i,
+        /aidirectories\./i,
+        /ai‑directory\./i,
+        /aidirectory\./i,
+        /ai‑directorys\./i,
+        /aidirectorys\./i,
+        /aitoolsdirectory\./i,
+        /aitoolsdirectory\./i,
+        /aidirectory\./i, 
+        /onlineaidirectory\./i, 
+        /aidirectoryonline\./i, 
+        /online-aidirectory\./i, 
+        /aidirectory-online\./i, 
+        /onlineaidirectorys\./i, 
+        /aidirectorysonline\./i, 
+        /online-aidirectorys\./i, 
+        /aidirectorys-online\./i, 
+        /ai-directory\./i,
+        /assistingintelligence\./i,
+        /assisting-intelligence\./i,
+        /intelligenceassisting\./i,
+        /intelligence-assisting\./i,
+        /assistintelligence\./i,
+        /assist-intelligence\./i,
+        /intelligenceassist\./i,
+        /intelligence-assist\./i,
+        /aidirectorylist\./i,
+        /aiagentsdirectory\./i,
+        /aiagentsdirectory\./i,
+        /aiphoto\./i,
+        /ai-photo\./i,
+        /photoai\./i,
+        /photo-ai\./i,
+        /aiphotohq\./i,
+        /ai-photohq\./i,
+        /aiphoto-hq\./i,
+        /ai-photo-hq\./i,
+        /axis-intelligence\.com/i,
+        /letsview\.com/i,
+        /trendhunter\./i,
+        /trendhunt\./i,
+        /trend-hunter\./i,
+        /trend-hunt\./i,
+        /dev\./i,
+        /feishu\.cn/i,
+        /n8ked\./i,
+        /imgur\.com.*nude/i,
+        /imgur\.com.*deepn/i,
+        /AlexaBliss/i,
+        /DuaLipa/i,
+        /Dua_Lipa/i,
+        /threads\./i,
+        /instagram\./i,
+        /justaistuff\./i,
+        /aistuff\./i,
+        /claude\./i,
+        /browsing\./i,
+        /browsing\./i,
+        /-browser\./i,
+        /-browsing\./i,
+        /a1art\./i,
+        /bangbros/i,
+        /sportskeeda\.com/i,
+        /deviantart\.com/i,
+        /deepnude\./i,
+        /deepany\./i,
+        /deep-any\./i,
+        /nudify\./i,
+        /venice\./i,
+        /venica\./i,
+        /vanica\./i,
+        /vanice\./i,
+        /edit\./i,
+        /-edit\./i,
+        /editor\./i,
+        /-editor\./i,
+        /editing\./i,
+        /-editing\./i,
+        /upscale\./i,
+        /-upscale\./i,
+        /upscaling\./i,
+        /-upscaling\./i,
+        /uncensor\./i,
+        /uncensoring\./i,
+        /uncensored\./i,
+        /softorbits\./i,
+        /softorbit\./i,
+        /soft-orbits\./i,
+        /soft-orbit\./i,
+        /nightcafe\./i,
+        /kuvake\./i,
+        /ai-\./i,
+        /-ai\./i,
+        /ai\./i,
+        /neural\./i,
+        /nudifyer\./i,
+        /nudifying\./i,
+        /nudifier\./i,
+        /theresanaiforthat\./i,
+        /fixthephoto\./i,
+        /fixthatphoto\./i,
+        /fixthisphoto\./i,
+        /nudifyonline\./i,
+        /nudify-online\./i,
+        /nudifyingonline\./i,
+        /nudifying-online\./i,
+        /onlinenudify\./i,
+        /onlinenudifying\./i,
+        /onlinenudifyier\./i,
+        /onlinenudifier\./i,
+        /online-nudify\./i,
+        /online-nudifying\./i,
+        /online-nudifyier\./i,
+        /online-nudifier\./i,
+        /stablediffusionapi\./i,
+        /stablediffusion\./i,
+        /stable-diffusion\./i,
+        /stable-diffusionapi\./i,
+        /stablediffusion-api\./i,
+        /stable-diffusion-api\./i,
+        /stablediffusionapi\./i,
+        /huggingface\./i,
+        /hugging-face\./i,
+        /huntscreen\./i,
+        /huntscreens\./i,
+        /hunt-screen\./i,
+        /hunt-screens\./i,
+        /screenhunt\./i,
+        /screenshunt\./i,
+        /screen-hunt\./i,
+        /screens-hunt\./i,
+        /trendingaitool\./i,
+        /trendingaitools\./i,
+        /toolsfine\./i,
+        /toolfine\./i,
+        /tools-fine\./i,
+        /tool-fine\./i,
+        /finetools\./i,
+        /finetool\./i,
+        /fine-tools\./i,
+        /fine-tool\./i,
+        /HeyGen\./i,
+        /GenHey\./i,
+        /Hey-Gen\./i,
+        /Gen-Hey\./i,
+        /apkpure\./i,
+        /apk-pure\./i,
+        /alucare\./i,
+        /scribd\./i,
+        /alu-care\./i,
+        /noxilo\./i,
+        /aichef\./i,
+        /ai-chef\./i,
+        /chefai\./i,
+        /chef-ai\./i,
+        /aichief\./i,
+        /ai-chief\./i,
+        /chiefai\./i,
+        /chief-ai\./i,
+        /noxillo\./i,
+        /vadoo\./i,
+        /vidnoz\./i,
+        /theresanaiforthat\./i,
+        /futuretools\./i,
+        /future-tools\./i,
+        /futurepedia\./i,
+        /future-pedia\./i,
+        /aitooldirectory\./i,
+        /aitoolsforme\./i,
+        /aixploria\./i,  
+        /topai\./i, 
+        /top-ai\./i,
+        /aitop\./i, 
+        /ai-top\./i,
+        /toolify\./i,  
+        /allaitool\./i,  
+        /toolsaiapp\./i,  
+        /aitoolhunt\./i,  
+        /openfuture\./i,  
+        /seofai\./i,   
+        /alltheaitools\./i,  
+        /aitools\./i,   
+        /aitoptools\./i,  
+        /allthingsai\./i,  
+        /aidir\./i, 
+        /wegocup\./i,
+        /modcombo\./i,
+        /monica\./i,
+        /aimonica\./i,
+        /ai-monica\./i,
+        /monicaai\./i,
+        /monica-ai\./i,
+        /monicai\./i,
+        /monic-ai\./i,
+        /clothoff\./i,
+        /cloth-off\./i,
+        /offcloth\./i,
+        /off-cloth\./i,
+        /clothyoff\./i,
+        /clothy-off\./i,
+        /offclothy\./i,
+        /off-clothy\./i,
+        /clothesoff\./i,
+        /clothes-off\./i,
+        /offclothes\./i,
+        /off-clothes\./i,
+        /cloudbooklet\./i,
+        /cyberlink\./i,
+        /undressapp\./i,
+        /undress-app\./i,
+        /appundress\./i,
+        /app-undress\./i,
+        /reddit\.com\/r\/MachineLearning/i,
+        /reddit\.com\/r\/Grok/i,
+        /solo\./i,
+        /robeoff\./i,
+        /offrobe\./i,
+        /robe-off\./i,
+        /off-robe\./i,
+        /sendfame\./i,
+        /send-fame\./i,
+        /sendingfame\./i,
+        /sending-fame\./i,
+        /sendsfame\./i,
+        /sends-fame\./i,
+        /sentfame\./i,
+        /sent-fame\./i,
+        /famesend\./i,
+        /fame-send\./i,
+        /famesending\./i,
+        /fame-sending\./i,
+        /famesends\./i,
+        /fame-sends\./i,
+        /famesent\./i,
+        /fame-sent\./i,
+        /headgenai\./i,
+        /headgen-ai\./i,
+        /head-genai\./i,
+        /head-gen-ai\./i,
+        /whatisthebigdata\./i,
+        /whatsthebigdata\./i,
+        /mangoanimate\./i,
+        /mangoai\./i,
+        /mango-animate\./i,
+        /mango-anim\./i,
+        /lantaai\./i,
+        /lantai\./i,
+        /lanta-ai\./i,
+        /mango-anims\./i,
+        /coinmarketcap\./i,
+        /imageresizer\./i,
+        /image-resizer\./i,
+        /imageresize\./i,
+        /image-resize\./i,
+        /photoresizer\./i,
+        /photo-resizer\./i,
+        /photoresize\./i,
+        /photo-resize\./i,
+        /mangoanims\./i,
+        /mango-animated\./i,
+        /mango-animations\./i,
+        /mangoanim\./i,
+        /mangoanimated\./i,
+        /mangoanimations\./i,
+        /mango-ai\./i,
+        /insmind\./i,
+        /.\cat/i,
+        /dreamshoot\./i,
+        /dreamshootai\./i,
+        /faceswapvideo\./i,
+        /faceswapvid\./i,
+        /faceswapvids\./i,
+        /faceswapvideos\./i,
+        /faceswap-video\./i,
+        /faceswap-vid\./i,
+        /faceswap-vids\./i,
+        /faceswap-videos\./i,
+        /saashub\./i,
+        /undress\./i,
+        /twitter\.com/i,
+        /x\.com/i,
+    ];
+
+    const blockedImageURLPatterns = [
+        /reddit\.com\/r\/SquaredCircle/i,
+        /reddit\.com\/r\/SCJerk/i,
+        /reddit\.com\/r\/AlexaBliss/i,
+        /reddit\.com\/r\/AlexaBlissWorship/i,
+        /redgifs\.com\//i,
+        /tiktok\.com/i,
+        /AlexaBliss/i,
+        /DuaLipa/i,
+        /Dua_Lipa/i,
+        /threads\./i,
+        /instagram\.com/i,
+        /lite\.irc-galleria\./i,
+        /irc-galleria\.fi/i,
+        /irc-galleria\.net/i,
+        /irc-galleria\./i,
+        /irc\.fi/i,
+        /brazzers/i,
+        /brazzer/i,
+        /bangbros/i,
+        /sportskeeda\.com/i,
+        /deviantart\.com/i,
+        /deepnude\./i,
+        /deepany\./i,
+        /deep-any\./i,
+        /nudify\./i,
+        /venice\./i,
+        /venica\./i,
+        /vanica\./i,
+        /vanice\./i,
+        /HeyGen\./i,
+        /GenHey\./i,
+        /Hey-Gen\./i,
+        /Gen-Hey\./i,
+        /apkpure\./i,
+        /apk-pure\./i,
+        /uncensor\./i,
+        /uncensoring\./i,
+        /uncensored\./i,
+        /threads\.com/i,
+        /threads\.net/i,
+        /nudifyer\./i,
+        /nudifying\./i,
+        /nudifier\./i,
+        /undress\./i,
+        /selain\./i,
+        /selaimet\./i,
+        /nightcafe\./i,
+        /softorbits\./i,
+        /softorbit\./i,
+        /soft-orbits\./i,
+        /soft-orbit\./i,
+        /www\.bing\.com/i,
+        /kuvake\./i,
+        /ai-\./i,
+        /-ai\./i,
+        /ai\./i,
+        /soulgyn\./i,
+        /porn\./i,
+        /.\porn/i,
+        /softorbits\./i,
+        /softorbit\./i,
+        /soft-orbits\./i,
+        /soft-orbit\./i,
+        /nightcafe\./i,
+        /kuvake\./i,
+        /neural\./i,
+        /nudifyer\./i,
+        /nudifying\./i,
+        /nudifier\./i,
+        /theresanaiforthat\./i,
+        /fixthephoto\./i,
+        /fixthatphoto\./i,
+        /fixthisphoto\./i,
+        /nudifyonline\./i,
+        /nudify-online\./i,
+        /nudifyingonline\./i,
+        /nudifying-online\./i,
+        /onlinenudify\./i,
+        /onlinenudifying\./i,
+        /onlinenudifyier\./i,
+        /onlinenudifier\./i,
+        /online-nudify\./i,
+        /online-nudifying\./i,
+        /online-nudifyier\./i,
+        /online-nudifier\./i,
+        /stablediffusionapi\./i,
+        /stablediffusion\./i,
+        /stable-diffusion\./i,
+        /stable-diffusionapi\./i,
+        /stablediffusion-api\./i,
+        /stable-diffusion-api\./i,
+        /stablediffusionapi\./i,
+        /.\cat/i,
+        /headgenai\./i,
+        /headgen-ai\./i,
+        /head-genai\./i,
+        /head-gen-ai\./i,
+        /whatisthebigdata\./i,
+        /whatsthebigdata\./i,
+        /mangoanimate\./i,
+        /mangoai\./i,
+        /mango-animate\./i,
+        /mango-anim\./i,
+        /lantaai\./i,
+        /lantai\./i,
+        /lanta-ai\./i,
+        /mango-anims\./i,
+        /coinmarketcap\./i,
+        /imageresizer\./i,
+        /image-resizer\./i,
+        /imageresize\./i,
+        /image-resize\./i,
+        /photoresizer\./i,
+        /photo-resizer\./i,
+        /photoresize\./i,
+        /photo-resize\./i,
+        /mangoanims\./i,
+        /mango-animated\./i,
+        /mango-animations\./i,
+        /mangoanim\./i,
+        /mangoanimated\./i,
+        /mangoanimations\./i,
+        /mango-ai\./i,
+        /insmind\./i,
+        /dreamshoot\./i,
+        /dreamshootai\./i,
+        /faceswapvideo\./i,
+        /faceswapvid\./i,
+        /faceswapvids\./i,
+        /faceswapvideos\./i,
+        /faceswap-video\./i,
+        /faceswap-vid\./i,
+        /faceswap-vids\./i,
+        /faceswap-videos\./i,
+        /saashub\./i,
+        /undress\./i,
+        /twitter\.com/i,
+        /x\.com/i,
+        /huggingface\./i,
+        /hugging-face\./i,
+        /torproject\.org/i,
+        /tor\.app/i,
+        /mozilla\.org/i,
+        /mozilla\.fi/i,
+        /cloudbooklet\./i,
+        /cyberlink\./i,
+        /undressapp\./i,
+        /undress-app\./i,
+        /www\.opera\.com/i,
+        /www\.apple\.com/i,
+        /microsoft\.com\/en-us\/edge\//i,
+        /microsoft\.com\/fi-fi\/edge\//i,
+        /brave\.com/i,
+        /411mania\.com/i,
+        /cultaholic\.com/i,
+        /whatculture\.com/i,
+        /ringsideintel\.com/i,
+        /wrestlinginc\.com/i,
+        /thesportster\.com/i,
+        /cagesideseats\.com/i,
+        /f4wonline\.com/i,
+        /www\.f4wonline\.com/i,
+        /medium\.com/i,
+        /https?:\/\/(?:www\.)?medium\.com/i,
+        /medium\.com\/@/i,
+        /awfulannouncing\.com/i,
+        /pwpix\./i,
+        /pwpix\.net/i,
+        /noxillo\./i,
+        /vadoo\./i,
+        /vidnoz\./i,
+        /reddit\.com\/r\/photoshop/i,
+        /reddit\.com\/r\/StableDiffusion/i,
+        /reddit\.com\/r\/Grok/i,
+        /reddit\.com\/r\/AlexaBliss/i,
+        /reddit\.com\/r\/BeckyLynch/i,
+        /reddit\.com\/r\/CharlotteFlair/i,
+        /reddit\.com\/r\/SashaBanks/i,
+        /reddit\.com\/r\/Bayley/i,
+        /reddit\.com\/r\/Asuka/i,
+        /reddit\.com\/r\/RheaRipley/i,
+        /reddit\.com\/r\/LivMorgan/i,
+        /reddit\.com\/r\/Carmella/i,
+        /reddit\.com\/r\/ZelinaVega/i,
+        /reddit\.com\/r\/MandyRose/i,
+        /reddit\.com\/r\/ToniStorm/i,
+        /reddit\.com\/r\/IoShirai/i,
+        /reddit\.com\/r\/BiancaBelair/i,
+        /reddit\.com\/r\/NikkiCross/i,
+        /reddit\.com\/r\/PaigeWWE/i,
+        /reddit\.com\/r\/Lita/i,
+        /reddit\.com\/r\/TrishStratus/i,
+        /reddit\.com\/r\/MickieJames/i,
+        /reddit\.com\/r\/GailKim/i,
+        /reddit\.com\/r\/AJLee/i,
+        /reddit\.com\/r\/NaomiWWE/i,
+        /reddit\.com\/r\/NiaJax/i,
+        /reddit\.com\/r\/ShaynaBaszler/i,
+        /reddit\.com\/r\/RubyRiott/i,
+        /reddit\.com\/r\/EmberMoon/i,
+        /reddit\.com\/r\/KairiSane/i,
+        /reddit\.com\/r\/DakotaKai/i,
+        /reddit\.com\/r\/TeganNox/i,
+        /reddit\.com\/r\/PeytonRoyce/i,
+        /reddit\.com\/r\/BillieKay/i,
+        /reddit\.com\/r\/CandiceLeRae/i,
+        /reddit\.com\/r\/SonyaDeville/i,
+        /reddit\.com\/r\/NikkiBella/i,
+        /reddit\.com\/r\/BrieBella/i,
+        /reddit\.com\/r\/EvaMarie/i,
+        /reddit\.com\/r\/KellyKelly/i,
+        /reddit\.com\/r\/BethPhoenix/i,
+        /reddit\.com\/r\/Melina/i,
+        /reddit\.com\/r\/VictoriaWWE/i,
+        /reddit\.com\/r\/LaylaEl/i,
+        /reddit\.com\/r\/MichelleMcCool/i,
+        /reddit\.com\/r\/SquaredCircle/i,
+        /reddit\.com\/r\/SCJerk/i,
+        /reddit\.com\/r\/AlexaBlissWorship/i,
+        /face25\./i,
+        /face26\./i,
+        /anthropic\./i,
+    ];
+
+    const protectedSelectors = [
+        '#APjFqb', '#tsf > div:nth-child(1) > div.A8SBwf > div.RNNXgb > div.SDkEP > div.a4bIc',
+        '#tsf > div:nth-child(1) > div.A8SBwf > div.RNNXgb > div.fM33ce.dRYYxd',
+        '#tsf > div:nth-child(1) > div.A8SBwf > div.RNNXgb > button',
+        '#tsf > div:nth-child(1) > div.A8SBwf > div.RNNXgb > div.M8H8pb',
+        '#tsf > div:nth-child(1) > div.A8SBwf > div.RNNXgb',
+        '#_gPKbZ730HOzVwPAP7pnh0QE_3', '#tsf > div:nth-child(1) > div.A8SBwf',
+        '#tsf > div:nth-child(1) > div:nth-child(2)', '#tsf > div:nth-child(1) > script',
+        '#tsf > div:nth-child(1)', '#tophf', '#tsf',
+        '#hdtb-msb', '#hdtb', '#top_nav', '#slim_appbar', '.MUFPAc', '.hdtb-mitem', '#botabar', '.crJ18e', '.T3mIbg',
+        '.EDblX.JpOecb', '#googlejs-firefox-search-tabs-host', '#googlejs-firefox-search-tabs-host *',
+        '#googlejs-firefox-search-tabs', '#googlejs-firefox-search-tabs *' // Prevent nav bars from being swept
+    ];
+
+    // Firefox receives several alternate Google tab DOMs. Protect the complete search-filter
+    // navigation (and every descendant) from generic result/phrase sweepers. AI Mode and the two
+    // explicitly unwanted rabbit-hole tabs remain eligible for the dedicated hiders below.
+    const FIREFOX_SEARCH_NAV_SELECTOR = [
+        '#hdtb-msb', '#hdtb', '#top_nav', '#slim_appbar', '.MUFPAc', '.hdtb-mitem',
+        '#botabar', '.crJ18e', '.T3mIbg', '.EDblX.JpOecb',
+        '#googlejs-firefox-search-tabs-host', '#googlejs-firefox-search-tabs', 'nav', '[role="navigation"]'
+    ].join(', ');
+
+    function isFirefoxIntentionallyHiddenSearchTab(element) {
+        if (!isFirefox || !element || !element.closest) return false;
+        try {
+            const tab = element.closest('div[role="listitem"], a[href]') || element;
+            const link = tab.matches && tab.matches('a[href]') ? tab : tab.querySelector && tab.querySelector('a[href]');
+            const href = link ? (link.getAttribute('href') || '') : '';
+            if (/[?&]udm=(?:39|50)(?:&|$)/i.test(href)) return true;
+
+            const text = String(tab.textContent || tab.getAttribute?.('aria-label') || '')
+                .replace(/\s+/g, ' ')
+                .trim();
+            return /(?:tekoälytila|ai\s*mode)/i.test(text);
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function isFirefoxSearchNavigationElement(element) {
+        if (!isFirefox || !element || !element.closest) return false;
+        if (isFirefoxIntentionallyHiddenSearchTab(element)) return false;
+        try {
+            if (element.closest(FIREFOX_SEARCH_NAV_SELECTOR)) return true;
+
+            // Some Firefox/mobile experiments expose the filter strip only as a role=list wrapper.
+            const roleList = element.closest('div[role="list"]');
+            return !!(roleList && roleList.querySelector('a[href*="/search"]'));
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function restoreFirefoxSearchNavigation() {
+        if (!isFirefox) return;
+        try {
+            const roots = new Set(document.querySelectorAll(FIREFOX_SEARCH_NAV_SELECTOR));
+            document.querySelectorAll('div[role="list"]').forEach(list => {
+                if (list.querySelector('a[href*="/search"]')) roots.add(list);
+            });
+
+            roots.forEach(root => {
+                const nodes = [root, ...root.querySelectorAll('[data-googlejs-hidden="1"]')];
+                nodes.forEach(node => {
+                    if (!node || isFirefoxIntentionallyHiddenSearchTab(node)) return;
+                    if (node.getAttribute('data-googlejs-hidden') !== '1') return;
+                    node.removeAttribute('data-googlejs-hidden');
+                    node.removeAttribute('aria-hidden');
+                    ['display', 'visibility', 'opacity', 'pointer-events'].forEach(property => {
+                        if (node.style.getPropertyPriority(property) === 'important') {
+                            node.style.removeProperty(property);
+                        }
+                    });
+                });
+            });
+        } catch (e) {}
+    }
+
+
+    // === FIREFOX SEARCH-MODE PARITY LAYER ===
+    // Both Firefox platforms share URL-mode handling and navigation protection. Firefox desktop may
+    // use the synthetic parity strip below; Firefox Android always keeps Google's native mobile strip
+    // and only receives a CSS-order marker so Web Search appears first without moving DOM nodes.
+    const FIREFOX_SEARCH_TABS_HOST_ID = 'googlejs-firefox-search-tabs-host';
+    const FIREFOX_SEARCH_TABS_ID = 'googlejs-firefox-search-tabs';
+    const FIREFOX_SEARCH_TABS_STYLE_ID = 'googlejs-firefox-search-tabs-style';
+    const FIREFOX_NATIVE_TAB_STRIP_ATTR = 'data-googlejs-firefox-native-tab-strip';
+    const FIREFOX_NATIVE_TOOLS_ATTR = 'data-googlejs-firefox-native-tools';
+    const FIREFOX_NATIVE_OVERFLOW_ATTR = 'data-googlejs-firefox-native-overflow';
+    const FIREFOX_CHIP_SHIFT_ATTR = 'data-googlejs-firefox-chip-shift';
+    const FIREFOX_RESULT_SPACING_ATTR = 'data-googlejs-firefox-result-spacing';
+    const FIREFOX_ANDROID_NATIVE_TABS_STYLE_ID = 'googlejs-firefox-android-native-tabs-style';
+    const FIREFOX_ANDROID_NATIVE_TAB_ROW_ATTR = 'data-googlejs-firefox-android-native-tab-row';
+    const FIREFOX_ANDROID_NATIVE_TAB_MODE_ATTR = 'data-googlejs-firefox-android-native-tab-mode';
+    let firefoxDesktopCollisionFrame = 0;
+
+    function isFirefoxGoogleResultsPage() {
+        if (!isFirefox) return false;
+        try {
+            const url = new URL(window.location.href);
+            return /\/search$/i.test(url.pathname) && !!url.searchParams.get('q');
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function getFirefoxSearchTabLabels() {
+        let finnish = false;
+        try {
+            const url = new URL(window.location.href);
+            const lang = String(document.documentElement.lang || '').toLowerCase();
+            finnish = url.searchParams.get('hl') === 'fi' || lang === 'fi' || lang.startsWith('fi-') ||
+                /(?:^|\s)(?:Verkkohaku|Kuvahaku|Videot|Työkalut)(?:\s|$)/i.test(document.body?.innerText || '');
+        } catch (e) {}
+
+        return finnish ? {
+            web: 'Verkkohaku',
+            images: 'Kuvahaku',
+            videos: 'Videot',
+            all: 'Virikkeinen haku',
+            finance: 'Talous',
+            more: 'Lisää',
+            news: 'Uutiset',
+            shopping: 'Ostokset',
+            books: 'Kirjat',
+            maps: 'Kartat',
+            tools: 'Työkalut',
+            anytime: 'Milloin tahansa',
+            pastHour: 'Viime tunti',
+            pastDay: 'Viime vuorokausi',
+            pastWeek: 'Viime viikko',
+            pastMonth: 'Viime kuukausi',
+            pastYear: 'Viime vuosi',
+            verbatim: 'Sanasta sanaan',
+            allResults: 'Kaikki tulokset'
+        } : {
+            web: 'Web',
+            images: 'Images',
+            videos: 'Videos',
+            all: 'All results',
+            finance: 'Finance',
+            more: 'More',
+            news: 'News',
+            shopping: 'Shopping',
+            books: 'Books',
+            maps: 'Maps',
+            tools: 'Tools',
+            anytime: 'Any time',
+            pastHour: 'Past hour',
+            pastDay: 'Past 24 hours',
+            pastWeek: 'Past week',
+            pastMonth: 'Past month',
+            pastYear: 'Past year',
+            verbatim: 'Verbatim',
+            allResults: 'All results'
+        };
+    }
+
+    function makeFirefoxSearchModeUrl(mode) {
+        try {
+            const url = new URL(window.location.href);
+            url.searchParams.delete('start');
+            url.searchParams.delete('tbm');
+            url.searchParams.delete('udm');
+            url.searchParams.delete('source');
+            url.searchParams.delete('client');
+            url.searchParams.delete('channel');
+
+            const query = url.searchParams.get('q') || '';
+            if (query) url.searchParams.set('oq', query);
+            url.searchParams.set('safe', 'active');
+            url.searchParams.set('pws', '0');
+
+            if (mode === 'web') {
+                url.searchParams.set('udm', '14');
+                url.searchParams.set('source', 'chrome');
+            }
+            else if (mode === 'images') {
+                url.searchParams.set('udm', '2');
+                url.searchParams.set('source', 'chrome');
+            } else if (mode === 'videos') {
+                url.searchParams.set('udm', '7');
+                url.searchParams.set('source', 'chrome');
+            } else if (mode === 'finance') {
+                url.searchParams.set('tbm', 'fin');
+                url.searchParams.set('source', 'chrome');
+            } else if (mode === 'news') {
+                url.searchParams.set('tbm', 'nws');
+                url.searchParams.set('source', 'chrome');
+            } else if (mode === 'shopping') {
+                url.searchParams.set('udm', '28');
+                url.searchParams.set('source', 'chrome');
+            } else if (mode === 'books') {
+                url.searchParams.set('tbm', 'bks');
+                url.searchParams.set('source', 'chrome');
+            } else if (mode === 'all') url.searchParams.set('source', 'lnms');
+            // "All results" deliberately leaves both mode parameters absent. source=lnms is the
+            // native filter-navigation marker and prevents the Firefox Web-default redirect winning.
+
+            return url.toString();
+        } catch (e) {
+            return window.location.href;
+        }
+    }
+
+    function getFirefoxCurrentSearchMode() {
+        try {
+            const url = new URL(window.location.href);
+            const udm = url.searchParams.get('udm') || '';
+            const tbm = url.searchParams.get('tbm') || '';
+            if (udm === '14') return 'web';
+            if (udm === '2' || tbm === 'isch') return 'images';
+            if (udm === '7' || tbm === 'vid') return 'videos';
+            if (tbm === 'fin') return 'finance';
+            if (tbm === 'nws' || udm === '12') return 'news';
+            if (udm === '28' || tbm === 'shop') return 'shopping';
+            if (tbm === 'bks') return 'books';
+            return 'all';
+        } catch (e) {
+            return 'all';
+        }
+    }
+
+    function makeFirefoxToolUrl(tool) {
+        try {
+            const url = new URL(window.location.href);
+            url.searchParams.delete('start');
+            url.searchParams.delete('client');
+            url.searchParams.delete('channel');
+            url.searchParams.set('safe', 'active');
+            url.searchParams.set('pws', '0');
+            if ((url.searchParams.get('source') || '') !== 'lnms') url.searchParams.set('source', 'chrome');
+
+            let tokens = String(url.searchParams.get('tbs') || '')
+                .split(',')
+                .map(token => token.trim())
+                .filter(Boolean);
+
+            const qdr = { hour: 'qdr:h', day: 'qdr:d', week: 'qdr:w', month: 'qdr:m', year: 'qdr:y' };
+            if (tool === 'anytime' || qdr[tool]) {
+                tokens = tokens.filter(token => !/^qdr:/i.test(token));
+                if (qdr[tool]) tokens.push(qdr[tool]);
+            }
+            if (tool === 'verbatim' || tool === 'allResults') {
+                tokens = tokens.filter(token => !/^li:1$/i.test(token));
+                if (tool === 'verbatim') tokens.push('li:1');
+            }
+
+            if (tokens.length) url.searchParams.set('tbs', tokens.join(','));
+            else url.searchParams.delete('tbs');
+            return url.toString();
+        } catch (e) {
+            return window.location.href;
+        }
+    }
+
+    function getFirefoxCurrentToolState() {
+        try {
+            const tbs = String(new URL(window.location.href).searchParams.get('tbs') || '');
+            return {
+                active: /(?:^|,)qdr:[hdwmy](?:,|$)|(?:^|,)li:1(?:,|$)/i.test(tbs),
+                verbatim: /(?:^|,)li:1(?:,|$)/i.test(tbs)
+            };
+        } catch (e) {
+            return { active: false, verbatim: false };
+        }
+    }
+
+    function installFirefoxSyntheticMenuDismiss() {
+        if (!isFirefox || window.__googlejsFirefoxSyntheticMenuDismiss) return;
+        window.__googlejsFirefoxSyntheticMenuDismiss = true;
+        document.addEventListener('click', event => {
+            const nav = document.getElementById(FIREFOX_SEARCH_TABS_ID);
+            if (!nav) return;
+            const inside = event.target?.closest?.(`#${FIREFOX_SEARCH_TABS_ID} details`);
+            nav.querySelectorAll('details[open]').forEach(details => {
+                if (details !== inside) details.removeAttribute('open');
+            });
+        }, true);
+    }
+
+    function armFirefoxDetailsMenu(details) {
+        const summary = details?.querySelector(':scope > summary');
+        if (!details || !summary) return details;
+        summary.addEventListener('click', event => {
+            event.preventDefault();
+            event.stopPropagation();
+            const nav = details.closest(`#${FIREFOX_SEARCH_TABS_ID}`);
+            const willOpen = !details.hasAttribute('open');
+            nav?.querySelectorAll('details[open]').forEach(other => {
+                if (other !== details) other.removeAttribute('open');
+            });
+            details.toggleAttribute('open', willOpen);
+            summary.setAttribute('aria-expanded', String(willOpen));
+        }, true);
+        return details;
+    }
+
+    function ensureFirefoxSearchTabsStyle() {
+        if (!isFirefox || document.getElementById(FIREFOX_SEARCH_TABS_STYLE_ID)) return;
+        try {
+            const style = document.createElement('style');
+            style.id = FIREFOX_SEARCH_TABS_STYLE_ID;
+            style.textContent = `
+                #${FIREFOX_SEARCH_TABS_HOST_ID} {
+                    box-sizing: border-box !important;
+                    display: block !important;
+                    flex: 0 0 100vw !important;
+                    width: 100vw !important;
+                    max-width: none !important;
+                    min-width: 0 !important;
+                    min-height: 44px !important;
+                    margin: 0 0 0 calc(50% - 50vw) !important;
+                    padding: 0 !important;
+                    clear: both !important;
+                    overflow: visible !important;
+                    background: #fff !important;
+                    border-bottom: 1px solid #dadce0 !important;
+                    position: relative !important;
+                    z-index: 2147482000 !important;
+                    pointer-events: auto !important;
+                }
+                #${FIREFOX_SEARCH_TABS_ID} {
+                    box-sizing: border-box !important;
+                    display: flex !important;
+                    align-items: stretch !important;
+                    gap: 22px !important;
+                    width: 100% !important;
+                    max-width: none !important;
+                    min-width: 0 !important;
+                    min-height: 44px !important;
+                    margin: 0 !important;
+                    padding: 0 var(--googlejs-firefox-tabs-right, 24px) 0 var(--googlejs-firefox-tabs-left, 150px) !important;
+                    overflow-x: auto !important;
+                    overflow-y: visible !important;
+                    white-space: nowrap !important;
+                    scrollbar-width: none !important;
+                    background: #fff !important;
+                    color: #5f6368 !important;
+                    font-family: Arial, sans-serif !important;
+                    font-size: 14px !important;
+                    position: relative !important;
+                    z-index: 2147482001 !important;
+                    pointer-events: auto !important;
+                }
+                #${FIREFOX_SEARCH_TABS_ID}::-webkit-scrollbar { display: none !important; }
+                #${FIREFOX_SEARCH_TABS_ID} > a,
+                #${FIREFOX_SEARCH_TABS_ID} > button,
+                #${FIREFOX_SEARCH_TABS_ID} > details > summary {
+                    appearance: none !important;
+                    -moz-appearance: none !important;
+                    box-sizing: border-box !important;
+                    display: inline-flex !important;
+                    align-items: center !important;
+                    min-height: 44px !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    border: 0 !important;
+                    border-bottom: 0 !important;
+                    outline: 0 !important;
+                    background: transparent !important;
+                    color: #5f6368 !important;
+                    cursor: pointer !important;
+                    font: inherit !important;
+                    text-decoration: none !important;
+                    flex: 0 0 auto !important;
+                    position: relative !important;
+                    z-index: 2147482002 !important;
+                    pointer-events: auto !important;
+                    touch-action: manipulation !important;
+                }
+                #${FIREFOX_SEARCH_TABS_ID} > a[data-active="true"],
+                #${FIREFOX_SEARCH_TABS_ID} > details[data-active="true"] > summary {
+                    color: #202124 !important;
+                    font-weight: 400 !important;
+                    position: relative !important;
+                    z-index: 2147482003 !important;
+                }
+                #${FIREFOX_SEARCH_TABS_ID} > a[data-active="true"]::after,
+                #${FIREFOX_SEARCH_TABS_ID} > details[data-active="true"] > summary::after {
+                    content: '' !important;
+                    display: block !important;
+                    position: absolute !important;
+                    left: 0 !important;
+                    right: 0 !important;
+                    bottom: 0 !important;
+                    height: 2px !important;
+                    border-radius: 2px 2px 0 0 !important;
+                    background: #202124 !important;
+                    pointer-events: none !important;
+                }
+                #${FIREFOX_SEARCH_TABS_ID} details {
+                    position: relative !important;
+                    flex: 0 0 auto !important;
+                }
+                #${FIREFOX_SEARCH_TABS_ID} details > summary { list-style: none !important; }
+                #${FIREFOX_SEARCH_TABS_ID} details > summary::-webkit-details-marker { display: none !important; }
+                #${FIREFOX_SEARCH_TABS_ID} details:not([open]) > .googlejs-firefox-more-menu {
+                    display: none !important;
+                }
+                #${FIREFOX_SEARCH_TABS_ID} details[open] > .googlejs-firefox-more-menu {
+                    display: flex !important;
+                }
+                #${FIREFOX_SEARCH_TABS_ID} .googlejs-firefox-more-menu {
+                    position: absolute !important;
+                    top: 40px !important;
+                    left: 0 !important;
+                    flex-direction: column !important;
+                    min-width: 150px !important;
+                    padding: 8px 0 !important;
+                    border: 1px solid #dadce0 !important;
+                    border-radius: 8px !important;
+                    background: #fff !important;
+                    box-shadow: 0 2px 8px rgba(60,64,67,.2) !important;
+                    z-index: 2147483000 !important;
+                }
+                #${FIREFOX_SEARCH_TABS_ID} .googlejs-firefox-more-menu a {
+                    display: block !important;
+                    padding: 9px 14px !important;
+                    color: #202124 !important;
+                    text-decoration: none !important;
+                }
+                #${FIREFOX_SEARCH_TABS_ID} .googlejs-firefox-more-menu a:hover {
+                    background: #f1f3f4 !important;
+                }
+                /* Firefox desktop's suggestion chips use a tight/partly negative app-bar offset.
+                   Give the synthetic mode row an explicit Chrome-like lane plus a small gutter so the
+                   chips begin underneath it instead of climbing over the labels and active marker. */
+                #${FIREFOX_SEARCH_TABS_HOST_ID}[data-googlejs-firefox-platform="desktop"] {
+                    height: 50px !important;
+                    min-height: 50px !important;
+                    max-height: 50px !important;
+                    margin-bottom: 14px !important;
+                }
+                #${FIREFOX_SEARCH_TABS_HOST_ID}[data-googlejs-firefox-platform="desktop"] #${FIREFOX_SEARCH_TABS_ID} {
+                    height: 50px !important;
+                    min-height: 50px !important;
+                    max-height: 50px !important;
+                    overflow-x: visible !important;
+                    overflow-y: visible !important;
+                }
+                #${FIREFOX_SEARCH_TABS_HOST_ID}[data-googlejs-firefox-platform="desktop"] #${FIREFOX_SEARCH_TABS_ID} > a,
+                #${FIREFOX_SEARCH_TABS_HOST_ID}[data-googlejs-firefox-platform="desktop"] #${FIREFOX_SEARCH_TABS_ID} > button,
+                #${FIREFOX_SEARCH_TABS_HOST_ID}[data-googlejs-firefox-platform="desktop"] #${FIREFOX_SEARCH_TABS_ID} > details > summary {
+                    height: 50px !important;
+                    min-height: 50px !important;
+                    padding-top: 3px !important;
+                }
+                [${FIREFOX_CHIP_SHIFT_ATTR}="true"] {
+                    position: relative !important;
+                    transform: translateY(var(--googlejs-firefox-chip-shift, 0px)) !important;
+                    transition: none !important;
+                    z-index: 1 !important;
+                }
+                [${FIREFOX_RESULT_SPACING_ATTR}="true"] {
+                    padding-top: 18px !important;
+                }
+                [${FIREFOX_NATIVE_TAB_STRIP_ATTR}="true"],
+                [${FIREFOX_NATIVE_TOOLS_ATTR}="true"],
+                [${FIREFOX_NATIVE_OVERFLOW_ATTR}="true"] {
+                    display: none !important;
+                    visibility: hidden !important;
+                    width: 0 !important;
+                    height: 0 !important;
+                    min-width: 0 !important;
+                    min-height: 0 !important;
+                    max-width: 0 !important;
+                    max-height: 0 !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    border: 0 !important;
+                    overflow: hidden !important;
+                    pointer-events: none !important;
+                }
+            `;
+            (document.head || document.documentElement).appendChild(style);
+        } catch (e) {}
+    }
+
+    function isLikelyNativeFirefoxSearchTabStrip(root) {
+        if (!root || root.id === FIREFOX_SEARCH_TABS_ID || root.id === FIREFOX_SEARCH_TABS_HOST_ID ||
+            root.querySelector?.(`#${FIREFOX_SEARCH_TABS_ID}, #${FIREFOX_SEARCH_TABS_HOST_ID}`)) return false;
+        if (root.querySelector?.('input[name="q"], textarea[name="q"], form[role="search"]')) return false;
+        try {
+            const text = String(root.textContent || '').replace(/\s+/g, ' ').trim();
+            const hasKnownLabel = /(?:Verkkohaku|Kuvahaku|Videot|Kaikki|Virikkeinen haku|Talous|Lisää|Työkalut|Web|Images|Videos|All|Finance|More|Tools)/i.test(text);
+            const hasSearchLink = !!root.querySelector('a[href*="/search"], a[href*="udm="], a[href*="tbm="]');
+            return hasKnownLabel && hasSearchLink;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function findFirefoxNativeSearchTabStrip() {
+        if (!isFirefoxGoogleResultsPage()) return null;
+        const selectors = [
+            '#hdtb-msb', '.MUFPAc', '#hdtb .MUFPAc', '#top_nav [role="list"]',
+            '#slim_appbar [role="list"]', '.T3mIbg [role="list"]', '.crJ18e [role="list"]',
+            'div[role="navigation"] div[role="list"]', 'nav div[role="list"]'
+        ];
+        for (const selector of selectors) {
+            const roots = document.querySelectorAll(selector);
+            for (const root of roots) {
+                if (isLikelyNativeFirefoxSearchTabStrip(root)) return root;
+            }
+        }
+        return null;
+    }
+
+    function armFirefoxSyntheticNavigation(link) {
+        if (!link || link.getAttribute('data-googlejs-firefox-nav-armed') === 'true') return link;
+        link.setAttribute('data-googlejs-firefox-nav-armed', 'true');
+        link.addEventListener('click', event => {
+            try {
+                // Preserve the browser's normal modified-click behavior for new tabs/windows.
+                if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+                const href = link.href || link.getAttribute('href') || '';
+                if (!href) return;
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                window.location.assign(href);
+            } catch (e) {}
+        }, true);
+        return link;
+    }
+
+    function makeFirefoxTabLink(label, mode, activeMode) {
+        const link = document.createElement('a');
+        link.textContent = label;
+        link.href = makeFirefoxSearchModeUrl(mode);
+        link.dataset.googlejsFirefoxMode = mode;
+        link.dataset.active = String(activeMode === mode);
+        if (activeMode === mode) link.setAttribute('aria-current', 'page');
+        return armFirefoxSyntheticNavigation(link);
+    }
+
+    function clickNativeFirefoxSearchTools() {
+        const customHost = document.getElementById(FIREFOX_SEARCH_TABS_HOST_ID);
+        const candidates = document.querySelectorAll(
+            '#hdtb-tls, [aria-label="Hakutyökalut"], [aria-label="Search tools"], ' +
+            'button[aria-label*="työkal" i], button[aria-label*="tools" i], ' +
+            'a[aria-label*="työkal" i], a[aria-label*="tools" i], [role="button"]'
+        );
+        for (const candidate of candidates) {
+            if (!candidate || customHost?.contains(candidate)) continue;
+            const text = String(candidate.textContent || candidate.getAttribute?.('aria-label') || '').replace(/\s+/g, ' ').trim();
+            if (!/^(?:Työkalut|Hakutyökalut|Tools|Search tools)$/i.test(text) && candidate.id !== 'hdtb-tls') continue;
+            try {
+                candidate.click();
+                return true;
+            } catch (e) {}
+        }
+        return false;
+    }
+
+    function buildFirefoxSearchTabs() {
+        const labels = getFirefoxSearchTabLabels();
+        const activeMode = getFirefoxCurrentSearchMode();
+        const toolState = getFirefoxCurrentToolState();
+        const nav = document.createElement('nav');
+        nav.id = FIREFOX_SEARCH_TABS_ID;
+        nav.setAttribute('aria-label', labels.web + ' / ' + labels.more);
+        nav.setAttribute('data-googlejs-firefox-tabs', 'true');
+        nav.addEventListener('click', event => {
+            try {
+                const link = event.target?.closest?.('a[href]');
+                if (!link || !nav.contains(link)) return;
+                if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                window.location.assign(link.href);
+            } catch (e) {}
+        }, true);
+
+        nav.appendChild(makeFirefoxTabLink(labels.web, 'web', activeMode));
+        nav.appendChild(makeFirefoxTabLink(labels.images, 'images', activeMode));
+        nav.appendChild(makeFirefoxTabLink(labels.videos, 'videos', activeMode));
+        nav.appendChild(makeFirefoxTabLink(labels.all, 'all', activeMode));
+        nav.appendChild(makeFirefoxTabLink(labels.finance, 'finance', activeMode));
+
+        const more = document.createElement('details');
+        more.dataset.googlejsFirefoxMenu = 'more';
+        more.dataset.active = String(['news', 'shopping', 'books'].includes(activeMode));
+        const moreSummary = document.createElement('summary');
+        moreSummary.textContent = labels.more;
+        moreSummary.setAttribute('aria-haspopup', 'menu');
+        moreSummary.setAttribute('aria-expanded', 'false');
+        more.appendChild(moreSummary);
+        const moreMenu = document.createElement('div');
+        moreMenu.className = 'googlejs-firefox-more-menu';
+        moreMenu.setAttribute('role', 'menu');
+        moreMenu.appendChild(makeFirefoxTabLink(labels.news, 'news', activeMode));
+        moreMenu.appendChild(makeFirefoxTabLink(labels.shopping, 'shopping', activeMode));
+        moreMenu.appendChild(makeFirefoxTabLink(labels.books, 'books', activeMode));
+        try {
+            const mapsLink = document.createElement('a');
+            mapsLink.textContent = labels.maps;
+            const query = new URL(window.location.href).searchParams.get('q') || '';
+            mapsLink.href = 'https://www.google.com/maps/search/' + encodeURIComponent(query);
+            mapsLink.setAttribute('role', 'menuitem');
+            armFirefoxSyntheticNavigation(mapsLink);
+            moreMenu.appendChild(mapsLink);
+        } catch (e) {}
+        more.appendChild(moreMenu);
+        armFirefoxDetailsMenu(more);
+        nav.appendChild(more);
+
+        const tools = document.createElement('details');
+        tools.dataset.googlejsFirefoxMenu = 'tools';
+        tools.dataset.active = String(toolState.active);
+        const toolsSummary = document.createElement('summary');
+        toolsSummary.textContent = labels.tools;
+        toolsSummary.setAttribute('aria-haspopup', 'menu');
+        toolsSummary.setAttribute('aria-expanded', 'false');
+        tools.appendChild(toolsSummary);
+        const toolsMenu = document.createElement('div');
+        toolsMenu.className = 'googlejs-firefox-more-menu googlejs-firefox-tools-menu';
+        toolsMenu.setAttribute('role', 'menu');
+        [
+            [labels.anytime, 'anytime'], [labels.pastHour, 'hour'], [labels.pastDay, 'day'],
+            [labels.pastWeek, 'week'], [labels.pastMonth, 'month'], [labels.pastYear, 'year'],
+            [labels.verbatim, 'verbatim'], [labels.allResults, 'allResults']
+        ].forEach(([label, tool]) => {
+            const link = document.createElement('a');
+            link.textContent = label;
+            link.href = makeFirefoxToolUrl(tool);
+            link.dataset.googlejsFirefoxTool = tool;
+            link.setAttribute('role', 'menuitem');
+            armFirefoxSyntheticNavigation(link);
+            toolsMenu.appendChild(link);
+        });
+        tools.appendChild(toolsMenu);
+        armFirefoxDetailsMenu(tools);
+        nav.appendChild(tools);
+        installFirefoxSyntheticMenuDismiss();
+        return nav;
+    }
+
+    function buildFirefoxSearchTabsHost() {
+        const host = document.createElement('div');
+        host.id = FIREFOX_SEARCH_TABS_HOST_ID;
+        host.setAttribute('data-googlejs-firefox-tabs-host', 'true');
+        host.appendChild(buildFirefoxSearchTabs());
+        return host;
+    }
+
+    function getFirefoxDesktopTabsLeftOffset() {
+        const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 1280;
+        const selectors = ['#search', '#rso', '#center_col', '#tsf', 'form[role="search"]'];
+        for (const selector of selectors) {
+            const element = document.querySelector(selector);
+            if (!element) continue;
+            try {
+                const rect = element.getBoundingClientRect();
+                if (rect.width < 280 || rect.left < 24 || rect.left > viewportWidth * 0.48) continue;
+                return Math.round(rect.left);
+            } catch (e) {}
+        }
+        return Math.max(24, Math.min(180, Math.round(viewportWidth * 0.09)));
+    }
+
+    function getVisibleRect(element) {
+        if (!element || !element.isConnected) return null;
+        try {
+            const rect = element.getBoundingClientRect();
+            if (rect.width <= 0 || rect.height <= 0) return null;
+            const style = window.getComputedStyle(element);
+            if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity || 1) === 0) return null;
+            return rect;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function clearFirefoxDesktopChipShifts(keep) {
+        document.querySelectorAll(`[${FIREFOX_CHIP_SHIFT_ATTR}="true"]`).forEach(element => {
+            if (element === keep) return;
+            element.removeAttribute(FIREFOX_CHIP_SHIFT_ATTR);
+            element.removeAttribute('data-googlejs-firefox-chip-shift-px');
+            element.style.removeProperty('--googlejs-firefox-chip-shift');
+        });
+    }
+
+    function findFirefoxDesktopSuggestionRow(host, nav) {
+        const navRect = getVisibleRect(nav);
+        const searchRect = getVisibleRect(document.querySelector('#searchform, #tsf, form[role="search"]'));
+        if (!navRect || !searchRect) return null;
+
+        const candidateControls = [];
+        document.querySelectorAll('a, button, [role="button"]').forEach(control => {
+            if (!control || host.contains(control) || control.closest?.(`#${FIREFOX_SEARCH_TABS_HOST_ID}`)) return;
+            if (control.closest?.('#rso, #res, .g, h3, [data-snhf], [data-header-feature]')) return;
+            const rect = getVisibleRect(control);
+            if (!rect || rect.height < 20 || rect.height > 48 || rect.width < 28 || rect.width > 260) return;
+            if (rect.top < searchRect.bottom - 8 || rect.top > navRect.bottom + 30) return;
+            const text = String(control.textContent || control.getAttribute?.('aria-label') || '').replace(/\s+/g, ' ').trim();
+            if (!text || text.length > 70) return;
+            candidateControls.push(control);
+        });
+        if (candidateControls.length < 2) return null;
+
+        const scores = new Map();
+        candidateControls.forEach(control => {
+            let node = control.parentElement;
+            for (let depth = 0; node && depth < 5; depth++, node = node.parentElement) {
+                if (node === document.body || node === document.documentElement || host.contains(node)) break;
+                if (node.matches?.('#searchform, #tsf, form[role="search"], #rso, #res')) break;
+                const rect = getVisibleRect(node);
+                if (!rect || rect.height > 90 || rect.width > Math.min(window.innerWidth * 0.9, 1100)) continue;
+                const count = candidateControls.filter(item => node.contains(item)).length;
+                if (count < 2) continue;
+                const area = Math.max(1, rect.width * rect.height);
+                const score = count * 1000000 - area;
+                if (!scores.has(node) || scores.get(node) < score) scores.set(node, score);
+            }
+        });
+
+        let best = null;
+        let bestScore = -Infinity;
+        scores.forEach((score, node) => {
+            if (score > bestScore) {
+                best = node;
+                bestScore = score;
+            }
+        });
+        return best;
+    }
+
+    function resolveFirefoxDesktopTabCollision(host, nav) {
+        if (!isFirefox || isFirefoxAndroid || !host || !nav) return;
+        if (firefoxDesktopCollisionFrame) cancelAnimationFrame(firefoxDesktopCollisionFrame);
+        firefoxDesktopCollisionFrame = requestAnimationFrame(() => {
+            firefoxDesktopCollisionFrame = 0;
+            try {
+                const row = findFirefoxDesktopSuggestionRow(host, nav);
+                clearFirefoxDesktopChipShifts(row);
+                if (!row) return;
+
+                const navRect = getVisibleRect(nav);
+                const rowRect = getVisibleRect(row);
+                if (!navRect || !rowRect) return;
+                const currentShift = Number.parseFloat(row.getAttribute('data-googlejs-firefox-chip-shift-px') || '0') || 0;
+                const unshiftedTop = rowRect.top - currentShift;
+                const requiredShift = Math.max(0, Math.min(64, Math.ceil(navRect.bottom + 8 - unshiftedTop)));
+                if (requiredShift <= 0) {
+                    row.removeAttribute(FIREFOX_CHIP_SHIFT_ATTR);
+                    row.removeAttribute('data-googlejs-firefox-chip-shift-px');
+                    row.style.removeProperty('--googlejs-firefox-chip-shift');
+                    return;
+                }
+                row.setAttribute(FIREFOX_CHIP_SHIFT_ATTR, 'true');
+                row.setAttribute('data-googlejs-firefox-chip-shift-px', String(requiredShift));
+                row.style.setProperty('--googlejs-firefox-chip-shift', requiredShift + 'px');
+            } catch (e) {}
+        });
+    }
+
+    function clearFirefoxDesktopResultSpacing(keep) {
+        document.querySelectorAll(`[${FIREFOX_RESULT_SPACING_ATTR}="true"]`).forEach(element => {
+            if (element === keep) return;
+            element.removeAttribute(FIREFOX_RESULT_SPACING_ATTR);
+        });
+    }
+
+    function applyFirefoxDesktopResultSpacing() {
+        const resultRoot = document.querySelector('#search') ||
+            document.querySelector('#res') ||
+            document.querySelector('#rso');
+        clearFirefoxDesktopResultSpacing(resultRoot);
+        if (resultRoot) resultRoot.setAttribute(FIREFOX_RESULT_SPACING_ATTR, 'true');
+    }
+
+    function applyFirefoxDesktopTabsLayout(host, nav) {
+        host.setAttribute('data-googlejs-firefox-platform', 'desktop');
+        nav.style.setProperty('--googlejs-firefox-tabs-left', getFirefoxDesktopTabsLeftOffset() + 'px');
+        nav.style.setProperty('--googlejs-firefox-tabs-right', '24px');
+        applyFirefoxDesktopResultSpacing();
+        resolveFirefoxDesktopTabCollision(host, nav);
+    }
+
+    function applyFirefoxPlatformTabsLayout(host, nav) {
+        if (!host || !nav) return;
+        applyFirefoxDesktopTabsLayout(host, nav);
+    }
+
+    function getFirefoxSearchTabsMountTarget(nativeStrip) {
+        // Google's reduced Firefox desktop layout can place its incomplete native strip before the
+        // actual search header. Mount the desktop replacement after the search form and before results.
+        const searchHeader = document.querySelector('#searchform');
+        if (searchHeader?.parentNode) {
+            return { parent: searchHeader.parentNode, before: searchHeader.nextSibling };
+        }
+
+        const searchForm = document.querySelector('#tsf, form[role="search"], form[action="/search"]');
+        if (searchForm) {
+            // Climb only through wrappers that contain no unrelated result content, then insert after
+            // the outer desktop search-row wrapper.
+            let row = searchForm;
+            for (let depth = 0; depth < 4; depth++) {
+                const parent = row.parentElement;
+                if (!parent || parent === document.body || parent === document.documentElement) break;
+                if (parent.querySelector('#search, #rso, #res')) break;
+                row = parent;
+            }
+            if (row.parentNode) return { parent: row.parentNode, before: row.nextSibling };
+        }
+
+        // Last-resort fallbacks are used only before Google's search header exists. ensureFirefoxSearchTabs()
+        // runs again on DOM mutations and will relocate the already-connected host once the header mounts.
+        const fallback = document.querySelector('#top_nav, #hdtb, #hdtb-msb');
+        if (fallback?.parentNode) {
+            return { parent: fallback.parentNode, before: fallback };
+        }
+
+        if (nativeStrip?.parentNode) {
+            return { parent: nativeStrip.parentNode, before: nativeStrip };
+        }
+
+        return { parent: document.body || document.documentElement, before: null };
+    }
+
+    function mountFirefoxSearchTabsHost(host, nativeStrip) {
+        if (!host) return;
+        const target = getFirefoxSearchTabsMountTarget(nativeStrip);
+        if (!target?.parent) return;
+
+        // Do not merely test host.isConnected. The first pass can run against Google's early shell,
+        // before #searchform exists. Re-evaluate placement on every pass and move the same host into
+        // its final below-search-bar position as soon as the stable header appears.
+        const reference = target.before && target.before.parentNode === target.parent
+            ? target.before
+            : null;
+        if (host.parentNode === target.parent && (reference === host || host.nextSibling === reference)) return;
+
+        try {
+            target.parent.insertBefore(host, reference);
+        } catch (e) {
+            try { target.parent.appendChild(host); } catch (ignored) {}
+        }
+    }
+
+    function markFirefoxNativeAuxiliaryControls(nativeStrip) {
+        if (!nativeStrip?.parentElement) return;
+        const customHost = document.getElementById(FIREFOX_SEARCH_TABS_HOST_ID);
+        const scope = nativeStrip.parentElement;
+        const candidates = new Set(scope.querySelectorAll('button, [role="button"], a[href]'));
+        Array.from(scope.children || []).forEach(child => candidates.add(child));
+
+        candidates.forEach(candidate => {
+            if (!candidate || candidate === nativeStrip || customHost?.contains(candidate) ||
+                candidate.contains?.(customHost) || nativeStrip.contains(candidate)) return;
+
+            const text = String(candidate.textContent || candidate.getAttribute?.('aria-label') || '')
+                .replace(/\s+/g, ' ')
+                .trim();
+            if (/^(?:Työkalut|Hakutyökalut|Tools|Search tools)$/i.test(text) || candidate.id === 'hdtb-tls') {
+                candidate.setAttribute(FIREFOX_NATIVE_TOOLS_ATTR, 'true');
+                return;
+            }
+
+            const aria = String(candidate.getAttribute?.('aria-label') || '').trim();
+            let compactIconControl = false;
+            try {
+                const rect = candidate.getBoundingClientRect();
+                compactIconControl = !text && rect.width > 0 && rect.width <= 96 &&
+                    rect.height > 0 && rect.height <= 72 &&
+                    (!!candidate.matches?.('button, [role="button"]') ||
+                        !!candidate.querySelector?.('svg, [class*="chevron" i], [class*="arrow" i]'));
+            } catch (e) {}
+
+            if ((!text && /(?:more|next|overflow|lisää|seuraava)/i.test(aria)) || compactIconControl) {
+                candidate.setAttribute(FIREFOX_NATIVE_OVERFLOW_ATTR, 'true');
+            }
+        });
+    }
+
+    function restoreFirefoxNativeSearchControls() {
+        if (!isFirefox) return;
+        [FIREFOX_NATIVE_TAB_STRIP_ATTR, FIREFOX_NATIVE_TOOLS_ATTR, FIREFOX_NATIVE_OVERFLOW_ATTR]
+            .forEach(attribute => {
+                document.querySelectorAll(`[${attribute}="true"]`).forEach(element => {
+                    element.removeAttribute(attribute);
+                });
+            });
+    }
+
+    // === FIREFOX ANDROID NATIVE TAB ORDER ===
+    // Android keeps Google's own tab elements. We only mark the existing direct children with CSS
+    // order values; no reparenting, replacement strip, label rewrite, height change or scrollIntoView.
+    function ensureFirefoxAndroidNativeTabsStyle() {
+        if (!isFirefoxAndroid || document.getElementById(FIREFOX_ANDROID_NATIVE_TABS_STYLE_ID)) return;
+        try {
+            const style = document.createElement('style');
+            style.id = FIREFOX_ANDROID_NATIVE_TABS_STYLE_ID;
+            style.textContent = `
+                [${FIREFOX_ANDROID_NATIVE_TAB_ROW_ATTR}="true"] > [${FIREFOX_ANDROID_NATIVE_TAB_MODE_ATTR}="web"] {
+                    order: -700 !important;
+                }
+                [${FIREFOX_ANDROID_NATIVE_TAB_ROW_ATTR}="true"] > [${FIREFOX_ANDROID_NATIVE_TAB_MODE_ATTR}="images"] {
+                    order: -600 !important;
+                }
+                [${FIREFOX_ANDROID_NATIVE_TAB_ROW_ATTR}="true"] > [${FIREFOX_ANDROID_NATIVE_TAB_MODE_ATTR}="videos"] {
+                    order: -500 !important;
+                }
+                [${FIREFOX_ANDROID_NATIVE_TAB_ROW_ATTR}="true"] > [${FIREFOX_ANDROID_NATIVE_TAB_MODE_ATTR}="all"] {
+                    order: -400 !important;
+                }
+                [${FIREFOX_ANDROID_NATIVE_TAB_ROW_ATTR}="true"] > [${FIREFOX_ANDROID_NATIVE_TAB_MODE_ATTR}="finance"] {
+                    order: -300 !important;
+                }
+                [${FIREFOX_ANDROID_NATIVE_TAB_ROW_ATTR}="true"] > [${FIREFOX_ANDROID_NATIVE_TAB_MODE_ATTR}="more"] {
+                    order: -200 !important;
+                }
+                [${FIREFOX_ANDROID_NATIVE_TAB_ROW_ATTR}="true"] > [${FIREFOX_ANDROID_NATIVE_TAB_MODE_ATTR}="tools"] {
+                    order: -100 !important;
+                }
+            `;
+            (document.head || document.documentElement).appendChild(style);
+        } catch (e) {}
+    }
+
+    function classifyFirefoxAndroidNativeTab(element) {
+        if (!element) return '';
+        try {
+            const directSummary = Array.from(element.children || []).find(child => child.tagName === 'SUMMARY');
+            const labelNode = directSummary || element;
+            const text = String(labelNode.getAttribute?.('aria-label') || labelNode.textContent ||
+                element.getAttribute?.('aria-label') || element.textContent || '')
+                .replace(/[▾▼⌄]/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+            const exactLabel = text.toLowerCase();
+            const link = element.matches?.('a[href]')
+                ? element
+                : element.querySelector?.('a[href]');
+            const href = String(link?.getAttribute('href') || link?.href || '');
+
+            if (href) {
+                const url = new URL(href, window.location.origin);
+                const udm = url.searchParams.get('udm') || '';
+                const tbm = url.searchParams.get('tbm') || '';
+                const source = url.searchParams.get('source') || '';
+                if (udm === '14') return 'web';
+                if (udm === '2' || tbm === 'isch') return 'images';
+                if (udm === '7' || tbm === 'vid') return 'videos';
+                if (tbm === 'fin') return 'finance';
+                if (!udm && !tbm && source === 'lnms') return 'all';
+            }
+
+            if (/^(?:verkkohaku|web|web search)$/.test(exactLabel)) return 'web';
+            if (/^(?:kuvahaku|kuvat|images?)$/.test(exactLabel)) return 'images';
+            if (/^(?:videot|videos?)$/.test(exactLabel)) return 'videos';
+            if (/^(?:kaikki|kaikki tulokset|virikkeinen haku|all|all results)$/.test(exactLabel)) return 'all';
+            if (/^(?:talous|finance)$/.test(exactLabel)) return 'finance';
+            if (/^(?:lisää|more)$/.test(exactLabel)) return 'more';
+            if (/^(?:työkalut|hakutyökalut|tools|search tools)$/.test(exactLabel)) return 'tools';
+        } catch (e) {}
+        return '';
+    }
+
+    function getFirefoxAndroidNativeTabRow(nativeStrip) {
+        if (!nativeStrip) return null;
+        const candidates = new Set([nativeStrip]);
+
+        try {
+            nativeStrip.querySelectorAll('[role="list"], [role="tablist"]').forEach(row => candidates.add(row));
+            nativeStrip.querySelectorAll('a[href], button, summary, [role="tab"], [role="button"]').forEach(control => {
+                if (!classifyFirefoxAndroidNativeTab(control)) return;
+                let parent = control.parentElement;
+                for (let depth = 0; parent && depth < 5; depth++, parent = parent.parentElement) {
+                    candidates.add(parent);
+                    if (parent === nativeStrip) break;
+                }
+            });
+        } catch (e) {}
+
+        let bestRow = null;
+        let bestScore = -1;
+        candidates.forEach(row => {
+            try {
+                const children = Array.from(row.children || []);
+                if (children.length < 2) return;
+                const modes = children.map(classifyFirefoxAndroidNativeTab).filter(Boolean);
+                const distinct = new Set(modes);
+                if (distinct.size < 2) return;
+
+                let score = distinct.size * 10;
+                if (distinct.has('web')) score += 8;
+                if (distinct.has('images')) score += 4;
+                if (distinct.has('videos')) score += 3;
+                if (distinct.has('all')) score += 2;
+                // Prefer the narrow/deep row whose direct children are the actual tab items.
+                score -= Math.min(20, Math.max(0, children.length - distinct.size));
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestRow = row;
+                }
+            } catch (e) {}
+        });
+
+        return bestRow;
+    }
+
+    function clearFirefoxAndroidNativeTabOrder(keepRow) {
+        try {
+            document.querySelectorAll(`[${FIREFOX_ANDROID_NATIVE_TAB_ROW_ATTR}="true"]`).forEach(row => {
+                if (row === keepRow) return;
+                row.removeAttribute(FIREFOX_ANDROID_NATIVE_TAB_ROW_ATTR);
+                row.querySelectorAll(`[${FIREFOX_ANDROID_NATIVE_TAB_MODE_ATTR}]`).forEach(item => {
+                    item.removeAttribute(FIREFOX_ANDROID_NATIVE_TAB_MODE_ATTR);
+                });
+            });
+        } catch (e) {}
+    }
+
+    function ensureFirefoxAndroidNativeWebTabFirst() {
+        if (!isFirefoxAndroid) return;
+        if (!isFirefoxGoogleResultsPage()) {
+            clearFirefoxAndroidNativeTabOrder(null);
+            return;
+        }
+
+        ensureFirefoxAndroidNativeTabsStyle();
+        const nativeStrip = findFirefoxNativeSearchTabStrip();
+        const row = getFirefoxAndroidNativeTabRow(nativeStrip);
+        clearFirefoxAndroidNativeTabOrder(row);
+        if (!row) return;
+
+        let foundWeb = false;
+        try {
+            Array.from(row.children || []).forEach(item => {
+                const mode = classifyFirefoxAndroidNativeTab(item);
+                if (!mode) {
+                    item.removeAttribute(FIREFOX_ANDROID_NATIVE_TAB_MODE_ATTR);
+                    return;
+                }
+                item.setAttribute(FIREFOX_ANDROID_NATIVE_TAB_MODE_ATTR, mode);
+                if (mode === 'web') foundWeb = true;
+            });
+
+            // Do not force layout semantics onto Google's row. `order` is applied only when its native
+            // layout already supports it; if Google omits Web Search in an experiment, leave the row alone.
+            if (foundWeb) row.setAttribute(FIREFOX_ANDROID_NATIVE_TAB_ROW_ATTR, 'true');
+            else row.removeAttribute(FIREFOX_ANDROID_NATIVE_TAB_ROW_ATTR);
+        } catch (e) {}
+    }
+
+    function ensureFirefoxSearchTabsResizeHook() {
+        if (!isFirefox || window.__googlejsFirefoxTabsResizeHooked) return;
+        window.__googlejsFirefoxTabsResizeHooked = true;
+        window.addEventListener('resize', () => {
+            const host = document.getElementById(FIREFOX_SEARCH_TABS_HOST_ID);
+            const nav = document.getElementById(FIREFOX_SEARCH_TABS_ID);
+            if (host && nav) applyFirefoxPlatformTabsLayout(host, nav);
+        }, { passive: true });
+    }
+
+    function ensureFirefoxSearchTabs() {
+        // Firefox Android uses Google's native mobile search-mode strip. Keep the synthetic replacement
+        // strictly desktop-only; restore any native controls hidden by an older injected copy, then apply
+        // the isolated CSS-only Android order marker.
+        if (isFirefoxAndroid) {
+            document.getElementById(FIREFOX_SEARCH_TABS_HOST_ID)?.remove();
+            document.getElementById(FIREFOX_SEARCH_TABS_ID)?.remove();
+            document.getElementById(FIREFOX_SEARCH_TABS_STYLE_ID)?.remove();
+            clearFirefoxDesktopChipShifts(null);
+            clearFirefoxDesktopResultSpacing(null);
+            restoreFirefoxNativeSearchControls();
+            ensureFirefoxAndroidNativeWebTabFirst();
+            return;
+        }
+
+        if (!isFirefoxGoogleResultsPage()) {
+            document.getElementById(FIREFOX_SEARCH_TABS_HOST_ID)?.remove();
+            document.getElementById(FIREFOX_SEARCH_TABS_ID)?.remove();
+            clearFirefoxDesktopChipShifts(null);
+            clearFirefoxDesktopResultSpacing(null);
+            restoreFirefoxNativeSearchControls();
+            return;
+        }
+
+        ensureFirefoxSearchTabsStyle();
+        ensureFirefoxSearchTabsResizeHook();
+
+        const currentMode = getFirefoxCurrentSearchMode();
+        let host = document.getElementById(FIREFOX_SEARCH_TABS_HOST_ID);
+        let nav = host?.querySelector(`#${FIREFOX_SEARCH_TABS_ID}`) || document.getElementById(FIREFOX_SEARCH_TABS_ID);
+        const existingMode = nav?.getAttribute('data-googlejs-mode') || '';
+        const expectedModes = ['web', 'images', 'videos', 'all', 'finance', 'news', 'shopping', 'books'];
+        const navIsComplete = !!nav &&
+            expectedModes.every(mode => nav.querySelector(`[data-googlejs-firefox-mode="${mode}"]`)) &&
+            !!nav.querySelector('details[data-googlejs-firefox-menu="more"]') &&
+            !!nav.querySelector('details[data-googlejs-firefox-menu="tools"]');
+
+        // An older content-script generation may have removed only the anchors while leaving
+        // More/Tools behind. Rebuild the complete isolated Firefox host whenever integrity fails.
+        if (!host || !nav || existingMode !== currentMode || !navIsComplete) {
+            const replacement = buildFirefoxSearchTabsHost();
+            const replacementNav = replacement.querySelector(`#${FIREFOX_SEARCH_TABS_ID}`);
+            replacementNav?.setAttribute('data-googlejs-mode', currentMode);
+            if (host) host.replaceWith(replacement);
+            else if (nav) nav.replaceWith(replacement);
+            host = replacement;
+            nav = replacementNav;
+        }
+
+        const nativeStrip = findFirefoxNativeSearchTabStrip();
+        mountFirefoxSearchTabsHost(host, nativeStrip);
+        applyFirefoxPlatformTabsLayout(host, nav);
+
+        // Hide only Firefox's incomplete native strip and its separate Tools/overflow controls after
+        // the replacement is connected. Chrome never reaches this branch.
+        if (host?.isConnected && nativeStrip) {
+            nativeStrip.setAttribute(FIREFOX_NATIVE_TAB_STRIP_ATTR, 'true');
+            markFirefoxNativeAuxiliaryControls(nativeStrip);
+        }
+    }
+
+    // Remove Google's query-refinement carousel ("Game log", "Reference", "Stats", etc.).
+    // The fingerprints below come from Google's dedicated hdtb-sc/data-id=trc mode carousel and are
+    // intentionally narrower than generic role=list navigation selectors.
+    function removeGoogleRecommendedSearchChips() {
+        try {
+            const rows = document.querySelectorAll(
+                '#hdtb-sc[data-id="trc"] .IUOThf[role="list"], ' +
+                '[data-st-tgt="mode"][role="navigation"] .IUOThf[role="list"]'
+            );
+
+            rows.forEach(row => {
+                if (!row || !row.isConnected) return;
+                const hasRefinementLinks = !!row.querySelector(
+                    'a.nPDzT[jsname="VIftV"][href*="/search"], ' +
+                    'a[role="link"][aria-label^="Lisää "][href*="/search"], ' +
+                    'a[role="link"][aria-label^="Add "][href*="/search"]'
+                );
+                if (!hasRefinementLinks) return;
+
+                const root =
+                    row.closest('.xhjkHe.CEXVle') ||
+                    row.closest('.TrmO7[data-st-cnt="mode"]') ||
+                    row.closest('[data-st-tgt="mode"][role="navigation"]') ||
+                    row.closest('#bqHHPb') ||
+                    row.closest('#hdtb-sc[data-id="trc"]') ||
+                    row;
+                if (root && root.isConnected) root.remove();
+            });
+
+            // Catch a partially hydrated carousel whose inner role=list has not mounted yet.
+            document.querySelectorAll('#hdtb-sc[data-id="trc"]').forEach(element => {
+                if (element && element.isConnected) {
+                    const root =
+                        element.closest('.xhjkHe.CEXVle') ||
+                        element.closest('.TrmO7[data-st-cnt="mode"]') ||
+                        element.closest('[data-st-tgt="mode"][role="navigation"]') ||
+                        element.closest('#bqHHPb') ||
+                        element;
+                    root.remove();
+                }
+            });
+        } catch (e) {}
+    }
+
+    // --- Runtime regex hygiene + scoped URL-policy compilation ---
+    function dedupeRegexArray(list) {
+        const seen = new Set();
+        for (let i = list.length - 1; i >= 0; --i) {
+            const rx = list[i];
+            if (!rx || typeof rx.test !== 'function') {
+                list.splice(i, 1);
+                continue;
+            }
+            const key = String(rx.source || rx) + '/' + String(rx.flags || '');
+            if (seen.has(key)) {
+                list.splice(i, 1);
+            } else {
+                seen.add(key);
+            }
+        }
+        return list;
+    }
+
+    dedupeRegexArray(nuclearRegex);
+    dedupeRegexArray(resultHideTerms);
+    dedupeRegexArray(redirectHideLite);
+    dedupeRegexArray(searchAllowTerms);
+    // Domain/path allowances are strings; the regex deduper would delete every entry.
+    const allowedResultURLRules = Array.from(new Set(allowedResultURLs.map(entry =>
+        String(entry || '').trim().toLowerCase()
+    ).filter(Boolean))).map(entry => {
+        const allSubdomains = entry.startsWith('*.');
+        const bare = allSubdomains ? entry.slice(2) : entry;
+        const slashIndex = bare.indexOf('/');
+        const host = (slashIndex < 0 ? bare : bare.slice(0, slashIndex)).replace(/\.$/, '');
+        const pathPrefix = slashIndex < 0 ? '' : bare.slice(slashIndex).replace(/\/+$/, '');
+        if (!/^[a-z0-9-]+(?:\.[a-z0-9-]+)+$/.test(host)) return null;
+        return { host, pathPrefix, allSubdomains };
+    }).filter(Boolean);
+    dedupeRegexArray(priorityBlockedResultURLPatterns);
+    dedupeRegexArray(blockedResultURLPatterns);
+    dedupeRegexArray(blockedImageURLPatterns);
+
+    // --- Helpers ---
+    // Compare the URL's parsed hostname and path, never arbitrary substrings of its href.
+    // This accepts http/https and www automatically; only *.domain entries allow all subdomains.
+    function isResultURLAllowed(url) {
+        if (!url) return false;
+        try {
+            const parsed = new URL(String(url), window.location.origin);
+            if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+            if (GJ_centralPolicyCachedVerdict(parsed.href) === 'allow') return true;
+
+            const hostname = parsed.hostname.toLowerCase().replace(/\.$/, '');
+            const pathname = parsed.pathname.toLowerCase();
+            return allowedResultURLRules.some(rule => {
+                const matchedHost = hostname === rule.host || hostname === `www.${rule.host}` ||
+                    (rule.allSubdomains && hostname.endsWith(`.${rule.host}`));
+                if (!matchedHost) return false;
+                return !rule.pathPrefix || pathname === rule.pathPrefix ||
+                    pathname.startsWith(`${rule.pathPrefix}/`);
+            });
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function matchesBlockedResultURLPattern(url) {
+        if (!url) return false;
+        if (GJ_centralPolicyCachedVerdict(url) === 'block') return true;
+        for (let i = 0; i < blockedResultURLPatterns.length; ++i) {
+            blockedResultURLPatterns[i].lastIndex = 0;
+            if (blockedResultURLPatterns[i].test(url)) return true;
+        }
+        return false;
+    }
+
+    function matchesPriorityBlockedResultURLPattern(url) {
+        if (!url) return false;
+        for (let i = 0; i < priorityBlockedResultURLPatterns.length; ++i) {
+            priorityBlockedResultURLPatterns[i].lastIndex = 0;
+            if (priorityBlockedResultURLPatterns[i].test(url)) return true;
+        }
+        return false;
+    }
+
+    function matchesBlockedImageURLPattern(url) {
+        if (!url) return false;
+        let testUrl = url;
+        try {
+            if (url.startsWith('http')) testUrl = url.replace(/#imgrc=[^\s]*/g, '');
+        } catch(e) {}
+        if (GJ_centralPolicyCachedVerdict(testUrl) === 'block') return true;
+        for (let i = 0; i < blockedImageURLPatterns.length; ++i) {
+            blockedImageURLPatterns[i].lastIndex = 0;
+            if (blockedImageURLPatterns[i].test(testUrl)) return true;
+        }
+        return false;
+    }
+
+    // Google pagination is navigation, not a result or correction suggestion.
+    // Scope this narrowly to the actual footer controls, never the search root.
+    const GOOGLEJS_PAGINATION_SELECTOR = '#nav, #navcnt, #footcnt, #foot, #sfooter, .AaVjTc, #botstuff [role="navigation"]';
+
+    function isGooglePaginationElement(element) {
+        try {
+            return Boolean(element?.closest?.(GOOGLEJS_PAGINATION_SELECTOR));
+        } catch (e) { return false; }
+    }
+
+    function isProtectedElement(element) {
+        if (isGooglePaginationElement(element)) return true;
+        if (isFirefoxSearchNavigationElement(element)) return true;
+        return protectedSelectors.some(selector => element.matches && element.matches(selector));
+    }
+
+    const POLICY_ACTION = Object.freeze({
+        NONE: 'none',
+        ALLOW: 'allow',
+        HIDE: 'hide',
+        REDIRECT: 'redirect'
+    });
+
+    const NO_POLICY_DECISION = Object.freeze({
+        action: POLICY_ACTION.NONE,
+        scope: 'none',
+        reason: 'no-match',
+        match: ''
+    });
+
+    function makePolicyDecision(action, scope, reason, value, inText) {
+        const decision = {
+            action,
+            scope,
+            reason,
+            match: String(value || '')
+        };
+        lastMatchDetails = {
+            kind: reason,
+            action,
+            scope,
+            value: String(value || ''),
+            snippet: String(inText || '').substring(0, 200),
+            when: new Date().toISOString()
+        };
+        devLog('POLICY DECISION:', decision, 'in:', lastMatchDetails.snippet);
+        return decision;
+    }
+
+    function testRegexList(list, text) {
+        if (!text) return false;
+        for (let i = 0; i < list.length; ++i) {
+            const re = list[i];
+            try {
+                re.lastIndex = 0;
+                if (re.test(text)) return re.toString();
+            } catch (e) {}
+        }
+        return false;
+    }
+
+    // === NUCLEAR KEYWORD CHECKER ===
+    // Shared by query redirects and hard result/card/image hiding.
+    function containsNuclearTerms(text) {
+        return testRegexList(nuclearRegex, text);
+    }
+
+    // Query-only allow tier. Never called by result/link/image decisions.
+    function containsSearchAllowTerms(text) {
+        return testRegexList(searchAllowTerms, text);
+    }
+
+    // Result/link/card hide tier. Never called by query decisions.
+    function containsResultHideTerms(text) {
+        return testRegexList(resultHideTerms, text);
+    }
+
+    // Redirect-only rules remain available for direct searches. Normal result/image
+    // cards use nuclearRegex, resultHideTerms, central hosts and blocked URL lists.
+    function containsRedirectHideLite(text) {
+        return testRegexList(redirectHideLite, text);
+    }
+
+    // === CONTEXT-AWARE AI TOKEN CHECKER (USED FOR QUERIES AND RESULTS) ===
+    // Match the standalone AI abbreviation and recognizable AI compounds only.
+    // The old "starts/ends with ai" fallback treated AIR, AIO, AIDA64, Thai,
+    // and other unrelated words as Nuclear AI hits, hiding legitimate results.
+    // Explicit harmful terms and named AI products remain covered separately
+    // by nuclearRegex, so this checker does not replace those hard rules.
+    function containsAiBoundary(text) {
+        if (!text) return false;
+
+        // Keep punctuation and underscores as separators (AI-Tool, AI_Image, etc.),
+        // but retain embedded letters/numbers as part of each word (AIR903Max).
+        const normalized = String(text).normalize('NFKC');
+        let tokens;
+        try {
+            tokens = normalized.match(/[\p{L}\p{N}]+/gu) || [];
+        } catch (e) {
+            tokens = normalized.match(/[A-Za-z0-9]+/g) || [];
+        }
+
+        // Require an AI-related word after/before "AI" when joined without a
+        // separator. These intentionally avoid short fragments such as R, O, D,
+        // M, L and S, which are common in real product names and ordinary words.
+        const aiPrefixCompound = /^ai(?:app|application|art|artist|artwork|assistant|avatar|bot|chat|companion|content|creator|deepfake|draw|edit|enhanc|face|filter|friend|generat|generator|gen|girlfriend|boyfriend|graphic|image|img|language|learn|model|motion|music|nud|photo|picture|pic|portrait|power|prompt|render|remov|search|swap|text|tool|uncloth|undress|upscal|video|virtual|voice|writ)[a-z0-9]*$/i;
+        const aiSuffixCompound = /^(?:app|art|artist|avatar|bot|chat|companion|creator|draw|editor|face|filter|generator|gen|girlfriend|graphic|image|img|model|motion|music|photo|picture|pic|portrait|prompt|render|search|swap|text|tool|video|voice|writer)ai$/i;
+
+        for (const token of tokens) {
+            // Preserve the existing narrow OpenAI brand exception. Any other
+            // blocked word elsewhere in the result is evaluated independently.
+            if (/^openai$/i.test(token)) continue;
+            if (/^ai$/i.test(token)) return 'AI';
+            if (aiPrefixCompound.test(token) || aiSuffixCompound.test(token)) return 'AI';
+        }
+        return false;
+    }
+
+    // === SCOPED POLICY ENGINE ===
+    // Nuclear is absolute on every account. resultHideTerms only hides results.
+    // redirectHideLite applies to direct search queries; it must not additionally
+    // consume normal web/image results because a multi-field snippet can accidentally
+    // satisfy a very broad redirect expression unrelated to the target destination.
+    // Tapio gets one narrow exception: after hard denies, an explicitly allowed destination may
+    // rescue a soft result hide. Signed-out/unknown/other accounts get no such rescue.
+    // Query:  nuclearRegex/AI -> searchAllowTerms -> redirectHideLite -> none
+    // Result: nuclearRegex/AI -> hard URL/TLD denies -> Tapio allowed-URL rescue -> resultHideTerms
+    //         -> normal allowed URL -> generic blocked result URL -> none
+    // Image:  same as Result, with hard image URL denies and a final generic WebP fallback.
+
+    // Google sometimes sends organic-result links through /goto?url=CAES... opaque tokens.
+    // Those tokens are routing data, not a publisher URL or readable page content.
+    // Strip ONLY that opaque parameter from policy candidates, never from navigation.
+    // Actual http(s) destinations and non-Google URLs keep all their original fields.
+    function getPolicyURLWithoutOpaqueGoogleGoto(value) {
+        const raw = String(value || '').trim();
+        if (!raw) return raw;
+        try {
+            const parsed = new URL(raw, window.location.origin);
+            const googleHost = /^(?:[a-z0-9-]+\.)*google\.(?:[a-z]{2,3}|[a-z]{2,3}\.[a-z]{2})$/i;
+            if (!googleHost.test(parsed.hostname) || parsed.pathname !== '/goto') return raw;
+            const payload = parsed.searchParams.get('url') || '';
+            if (!/^CAES[A-Za-z0-9_-]{20,}={0,2}$/.test(payload)) return raw;
+            return parsed.origin + parsed.pathname;
+        } catch (e) {
+            return raw;
+        }
+    }
+
+    function getResultURLCandidates(url) {
+        const candidates = [];
+        const add = (value) => {
+            const raw = getPolicyURLWithoutOpaqueGoogleGoto(value);
+            if (!raw) return;
+            candidates.push(raw);
+            try {
+                const decoded = decodeRepeatedly(raw);
+                if (decoded && decoded !== raw) candidates.push(decoded);
+            } catch (e) {}
+        };
+
+        add(url);
+        try {
+            const parsed = new URL(String(url || ''), window.location.origin);
+            // Only Google's own redirect/image wrappers may nominate an embedded
+            // destination. An arbitrary site cannot whitelist itself by putting an
+            // allowed URL in a ?url= parameter.
+            if (/^(?:[a-z0-9-]+\.)*google\.[a-z.]+$/i.test(parsed.hostname)) {
+                const opaqueGoto = parsed.pathname === '/goto' &&
+                    getPolicyURLWithoutOpaqueGoogleGoto(parsed.href) === parsed.origin + parsed.pathname;
+                ['q', 'url', 'imgurl', 'imgrefurl'].forEach(name => {
+                    // The CAES token must not leak back into broad URL/text regex matching.
+                    if (opaqueGoto && name === 'url') return;
+                    add(parsed.searchParams.get(name) || '');
+                });
+            }
+        } catch (e) {}
+
+        return Array.from(new Set(candidates));
+    }
+
+    // Google /goto?url=CAES... parameters are opaque routing tokens, not readable content.
+    // Do not interpret their random letters as AI/Nuclear keywords. Keep the original
+    // candidates for all real URL, TLD and central-hosts checks below.
+    function getResultSemanticSafetySignal(url, text, candidates) {
+        let opaqueGotoPayload = '';
+        try {
+            const parsed = new URL(String(url || ''), window.location.origin);
+            if (/^(?:[a-z0-9-]+\.)*google\.[a-z.]+$/i.test(parsed.hostname) &&
+                parsed.pathname === '/goto') {
+                const payload = parsed.searchParams.get('url') || '';
+                if (payload && !/^https?:\/\//i.test(payload)) opaqueGotoPayload = payload;
+            }
+        } catch (e) {}
+
+        if (!opaqueGotoPayload) return `${text || ''} ${candidates.join(' ')}`.trim();
+        const readableCandidates = candidates.filter(candidate => {
+            const raw = String(candidate || '');
+            if (raw === opaqueGotoPayload) return false;
+            try {
+                const parsed = new URL(raw, window.location.origin);
+                if (/^(?:[a-z0-9-]+\.)*google\.[a-z.]+$/i.test(parsed.hostname) &&
+                    parsed.pathname === '/goto' &&
+                    parsed.searchParams.get('url') === opaqueGotoPayload) return false;
+            } catch (e) {}
+            return true;
+        });
+        return `${text || ''} ${readableCandidates.join(' ')}`.trim();
+    }
+
+    function decideQueryPolicy(text, includeRedirectHideLite = true) {
+        const input = String(text || '');
+        if (!input) return NO_POLICY_DECISION;
+
+        const nuclearHit = containsNuclearTerms(input);
+        if (nuclearHit) {
+            return makePolicyDecision(POLICY_ACTION.REDIRECT, 'query', 'nuclearRegex', nuclearHit, input);
+        }
+
+        // AI is part of Nuclear policy. It is intentionally checked before query allow terms.
+        const aiHit = containsAiBoundary(input);
+        if (aiHit) {
+            return makePolicyDecision(POLICY_ACTION.REDIRECT, 'query', 'nuclear-ai-boundary', aiHit, input);
+        }
+
+        const allowHit = containsSearchAllowTerms(input);
+        if (allowHit) {
+            return makePolicyDecision(POLICY_ACTION.ALLOW, 'query', 'searchAllowTerms', allowHit, input);
+        }
+
+        // Only direct searches use this tier. Google's spelling/correction suggestions opt out.
+        const redirectHit = includeRedirectHideLite ? containsRedirectHideLite(input) : false;
+        if (redirectHit) {
+            return makePolicyDecision(POLICY_ACTION.REDIRECT, 'query', 'redirectHideLite', redirectHit, input);
+        }
+
+        return NO_POLICY_DECISION;
+    }
+
+    function decideResultPolicy(url, text, isImage = false, includeLite = false) {
+        let candidates = getResultURLCandidates(url);
+
+        // Organic Google cards can expose the real destination only in rendered breadcrumb/text
+        // while the anchor itself points through a Google wrapper. Feed those displayed destinations
+        // into the same URL policy so BraveFoxHosts/legacyFox remain authoritative for web results.
+        try {
+            GJ_extractCentralPolicyURLsFromText(decodeRepeatedly(String(text || '')))
+                .forEach(candidate => candidates.push(candidate));
+        } catch (e) {}
+
+        if (isImage) {
+            try {
+                extractUrlsFromSignal(decodeRepeatedly(String(text || '')))
+                    .forEach(candidate => candidates.push(candidate));
+            } catch (e) {}
+        }
+        candidates = Array.from(new Set(candidates));
+        const urlSignal = candidates.join(' ');
+        const signal = `${text || ''} ${urlSignal}`.trim();
+
+        const semanticSafetySignal = getResultSemanticSafetySignal(url, text, candidates);
+        const nuclearHit = containsNuclearTerms(semanticSafetySignal);
+        if (nuclearHit) {
+            return makePolicyDecision(POLICY_ACTION.HIDE, isImage ? 'image' : 'result', 'nuclearRegex', nuclearHit, signal);
+        }
+
+        // AI is Nuclear in result/image context too; no account or URL allow may rescue it.
+        const aiHit = containsAiBoundary(semanticSafetySignal);
+        if (aiHit) {
+            return makePolicyDecision(POLICY_ACTION.HIDE, isImage ? 'image' : 'result', 'nuclear-ai-boundary', aiHit, signal);
+        }
+
+        // Hard URL/TLD/image denies are absolute and stay above Tapio's soft-result exception.
+        const blockedTLD = candidates.find(isBannedTLD);
+        if (blockedTLD) {
+            return makePolicyDecision(POLICY_ACTION.HIDE, isImage ? 'image' : 'result', 'blocked-tld', blockedTLD, signal);
+        }
+
+        if (isImage) {
+            const blockedImageURL = candidates.find(matchesBlockedImageURLPattern);
+            if (blockedImageURL || matchesBlockedImageURLPattern(urlSignal)) {
+                return makePolicyDecision(POLICY_ACTION.HIDE, 'image', 'blocked-image-url', blockedImageURL || urlSignal, signal);
+            }
+        }
+
+        // Central hosts-file decisions are a hard URL deny. Keep this above allowedResultURLs so a
+        // domain explicitly present in BraveFoxHosts/legacyFox cannot be rescued by a local result
+        // allowance. The first pass queues unknown candidates; the async verdict invalidates the
+        // card cache and this same branch removes the card on the immediate follow-up pass.
+        const centralBlockedURL = candidates.find(candidate =>
+            GJ_centralPolicyCachedVerdict(candidate) === 'block'
+        );
+        if (centralBlockedURL) {
+            return makePolicyDecision(POLICY_ACTION.HIDE, isImage ? 'image' : 'result', 'central-hosts', centralBlockedURL, signal);
+        }
+
+        const priorityBlockedURL = candidates.find(matchesPriorityBlockedResultURLPattern);
+        if (priorityBlockedURL || matchesPriorityBlockedResultURLPattern(urlSignal)) {
+            return makePolicyDecision(POLICY_ACTION.HIDE, isImage ? 'image' : 'result', 'priority-blocked-result-url', priorityBlockedURL || urlSignal, signal);
+        }
+
+        const allowedURL = candidates.find(isResultURLAllowed);
+        const regularHideHit = containsResultHideTerms(signal);
+        const liteHideHit = includeLite ? containsRedirectHideLite(signal) : false;
+        const hideHit = regularHideHit || liteHideHit;
+
+        // Dad-mode is intentionally narrow: only an explicitly allowed destination may rescue an
+        // actual resultHide match. Nuclear and all hard URL/image denies have already won above.
+        if (hideHit && braveFoxCanUseAllowedResultRescue() && allowedURL) {
+            return makePolicyDecision(POLICY_ACTION.ALLOW, isImage ? 'image' : 'result', 'tapio-allowed-result-rescue', allowedURL, signal);
+        }
+
+        if (hideHit) {
+            return makePolicyDecision(POLICY_ACTION.HIDE, isImage ? 'image' : 'result', regularHideHit ? 'resultHideTerms' : 'redirectHideLite', hideHit, signal);
+        }
+
+        // Outside Tapio mode an allowlisted URL still keeps its normal URL-level exception, but it
+        // cannot rescue resultHide because that tier has already been evaluated above.
+        if (allowedURL) {
+            return makePolicyDecision(POLICY_ACTION.ALLOW, isImage ? 'image' : 'result', 'allowedResultURLs', allowedURL, signal);
+        }
+
+        // Broad legacy URL fragments remain below anchored allowances. Patterns like
+        // /x\.com/ would otherwise also match a permitted Netflix URL.
+        const blockedURL = candidates.find(matchesBlockedResultURLPattern);
+        if (blockedURL || matchesBlockedResultURLPattern(urlSignal)) {
+            return makePolicyDecision(POLICY_ACTION.HIDE, isImage ? 'image' : 'result', 'blocked-result-url', blockedURL || urlSignal, signal);
+        }
+
+        if (isImage && isWebpImageSignal(urlSignal)) {
+            return makePolicyDecision(POLICY_ACTION.HIDE, 'image', 'blocked-image-format', urlSignal, signal);
+        }
+
+        return NO_POLICY_DECISION;
+    }
+
+    function shouldRemoveElement(url, text, isImage = false, includeLite = false) {
+        return decideResultPolicy(url, text, isImage, includeLite).action === POLICY_ACTION.HIDE;
+    }
+
+    // Compatibility wrapper retained for existing submit/input/preflight hooks.
+    function containsForbiddenKeywords(text) {
+        devLog('containsForbiddenKeywords called with:', JSON.stringify(String(text || '')));
+        const decision = decideQueryPolicy(text);
+        return decision.action === POLICY_ACTION.REDIRECT
+            ? (decision.match || decision.reason)
+            : false;
+    }
+
+    function runPolicySelfTests() {
+        const originalTapioState = braveFoxIsTapioAccount;
+
+        const withTapioState = (isTapio, fn) => {
+            braveFoxIsTapioAccount = Boolean(isTapio);
+            try { return fn(); } finally { braveFoxIsTapioAccount = originalTapioState; }
+        };
+
+        const tests = [
+            // AI consolidation regression coverage: ordinary words and meaningful AI terms.
+            {
+                name: 'Portable electricity generator is not generative AI',
+                decision: decideQueryPolicy('portable electric generator'),
+                expectedNotAction: POLICY_ACTION.REDIRECT
+            },
+            {
+                name: 'Finnish electric generator remains available',
+                decision: decideQueryPolicy('sähkögeneraattori'),
+                expectedNotAction: POLICY_ACTION.REDIRECT
+            },
+            {
+                name: 'Generated electricity does not imply AI',
+                decision: decideQueryPolicy('electricity generated by hydroelectric dam'),
+                expectedNotAction: POLICY_ACTION.REDIRECT
+            },
+            {
+                name: 'JavaScript objects do not imply AI removal',
+                decision: decideQueryPolicy('JavaScript object properties'),
+                expectedNotAction: POLICY_ACTION.REDIRECT
+            },
+            {
+                name: 'Physics diffusion does not imply AI diffusion',
+                decision: decideQueryPolicy('diffusion of oxygen molecules'),
+                expectedNotAction: POLICY_ACTION.REDIRECT
+            },
+            {
+                name: 'Ordinary generator result card is not Nuclear',
+                decision: withTapioState(false, () => decideResultPolicy('https://example.com/power/generator', 'Portable electric generator specifications', false)),
+                expectedNotAction: POLICY_ACTION.HIDE
+            },
+            {
+                name: 'Deep fake with a separator remains Nuclear',
+                decision: decideQueryPolicy('deep fake creation'),
+                expectedAction: POLICY_ACTION.REDIRECT,
+                expectedReason: 'nuclearRegex'
+            },
+            {
+                name: 'Deep faking with underscore remains Nuclear',
+                decision: decideQueryPolicy('deep_faking'),
+                expectedAction: POLICY_ACTION.REDIRECT,
+                expectedReason: 'nuclearRegex'
+            },
+            {
+                name: 'Generative AI remains Nuclear',
+                decision: decideQueryPolicy('generative AI'),
+                expectedAction: POLICY_ACTION.REDIRECT,
+                expectedReason: 'nuclearRegex'
+            },
+            {
+                name: 'Image generator remains Nuclear',
+                decision: decideQueryPolicy('AI image generator'),
+                expectedAction: POLICY_ACTION.REDIRECT,
+                expectedReason: 'nuclearRegex'
+            },
+            {
+                name: 'Deep learning remains Nuclear',
+                decision: decideQueryPolicy('deep learning models'),
+                expectedAction: POLICY_ACTION.REDIRECT,
+                expectedReason: 'nuclearRegex'
+            },
+            {
+                name: 'Text to image remains Nuclear',
+                decision: decideQueryPolicy('text to image'),
+                expectedAction: POLICY_ACTION.REDIRECT,
+                expectedReason: 'nuclearRegex'
+            },
+            {
+                name: 'Photo object removal remains Nuclear',
+                decision: decideQueryPolicy('remove object from photo'),
+                expectedAction: POLICY_ACTION.REDIRECT,
+                expectedReason: 'nuclearRegex'
+            },
+            {
+                name: 'Object eraser remains Nuclear',
+                decision: decideQueryPolicy('object eraser'),
+                expectedAction: POLICY_ACTION.REDIRECT,
+                expectedReason: 'nuclearRegex'
+            },
+            {
+                name: 'Image result with stable diffusion remains hidden',
+                decision: withTapioState(false, () => decideResultPolicy('https://example.com/gallery', 'Stable Diffusion art', true)),
+                expectedAction: POLICY_ACTION.HIDE,
+                expectedReason: 'nuclearRegex'
+            },
+            {
+                name: 'Hugging Face result remains hidden',
+                decision: withTapioState(false, () => decideResultPolicy('https://example.com/article', 'Hugging Face neural network', false)),
+                expectedAction: POLICY_ACTION.HIDE,
+                expectedReason: 'nuclearRegex'
+            },
+            {
+                name: 'nuclear overrides a query allow term',
+                decision: decideQueryPolicy('deepnude RuneScape'),
+                expectedAction: POLICY_ACTION.REDIRECT,
+                expectedReason: 'nuclearRegex'
+            },
+            {
+                name: 'explicit AI vocabulary is Nuclear before query allow terms',
+                decision: decideQueryPolicy('DeepSeek RuneScape'),
+                expectedAction: POLICY_ACTION.REDIRECT,
+                expectedReason: 'nuclearRegex'
+            },
+            {
+                name: 'AIR 903 Max query is not mistaken for AI',
+                decision: decideQueryPolicy('Montech AIR 903 Max PC Case'),
+                expectedNotAction: POLICY_ACTION.REDIRECT
+            },
+            {
+                name: 'AIR 903 Max search card is not hidden by AI detection',
+                decision: withTapioState(false, () => decideResultPolicy('https://example.com/montech/air-903-max', 'Montech AIR 903 MAX PC Case', false)),
+                expectedNotAction: POLICY_ACTION.HIDE
+            },
+            {
+                name: 'AIO cooler and AIDA64 are not AI terms',
+                decision: decideQueryPolicy('AIO cooler AIDA64 benchmark'),
+                expectedNotAction: POLICY_ACTION.REDIRECT
+            },
+            {
+                name: 'Other ordinary AI-letter words are not AI terms',
+                decision: decideQueryPolicy('hair dryer samurai Thai food'),
+                expectedNotAction: POLICY_ACTION.REDIRECT
+            },
+            {
+                name: 'A PC case model number is not a Nuclear model hit',
+                decision: decideQueryPolicy('Montech AIR 903 MAX case model number'),
+                expectedNotAction: POLICY_ACTION.REDIRECT
+            },
+            {
+                name: 'Tesla Model Y is not a Nuclear model hit',
+                decision: decideQueryPolicy('Tesla Model Y specifications'),
+                expectedNotAction: POLICY_ACTION.REDIRECT
+            },
+            {
+                name: 'A scale model is not an AI model',
+                decision: decideQueryPolicy('scale model railway'),
+                expectedNotAction: POLICY_ACTION.REDIRECT
+            },
+            {
+                name: 'Ordinary hardware result with model number stays visible',
+                decision: withTapioState(false, () => decideResultPolicy('https://example.com/hardware/air-903-max', 'Montech AIR 903 MAX case model specifications', false)),
+                expectedNotAction: POLICY_ACTION.HIDE
+            },
+            {
+                name: 'Unrelated machine words after a product model stay allowed',
+                decision: decideQueryPolicy('Tesla Model Y washing machine'),
+                expectedNotAction: POLICY_ACTION.REDIRECT
+            },
+            {
+                name: 'Language model remains a Nuclear AI-related term',
+                decision: decideQueryPolicy('language model'),
+                expectedAction: POLICY_ACTION.REDIRECT,
+                expectedReason: 'nuclearRegex'
+            },
+            {
+                name: 'AI model remains Nuclear',
+                decision: decideQueryPolicy('AI model'),
+                expectedAction: POLICY_ACTION.REDIRECT,
+                expectedReason: 'nuclearRegex'
+            },
+            {
+                name: 'Machine learning models remain Nuclear',
+                decision: decideQueryPolicy('machine learning models'),
+                expectedAction: POLICY_ACTION.REDIRECT,
+                expectedReason: 'nuclearRegex'
+            },
+            {
+                name: 'Image-generation model results remain blocked',
+                decision: withTapioState(false, () => decideResultPolicy('https://example.com/article', 'image generation model', false)),
+                expectedAction: POLICY_ACTION.HIDE,
+                expectedReason: 'nuclearRegex'
+            },
+            {
+                name: 'Standalone AI remains Nuclear',
+                decision: decideQueryPolicy('AI'),
+                expectedAction: POLICY_ACTION.REDIRECT,
+                expectedReason: 'nuclear-ai-boundary'
+            },
+            {
+                name: 'Joined AI photo compound remains Nuclear',
+                decision: decideQueryPolicy('AIphoto'),
+                expectedAction: POLICY_ACTION.REDIRECT,
+                expectedReason: 'nuclear-ai-boundary'
+            },
+            {
+                name: 'Joined photo AI suffix remains Nuclear',
+                decision: decideQueryPolicy('PhotoAI'),
+                expectedAction: POLICY_ACTION.REDIRECT,
+                expectedReason: 'nuclear-ai-boundary'
+            },
+            {
+                name: 'OpenAI literal is explicitly allowed',
+                decision: decideQueryPolicy('OpenAI'),
+                expectedAction: POLICY_ACTION.ALLOW,
+                expectedReason: 'searchAllowTerms'
+            },
+            {
+                name: 'ordinary safe query allow still works',
+                decision: decideQueryPolicy('RuneScape quest guide'),
+                expectedAction: POLICY_ACTION.ALLOW,
+                expectedReason: 'searchAllowTerms'
+            },
+            {
+                name: 'redirectHideLite redirects a direct query',
+                decision: decideQueryPolicy('Selain'),
+                expectedAction: POLICY_ACTION.REDIRECT,
+                expectedReason: 'redirectHideLite'
+            },
+            {
+                name: 'Tapio explicit allow rescues soft resultHide',
+                decision: withTapioState(true, () => decideResultPolicy('https://www.youtube.com/watch?v=123', 'il0tytto', false)),
+                expectedAction: POLICY_ACTION.ALLOW,
+                expectedReason: 'tapio-allowed-result-rescue'
+            },
+            {
+                name: 'non-Tapio explicit allow cannot rescue soft resultHide',
+                decision: withTapioState(false, () => decideResultPolicy('https://www.youtube.com/watch?v=123', 'il0tytto', false)),
+                expectedAction: POLICY_ACTION.HIDE,
+                expectedReason: 'resultHideTerms'
+            },
+            {
+                name: 'Tapio cannot rescue soft resultHide on an unallowed site',
+                decision: withTapioState(true, () => decideResultPolicy('https://example.com/project', 'il0tytto', false)),
+                expectedAction: POLICY_ACTION.HIDE,
+                expectedReason: 'resultHideTerms'
+            },
+            {
+                name: 'Rutto oireet search is allowed',
+                decision: decideQueryPolicy('Rutto oireet'),
+                expectedNotAction: POLICY_ACTION.REDIRECT
+            },
+            {
+                name: 'Google suggestion with Selain never redirects through the lite tier',
+                decision: decideQueryPolicy('Näytetään tulokset haulla Rutto oireet Selain', false),
+                expectedNotAction: POLICY_ACTION.REDIRECT
+            },
+            {
+                name: 'Exact lite term never redirects from a suggestion selector',
+                decision: decideQueryPolicy('Selain', false),
+                expectedNotAction: POLICY_ACTION.REDIRECT
+            },
+            {
+                name: 'Redirect-only rules do not hide actual result cards',
+                decision: withTapioState(false, () => decideResultPolicy('https://example.com/article', 'make move', false)),
+                expectedAction: POLICY_ACTION.NONE,
+                expectedReason: 'no-match'
+            },
+            {
+                name: 'Lite terms leave a normal web result alone',
+                decision: withTapioState(false, () => decideResultPolicy('https://example.com/article', 'Selain', false)),
+                expectedAction: POLICY_ACTION.NONE,
+                expectedReason: 'no-match'
+            },
+            {
+                name: 'Lite terms leave an image card alone',
+                decision: withTapioState(false, () => decideResultPolicy('https://example.com/photo.jpg', 'Selain', true)),
+                expectedAction: POLICY_ACTION.NONE,
+                expectedReason: 'no-match'
+            },
+            {
+                name: 'Lite terms ignore suggestion-only text',
+                decision: withTapioState(false, () => decideResultPolicy('https://example.com/article', 'Selain', false, false)),
+                expectedAction: POLICY_ACTION.NONE,
+                expectedReason: 'no-match'
+            },
+            {
+                name: 'Nuclear overrides Tapio allowed-result rescue',
+                decision: withTapioState(true, () => decideResultPolicy('https://www.youtube.com/watch?v=123', 'deepnude', false)),
+                expectedAction: POLICY_ACTION.HIDE,
+                expectedReason: 'nuclearRegex'
+            },
+            {
+                name: 'AI Nuclear overrides Tapio allowed-result rescue',
+                decision: withTapioState(true, () => decideResultPolicy('https://www.youtube.com/watch?v=123', 'DeepSeek', false)),
+                expectedAction: POLICY_ACTION.HIDE,
+                expectedReason: 'nuclearRegex'
+            },
+            {
+                name: 'hard TLD deny remains absolute',
+                decision: withTapioState(true, () => decideResultPolicy('https://example.xyz/ordinary', 'ordinary result', false)),
+                expectedAction: POLICY_ACTION.HIDE,
+                expectedReason: 'blocked-tld'
+            },
+            {
+                name: 'specific blocked path overrides an allowed Reddit host',
+                decision: (() => {
+                    const probeRule = /reddit\.com\/r\/qz7391(?:\/|$)/i;
+                    priorityBlockedResultURLPatterns.push(probeRule);
+                    try {
+                        return withTapioState(true, () => decideResultPolicy('https://www.reddit.com/r/qz7391/comments/example', 'ordinary post', false));
+                    } finally {
+                        priorityBlockedResultURLPatterns.pop();
+                    }
+                })(),
+                expectedAction: POLICY_ACTION.HIDE,
+                expectedReason: 'priority-blocked-result-url'
+            },
+            {
+                name: 'lookalike host does not match an allowed URL regex',
+                decision: withTapioState(true, () => decideResultPolicy('https://youtube.com.example.org/watch?v=123', 'ordinary result', false)),
+                expectedAction: POLICY_ACTION.NONE,
+                expectedReason: 'no-match'
+            },
+            {
+                name: 'bare archive domain allows a Wayback HTTPS subdomain',
+                decision: withTapioState(false, () => decideResultPolicy('https://web.archive.org/web/20240101/https://example.com/', 'Wayback Machine', false)),
+                expectedAction: POLICY_ACTION.ALLOW,
+                expectedReason: 'allowedResultURLs'
+            },
+            {
+                name: 'archive allowlist also accepts HTTP and alternate archive subdomains',
+                decision: withTapioState(false, () => decideResultPolicy('http://wayback.archive.org/web/20240101/', 'Wayback Machine', false)),
+                expectedAction: POLICY_ACTION.ALLOW,
+                expectedReason: 'allowedResultURLs'
+            },
+            {
+                name: 'opaque Google Wayback redirect is checked without its CAES token',
+                decision: withTapioState(false, () => decideResultPolicy(
+                    'https://www.google.com/goto?url=CAESaAHrOzAVINX6-lHFYgVzotiuCX4_QqwZMaFq2OlQG-tHOeqaI3TZHcnce3zpIQHBm0iQ08lF_648ofB34wTT-QZ44zOD4Dq0oZz_Rp_v4fgteXr9V4GdH8xhLwINYTMd4PUKsPinju5q',
+                    'Wayback Machine http://wayback.archive.org', false)),
+                expectedAction: POLICY_ACTION.ALLOW,
+                expectedReason: 'allowedResultURLs'
+            },
+            {
+                name: 'normal Google redirect with a readable blocked URL is still blocked',
+                decision: withTapioState(false, () => decideResultPolicy(
+                    'https://www.google.com/goto?url=https%3A%2F%2Ftiktok.com%2Fvideo%2F123',
+                    'TikTok video', false)),
+                expectedAction: POLICY_ACTION.HIDE,
+                expectedReason: 'nuclearRegex'
+            },
+            {
+                name: 'plain chatgpt.com entry allows www and scheme variants',
+                decision: withTapioState(false, () => decideResultPolicy('https://www.chatgpt.com/c/example', 'ordinary result', false)),
+                expectedAction: POLICY_ACTION.ALLOW,
+                expectedReason: 'allowedResultURLs'
+            },
+            {
+                name: 'plain domain entry rejects lookalike host',
+                decision: withTapioState(false, () => decideResultPolicy('https://chatgpt.com.example.org/c/example', 'ordinary result', false)),
+                expectedAction: POLICY_ACTION.NONE,
+                expectedReason: 'no-match'
+            },
+            {
+                name: 'path allowance permits only the GitHub paintdotnet repository',
+                decision: withTapioState(false, () => decideResultPolicy('https://github.com/paintdotnet/readme', 'ordinary result', false)),
+                expectedAction: POLICY_ACTION.ALLOW,
+                expectedReason: 'allowedResultURLs'
+            },
+            {
+                name: 'path allowance excludes a similarly named GitHub repository',
+                decision: withTapioState(false, () => decideResultPolicy('https://github.com/paintdotnet-bad/readme', 'ordinary result', false)),
+                expectedAction: POLICY_ACTION.NONE,
+                expectedReason: 'no-match'
+            },
+            {
+                name: 'priority Reddit exclusion overrides plain domain allowance',
+                decision: withTapioState(true, () => decideResultPolicy('https://reddit.com/r/comfyui', 'ordinary result', false)),
+                expectedAction: POLICY_ACTION.HIDE,
+                expectedReason: 'priority-blocked-result-url'
+            },
+            {
+                name: 'ordinary allowed URL stays allowed outside Tapio mode',
+                decision: withTapioState(false, () => decideResultPolicy('https://www.netflix.com/title/123', 'ordinary title', false)),
+                expectedAction: POLICY_ACTION.ALLOW,
+                expectedReason: 'allowedResultURLs'
+            },
+            {
+                name: 'blocked image format is hidden when no stronger rule applies',
+                decision: withTapioState(false, () => decideResultPolicy('https://example.com/file.webp', 'ordinary file', true)),
+                expectedAction: POLICY_ACTION.HIDE,
+                expectedReason: 'blocked-image-format'
+            }
+        ];
+
+        const results = tests.map(test => {
+            const actionOkay = test.expectedNotAction
+                ? test.decision.action !== test.expectedNotAction
+                : test.decision.action === test.expectedAction;
+            const reasonOkay = test.expectedReason === undefined || test.decision.reason === test.expectedReason;
+            return {
+                name: test.name,
+                passed: actionOkay && reasonOkay,
+                expected: test.expectedNotAction
+                    ? { notAction: test.expectedNotAction }
+                    : { action: test.expectedAction, reason: test.expectedReason },
+                actual: test.decision
+            };
+        });
+
+        braveFoxIsTapioAccount = originalTapioState;
+        return {
+            passed: results.every(result => result.passed),
+            results
+        };
+    }
+
+    if (typeof window !== 'undefined') {
+        window.containsAiBoundary = containsAiBoundary;
+        window.containsForbiddenKeywords = containsForbiddenKeywords;
+        window.GoogleJS = window.GoogleJS || {};
+        window.GoogleJS.getLastRedirectInfo = () => lastRedirectInfo || readPersistedRedirect();
+        window.GoogleJS.canUseAllowedResultRescue = () => braveFoxCanUseAllowedResultRescue();
+        window.GoogleJS.getQueryPolicyDecision = (text) => ({ ...decideQueryPolicy(text) });
+        window.GoogleJS.getResultPolicyDecision = (url, text, isImage = false) => ({ ...decideResultPolicy(url, text, isImage) });
+        window.GoogleJS.runPolicySelfTests = runPolicySelfTests;
+    }
+
+    function hideElementSafely(el) {
+        try {
+            if (!el || !el.style) return;
+            if (isGooglePaginationElement(el)) return;
+            if (isFirefoxSearchNavigationElement(el)) return;
+            el.setAttribute('data-googlejs-hidden', '1');
+            el.setAttribute('aria-hidden', 'true');
+            el.style.setProperty('display', 'none', 'important');
+            el.style.setProperty('visibility', 'hidden', 'important');
+            el.style.setProperty('opacity', '0', 'important');
+            el.style.setProperty('pointer-events', 'none', 'important');
+        } catch (e) {}
+    }
+
+
+    // === GOOGLE IMAGES NORMAL-MODE HELPERS ===
+    // Normal signed-in Google Images and Incognito often get different async DOM buckets.
+    // These helpers avoid random class-name nukes and instead use actual URLs/text/data attrs.
+    let googleImagesFirstPassDone = false;
+
+    function decodeRepeatedly(value) {
+        let out = String(value || '');
+        for (let i = 0; i < 3; i++) {
+            try {
+                const dec = decodeURIComponent(out);
+                if (dec === out) break;
+                out = dec;
+            } catch (e) { break; }
+        }
+        return out;
+    }
+
+    function collectUrlPiecesFromValue(value, out) {
+        try {
+            if (!value) return;
+            const raw = String(value);
+            out.push(raw);
+            const decoded = decodeRepeatedly(raw);
+            if (decoded !== raw) out.push(decoded);
+
+            const maybeUrl = raw.startsWith('http') ? raw : (raw.startsWith('/') ? window.location.origin + raw : '');
+            if (maybeUrl) {
+                const u = new URL(maybeUrl, window.location.origin);
+                ['url', 'q', 'imgurl', 'imgrefurl', 'source', 'ved', 'docid', 'tbnid'].forEach(key => {
+                    const v = u.searchParams.get(key);
+                    if (v) {
+                        out.push(v);
+                        out.push(decodeRepeatedly(v));
+                    }
+                });
+            }
+        } catch (e) {}
+    }
+
+    function collectGoogleImageSignal(node) {
+        const parts = [];
+        try {
+            if (!node || node.nodeType !== 1) return '';
+            parts.push(node.getAttribute('aria-label') || '');
+            parts.push(node.getAttribute('title') || '');
+            parts.push(node.getAttribute('data-lpage') || '');
+            parts.push(node.getAttribute('data-ref-docid') || '');
+            parts.push((node.innerText || node.textContent || '').slice(0, 2500));
+
+            const nodes = [node, ...Array.from(node.querySelectorAll('a, img, [data-lpage], [data-ref-docid], [data-docid], [data-nav], [data-surl], [data-src]')).slice(0, 90)];
+            nodes.forEach(el => {
+                try {
+                    ['href', 'src', 'data-src', 'data-surl', 'data-nav', 'data-lpage', 'data-ref-docid', 'data-docid', 'ping', 'title', 'alt', 'aria-label'].forEach(attr => {
+                        const v = el.getAttribute && el.getAttribute(attr);
+                        if (v) collectUrlPiecesFromValue(v, parts);
+                    });
+                    if (typeof el.href === 'string') collectUrlPiecesFromValue(el.href, parts);
+                    if (typeof el.src === 'string') collectUrlPiecesFromValue(el.src, parts);
+                } catch (e) {}
+            });
+        } catch (e) {}
+        return decodeRepeatedly(parts.filter(Boolean).join(' '));
+    }
+
+    function extractUrlsFromSignal(signal) {
+        try {
+            const s = String(signal || '');
+            return s.match(/https?:\/\/[^\s"'<>]+/gi) || [];
+        } catch (e) {}
+        return [];
+    }
+
+    function isWebpImageSignal(signal) {
+        const s = String(signal || '');
+        return /(?:\.webp(?:[?#]|$)|format=webp|auto=webp|%2ewebp|%3dwebp)/i.test(s);
+    }
+
+    function shouldRemoveGoogleImageNode(node, suppliedSignal = '') {
+        try {
+            const signal = suppliedSignal || collectGoogleImageSignal(node);
+            if (!signal) return false;
+            return decideResultPolicy('', signal, true, false).action === POLICY_ACTION.HIDE;
+        } catch (e) {}
+        return false;
+    }
+
+    function getGoogleImageCardRoot(node) {
+        try {
+            if (!node || !node.closest) return node;
+            const inner = node.closest('[data-attrid="images universal"], .isv-r, .eA0Zlc, .rg_bx, .wXeWr, .ivg-i, a.ddkIM') || node;
+            const outer = inner.closest('[data-snc][data-snm] > .kb0PBd, .VifEQd, .isv-r, .eA0Zlc, .rg_bx, .wXeWr') || inner;
+
+            // Safety: never return a huge page/panel wrapper as a card.
+            const imgCount = outer.querySelectorAll ? outer.querySelectorAll('img').length : 0;
+            if (imgCount > 8 && inner !== outer) return inner;
+            return outer;
+        } catch (e) {}
+        return node;
+    }
+
+    function markGoogleImageCardPending(node) {
+        try {
+            if (!node || node.nodeType !== 1) return;
+            node.setAttribute('data-googlejs-image-policy-pending', '1');
+            node.removeAttribute('data-googlejs-cleared');
+            const descendants = node.querySelectorAll?.('[data-attrid="images universal"], .isv-r, .eA0Zlc, .rg_bx, .wXeWr, .ivg-i') || [];
+            for (let i = 0; i < descendants.length && i < 20; i++) {
+                descendants[i].removeAttribute('data-googlejs-cleared');
+            }
+        } catch (e) {}
+    }
+
+    function markGoogleImageCardCleared(node) {
+        try {
+            if (!node || node.nodeType !== 1) return;
+            node.removeAttribute('data-googlejs-image-policy-pending');
+            node.setAttribute('data-googlejs-cleared', '1');
+            const descendants = node.querySelectorAll ? node.querySelectorAll('[data-attrid="images universal"], .isv-r, .eA0Zlc, .rg_bx, .wXeWr, .ivg-i') : [];
+            for (let i = 0; i < descendants.length && i < 20; i++) {
+                descendants[i].setAttribute('data-googlejs-cleared', '1');
+            }
+        } catch (e) {}
+    }
+
+    function hideGoogleImageCard(node) {
+        try {
+            const root = getGoogleImageCardRoot(node);
+            if (!root || isInsideOpenImagePreview(root)) return;
+            hideElementSafely(root);
+            root.remove();
+        } catch (e) {}
+    }
+
+    function isGoogleImagesRelatedSearchBlock(node) {
+        try {
+            if (!node || node.nodeType !== 1) return false;
+            const block = node.matches && node.matches('.BA0zte') ? node : (node.closest ? node.closest('.BA0zte') : null);
+            if (!block) return false;
+
+            const heading = block.querySelector('h2, [role="heading"]');
+            const headingText = normalizeTextForMatching(heading ? heading.textContent : '');
+            if (/aiheeseen liittyv[aä]t haut|related searches|searches related|liittyv[aä]t haut/i.test(headingText)) return true;
+
+            // Structural fallback from captured Google Images HTML:
+            // .BA0zte + related-search query pills are anchors back into /search?...udm=2.
+            const relatedAnchors = block.querySelectorAll('a.bqW4cb[href*="/search"][href*="udm=2"], a[href*="/search"][href*="udm=2"][href*="source=univ"]');
+            return relatedAnchors && relatedAnchors.length >= 2;
+        } catch (e) {}
+        return false;
+    }
+
+    function removeGoogleImagesRelatedSearchBlocks() {
+        if (!isGoogleImageSearch()) return;
+        try {
+            document.querySelectorAll('.BA0zte, .UU8K7.ZwRhJd').forEach(node => {
+                try {
+                    const block = node.matches && node.matches('.BA0zte') ? node : node.closest('.BA0zte');
+                    if (!block || !isGoogleImagesRelatedSearchBlock(block)) return;
+
+                    const shell = block.closest('.kb0PBd.cvP2Ce, [data-snf][data-snm]') || block;
+                    if (isInsideOpenImagePreview(shell)) return;
+                    hideElementSafely(shell);
+                    shell.remove();
+                } catch (e) {}
+            });
+        } catch (e) {}
+    }
+
+    function removeGoogleImagesRelatedPreviewBlocks() {
+        if (!isGoogleImageSearch()) return;
+        try {
+            const selector = [
+                'div[id^="imgv-"][data-async-type="imgv"]',
+                '[data-async-type="imgv"][id^="imgv-"]'
+            ].join(',');
+
+            document.querySelectorAll(selector).forEach(block => {
+                try {
+                    // These async imgv blocks are the related/similar-image trap from the uploaded HTML.
+                    // The actual opened preview image/source/buttons are outside this block in current Google DOM.
+                    hideElementSafely(block);
+                    block.remove();
+                } catch (e) {}
+            });
+
+            // Fallback: if Google only injects the grid without the outer imgv wrapper, hide that grid.
+            document.querySelectorAll('[data-async-type="imgv"] [data-snc="oJ14jb"], div[id^="imgv-"] [data-snc="oJ14jb"]').forEach(grid => {
+                try {
+                    const block = grid.closest('[data-async-type="imgv"], div[id^="imgv-"]') || grid;
+                    hideElementSafely(block);
+                    block.remove();
+                } catch (e) {}
+            });
+        } catch (e) {}
+    }
+
+    // Shared compiled selector. Google has many nested elements, so one closest()
+    // lookup is cheaper than testing every ancestor against every selector.
+    const GOOGLE_SUGGESTION_SELECTORS = [
+        '#fprsl', '#fprs', '.QRYxYe', '.NNMgCf', '.spell_orig', '.gL9Hy', 'div.y6Uyqe',
+        'span.gL9Hy', 'a.spell', 'p.spell_orig', '.KDCVqf', '.card-section.p64x9c',
+        '[aria-label*="Did you mean"]', '[aria-label*="Showing results for"]',
+        '[aria-label*="Tarkoititko"]', '[aria-label*="Näytetään tulokset haulla"]',
+    ];
+    const GOOGLE_SUGGESTION_SELECTOR = GOOGLE_SUGGESTION_SELECTORS.join(',');
+    function getSuggestionSelectors() {
+        return GOOGLE_SUGGESTION_SELECTORS;
+    }
+
+    function isWithinSuggestionNode(node) {
+        try {
+            const element = node?.nodeType === 1 ? node : node?.parentElement;
+            return !!(element && element !== document.documentElement &&
+                element.closest && element.closest(GOOGLE_SUGGESTION_SELECTOR));
+        } catch (e) {}
+        return false;
+    }
+
+    // === SUGGESTION/CORRECTION TEXT CHECKER ===
+    // Suggestions keep Nuclear/AI policy but skip redirectHideLite entirely.
+    // This includes #oFNiHe and Did you mean?/Showing results for: banners.
+    function getSuggestionForbiddenMatch(text) {
+        const decision = decideQueryPolicy(text, false);
+        return decision.action === POLICY_ACTION.REDIRECT
+            ? (decision.match || decision.reason)
+            : false;
+    }
+
+    function isInsideImagePreviewOrHidden(node) {
+        try {
+            if (!node || !node.closest) return false;
+            if (node.closest('[data-googlejs-hidden="1"]')) return true;
+            if (isNodeClicked(node)) return true;
+            if (node.closest('#Sva75c, #islsp, .tvh9oe, .OUZ5W, .p7rlpe, .nQvPN, .AnpO2b, .gx72we, .VKHL9c, .kC8B4e, c-wiz[data-region="main"], div[role="region"][aria-label], c-wiz[data-rp]')) return true;
+            if (node.closest('.isv-r.ia-active, .isv-r[aria-expanded="true"], .isv-r[data-focused="true"], .isv-r.VmSmrc, .isv-r.B0pnze')) return true;
+
+            if (node.nodeType === 1 && node.offsetWidth === 0 && node.offsetHeight === 0) return true;
+        } catch(e) {}
+        return false;
+    }
+
+
+    // === GOOGLE IMAGES PREVIEW PANEL SKIP ===
+    // The opened image panel is heavy and changes constantly. We do not keyword-scan it anymore.
+    // Similar-images/rabbit-hole modules are still hidden by the CSS rules above.
+    function isInsideOpenImagePreview(node) {
+        try {
+            if (!isGoogleImageSearch()) return false;
+            if (!node || !node.closest) return false;
+            return !!node.closest('#Sva75c');
+        } catch (e) {}
+        return false;
+    }
+
+    function mutationTouchesOnlyOpenImagePreview(mutations) {
+        try {
+            if (!isGoogleImageSearch() || !mutations || !mutations.length) return false;
+
+            for (let i = 0; i < mutations.length; i++) {
+                const m = mutations[i];
+
+                if (m.target && !isInsideOpenImagePreview(m.target)) return false;
+
+                if (m.addedNodes) {
+                    for (let j = 0; j < m.addedNodes.length; j++) {
+                        const n = m.addedNodes[j];
+                        if (n && n.nodeType === 1 && !isInsideOpenImagePreview(n)) return false;
+                    }
+                }
+
+                if (m.removedNodes) {
+                    for (let j = 0; j < m.removedNodes.length; j++) {
+                        const n = m.removedNodes[j];
+                        if (n && n.nodeType === 1 && !isInsideOpenImagePreview(n)) return false;
+                    }
+                }
+            }
+            return true;
+        } catch (e) {}
+        return false;
+    }
+
+    function doRedirect(triggerContext, triggerTerm) {
+        if (isRedirecting || isGoogleMapsOrEarthUrl()) return;
+        logRedirect(triggerContext, triggerTerm);
+        isRedirecting = true;
+        try { if (domObserver) domObserver.disconnect(); } catch (e) {}
+        if (ffAndroidScanInterval) {
+            try { clearInterval(ffAndroidScanInterval); } catch (e) {}
+            ffAndroidScanInterval = null;
+        }
+        
+        if (!isFirefoxAndroid) {
+            try { window.stop && window.stop(); } catch (e) {}
+        }
+        
+        try {
+            document.documentElement.style.background = '#fff';
+            document.body && (document.body.style.background = '#fff');
+        } catch (e) {}
+        
+        if (isFirefoxAndroid) {
+            try {
+                let meta = document.createElement('meta');
+                meta.httpEquiv = "refresh";
+                meta.content = "0;url=https://www.google.com";
+                document.documentElement.appendChild(meta);
+            } catch(e) {}
+            
+            setTimeout(() => {
+                try { window.location.replace('https://www.google.com'); } catch (e) {}
+                try { window.location.href = 'https://www.google.com'; } catch (e) {}
+            }, 10);
+        } else {
+            try { window.location.replace('https://www.google.com'); } catch (e) { window.location.href = 'https://www.google.com'; }
+        }
+    }
+
+    function preflightRedirectIfBanned() {
+        const currentHostname = window.location.hostname;
+        const googleDomainPattern = /^([a-z0-9-]+\.)*google\.[a-z]+(\.[a-z]+)?$/i;
+        if (!googleDomainPattern.test(currentHostname)) return false;
+
+        const searchParams = new URLSearchParams(window.location.search);
+        const query = searchParams.get('q') || '';
+
+        const forbiddenMatch = containsForbiddenKeywords(query);
+        if (forbiddenMatch) {
+            doRedirect('preflight', forbiddenMatch);
+            return true;
+        }
+        return false;
+    }
+
+    if (preflightRedirectIfBanned()) return;
+
+let googleLastUrlSanitizerInput = '';
+function cleanGoogleUrl() {
+    if (isFirefox) return;
+    // The body observer can fire hundreds of times while the URL stays the same.
+    // No reason to reparse it or run Image Search DOM detection on every mutation.
+    const currentHref = window.location.href;
+    if (currentHref === googleLastUrlSanitizerInput) return;
+    // Do not memoize an Image Search DOM that Google may later rehydrate into Web
+    // mode without a URL change. That transition still needs the original check.
+    if (isGoogleImageSearch()) return;
+    googleLastUrlSanitizerInput = currentHref;
+
+    // 1. Bulletproof Gemini Abort
+    if (window.location.hostname.includes('gemini')) return;
+
+    // 2. Only run cleaning logic if we are actually on a search results page
+    // This targets /search, /search/fincore, etc., while ignoring /app or /
+    if (!window.location.pathname.includes('/search')) return;
+        
+        const keepParams = [
+            "q", "tbm", "tbs", "hl", "safe", "biw", "bih", "dpr", "ijn", "ei", "start", "source", "rlz", "oq", "gs_l", "sxsrf",
+            "imgrc", "imgdii", "imgurl", "imgrefurl", "prev", "usg", "bvm", "psig", "ust", "chips", "asearch", "udm",
+            "uact", "pbx", "sclient", "aqs", "gs_ivs", "iflsig", "ictx", "app", "gemini",
+        ];
+           try {
+        const url = new URL(window.location.href);
+        let changed = false;
+        const paramsArray = Array.from(url.searchParams.keys());
+        
+        for (let i = 0; i < paramsArray.length; ++i) {
+            const param = paramsArray[i];
+            if (!keepParams.includes(param)) {
+                url.searchParams.delete(param);
+                changed = true;
+            }
+        }
+        
+        if (changed) {
+            const cleanedUrl = `${window.location.origin}${window.location.pathname}${url.searchParams.toString() ? '?' + url.searchParams.toString() : ''}`;
+            if (cleanedUrl !== window.location.href) {
+                window.history.replaceState({}, '', cleanedUrl);
+                googleLastUrlSanitizerInput = window.location.href;
+            }
+        }
+    } catch (e) {}
+}
+
+    document.addEventListener('submit', function (event) {
+        try {
+            const form = event.target;
+            if (form && form.action && /google\..*\/search/i.test(form.action)) {
+                const inputs = form.querySelectorAll('input[name="q"]');
+                for (let i = 0; i < inputs.length; ++i) {
+                    const val = inputs[i].value || '';
+                    const forbiddenMatch = containsForbiddenKeywords(val);
+                    if (forbiddenMatch) {
+                        event.preventDefault();
+                        event.stopImmediatePropagation();
+                        overlay && (overlay.style.display = 'block');
+                        doRedirect('submit', forbiddenMatch);
+                        return false;
+                    }
+                }
+            }
+        } catch (e) {}
+    }, true);
+
+    document.addEventListener('keydown', function (event) {
+        try {
+            if (event.key !== 'Enter') return;
+            const active = document.activeElement;
+            if (!active) return;
+            if (active.name === 'q' || (active.tagName === 'INPUT' && /search|text/i.test(active.type))) {
+                const val = active.value || '';
+                const forbiddenMatch = containsForbiddenKeywords(val);
+                if (forbiddenMatch) {
+                    event.preventDefault();
+                    event.stopImmediatePropagation();
+                    overlay && (overlay.style.display = 'block');
+                    doRedirect('enter', forbiddenMatch);
+                    return false;
+                }
+            }
+        } catch (e) {}
+    }, true);
+
+    function interceptSearchInputChanges() {
+        const inputs = document.querySelectorAll('input[name="q"]');
+        devLog('Found ' + inputs.length + ' search inputs to monitor');
+        for (let i = 0; i < inputs.length; ++i) {
+            const searchInput = inputs[i];
+            searchInput.addEventListener('input', function () {
+                try {
+                    const val = searchInput.value || '';
+                    const forbiddenMatch = containsForbiddenKeywords(val);
+                    if (forbiddenMatch) {
+                        overlay && (overlay.style.display = 'block');
+                        doRedirect('input-change', forbiddenMatch);
+                    }
+                } catch (e) {}
+            });
+        }
+    }
+
+    function isPromoBannerText(txt) {
+        const promoPhrases = [
+            /Lataa Chrome/i, /toimii paremmin/i, /Käytät Firefoxia/i, /oletushakukone/i, 
+            /Switch to Chrome/i, /Tee Googlesta/i, /Kokeile Chromea/i, /Google suosittelee/i,
+            /parempi selain/i, /Chrome on nopeampi/i, /Siirry Chromeen/i, /nopeampi kuin Firefox/i
+        ];
+        return promoPhrases.some(p => p.test(txt));
+    }
+
+    function isPromoBannerNode(node) {
+        if (!node) return false;
+        let txt = node.textContent || '';
+        if (txt.length < 30 && node.parentElement) {
+            txt = node.parentElement.textContent || '';
+        }
+        if (txt.length < 50 && node.parentElement && node.parentElement.parentElement) {
+            txt = node.parentElement.parentElement.textContent || '';
+        }
+        return isPromoBannerText(txt);
+    }
+
+    function removePromoBanners() {
+        const elements = document.querySelectorAll('div[role="alert"], div[role="dialog"], .dbsFrd, .gws-promo-pushdown');
+        elements.forEach(el => {
+            if (isProtectedElement(el)) return;
+            const txt = el.textContent || '';
+            if (txt.length < 400 && isPromoBannerText(txt)) {
+                el.remove();
+            }
+        });
+        
+        const cwizElements = document.querySelectorAll('c-wiz');
+        cwizElements.forEach(el => {
+            if (isProtectedElement(el)) return;
+            if (el.querySelector('#hdtb, #hdtb-msb, #top_nav, form[action="/search"]')) return;
+            
+            const txt = el.textContent || '';
+            if (txt.length < 150 && isPromoBannerText(txt)) {
+                el.remove();
+            }
+        });
+    }
+
+
+    // BF25_4_0_AI_MODE_HIDE_HOTFIX
+    // Hide Google's AI Mode / Tekoälytila tab without touching normal tab rows.
+    function hideGoogleAIModeButton() {
+        try {
+            const labelRe = /(?:tekoälytila|ai\s*mode)/i;
+            const seen = new WeakSet();
+            const candidates = document.querySelectorAll([
+                'span[jsname="KliEFc"]',
+                'a.XVMlrc',
+                'div.olrp5b',
+                'div[role="listitem"]'
+            ].join(','));
+
+            candidates.forEach((node) => {
+                try {
+                    if (!node || seen.has(node)) return;
+                    seen.add(node);
+
+                    const text = String(node.textContent || node.getAttribute?.('aria-label') || '').replace(/\s+/g, ' ').trim();
+                    if (!labelRe.test(text)) return;
+
+                    const target = node.closest?.('div[role="listitem"]') ||
+                                   node.closest?.('div.olrp5b') ||
+                                   node.closest?.('a.XVMlrc') ||
+                                   node;
+                    if (!target || !target.style) return;
+
+                    target.setAttribute('data-bravefox-ai-mode-hidden', '1');
+                    target.style.setProperty('display', 'none', 'important');
+                    target.style.setProperty('visibility', 'hidden', 'important');
+                    target.style.setProperty('opacity', '0', 'important');
+                    target.style.setProperty('pointer-events', 'none', 'important');
+                    target.style.setProperty('position', 'absolute', 'important');
+                    target.style.setProperty('left', '-9999px', 'important');
+                    target.style.setProperty('top', '-9999px', 'important');
+                    target.style.setProperty('width', '0', 'important');
+                    target.style.setProperty('height', '0', 'important');
+                    target.style.setProperty('overflow', 'hidden', 'important');
+                } catch (e) {}
+            });
+        } catch (e) {}
+    }
+
+function swapSearchTabs() {
+        if (isRedirecting || isFirefox) return;
+        try {
+            // EXACT NON-FIREFOX/PC LOGIC FROM BASE FILE
+                const kaikkiSpan = Array.from(document.querySelectorAll('span.R1QWuf:not([data-swapped])')).find(el => el.textContent.trim() === 'Kaikki');
+                const verkkoSpan = Array.from(document.querySelectorAll('span.R1QWuf:not([data-swapped])')).find(el => el.textContent.trim() === 'Verkkohaku');
+
+                if (kaikkiSpan && verkkoSpan) {
+                    const getTabNode = (span) => span.closest('div[role="listitem"]') || span.closest('a') || span.closest('div[jsname="xBNgKe"]');
+                    
+                    const kaikkiTab = getTabNode(kaikkiSpan);
+                    const verkkoTab = getTabNode(verkkoSpan);
+
+                    if (kaikkiTab && verkkoTab && kaikkiTab !== verkkoTab) {
+                        const temp = document.createElement('div');
+                        kaikkiTab.parentNode.insertBefore(temp, kaikkiTab);
+                        verkkoTab.parentNode.insertBefore(kaikkiTab, verkkoTab);
+                        temp.parentNode.insertBefore(verkkoTab, temp);
+                        temp.remove();
+
+                        verkkoSpan.textContent = 'Verkkohaku';
+                        kaikkiSpan.textContent = 'Virikkeinen haku';
+
+                        kaikkiSpan.setAttribute('data-swapped', '1');
+                        verkkoSpan.setAttribute('data-swapped', '1');
+                    }
+                }
+        } catch(e) {}
+    }
+
+    // === CROSS-BROWSER ORGANIC RESULT CARD NORMALIZATION ===
+    // Google gives signed-in Firefox and Incognito Chrome different wrapper class
+    // soups. Filter from the primary heading link outward and stop before a wrapper
+    // contains a second organic heading. This prevents a Chrome-only parent bucket
+    // from being mistaken for one result and taking several clean cards with it.
+    const GOOGLE_WEB_PRIMARY_RESULT_LINK_SELECTOR = [
+        '#search a[jsname="UWckNb"][href]',
+        '#search .yuRUbf > a[href]',
+        '#search a[href]:has(h3)',
+        '#search h3 a[href]',
+        '#rso a[jsname="UWckNb"][href]',
+        '#rso .yuRUbf > a[href]',
+        '#rso a[href]:has(h3)',
+        '#rso h3 a[href]',
+        '#res a[jsname="UWckNb"][href]',
+        '#res .yuRUbf > a[href]',
+        '#res a[href]:has(h3)',
+        '#res h3 a[href]'
+    ].join(',');
+
+    const GOOGLE_WEB_LOCAL_PRIMARY_LINK_SELECTOR = [
+        'a[jsname="UWckNb"][href]',
+        '.yuRUbf > a[href]',
+        'a[href]:has(h3)',
+        'h3 a[href]'
+    ].join(',');
+
+    function isGoogleWebPrimaryResultLink(link) {
+        try {
+            return !!(link && link.matches && link.matches(GOOGLE_WEB_LOCAL_PRIMARY_LINK_SELECTOR) &&
+                link.closest('#search, #rso, #res'));
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function countPrimaryResultLinksWithin(node) {
+        try {
+            return node.querySelectorAll(GOOGLE_WEB_LOCAL_PRIMARY_LINK_SELECTOR).length;
+        } catch (e) {
+            return 0;
+        }
+    }
+
+    const GOOGLE_WEB_OUTER_RESULT_SHELL_SELECTORS = [
+        '.MjjYud',
+        '.g',
+        '.tF2Cxc',
+        '.Gx5Zad',
+        '.SoaBEf',
+        '.M8OgIe',
+        '.N54PNb',
+        '[data-snhf]',
+        'article',
+        'li'
+    ];
+
+    const GOOGLE_WEB_INNER_RESULT_SHELL_SELECTOR = [
+        '.Ww4FFb',
+        '.yuRUbf',
+        '.kb0PBd',
+        '.VwiC3b'
+    ].join(',');
+
+    function countResultHeadingsWithin(node) {
+        try {
+            return node.querySelectorAll('h3, [role="heading"][aria-level="3"]').length;
+        } catch (e) {
+            return 0;
+        }
+    }
+
+    function isSafeSingleGoogleWebResultShell(candidate, boundary, link) {
+        try {
+            if (!candidate || candidate === boundary || !boundary.contains(candidate) || !candidate.contains(link)) return false;
+            const headingCount = countResultHeadingsWithin(candidate);
+            const primaryCount = countPrimaryResultLinksWithin(candidate);
+            return headingCount <= 1 && primaryCount <= 1;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function getGoogleWebResultCard(link) {
+        try {
+            if (!isGoogleWebPrimaryResultLink(link)) return null;
+            const boundary = link.closest('#search, #rso, #res');
+            if (!boundary) return null;
+
+            /*
+             * Google often nests the clickable title/header in .Ww4FFb while the
+             * visible snippet and metadata are siblings inside an outer .MjjYud/.g
+             * result shell. Element.closest() with one combined selector returned
+             * the nearest inner wrapper, so removing a blocked result deleted only
+             * its title/link and stranded the unclickable snippet text underneath.
+             *
+             * Prefer known outer one-result shells in explicit order. Firefox and
+             * Chrome use different class soup, so every candidate is still required
+             * to contain no more than one organic heading/link before we trust it.
+             */
+            for (const selector of GOOGLE_WEB_OUTER_RESULT_SHELL_SELECTORS) {
+                const candidate = link.closest(selector);
+                if (isSafeSingleGoogleWebResultShell(candidate, boundary, link)) return candidate;
+            }
+
+            const heading = link.querySelector('h3') || link.closest('h3');
+            const titleLength = String((heading && (heading.innerText || heading.textContent)) ||
+                link.innerText || link.textContent || '').trim().length;
+            let node = (heading || link).parentElement;
+            let depth = 0;
+            let best = null;
+
+            // Keep climbing while this is still demonstrably one result. Retain the
+            // outermost safe candidate so its title, URL, metadata and snippet vanish
+            // together, but stop before any shared multi-result bucket.
+            while (node && node !== boundary && depth < 14) {
+                if (node.nodeType === 1) {
+                    const headingCount = countResultHeadingsWithin(node);
+                    const primaryCount = countPrimaryResultLinksWithin(node);
+                    if (headingCount > 1 || primaryCount > 1) break;
+
+                    const tag = String(node.tagName || '').toLowerCase();
+                    const blockLike = tag === 'div' || tag === 'article' || tag === 'li';
+                    const textLength = String(node.innerText || node.textContent || '').trim().length;
+                    if (blockLike && headingCount === 1 && primaryCount <= 1 &&
+                        textLength >= Math.max(18, titleLength + 8)) {
+                        best = node;
+                    }
+                }
+                node = node.parentElement;
+                depth++;
+            }
+
+            if (best) return best;
+
+            // Last-resort inner shell. This should be rare, but is safer than removing
+            // a shared page bucket when Google supplies no recognisable outer card.
+            return link.closest(GOOGLE_WEB_INNER_RESULT_SHELL_SELECTOR) ||
+                link.closest('article, li, div');
+        } catch (e) {
+            return null;
+        }
+    }
+
+
+    // === CENTRAL-HOST NO-GLIMPSE RESULT GATE ======================================
+    // The central hosts verdict is asynchronous. Mark each real organic result shell pending
+    // before paint so BraveFoxHosts/legacyFox matches never flash briefly on screen while the
+    // background classifies them. Do NOT use content-visibility here: Google must still be free
+    // to hydrate/layout the card while it is invisible.
+    const GOOGLEJS_CENTRAL_GATE_ATTR = 'data-googlejs-central-policy-state';
+    const GOOGLEJS_CENTRAL_GATE_STYLE_ID = 'googlejs-central-policy-no-glimpse';
+    const GOOGLEJS_CENTRAL_GATE_SHELL_SELECTOR = [
+        ...GOOGLE_WEB_OUTER_RESULT_SHELL_SELECTORS,
+        '.Ww4FFb',
+        '.kb0PBd',
+        '.yuRUbf'
+    ].join(',');
+    let googleCentralGateObserver = null;
+    let googleCentralGateScanQueued = false;
+    let googleCentralGateNeedsLocalPass = false;
+    const googleCentralGateApprovedSignals = new WeakMap();
+    // Google's hydration can replace the outer result shell without replacing its
+    // title anchor. Remember the *same verified approval* against that anchor as
+    // well, so a harmless wrapper change does not blank an already cleared card.
+    const googleCentralGateApprovedLinks = new WeakMap();
+
+    function ensureGoogleCentralPolicyGateStyle() {
+        if (document.getElementById(GOOGLEJS_CENTRAL_GATE_STYLE_ID)) return;
+        try {
+            const style = document.createElement('style');
+            style.id = GOOGLEJS_CENTRAL_GATE_STYLE_ID;
+            style.textContent = `
+                [${GOOGLEJS_CENTRAL_GATE_ATTR}="pending"] {
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                    transition: none !important;
+                    animation: none !important;
+                }
+                [${GOOGLEJS_CENTRAL_GATE_ATTR}="blocked"] {
+                    display: none !important;
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                    transition: none !important;
+                    animation: none !important;
+                }
+                [${GOOGLEJS_CENTRAL_GATE_ATTR}="ready"] {
+                    visibility: visible !important;
+                    opacity: 1 !important;
+                    pointer-events: auto !important;
+                    transition: none !important;
+                    animation: none !important;
+                }
+            `;
+            (document.head || document.documentElement).appendChild(style);
+        } catch (e) {}
+    }
+
+    function getGoogleResultCentralPolicyCandidates(url, text) {
+        let candidates = getResultURLCandidates(url);
+        try {
+            GJ_extractCentralPolicyURLsFromText(decodeRepeatedly(String(text || '')))
+                .forEach(candidate => candidates.push(candidate));
+        } catch (e) {}
+        // Use the same canonical Google /goto wrapper as the local URL-policy engine.
+        // This prevents opaque CAES tokens from triggering central blockedSites/links
+        // substring rules, without exempting the publisher's visible destination URL.
+        return Array.from(new Set(candidates.map(candidate =>
+            GJ_normalizeCentralPolicyURL(getPolicyURLWithoutOpaqueGoogleGoto(candidate))
+        ).filter(Boolean)));
+    }
+
+    function getGoogleResultCentralPolicyGateState(url, text) {
+        const candidates = getGoogleResultCentralPolicyCandidates(url, text);
+        let pending = false;
+
+        for (const candidate of candidates) {
+            const verdict = GJ_centralPolicyCachedVerdict(candidate);
+            if (verdict === 'block') return 'blocked';
+            if (verdict === 'allow' || verdict === 'none') continue;
+            pending = true;
+        }
+
+        return pending ? 'pending' : 'ready';
+    }
+
+    // Google sometimes injects inline telemetry/script payloads inside an organic result
+    // shell. textContent includes those scripts, even while the no-glimpse gate hides
+    // the result. Exclude executable/embedded markup before URL and keyword scanning:
+    // a Google Ads conversion URL is not the result's publisher URL.
+    //
+    // Keep this visibility-independent. innerText can collapse while the result is
+    // hidden by BraveFox, which previously made pending/ready signatures unstable.
+    // Fast path avoids cloning normal result cards that have no embedded payloads.
+    function getGoogleWebResultContentText(result) {
+        if (!result) return '';
+        try {
+            const nonContentSelector = 'script, style, noscript, template, svg, iframe, object';
+            if (result.matches?.(nonContentSelector)) return '';
+            if (!result.querySelector?.(nonContentSelector)) {
+                return String(result.textContent || '');
+            }
+
+            const safeCopy = result.cloneNode(true);
+            safeCopy.querySelectorAll(nonContentSelector).forEach(node => node.remove());
+            return String(safeCopy.textContent || '');
+        } catch (e) {
+            // Never fall back to the contaminated full textContent on failure.
+            return '';
+        }
+    }
+
+    function getGoogleWebResultRenderedSignal(result, link) {
+        try {
+            const heading = link && (link.querySelector('h3') || link.closest('h3'));
+            const titleText = String((heading && (heading.textContent || heading.innerText)) ||
+                (link && (link.textContent || link.innerText)) || '');
+            const linkTitle = String((link && link.getAttribute('title')) || '');
+            return [getGoogleWebResultContentText(result), titleText, linkTitle]
+                .join(' ')
+                .replace(/\s+/g, ' ')
+                .trim()
+                .toLowerCase();
+        } catch (e) {
+            return '';
+        }
+    }
+
+    // A single, visibility-independent candidate source for EVERY web-result central
+    // check.  The previous blockResults() supplied innerText-derived policy text,
+    // while the early observer used textContent.  Since innerText changes when our
+    // CSS gate hides a card, those paths could alternately enqueue new URLs and
+    // turn a verified card back into pending without any DOM, policy or URL change.
+    // Keep the trusted publisher URL for links that still use opaque /goto wrappers.
+    // Strip embedded non-content markup without walking/joining live text nodes.
+    function getGoogleWebResultCentralPolicyText(result, link) {
+        const signal = getGoogleWebResultRenderedSignal(result, link);
+        const publisherURL = getGoogleWebResultTrustedPublisherPolicyURL(result, link);
+        return publisherURL ? signal + ' ' + publisherURL : signal;
+    }
+
+    function getGoogleWebResultCentralPolicyCandidateKey(result, link) {
+        const url = link?.href && !link.href.startsWith('data:') ? link.href : '';
+        return JSON.stringify(getGoogleResultCentralPolicyCandidates(
+            url, getGoogleWebResultCentralPolicyText(result, link)).sort());
+    }
+
+    function getGoogleCentralPolicyGateResultSignature(result, link) {
+        const url = link?.href && !link.href.startsWith('data:') ? link.href : '';
+        return JSON.stringify([url, getGoogleWebResultRenderedSignal(result, link)]);
+    }
+
+    function rememberGoogleCentralPolicyGateApproval(result, link, url, signature) {
+        const approval = {
+            link,
+            url,
+            signature,
+            candidateKey: getGoogleWebResultCentralPolicyCandidateKey(result, link),
+            accountScope: braveFoxIsTapioAccount,
+            policyGeneration: GJ_centralPolicyGeneration,
+            result
+        };
+        googleCentralGateApprovedSignals.set(result, approval);
+        if (link) googleCentralGateApprovedLinks.set(link, approval);
+    }
+
+    function isGoogleCentralPolicyGateResultApproved(result, link) {
+        const approved = googleCentralGateApprovedSignals.get(result);
+        return Boolean(approved && approved.link === link &&
+            approved.url === (link?.href || '') &&
+            approved.accountScope === braveFoxIsTapioAccount &&
+            approved.policyGeneration === GJ_centralPolicyGeneration &&
+            approved.signature === getGoogleCentralPolicyGateResultSignature(result, link) &&
+            approved.candidateKey === getGoogleWebResultCentralPolicyCandidateKey(result, link));
+    }
+
+    // Google can use an opaque /goto?url=CAES... link with no target hostname.
+    // A *trusted Google publisher badge* is usable only when it matches an explicitly
+    // blocked hostname, with a host-wide deny (not an unrelated path-only rule).
+    // This is derived from the existing URL lists, not a growing list of site names.
+    let googleBlockedPublisherLookup = null;
+    function getGoogleBlockedPublisherHostLookup() {
+        if (googleBlockedPublisherLookup) return googleBlockedPublisherLookup;
+        const lookup = new Map();
+        for (const rx of [...priorityBlockedResultURLPatterns, ...blockedResultURLPatterns, ...blockedImageURLPatterns]) {
+            const source = String(rx?.source || '');
+            const matches = source.match(/(?:[a-z0-9-]+\\\.)+[a-z]{2,16}/gi) || [];
+            for (const escapedHost of matches) {
+                const hostname = escapedHost.replace(/\\\./g, '.').replace(/^(?:www|m|mobile)\./, '');
+                const parts = hostname.split('.');
+                if (parts.length !== 2 || parts[0].length < 4) continue;
+                const candidate = `https://${hostname}/`;
+                // Only map a brand if the *homepage* itself is blocked. A narrow
+                // github.com/path rule must not make every GitHub result blocked.
+                const rootDenied = [...priorityBlockedResultURLPatterns, ...blockedResultURLPatterns, ...blockedImageURLPatterns]
+                    .some(rule => {
+                        rule.lastIndex = 0;
+                        return rule.test(candidate);
+                    });
+                if (!rootDenied) continue;
+                const brand = parts[0].replace(/[-_]/g, '').toLowerCase();
+                // Multiple denied domains may share one publisher badge (e.g. threads.com
+                // and threads.net). All candidates reaching here were independently denied
+                // at their homepages, so keep one as the blocking witness rather than
+                // treating another denied TLD as an ambiguous/unblocked publisher.
+                if (!lookup.has(brand)) lookup.set(brand, candidate);
+            }
+        }
+        googleBlockedPublisherLookup = lookup;
+        return lookup;
+    }
+
+    function getGoogleWebResultTrustedPublisherPolicyURL(result, link) {
+        try {
+            if (!result || !link || !result.contains(link) || !isGoogleWebPrimaryResultLink(link)) return '';
+            const actual = new URL(link.href);
+            if (!/^(?:www\.)?google\.[a-z.]+$/i.test(actual.hostname) ||
+                actual.pathname !== '/goto') return '';
+            const siteLabel = link.querySelector('.CA5RN .VuuXrf, .VuuXrf');
+            if (!siteLabel) return '';
+            const publisher = String(siteLabel.textContent || '').split(/[·•]/, 1)[0]
+                .trim().replace(/[-_\s]/g, '').toLowerCase();
+            if (!publisher || publisher.length < 4) return '';
+            return getGoogleBlockedPublisherHostLookup().get(publisher) || '';
+        } catch (e) {}
+        return '';
+    }
+
+    // Account scope can resolve after the first local filter pass. A soft match on
+    // an explicitly allowed URL cannot be irreversibly removed while Dad's account
+    // is still being identified. Hold it pending; nuclear and hard denies win now.
+    function shouldWaitForGoogleAllowedResultAccount(url, text, isImage, decision) {
+        if (braveFoxInitialGoogleAccountScopeSettled ||
+            decision?.action !== POLICY_ACTION.HIDE ||
+            decision.reason !== 'resultHideTerms') return false;
+        let candidates = getResultURLCandidates(url);
+        try {
+            GJ_extractCentralPolicyURLsFromText(decodeRepeatedly(String(text || '')))
+                .forEach(candidate => candidates.push(candidate));
+            if (isImage) {
+                extractUrlsFromSignal(decodeRepeatedly(String(text || '')))
+                    .forEach(candidate => candidates.push(candidate));
+            }
+        } catch (e) {}
+        return candidates.some(isResultURLAllowed);
+    }
+
+    function getGoogleWebResultPolicyText(result, link) {
+        // Match blockResults() exactly. The local safety decision must see the
+        // rendered title and snippet, not just the central URL candidate list.
+        const heading = link && (link.querySelector('h3') || link.closest('h3'));
+        const titleText = String((heading && (heading.innerText || heading.textContent)) ||
+            (link && (link.innerText || link.textContent)) || '');
+        const linkTitle = String((link && link.getAttribute('title')) || '');
+        const publisherPolicyURL = getGoogleWebResultTrustedPublisherPolicyURL(result, link);
+        return [getGoogleWebResultContentText(result), titleText, linkTitle, publisherPolicyURL]
+            .join(' ')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .toLowerCase();
+    }
+
+    function keepApprovedGoogleWebResultVisibleIfStillSafe(result, link) {
+        // Google frequently alters snippet/metadata nodes on an already visible card.
+        // Recheck those changes synchronously, BEFORE returning it to a hidden state.
+        // A new card, changed primary URL, changed account, or changed policy generation
+        // must instead follow the ordinary fail-closed pending/blocked route.
+        const currentUrl = link?.href || '';
+        const sameShellApproval = googleCentralGateApprovedSignals.get(result);
+        const linkApproval = googleCentralGateApprovedLinks.get(link);
+        const previous = sameShellApproval?.link === link ? sameShellApproval : linkApproval;
+        if (!previous || !result?.isConnected || !link || !result.contains(link) ||
+            previous.link !== link || previous.url !== currentUrl ||
+            previous.accountScope !== braveFoxIsTapioAccount ||
+            previous.policyGeneration !== GJ_centralPolicyGeneration) return false;
+
+        const signature = getGoogleCentralPolicyGateResultSignature(result, link);
+        // Only an identical *result shell* may take the cheap unchanged-signature path.
+        // An anchor transferred into a new wrapper must pass both policies again,
+        // since the new wrapper could contain newly added blocked snippet content.
+        const candidateKey = getGoogleWebResultCentralPolicyCandidateKey(result, link);
+        if (previous.result === result && previous.signature === signature &&
+            previous.candidateKey === candidateKey) return true;
+
+        // Revalidate BOTH policies before retaining ready. A changed destination
+        // must be independently classified: pending and blocked URLs NEVER inherit
+        // clearance from the old href, even on a previously approved result.
+        const text = getGoogleWebResultPolicyText(result, link);
+        if (getGoogleResultCentralPolicyGateState(currentUrl,
+            getGoogleWebResultCentralPolicyText(result, link)) !== 'ready' ||
+            decideResultPolicy(currentUrl, text, false, false).action === POLICY_ACTION.HIDE) {
+            return false;
+        }
+
+        rememberGoogleCentralPolicyGateApproval(result, link, currentUrl, signature);
+        result.setAttribute('data-gj-cache', text.length + ':' + currentUrl);
+        return true;
+    }
+
+    function getGoogleCentralPolicyGateShellFamily(result, link) {
+        const shells = new Set();
+        try {
+            if (result && result.isConnected) shells.add(result);
+            if (!link || !link.closest) return shells;
+
+            const boundary = link.closest('#search, #rso, #res');
+            let node = link.parentElement;
+            let depth = 0;
+            // Only decorate descendants INSIDE the selected one-result card.
+            // The old walk continued beyond `result` to arbitrary ancestors. During
+            // Google hydration a shared wrapper can briefly contain one heading,
+            // receive `pending`, then gain the rest of its children: EVERY previously
+            // approved result goes invisible even though its own URL is unchanged.
+            while (node && node !== boundary && depth < 14) {
+                if (result && !result.contains(node)) break;
+                if (node.matches?.(GOOGLEJS_CENTRAL_GATE_SHELL_SELECTOR)) {
+                    const headingCount = countResultHeadingsWithin(node);
+                    const primaryCount = countPrimaryResultLinksWithin(node);
+                    if (headingCount <= 1 && primaryCount <= 1) shells.add(node);
+                }
+                if (node === result) break;
+                node = node.parentElement;
+                depth++;
+            }
+        } catch (e) {}
+        return shells;
+    }
+
+    // === GOOGLE RESULT GATE DIAGNOSTICS (OBSERVATION ONLY) ========================
+    // Record one incident per state-setting call, not one row for every nested shell.
+    // Do not change any visibility, approval, queue or blocking decisions here.
+    const googleGateDiagnosticHistory = [];
+    let googleGateDiagnosticSerial = 0;
+
+    function describeGoogleGateDiagnosticNode(node) {
+        try {
+            if (!node) return '';
+            if (node.nodeType !== 1) return node.nodeType === 3 ? '#text' : `#node-${node.nodeType}`;
+            const tag = String(node.tagName || 'element').toLowerCase();
+            const id = node.id ? `#${String(node.id).slice(0, 45)}` : '';
+            const classes = Array.from(node.classList || []).slice(0, 5)
+                .map(value => String(value).slice(0, 35)).join('.');
+            return `${tag}${id}${classes ? '.' + classes : ''}`.slice(0, 220);
+        } catch (e) { return '[unavailable]'; }
+    }
+
+    function describeGoogleGateMutation(mutation, origin = '') {
+        try {
+            if (!mutation) return null;
+            return {
+                type: String(mutation.type || ''),
+                attribute: String(mutation.attributeName || ''),
+                target: describeGoogleGateDiagnosticNode(mutation.target),
+                origin: String(origin || ''),
+                addedCount: mutation.addedNodes?.length || 0,
+                removedCount: mutation.removedNodes?.length || 0,
+                added: Array.from(mutation.addedNodes || []).slice(0, 3)
+                    .map(describeGoogleGateDiagnosticNode),
+                removed: Array.from(mutation.removedNodes || []).slice(0, 3)
+                    .map(describeGoogleGateDiagnosticNode)
+            };
+        } catch (e) { return { type: 'unavailable' }; }
+    }
+
+    function rememberGoogleGateDiagnostic(result, link, affectedShells, context) {
+        try {
+            if (!affectedShells.length) return;
+            const currentUrl = String(link?.href || '');
+            const directApproval = googleCentralGateApprovedSignals.get(result);
+            const anchorApproval = link ? googleCentralGateApprovedLinks.get(link) : null;
+            const approval = directApproval?.link === link ? directApproval : anchorApproval;
+            const currentSignature = approval ? getGoogleCentralPolicyGateResultSignature(result, link) : '';
+            const rawTitle = link?.querySelector?.('h3')?.textContent ||
+                link?.closest?.('h3')?.textContent || result?.querySelector?.('h3')?.textContent || '';
+            const latestVerdict = currentUrl ? GJ_centralPolicyVerdictCache.get(GJ_normalizeCentralPolicyURL(currentUrl)) : undefined;
+            const stack = String(new Error().stack || '').split('\n').slice(2, 10)
+                .map(line => line.trim()).join(' | ').slice(0, 1600);
+            const entry = {
+                id: ++googleGateDiagnosticSerial,
+                at: new Date().toISOString(),
+                pageStart: new URLSearchParams(location.search).get('start') || '0',
+                title: String(rawTitle).trim().slice(0, 160),
+                source: String(context?.source || 'unspecified'),
+                centralState: String(context?.centralState || 'not-evaluated-here'),
+                approvedByFastCheck: context?.approvedByFastCheck ?? null,
+                approvedByRecheck: context?.approvedByRecheck ?? null,
+                result: describeGoogleGateDiagnosticNode(result),
+                url: currentUrl.slice(0, 350),
+                approvalExists: Boolean(approval),
+                sameResultNode: approval ? approval.result === result : null,
+                sameLinkNode: approval ? approval.link === link : null,
+                urlChanged: approval ? approval.url !== currentUrl : null,
+                textOrSignatureChanged: approval ? approval.signature !== currentSignature : null,
+                centralCandidatesChanged: approval ? approval.candidateKey !==
+                    getGoogleWebResultCentralPolicyCandidateKey(result, link) : null,
+                policyGenerationChanged: approval ? approval.policyGeneration !== GJ_centralPolicyGeneration : null,
+                accountScopeChanged: approval ? approval.accountScope !== braveFoxIsTapioAccount : null,
+                approvedGeneration: approval?.policyGeneration ?? null,
+                currentGeneration: GJ_centralPolicyGeneration,
+                cachedPrimaryVerdict: latestVerdict === undefined ? 'not-cached' : latestVerdict,
+                queuedCentralURLs: GJ_centralPolicyPending.size,
+                inFlightCentralURLs: GJ_centralPolicyInFlight.size,
+                resultConnected: Boolean(result?.isConnected),
+                mutation: context?.mutation || null,
+                shellCount: affectedShells.length,
+                shells: affectedShells.map(describeGoogleGateDiagnosticNode),
+                stack
+            };
+            googleGateDiagnosticHistory.push(entry);
+            if (googleGateDiagnosticHistory.length > 160) googleGateDiagnosticHistory.shift();
+        } catch (e) {} // Diagnostics must never interrupt enforcement.
+    }
+
+    try {
+        window.GoogleJS = window.GoogleJS || {};
+        window.GoogleJS.getGateDiagnosticHistory = () => googleGateDiagnosticHistory.map(entry => ({
+            ...entry,
+            shells: entry.shells.slice(),
+            mutation: entry.mutation ? {
+                ...entry.mutation,
+                added: (entry.mutation.added || []).slice(),
+                removed: (entry.mutation.removed || []).slice()
+            } : null
+        }));
+        window.GoogleJS.clearGateDiagnosticHistory = () => { googleGateDiagnosticHistory.length = 0; };
+    } catch (e) {}
+
+    function setGoogleCentralPolicyGateShellState(result, link, state, diagnosticContext = null) {
+        const normalizedState = state === 'ready' ? 'ready' : state === 'blocked' ? 'blocked' : 'pending';
+        const shells = getGoogleCentralPolicyGateShellFamily(result, link);
+        const newlyPendingShells = [];
+        shells.forEach(shell => {
+            try {
+                const previousState = shell.getAttribute(GOOGLEJS_CENTRAL_GATE_ATTR);
+                if (previousState !== normalizedState) {
+                    if (previousState === 'ready' && normalizedState === 'pending') {
+                        newlyPendingShells.push(shell);
+                    }
+                    if (shell === result || shell.matches?.(GOOGLEJS_CENTRAL_GATE_SHELL_SELECTOR)) {
+                        rememberGoogleWebGateTransition(shell, previousState, normalizedState);
+                    }
+                    shell.setAttribute(GOOGLEJS_CENTRAL_GATE_ATTR, normalizedState);
+                }
+                if (normalizedState === 'ready') {
+                    if (shell.hasAttribute('aria-hidden')) shell.removeAttribute('aria-hidden');
+                } else if (shell.getAttribute('aria-hidden') !== 'true') {
+                    shell.setAttribute('aria-hidden', 'true');
+                }
+            } catch (e) {}
+        });
+        // Only allocate an expensive diagnostic when an approved wrapper ACTUALLY resets.
+        if (newlyPendingShells.length) {
+            rememberGoogleGateDiagnostic(result, link, newlyPendingShells, diagnosticContext);
+        }
+    }
+
+    function syncGoogleWebResultCentralPolicyGate(result, link, suppliedText = '', diagnosticSource = 'central-gate-sync') {
+        try {
+            if (!result || !result.isConnected || !link) return 'ready';
+            const resultUrl = link.href && !link.href.startsWith('data:') ? link.href : '';
+            // suppliedText is intentionally ignored for CENTRAL classification.
+            // blockResults() keeps using it for its unchanged local policy rules.
+            const state = getGoogleResultCentralPolicyGateState(resultUrl,
+                getGoogleWebResultCentralPolicyText(result, link));
+
+            // Set the state on every single-result shell in the ancestor family. The document-start
+            // CSS can match more than one nested Google wrapper, so approving only one wrapper can
+            // otherwise leave an inner/outer layer invisibly gated.
+            // The early central-only scan must not reveal a new/changed result before
+            // blockResults() has also checked its local nuclear/URL/text policy.
+            const stillApproved = isGoogleCentralPolicyGateResultApproved(result, link) ||
+                (state === 'ready' && keepApprovedGoogleWebResultVisibleIfStillSafe(result, link));
+            // The exact same URL candidates were already checked for this approval.
+            // A temporary cache miss must not hide an unchanged cleared card.
+            // An explicit block still wins, and changed candidates/account/policy
+            // cannot use the old approval. New cards stay gated until local checks.
+            const visibleState = state === 'blocked' ? 'blocked' :
+                stillApproved ? 'ready' : 'pending';
+            setGoogleCentralPolicyGateShellState(result, link, visibleState, {
+                source: diagnosticSource,
+                centralState: state,
+                approvedByRecheck: stillApproved
+            });
+            // Preserve the original contract: a new card whose central hosts
+            // are ready must return 'ready' for blockResults() to run its LOCAL
+            // policy and approve it. Only an already-approved temporary cache
+            // miss may be treated as ready without a fresh central reply.
+            return state === 'pending' && stillApproved ? 'ready' : state;
+        } catch (e) {
+            return 'ready';
+        }
+    }
+
+    function releaseSharedGoogleCentralPolicyGateShells() {
+        try {
+            const selectors = [];
+            for (const boundary of ['#search', '#rso', '#res']) {
+                selectors.push(`${boundary} ${GOOGLEJS_CENTRAL_GATE_SHELL_SELECTOR}`);
+            }
+            document.querySelectorAll(selectors.join(',')).forEach(shell => {
+                // A wrapper containing multiple organic results is a shared bucket, not one card.
+                // Never let the document-start gate blank the entire bucket; its individual child
+                // result shells remain independently gated/classified.
+                if (countResultHeadingsWithin(shell) > 1 || countPrimaryResultLinksWithin(shell) > 1) {
+                    if (shell.getAttribute(GOOGLEJS_CENTRAL_GATE_ATTR) !== 'ready') {
+                        shell.setAttribute(GOOGLEJS_CENTRAL_GATE_ATTR, 'ready');
+                    }
+                    shell.removeAttribute('aria-hidden');
+                }
+            });
+        } catch (e) {}
+    }
+
+    function releaseSharedGoogleGateShellsForMutation(node) {
+        // A formerly single-result wrapper can become a bucket of several cards.
+        // Release just that *shared ancestor* synchronously, before paint; each
+        // actual result below it still receives its own independent policy gate.
+        // This also handles class-only hydration changes, which the old observer
+        // did not watch even though the document-start CSS uses class selectors.
+        let released = false;
+        try {
+            let element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
+            const boundary = element?.closest?.('#search, #rso, #res');
+            if (!boundary) return false;
+            let depth = 0;
+            while (element && element !== boundary && depth++ < 18) {
+                if (element.matches?.(GOOGLEJS_CENTRAL_GATE_SHELL_SELECTOR) &&
+                    (countResultHeadingsWithin(element) > 1 || countPrimaryResultLinksWithin(element) > 1)) {
+                    if (element.getAttribute(GOOGLEJS_CENTRAL_GATE_ATTR) !== 'ready') {
+                        element.setAttribute(GOOGLEJS_CENTRAL_GATE_ATTR, 'ready');
+                        released = true;
+                    }
+                    if (element.hasAttribute('aria-hidden')) element.removeAttribute('aria-hidden');
+                }
+                element = element.parentElement;
+            }
+        } catch (e) {}
+        return released;
+    }
+
+    function gateGoogleOrganicResultsImmediately() {
+        ensureGoogleCentralPolicyGateStyle();
+        let needsLocalApproval = false;
+        try {
+            releaseSharedGoogleCentralPolicyGateShells();
+            collectGoogleWebResultCards().forEach((link, result) => {
+                const state = syncGoogleWebResultCentralPolicyGate(result, link, '', 'central-gate-microtask-scan');
+                if (state === 'ready' && !isGoogleCentralPolicyGateResultApproved(result, link)) {
+                    needsLocalApproval = true;
+                }
+            });
+        } catch (e) {}
+        return needsLocalApproval;
+    }
+
+    function queueGoogleCentralGateScan(revalidateLocal = false) {
+        if (revalidateLocal) googleCentralGateNeedsLocalPass = true;
+        if (googleCentralGateScanQueued) return;
+        googleCentralGateScanQueued = true;
+        queueMicrotask(() => {
+            googleCentralGateScanQueued = false;
+            const needsLocalPass = googleCentralGateNeedsLocalPass;
+            googleCentralGateNeedsLocalPass = false;
+            const needsLocalApproval = gateGoogleOrganicResultsImmediately();
+            // Google can update the text of an approved card without changing its URL.
+            // Finish its local nuclear/URL/text check in this same pre-paint microtask.
+            // Waiting for the normal 18ms + animation-frame pass visibly blanks cards.
+            if ((needsLocalPass || needsLocalApproval) && !isRedirecting && !isGoogleImageSearch()) {
+                blockResults();
+            }
+            if (!overlayRemoved && needsLocalPass) maybeReleaseOverlay();
+        });
+    }
+
+    function preGateGoogleCentralPolicyMutationNode(node, mutation = null, mutationOrigin = '') {
+        let needsLocalPass = false;
+        try {
+            const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
+            if (!element) return false;
+
+            const links = new Set();
+            const nearestLink = element.closest?.('a[href]');
+            if (nearestLink && isGoogleWebPrimaryResultLink(nearestLink)) links.add(nearestLink);
+            if (element.matches?.(GOOGLE_WEB_LOCAL_PRIMARY_LINK_SELECTOR) && isGoogleWebPrimaryResultLink(element)) {
+                links.add(element);
+            }
+            element.querySelectorAll?.(GOOGLE_WEB_LOCAL_PRIMARY_LINK_SELECTOR).forEach(link => {
+                if (isGoogleWebPrimaryResultLink(link)) links.add(link);
+            });
+            // Snippet/metadata text can change without including the title anchor in
+            // the mutated subtree. Resolve its nearest single-result shell as well;
+            // otherwise the central scan re-pends the card but never runs its local
+            // policy until the next 18ms/rAF scan, producing visible missing-card frames.
+            let ancestor = element;
+            for (let depth = 0; ancestor && depth < 14; depth++, ancestor = ancestor.parentElement) {
+                if (ancestor.matches?.('#search, #rso, #res')) break;
+                if (!ancestor.matches?.(GOOGLEJS_CENTRAL_GATE_SHELL_SELECTOR) ||
+                    countPrimaryResultLinksWithin(ancestor) !== 1) continue;
+                const primary = ancestor.querySelector(GOOGLE_WEB_LOCAL_PRIMARY_LINK_SELECTOR);
+                if (isGoogleWebPrimaryResultLink(primary)) {
+                    links.add(primary);
+                    break;
+                }
+            }
+
+            links.forEach(link => {
+                // Use the same normalized one-result card as blockResults().
+                // The former findGoogleWebResultContainer() call was undefined,
+                // so the observer silently skipped every affected mutation.
+                const result = getGoogleWebResultCard(link);
+                if (!result) return;
+                // Unchanged, approved cards never lose their ready state merely because
+                // Google updates some unrelated wrapper around the result.
+                const approvedByFastCheck = isGoogleCentralPolicyGateResultApproved(result, link);
+                const approvedByRecheck = approvedByFastCheck ||
+                    keepApprovedGoogleWebResultVisibleIfStillSafe(result, link);
+                if (approvedByRecheck) {
+                    setGoogleCentralPolicyGateShellState(result, link, 'ready');
+                } else {
+                    // A changed URL/text or new card must pass BOTH central and local
+                    // policy before its pending state is allowed to clear.
+                    setGoogleCentralPolicyGateShellState(result, link, 'pending', {
+                        source: 'early-gate-mutation',
+                        approvedByFastCheck,
+                        approvedByRecheck,
+                        mutation: describeGoogleGateMutation(mutation, mutationOrigin)
+                    });
+                    needsLocalPass = true;
+                }
+            });
+        } catch (e) {}
+        return needsLocalPass;
+    }
+
+    function installGoogleCentralPolicyEarlyGateObserver() {
+        if (googleCentralGateObserver) return;
+        ensureGoogleCentralPolicyGateStyle();
+        try {
+            googleCentralGateObserver = new MutationObserver(mutations => {
+                // MutationObserver callbacks run before rendering. Resolve a wrapper
+                // that has become shared BEFORE touching its individual cards, so its
+                // stale pending/blocked CSS never hides the approved siblings.
+                let needsLocalPass = false;
+                for (const mutation of mutations) {
+                    // Our search-tab classes live outside results. Ignore those;
+                    // class changes *inside* search matter because the early gate
+                    // stylesheet matches Google's mutable result class names.
+                    if (mutation.type === 'attributes' && mutation.attributeName === 'class' &&
+                        !mutation.target?.closest?.('#search, #rso, #res')) continue;
+                    if (releaseSharedGoogleGateShellsForMutation(mutation.target)) needsLocalPass = true;
+                    if (preGateGoogleCentralPolicyMutationNode(mutation.target, mutation, 'mutation-target')) needsLocalPass = true;
+                    if (mutation.type === 'attributes') continue;
+                    mutation.addedNodes?.forEach(node => {
+                        if (preGateGoogleCentralPolicyMutationNode(node, mutation, 'added-node')) needsLocalPass = true;
+                    });
+                }
+                if (needsLocalPass) {
+                    if (!overlayRemoved) googleOverlayLastResultChangeAt = Date.now();
+                    queueGoogleCentralGateScan(true);
+                }
+            });
+            googleCentralGateObserver.observe(document.documentElement, {
+                childList: true,
+                subtree: true,
+                characterData: true,
+                attributes: true,
+                attributeFilter: ['href', 'class']
+            });
+            queueGoogleCentralGateScan();
+        } catch (e) {}
+    }
+
+    // Install during script evaluation rather than waiting for DOMContentLoaded. MutationObserver
+    // callbacks run before the next paint, which is what turns async central-host filtering into a
+    // true no-glimpse gate instead of a visible-then-disappearing cleanup.
+    installGoogleCentralPolicyEarlyGateObserver();
+
+    function getGoogleWebResultOuterShellFromCard(card) {
+        try {
+            if (!card || !card.closest) return card;
+            for (const selector of GOOGLE_WEB_OUTER_RESULT_SHELL_SELECTORS) {
+                const candidate = card.closest(selector);
+                if (!candidate) continue;
+                const boundary = candidate.closest('#search, #rso, #res');
+                if (!boundary) continue;
+                if (countResultHeadingsWithin(candidate) <= 1 && countPrimaryResultLinksWithin(candidate) <= 1) {
+                    return candidate;
+                }
+            }
+        } catch (e) {}
+        return card;
+    }
+
+    function removeGoogleWebResultCardCompletely(card) {
+        try {
+            if (!card || !card.isConnected) return false;
+            const shell = getGoogleWebResultOuterShellFromCard(card) || card;
+            shell.setAttribute('data-googlejs-hidden-result-shell', '1');
+            hideElementSafely(shell);
+            shell.remove();
+            return true;
+        } catch (e) {
+            try {
+                hideElementSafely(card);
+                card.remove();
+                return true;
+            } catch (_) {}
+        }
+        return false;
+    }
+
+    const GOOGLE_ANDROID_WEB_RESULT_CARD_SELECTOR = [
+        '#main .Gx5Zad',
+        '#main .SoaBEf',
+        '#main .M8OgIe',
+        '#main .N54PNb',
+        '#main [data-snhf]',
+        '#main .MjjYud',
+        '#main .tF2Cxc',
+        '#main .g'
+    ].join(',');
+
+    const GOOGLE_ANDROID_WEB_RESULT_CARD_LOCAL_SELECTOR = [
+        '.Gx5Zad',
+        '.SoaBEf',
+        '.M8OgIe',
+        '.N54PNb',
+        '[data-snhf]',
+        '.MjjYud',
+        '.tF2Cxc',
+        '.g'
+    ].join(',');
+
+    function getGoogleAndroidWebResultCard(node) {
+        if (!isAndroid || !node || !node.closest) return null;
+        try {
+            const card = node.closest(GOOGLE_ANDROID_WEB_RESULT_CARD_LOCAL_SELECTOR);
+            if (!card || !card.closest('#main')) return null;
+            if (card.closest('header, nav, form, [role="dialog"]')) return null;
+            return card;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function getGoogleAndroidPrimaryResultLink(card) {
+        try {
+            if (!card || !card.querySelector) return null;
+
+            // Firefox Android can receive Google's compact mobile result markup where the
+            // visible result title is a role-heading/.BNeawe node rather than an h3/UWckNb
+            // desktop heading. Resolve that title back to its owning anchor first.
+            const titleNode = card.querySelector([
+                'h3',
+                '[role="heading"][aria-level="3"]',
+                '.BNeawe.vvjwJb',
+                '.vvjwJb'
+            ].join(','));
+            if (titleNode) {
+                const titleLink = titleNode.closest?.('a[href]') || titleNode.querySelector?.('a[href]');
+                if (titleLink?.href && !titleLink.href.startsWith('data:')) return titleLink;
+            }
+
+            const links = card.querySelectorAll('a[href]');
+            for (const link of links) {
+                const href = String(link.href || link.getAttribute('href') || '').trim();
+                if (!href || href.startsWith('data:') || href.startsWith('javascript:') || href.startsWith('#')) continue;
+
+                try {
+                    const parsed = new URL(href, location.href);
+                    const googleHost = /^(?:[a-z0-9-]+\.)*google\.[a-z.]+$/i.test(parsed.hostname);
+                    if (googleHost && (parsed.pathname === '/' || parsed.pathname.startsWith('/search'))) continue;
+                } catch (e) {}
+
+                const label = String(
+                    link.innerText || link.textContent || link.getAttribute('aria-label') || link.getAttribute('title') || ''
+                ).trim();
+                if (label || link.hasAttribute('data-ved')) return link;
+            }
+        } catch (e) {}
+        return null;
+    }
+
+    function collectGoogleWebResultCards() {
+        const cards = new Map();
+        try {
+            document.querySelectorAll(GOOGLE_WEB_PRIMARY_RESULT_LINK_SELECTOR).forEach(link => {
+                try {
+                    const card = getGoogleWebResultCard(link);
+                    if (!card || card.id === 'search' || card.id === 'rso' || card.id === 'res') return;
+                    if (!cards.has(card)) cards.set(card, link);
+                } catch (e) {}
+            });
+        } catch (e) {}
+
+        // Android Google can serve a compact/mobile organic-result DOM under #main instead
+        // of the desktop #search/#rso/#res + h3/UWckNb structure. Scan those one-result
+        // wrappers directly so resultHideTerms sees the full rendered card/snippet text.
+        if (isAndroid) {
+            try {
+                document.querySelectorAll(GOOGLE_ANDROID_WEB_RESULT_CARD_SELECTOR).forEach(card => {
+                    try {
+                        if (!card?.isConnected || cards.has(card)) return;
+                        if (card.closest('header, nav, form, [role="dialog"]')) return;
+                        const link = getGoogleAndroidPrimaryResultLink(card);
+                        if (!link) return;
+                        const text = String(card.innerText || card.textContent || '').trim();
+                        if (!text) return;
+                        cards.set(card, link);
+                    } catch (e) {}
+                });
+            } catch (e) {}
+        }
+
+        return cards;
+    }
+
+    // === ORGANIC RESULT DIAGNOSTICS (READ ONLY) ===
+    // Keep a bounded history because the normal per-pass audit is reset on each scan.
+    // This never changes a verdict, result container, or visibility decision.
+    const googleWebResultRemovalHistory = [];
+    const googleWebGateTransitionHistory = [];
+
+    function rememberGoogleWebResultRemoval(title, url, reason, match) {
+        googleWebResultRemovalHistory.push({
+            at: new Date().toISOString(),
+            pageStart: new URLSearchParams(location.search).get('start') || '0',
+            title: String(title || '').trim().slice(0, 160),
+            url: String(url || '').slice(0, 500),
+            reason: String(reason || '').slice(0, 100),
+            match: String(match || '').slice(0, 250)
+        });
+        if (googleWebResultRemovalHistory.length > 80) googleWebResultRemovalHistory.shift();
+    }
+
+    function rememberGoogleWebGateTransition(result, previous, next) {
+        if (previous === next) return;
+        if (previous !== 'ready' || next !== 'pending') return;
+        const title = result?.querySelector?.('h3')?.textContent || '';
+        googleWebGateTransitionHistory.push({
+            at: new Date().toISOString(),
+            pageStart: new URLSearchParams(location.search).get('start') || '0',
+            title: String(title).trim().slice(0, 160),
+            from: previous,
+            to: next
+        });
+        if (googleWebGateTransitionHistory.length > 80) googleWebGateTransitionHistory.shift();
+    }
+
+    try {
+        window.GoogleJS = window.GoogleJS || {};
+        window.GoogleJS.getResultRemovalHistory = () => googleWebResultRemovalHistory.map(entry => ({ ...entry }));
+        window.GoogleJS.getGateTransitionHistory = () => googleWebGateTransitionHistory.map(entry => ({ ...entry }));
+    } catch (e) {}
+
+    const googleWebResultAudit = {
+        timestamp: '',
+        detectedCards: 0,
+        keptCards: 0,
+        hiddenCards: 0,
+        preservedBroadContainers: 0,
+        hidden: []
+    };
+
+    function resetGoogleWebResultAudit(detectedCards) {
+        googleWebResultAudit.timestamp = new Date().toISOString();
+        googleWebResultAudit.detectedCards = detectedCards;
+        googleWebResultAudit.keptCards = 0;
+        googleWebResultAudit.hiddenCards = 0;
+        googleWebResultAudit.preservedBroadContainers = 0;
+        googleWebResultAudit.hidden = [];
+    }
+
+    function containsGoogleWebOrganicResult(element) {
+        try {
+            if (!element || !element.querySelector || !element.closest('#search, #rso, #res')) return false;
+            return !!element.querySelector(GOOGLE_WEB_LOCAL_PRIMARY_LINK_SELECTOR + ', h3');
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function restoreBroadContainerIfNeeded(element) {
+        try {
+            if (!element || !element.style) return;
+            if (element.getAttribute('data-googlejs-broad-selector-hidden') !== '1') return;
+            element.removeAttribute('data-googlejs-broad-selector-hidden');
+            element.removeAttribute('data-googlejs-hidden');
+            element.removeAttribute('aria-hidden');
+            ['display', 'visibility', 'opacity', 'pointer-events'].forEach(property => {
+                element.style.removeProperty(property);
+            });
+        } catch (e) {}
+    }
+
+    try {
+        window.GoogleJS = window.GoogleJS || {};
+        window.GoogleJS.getResultAudit = () => JSON.parse(JSON.stringify(googleWebResultAudit));
+    } catch (e) {}
+
+    function blockUrls() {
+        if (isRedirecting) return;
+        const isImageSearch = isGoogleImageSearch();
+        
+        try {
+            const links = document.getElementsByTagName("a");
+            for (let i = 0; i < links.length; ++i) {
+                const link = links[i];
+                if (!link.href || link.href.startsWith('data:')) continue;
+                // Never rewrite or treat Google's own page numbers as result URLs.
+                if (isGooglePaginationElement(link)) continue;
+
+                // Firefox-only synthetic/native search tabs are navigation controls, not results.
+                // The old URL sweeper inspected every <a> without consulting isProtectedElement(),
+                // so it deleted the synthetic tab links and left only the non-anchor More/Tools controls.
+                // Keep Chrome's path byte-for-byte behaviorally unchanged by gating this exemption to Firefox.
+                if (isFirefox && (
+                    link.closest?.(`#${FIREFOX_SEARCH_TABS_ID}`) ||
+                    isFirefoxSearchNavigationElement(link)
+                )) continue;
+
+                if (isNodeClicked(link)) continue;
+                if (isInsideOpenImagePreview(link)) continue;
+                if (!overlayRemoved && isWithinSuggestionNode(link)) continue;
+
+                // Organic web cards are handled once, as normalized cards, by blockResults().
+                // Never climb from one nested Chrome sitelink into a shared result bucket.
+                if (!isImageSearch && (
+                    link.closest?.('#search, #rso, #res') ||
+                    getGoogleAndroidWebResultCard(link)
+                )) continue;
+
+                if (!isResultURLAllowed(link.href) && !isFirefox && !isImageSearch) {
+                    try {
+                        const urlObj = new URL(link.href, location.origin);
+                        if (urlObj.pathname.includes('/search')) {
+                            const keepParams = ["q", "tbm", "tbs", "hl", "safe", "biw", "bih", "dpr", "ijn", "ei", "start", "source", "rlz", "oq", "gs_l", "sxsrf", "imgrc", "imgdii", "imgurl", "imgrefurl", "prev", "usg", "bvm", "psig", "ust", "chips", "asearch", "udm", "uact", "pbx", "sclient", "aqs", "gs_ivs", "iflsig", "ictx", "pws", "filter", "num"];
+                            let changed = false;
+                            const paramsArray = Array.from(urlObj.searchParams.keys());
+                            for (let j = 0; j < paramsArray.length; ++j) {
+                                if (!keepParams.includes(paramsArray[j])) {
+                                    urlObj.searchParams.delete(paramsArray[j]);
+                                    changed = true;
+                                }
+                            }
+                            if (changed) {
+                                link.href = urlObj.origin + urlObj.pathname + (urlObj.searchParams.toString() ? '?' + urlObj.searchParams.toString() : '');
+                            }
+                        }
+                    } catch (e) {}
+                }
+
+                const linkText = ((link.innerText || link.textContent || '') + ' ' + (link.getAttribute('aria-label') || '') + ' ' + (link.title || '')).toLowerCase();
+                const cacheKey = linkText.length + ':' + link.href;
+                if (link.getAttribute('data-gj-cache') === cacheKey) continue;
+
+                if (shouldRemoveElement(link.href, linkText, false, false)) {
+                    let parent = link;
+                    let levels = 0;
+                    while (parent && levels < 15) { 
+                        if (!parent.parentElement || parent === document.body || parent.id === "search" || parent.id === "Sva75c" || parent.tagName === "MAIN") break;
+                        
+                        if (parent.getAttribute('role') === 'listitem' && parent.closest('.JpOecb')) {
+                            hideElementSafely(parent);
+                            parent.remove();
+                            break;
+                        }
+
+                        if (
+                            parent.classList.contains('X4T0U') ||
+                            parent.classList.contains('sHEJob') ||
+                            parent.classList.contains('ObbMBf') ||
+                            parent.classList.contains('isv-r') ||
+                            parent.classList.contains('eA0Zlc') ||
+                            parent.classList.contains('vNFaUb') ||
+                            parent.classList.contains('XRVJtc') ||
+                            parent.classList.contains('b2Rnsc') ||
+                            parent.classList.contains('k8X5ve') ||
+                            (parent.classList.contains('EDblX') && !parent.classList.contains('JpOecb')) ||
+                            parent.classList.contains('PmEWq') || 
+                            parent.classList.contains('Ww4FFb') || 
+                            parent.classList.contains('vt6azd') || 
+                            parent.classList.contains('wHYlTd') || 
+                            parent.classList.contains('GKS7s') || 
+                            parent.classList.contains('vtSz8d') || 
+                            parent.classList.contains('QpPSMb') || 
+                            parent.classList.contains('kJSB8')  || 
+                            parent.classList.contains('e8Ck0d') || 
+                            parent.classList.contains('mW90w')  ||
+                            parent.classList.contains('vCUuC')  || 
+                            parent.classList.contains('p7bv')   || 
+                            parent.classList.contains('kwICDb') || 
+                            parent.classList.contains('oYLlHe') ||
+                            parent.classList.contains('m3LIae') || 
+                            parent.classList.contains('ddkIM')     
+                        ) {
+                            hideElementSafely(parent);
+                            parent.remove();
+                            break;
+                        }
+                        parent = parent.parentElement; levels++;
+                    }
+                    hideElementSafely(link);
+                    link.remove();
+                } else {
+                    link.setAttribute('data-gj-cache', cacheKey);
+                }
+            }
+        } catch (e) {}
+    }
+
+    function blockResults() {
+        if (isRedirecting) return;
+        try {
+            const cards = collectGoogleWebResultCards();
+            resetGoogleWebResultAudit(cards.size);
+
+            cards.forEach((link, result) => {
+                try {
+                    if (!result || !result.isConnected) return;
+                    if (isNodeClicked(result)) return;
+                    if (isInsideOpenImagePreview(result)) return;
+                    if (!overlayRemoved && isWithinSuggestionNode(result)) return;
+
+                    // Use the card's rendered text plus the primary title/link only.
+                    // Do not concatenate every hidden aria-label/title descendant: Chrome's
+                    // accessibility and menu payloads differ from Firefox and can contain
+                    // unrelated blocked words that are not part of the actual result.
+                    const heading = link && (link.querySelector('h3') || link.closest('h3'));
+                    const titleText = String((heading && (heading.innerText || heading.textContent)) ||
+                        (link && (link.innerText || link.textContent)) || '');
+                    const resultText = getGoogleWebResultPolicyText(result, link);
+
+                    const resultUrl = link && link.href && !link.href.startsWith('data:') ? link.href : '';
+                    const centralGateState = syncGoogleWebResultCentralPolicyGate(result, link, resultText, 'blockResults-central-check');
+                    const cacheKey = resultText.length + ':' + resultUrl;
+                    if (centralGateState === 'ready' &&
+                        isGoogleCentralPolicyGateResultApproved(result, link) &&
+                        result.getAttribute('data-gj-cache') === cacheKey) {
+                        googleWebResultAudit.keptCards++;
+                        return;
+                    }
+
+                    const decision = decideResultPolicy(resultUrl, resultText, false, false);
+                    if (shouldWaitForGoogleAllowedResultAccount(resultUrl, resultText, false, decision)) {
+                        // This is NOT an approval; the finished account check will
+                        // classify and either rescue or remove the soft-matching card.
+                        googleCentralGateApprovedSignals.delete(result);
+                        result.removeAttribute('data-gj-cache');
+                        result.setAttribute('data-googlejs-organic-card', '1');
+                        setGoogleCentralPolicyGateShellState(result, link, 'pending', {
+                            source: 'blockResults-account-exception-wait',
+                            centralState: centralGateState
+                        });
+                        return;
+                    }
+                    if (decision.action === POLICY_ACTION.HIDE) {
+                        googleWebResultAudit.hiddenCards++;
+                        if (googleWebResultAudit.hidden.length < 20) {
+                            googleWebResultAudit.hidden.push({
+                                title: titleText.trim().slice(0, 180),
+                                url: resultUrl,
+                                reason: decision.reason || '',
+                                match: String(decision.match || '').slice(0, 180)
+                            });
+                        }
+                        rememberGoogleWebResultRemoval(titleText, resultUrl, decision.reason, decision.match);
+                        removeGoogleWebResultCardCompletely(result);
+                    } else if (centralGateState === 'blocked') {
+                        // Never let a new hard central denial fall through to the ready branch.
+                        googleWebResultAudit.hiddenCards++;
+                        // Preserve the actual denied URL in diagnostics. A Google /goto wrapper
+                        // and the displayed publisher URL can have different central verdicts.
+                        const blockedCentralCandidate = getGoogleResultCentralPolicyCandidates(
+                            resultUrl, getGoogleWebResultCentralPolicyText(result, link)
+                        ).find(candidate => GJ_centralPolicyCachedVerdict(candidate) === 'block') || '';
+                        rememberGoogleWebResultRemoval(titleText, resultUrl, 'central-gate-block', blockedCentralCandidate);
+                        removeGoogleWebResultCardCompletely(result);
+                    } else if (centralGateState === 'pending') {
+                        // Local policy found nothing wrong, but the authoritative hosts verdict has
+                        // not returned yet. Keep the card invisible and deliberately uncached so the
+                        // follow-up central-policy pass can either reveal it or remove it.
+                        result.removeAttribute('data-gj-cache');
+                        result.setAttribute('data-googlejs-organic-card', '1');
+                    } else {
+                        googleWebResultAudit.keptCards++;
+                        rememberGoogleCentralPolicyGateApproval(result, link, resultUrl,
+                            getGoogleCentralPolicyGateResultSignature(result, link));
+                        setGoogleCentralPolicyGateShellState(result, link, 'ready');
+                        result.setAttribute('data-gj-cache', cacheKey);
+                        result.setAttribute('data-googlejs-organic-card', '1');
+                    }
+                } catch (e) {}
+            });
+        } catch (e) {}
+    }
+
+    function blockElementsBySelectors() {
+        if (isRedirecting) return;
+        try {
+            const selectorsToHide = [
+                'span.gL9Hy', '.spell_orig', '.KDCVqf.card-section.p64x9c', '#taw',
+                '.QRYxYe', '.NNMgCf',
+                'div[role="listitem"]:has(a[href*="udm=39"])',
+                'div[role="listitem"]:has(a[href*="udm=50"])'
+            ];
+            selectorsToHide.forEach(selector => {
+                const elements = document.querySelectorAll(selector);
+                elements.forEach(element => {
+                    if (isProtectedElement(element) || isInsideOpenImagePreview(element)) return;
+
+                    // Chrome can place perfectly ordinary later-page results inside #bres /
+                    // .ULSxyf / other broad buckets. Firefox often does not. Never hide a
+                    // broad cleanup wrapper when it contains a real organic heading/link.
+                    if (containsGoogleWebOrganicResult(element)) {
+                        restoreBroadContainerIfNeeded(element);
+                        element.setAttribute('data-googlejs-organic-container', '1');
+                        googleWebResultAudit.preservedBroadContainers++;
+                        return;
+                    }
+
+                    const txt = element.textContent || '';
+                    if (element.getAttribute('data-gj-cache') === String(txt.length)) return;
+
+                    if (!containsSearchAllowTerms(txt)) {
+                        element.setAttribute('data-googlejs-broad-selector-hidden', '1');
+                        hideElementSafely(element);
+                    } else {
+                        element.setAttribute('data-gj-cache', String(txt.length));
+                    }
+                });
+            });
+        } catch (e) {}
+    }
+
+    function blockElementsByPhrases() {
+        if (isRedirecting) return;
+        try {
+            const phrasesToHide = [
+                /Näytetään tulokset haulla/i,
+                /Hae kyselyllä/i,
+                /Tarkoititko/i,
+                /Showing results for:/i,
+                /Search with query:/i,
+                /Did you mean:/i
+            ];
+            const elements = document.querySelectorAll('div, span, p, a, i');
+            elements.forEach(element => {
+                if (isRedirecting) return;
+                if (isProtectedElement(element) || isInsideOpenImagePreview(element)) return;
+                const textContent = element.textContent || '';
+                if (element.getAttribute('data-gj-cache') === String(textContent.length)) return;
+
+                const phraseHit = phrasesToHide.some(phrase => phrase.test(textContent));
+                if (phraseHit) {
+                    // Correction banners are usually short. This prevents an outer page wrapper
+                    // from redirecting just because it contains both a phrase and unrelated result text.
+                    if (textContent.length <= 700) {
+                        const suggestionMatch = getSuggestionForbiddenMatch(textContent);
+                        if (suggestionMatch) {
+                            overlay && (overlay.style.display = 'block');
+                            doRedirect('correction-phrase', suggestionMatch);
+                            return;
+                        }
+                    }
+
+                    if (!containsSearchAllowTerms(textContent)) {
+                        hideElementSafely(element);
+                        return;
+                    }
+                }
+
+                element.setAttribute('data-gj-cache', String(textContent.length));
+            });
+        } catch (e) {}
+    }
+
+    function hasForbiddenSuggestionText() {
+        // This is checked twice around overlay release. One combined selector
+        // preserves the same matched nodes without 16 separate DOM queries.
+        const elements = document.querySelectorAll(GOOGLE_SUGGESTION_SELECTOR);
+        for (let i = 0; i < elements.length; ++i) {
+            if (isPromoBannerNode(elements[i])) continue;
+            const txt = elements[i].textContent || '';
+            if (getSuggestionForbiddenMatch(txt)) return true;
+        }
+        return false;
+    }
+
+    function ffAndroidSuggestionScanAndRedirect() {
+        if (!isFirefoxAndroid || isRedirecting) return false;
+
+        const selectors = getSuggestionSelectors().concat([
+            'div[aria-live]',
+            'div[role="alert"]',
+            'div[aria-atomic]'
+        ]);
+        let redirected = false;
+
+        for (let s = 0; s < selectors.length && !redirected; ++s) {
+            const nodes = document.querySelectorAll(selectors[s]);
+            for (let i = 0; i < nodes.length && !redirected; ++i) {
+                if (isPromoBannerNode(nodes[i])) continue; 
+                const txt = nodes[i].textContent || '';
+                if (!txt) continue;
+
+                const hasForbidden = getSuggestionForbiddenMatch(txt);
+                if (hasForbidden) {
+                    overlay && (overlay.style.display = 'block');
+                    doRedirect('ffAndroid:' + selectors[s], hasForbidden);
+                    redirected = true;
+                }
+            }
+        }
+        return redirected;
+    }
+
+    function monitorSelectorsAndRedirect() {
+        const selectors = getSuggestionSelectors();
+        let redirected = false;
+        for (let s = 0; s < selectors.length; ++s) {
+            const elements = document.querySelectorAll(selectors[s]);
+            for (let i = 0; i < elements.length; ++i) {
+                if (isPromoBannerNode(elements[i])) continue; 
+                const txt = elements[i].textContent || '';
+
+                const forbiddenMatch = getSuggestionForbiddenMatch(txt);
+                if (forbiddenMatch) {
+                    overlay && (overlay.style.display = 'block');
+                    if (!redirected) { redirected = true; doRedirect('selector:' + selectors[s], forbiddenMatch); }
+                }
+            }
+        }
+
+        if (!redirected && isFirefoxAndroid) {
+            ffAndroidSuggestionScanAndRedirect();
+        }
+    }
+
+    // Content-aware image-result cache. A URL can change while the total text/URL
+    // length stays the same; the old length-only cache skipped that hard-deny update.
+    const googleImageApprovedSignals = new WeakMap();
+
+    function blockImageResults() {
+        if (isRedirecting) return;
+        try {
+            if (!isGoogleImageSearch()) return;
+            document.documentElement.classList.add('googlejs-image-search-active');
+
+            removeGoogleImagesRelatedPreviewBlocks();
+            removeGoogleImagesRelatedSearchBlocks();
+
+            const candidates = new Set();
+            const selectors = [
+                '.isv-r', '.rg_bx', '.eA0Zlc', '.wXeWr', '.TygpHb',
+                '[data-snc][data-snm] > .kb0PBd',
+                '[data-attrid="images universal"]',
+                'a[href*="/imgres"], a[href*="imgurl="], a[href*="imgrefurl="]'
+            ];
+
+            document.querySelectorAll(selectors.join(',')).forEach(node => {
+                try {
+                    if (!node || node.nodeType !== 1) return;
+                    if (isInsideOpenImagePreview(node)) return;
+                    if (isGoogleImagesRelatedSearchBlock(node)) return;
+                    if (node.closest && node.closest('.BA0zte')) return;
+                    if (node.closest('[data-googlejs-hidden="1"]')) return;
+                    candidates.add(getGoogleImageCardRoot(node));
+                } catch (e) {}
+            });
+
+            candidates.forEach(container => {
+                try {
+                    if (!container || container.nodeType !== 1) return;
+                    if (isInsideOpenImagePreview(container)) return;
+                    if (isGoogleImagesRelatedSearchBlock(container) || (container.closest && container.closest('.BA0zte'))) {
+                        removeGoogleImagesRelatedSearchBlocks();
+                        return;
+                    }
+                    if (container.closest('[data-googlejs-hidden="1"]')) return;
+
+                    const signal = collectGoogleImageSignal(container);
+                    const cacheKey = String(signal.length);
+                    if (container.getAttribute('data-gj-cache-img') === cacheKey &&
+                        container.getAttribute('data-googlejs-cleared') === '1' &&
+                        !container.hasAttribute('data-googlejs-image-policy-pending') &&
+                        googleImageApprovedSignals.get(container) === signal) return;
+
+                    // Only soft-matching, allowlisted images can wait for account
+                    // identification. A nuclear, URL, TLD or central denial never waits.
+                    const awaitAccount = !braveFoxInitialGoogleAccountScopeSettled &&
+                        shouldWaitForGoogleAllowedResultAccount('', signal, true,
+                            decideResultPolicy('', signal, true, false));
+                    if (awaitAccount) {
+                        googleImageApprovedSignals.delete(container);
+                        markGoogleImageCardPending(container);
+                    } else if (shouldRemoveGoogleImageNode(container, signal)) {
+                        googleImageApprovedSignals.delete(container);
+                        hideGoogleImageCard(container);
+                    } else {
+                        const centralState = getGoogleResultCentralPolicyGateState('', signal);
+                        if (centralState === 'blocked') {
+                            googleImageApprovedSignals.delete(container);
+                            hideGoogleImageCard(container);
+                        } else if (centralState === 'pending') {
+                            googleImageApprovedSignals.delete(container);
+                            container.removeAttribute('data-gj-cache-img');
+                            markGoogleImageCardPending(container);
+                        } else {
+                            googleImageApprovedSignals.set(container, signal);
+                            container.setAttribute('data-gj-cache-img', cacheKey);
+                            markGoogleImageCardCleared(container);
+                        }
+                    }
+                } catch (e) {}
+            });
+
+            googleImagesFirstPassDone = true;
+            try { document.body && document.body.setAttribute('data-googlejs-images-ready', '1'); } catch (e) {}
+        } catch (e) {
+            googleImagesFirstPassDone = true;
+        }
+    }
+
+    function removeBlockedGoogleImageResults() {
+        // Kept as a compatibility alias for the older call sites.
+        blockImageResults();
+    }
+
+    // The white overlay is a page-wide release barrier, not merely a DOM-ready timer.
+    // Only show the search page after local and central decisions are complete for every
+    // live organic card. A short quiet period absorbs Google's initial hydration burst.
+    let googleOverlayReleaseTimer = null;
+    let googleOverlayLastResultChangeAt = Date.now();
+    let googleInitialFullFilterPassCompleted = false;
+    const GOOGLEJS_OVERLAY_RESULT_SETTLE_MS = 45;
+
+    function areGoogleOverlayResultDecisionsComplete() {
+        if (!GJ_centralPolicySnapshotLoaded || !braveFoxInitialGoogleAccountScopeSettled ||
+            !googleInitialFullFilterPassCompleted) return false;
+        // Web Search protects each unapproved card independently below; a pending
+        // scan must not starve the full-page reveal indefinitely.
+        // Keep Image Search's original strict readiness barrier.
+        if (isGoogleImageSearch() &&
+            (googleCentralGateScanQueued || googleCentralGateNeedsLocalPass || filteringScheduled)) return false;
+        if (isGoogleImageSearch()) {
+            if (!googleImagesFirstPassDone) return false;
+            return !document.querySelector(
+                '.isv-r:not([data-googlejs-cleared="1"]):not([data-googlejs-hidden="1"]), ' +
+                '.eA0Zlc:not([data-googlejs-cleared="1"]):not([data-googlejs-hidden="1"]), ' +
+                '.rg_bx:not([data-googlejs-cleared="1"]):not([data-googlejs-hidden="1"])'
+            );
+        }
+
+        const cards = collectGoogleWebResultCards();
+        if (!cards.size && !document.querySelector('#search, #rso, #res')) return false;
+        for (const [result, link] of cards) {
+            if (!result.isConnected) continue;
+            const url = link.href && !link.href.startsWith('data:') ? link.href : '';
+            const centralState = getGoogleResultCentralPolicyGateState(url,
+                getGoogleWebResultCentralPolicyText(result, link));
+            const approved = centralState !== 'blocked' &&
+                isGoogleCentralPolicyGateResultApproved(result, link);
+            const shells = getGoogleCentralPolicyGateShellFamily(result, link);
+            if (approved && [...shells].every(shell => shell.getAttribute(GOOGLEJS_CENTRAL_GATE_ATTR) === 'ready')) {
+                continue;
+            }
+
+            // A slow/failed background verdict must not make the entire Google results page
+            // permanently white after the initial local filters, account scope, and central
+            // snapshot have finished. Keep this specific unapproved card hidden instead.
+            // This never approves it: the ordinary callback still decides remove vs. ready.
+            setGoogleCentralPolicyGateShellState(result, link, 'pending', {
+                source: 'overlay-result-release-check',
+                centralState,
+                approvedByFastCheck: approved
+            });
+            if (!shells.size || getComputedStyle(result).visibility !== 'hidden') return false;
+        }
+        return true;
+    }
+
+    function removeOverlayNow() {
+        if (overlayRemoved) return;
+        // Only called after the existing full local, account, and central-policy
+        // release barrier succeeds. Clean up duplicate covers left by interrupted
+        // injections, too, so an old one cannot keep an approved page white.
+        document.querySelectorAll('[id="google-blocker-blank"]').forEach(node => {
+            try { node.parentNode && node.parentNode.removeChild(node); } catch (e) {}
+        });
+        overlayRemoved = true;
+        try {
+            document.documentElement.setAttribute('data-googlejs-startup-phase', 'released');
+            document.documentElement.setAttribute('data-googlejs-overlay-wait', 'released');
+        } catch (e) {}
+        if (googleOverlayRecoveryTimer !== null) {
+            clearTimeout(googleOverlayRecoveryTimer);
+            googleOverlayRecoveryTimer = null;
+        }
+        devLog('Overlay removed (safe)');
+    }
+
+    // The one-shot release timer can be canceled while Google is hydrating or
+    // classification is in flight. Always retry from a separate, bounded monitor.
+    // This does NOT release a pending/blocked card or skip any policy checks.
+    let googleOverlayRecoveryTimer = null;
+    let googleOverlayRecoveryChecks = 0;
+    function scheduleGoogleOverlayRecovery() {
+        if (googleOverlayRecoveryTimer !== null || overlayRemoved || isRedirecting) return;
+        const delay = googleOverlayRecoveryChecks === 0 ? 650 :
+            googleOverlayRecoveryChecks < 12 ? 350 : 900;
+        googleOverlayRecoveryTimer = setTimeout(() => {
+            googleOverlayRecoveryTimer = null;
+            if (overlayRemoved || isRedirecting) return;
+            googleOverlayRecoveryChecks++;
+            if (document.readyState !== 'loading') {
+                // Recover from a missed notification as well as from an approval
+                // state that changed during a canceled one-shot release.
+                if (!filteringScheduled) mainFilteringThrottled();
+                maybeReleaseOverlay();
+            }
+            scheduleGoogleOverlayRecovery();
+        }, delay);
+    }
+
+    function maybeReleaseOverlay() {
+        // Accessible even when DevTools is in a different JavaScript execution world.
+        // This status is observational only and does not change approval decisions.
+        if (!overlayRemoved) {
+            const blockers = [];
+            if (isRedirecting) blockers.push('redirecting');
+            if (document.readyState === 'loading') blockers.push('document-loading');
+            if (!GJ_centralPolicySnapshotLoaded) blockers.push('central-snapshot');
+            if (!braveFoxInitialGoogleAccountScopeSettled) blockers.push('account-detection');
+            if (!googleInitialFullFilterPassCompleted) blockers.push('initial-local-pass');
+            if (isGoogleImageSearch() && !googleImagesFirstPassDone) blockers.push('image-first-pass');
+            try { document.documentElement.setAttribute('data-googlejs-overlay-wait', blockers.join(',') || 'result-release-check'); } catch (e) {}
+        }
+        if (isRedirecting || overlayRemoved || document.readyState === 'loading') return;
+        if (hasForbiddenSuggestionText() || !areGoogleOverlayResultDecisionsComplete()) {
+            if (googleOverlayReleaseTimer !== null) {
+                clearTimeout(googleOverlayReleaseTimer);
+                googleOverlayReleaseTimer = null;
+            }
+            return;
+        }
+        if (googleOverlayReleaseTimer !== null) return;
+        const quietTimeLeft = Math.max(0, GOOGLEJS_OVERLAY_RESULT_SETTLE_MS -
+            (Date.now() - googleOverlayLastResultChangeAt));
+        googleOverlayReleaseTimer = setTimeout(() => {
+            googleOverlayReleaseTimer = null;
+            // A fresh Google mutation or outstanding async verdict cancels release.
+            if (isRedirecting || overlayRemoved || document.readyState === 'loading' ||
+                hasForbiddenSuggestionText() || !areGoogleOverlayResultDecisionsComplete()) return;
+            if (Date.now() - googleOverlayLastResultChangeAt < GOOGLEJS_OVERLAY_RESULT_SETTLE_MS) {
+                maybeReleaseOverlay();
+                return;
+            }
+            removeOverlayNow();
+        }, Math.max(quietTimeLeft, isGoogleImageSearch() ? 35 : 45));
+    }
+
+    try {
+        window.GoogleJS = window.GoogleJS || {};
+        window.GoogleJS.getOverlayGateStatus = () => ({
+            overlayRemoved,
+            initialFullFilterPassCompleted: googleInitialFullFilterPassCompleted,
+            overlayCount: document.querySelectorAll('[id="google-blocker-blank"]').length,
+            forbiddenSuggestion: hasForbiddenSuggestionText(),
+            pendingOrUnapprovedCards: [...collectGoogleWebResultCards()].filter(([card, link]) =>
+                card.isConnected && !isGoogleCentralPolicyGateResultApproved(card, link)).length,
+            elapsedSinceLastResultChangeMs: Date.now() - googleOverlayLastResultChangeAt,
+            accountDetectionSettled: braveFoxInitialGoogleAccountScopeSettled,
+            centralSnapshotLoaded: GJ_centralPolicySnapshotLoaded,
+            centralQueuedURLs: GJ_centralPolicyPending.size,
+            centralInFlightURLs: GJ_centralPolicyInFlight.size,
+            scanQueued: googleCentralGateScanQueued,
+            filteringScheduled,
+            liveCards: collectGoogleWebResultCards().size
+        });
+    } catch (e) {}
+
+    function tryRemoveOverlayOnHomepage() {
+        if (isRedirecting || overlayRemoved) return;
+        if (document.readyState === 'loading') return;
+        
+        if (window.location.pathname === "/" && !new URLSearchParams(window.location.search).has('q')) {
+            removeOverlayNow();
+        }
+    }
+
+    let filteringScheduled = false;
+    function mainFilteringThrottled() {
+        if (filteringScheduled) return;
+        filteringScheduled = true;
+        let completed = false;
+        let fallbackTimer = null;
+        const completePass = () => {
+            if (completed) return;
+            completed = true;
+            if (fallbackTimer !== null) clearTimeout(fallbackTimer);
+            try {
+                mainFiltering();
+            } catch (error) {
+                // A transient Google DOM error must never leave the scheduler
+                // permanently set to busy, trapping the safety overlay forever.
+                devLog('Filtering pass failed:', error);
+            } finally {
+                filteringScheduled = false;
+                if (!overlayRemoved) maybeReleaseOverlay();
+            }
+        };
+        try { requestAnimationFrame(completePass); } catch (e) {}
+        // Browser background throttling or a missed animation frame cannot leave
+        // an approved page stuck behind the overlay indefinitely.
+        fallbackTimer = setTimeout(completePass, 280);
+    }
+
+    function mainFiltering() {
+        if (isRedirecting) return;
+        devLog('Main filtering');
+        
+        removeGoogleRecommendedSearchChips();
+        ensureFirefoxSearchTabs();
+        restoreFirefoxSearchNavigation();
+        removePromoBanners();
+        if (typeof hideGoogleAIModeButton === 'function') hideGoogleAIModeButton();
+        swapSearchTabs(); 
+        
+        const sp = new URLSearchParams(window.location.search);
+        const q = sp.get('q') || '';
+        const bad = containsForbiddenKeywords(q);
+        if (bad) {
+            overlay && (overlay.style.display = 'block');
+            doRedirect('late-query', bad);
+            return;
+        }
+
+        monitorSelectorsAndRedirect();
+        if (isRedirecting) return;
+
+        if (isGoogleImageSearch()) {
+            // Google Images has its own URL/text/card scanner. Running the generic web-result
+            // scanners here causes lag and can climb into the image grid wrappers in normal mode.
+            blockImageResults();
+            blockElementsBySelectors();
+        } else {
+            blockResults();
+            blockUrls();
+            blockElementsBySelectors();
+            blockElementsByPhrases();
+        }
+
+        googleInitialFullFilterPassCompleted = true;
+        if (!overlayRemoved) {
+            try { document.documentElement.setAttribute('data-googlejs-startup-phase', 'local-filtering-complete'); } catch (e) {}
+        }
+        maybeReleaseOverlay();
+        tryRemoveOverlayOnHomepage();
+    }
+
+    let googleOrdinaryRescanTimer = null;
+    function startFilteringAndObserve() {
+        devLog('Setting up mutation observer');
+        interceptSearchInputChanges();
+
+        const container = (isFirefoxAndroid ? document.documentElement : (document.body || document.documentElement));
+        domObserver = new MutationObserver((mutations) => {
+            if (isRedirecting) return;
+            if (isGoogleImageSearch()) {
+                try { removeGoogleImagesRelatedPreviewBlocks(); } catch (e) {}
+                try { removeGoogleImagesRelatedSearchBlocks(); } catch (e) {}
+            }
+            if (mutationTouchesOnlyOpenImagePreview(mutations)) return;
+            // Deleting an already-vetted card/banner cannot introduce new content.
+            // Avoid an expensive recursive full-page scan triggered solely by our
+            // own removals. Mixed remove+insert, text, and attribute changes still
+            // take the normal fail-closed filtering path.
+            if (mutations.length && mutations.every(mutation =>
+                mutation.type === 'childList' &&
+                mutation.addedNodes.length === 0 && mutation.removedNodes.length > 0)) return;
+            if (googleOrdinaryRescanTimer !== null) return;
+            googleOrdinaryRescanTimer = setTimeout(() => {
+                googleOrdinaryRescanTimer = null;
+                if (isRedirecting) return;
+                mainFilteringThrottled();
+            }, isGoogleImageSearch() ? 8 : 0);
+        });
+
+        const observerOptions = isFirefoxAndroid
+            // Keep Android observation narrow: watch structural/text changes plus the few attributes
+            // Google mutates when it recycles a mobile result card. Filtering-owned class/style/data
+            // changes are excluded, so this does not recreate the old self-triggering layout loop.
+            ? {
+                childList: true,
+                subtree: true,
+                characterData: true,
+                attributes: true,
+                attributeFilter: ['href', 'aria-label', 'title']
+            }
+            : { childList: true, subtree: true };
+
+        try { domObserver.observe(container, observerOptions); } catch (e) {}
+        devLog('Observer attached to: ' + (container === document.documentElement ? 'documentElement' : container.id || container.nodeName));
+
+        if (isFirefoxAndroid) {
+            try {
+                ffAndroidScanAttempts = 0;
+                ffAndroidScanInterval = setInterval(() => {
+                    if (isRedirecting) {
+                        clearInterval(ffAndroidScanInterval);
+                        ffAndroidScanInterval = null;
+                        return;
+                    }
+                    ffAndroidScanAttempts++;
+                    ffAndroidSuggestionScanAndRedirect();
+                    maybeReleaseOverlay();
+                    if (ffAndroidScanAttempts > 120) {
+                        clearInterval(ffAndroidScanInterval);
+                        ffAndroidScanInterval = null;
+                    }
+                }, 500);
+                devLog('FF Android periodic scanner started');
+            } catch (e) {}
+        }
+
+        mainFiltering();
+    }
+
+    function enforceSafeSearch() {
+        try {
+            document.cookie = "PREF=f2=8000000; domain=.google.com; path=/; secure";
+            devLog('SafeSearch cookie set');
+        } catch (e) {}
+    }
+    enforceSafeSearch();
+
+    const bodyObserver = new MutationObserver(cleanGoogleUrl);
+    function waitForBodyAndObserve() {
+        if (document.body) {
+            try {
+                bodyObserver.observe(document.body, { childList: true, subtree: true });
+                devLog('Body observer established');
+            } catch (e) {}
+        } else {
+            setTimeout(waitForBodyAndObserve, 20);
+        }
+    }
+    waitForBodyAndObserve();
+
+    function init() {
+        // Start recovery before filtering so even an exception during the first
+        // Google DOM pass cannot strand the overlay with no future wake-up.
+        scheduleGoogleOverlayRecovery();
+        startFilteringAndObserve();
+    }
+
+    if (document.readyState === "loading") {
+        devLog('Document loading - waiting for DOMContentLoaded');
+        document.addEventListener('DOMContentLoaded', init, { once: true });
+    } else {
+        devLog('Document ready - starting immediately');
+        init();
+    }
+
+    devLog('=== GOOGLE.JS INITIALIZATION COMPLETE ===');
+})();
