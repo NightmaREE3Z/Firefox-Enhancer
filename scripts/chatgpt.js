@@ -76,6 +76,12 @@
   const PERSONALIZATION_PROMPT = 'ChatGPT yksilöintiasetukset on salasanasuojattu, anna salasana jatkaaksesi.';
   const MEMORY_SUMMARY_PROMPT = 'Muistot on salasanasuojattu, anna salasana jatkaaksesi.';
   const PERSONALIZATION_PATH = '/settings/personalization';
+  const SPACE_PATH = '/space';
+  const SPACE_TABS_WAIT_CLASS = 'bravefox-space-tabs-pending';
+  const SPACE_TAB_HIDDEN_ATTR = 'data-bravefox-space-tab-hidden';
+  const PERSONALIZATION_MEMORY_ROW_SELECTOR = '#personalization-unified-memory, [data-settings-search-entry="personalization-unified-memory"]';
+  const PERSONALIZATION_VOICE_ROW_SELECTOR = '#personalization-voice, [data-settings-search-entry="personalization-voice"]';
+  const PERSONALIZATION_CODEX_ROW_SELECTOR = '#personalization-codex-instructions, [data-settings-search-entry="personalization-codex-instructions"]';
   // Password-gate master switch.
   // false = normal BraveFox password protection is active.
   // true  = diagnostic bypass only; do not ship enabled.
@@ -88,6 +94,9 @@
   const PERSONALIZATION_INSTRUCTIONS_PARAM = 'instructions';
   const PERSONALIZATION_CHATGPT_INSTRUCTIONS = 'chatgpt';
   const PERSONALIZATION_INSTRUCTIONS_PROMPT = 'ChatGPT mukautetut ohjeet on salasanasuojattu, anna salasana jatkaaksesi.';
+  const CHATGPT_INSTRUCTIONS_ROW_SELECTOR = '#personalization-chatgpt-instructions, [data-settings-search-entry="personalization-chatgpt-instructions"]';
+  const INSTRUCTIONS_AUTH_BRIDGE_HASH = '#settings/personalization?bravefox-instructions-auth=1';
+  const SETTINGS_AUTH_BRIDGE_HASH = '#settings/personalization?bravefox-settings-auth=1';
   const PERSONALIZATION_AUTH_BRIDGE_PARAM = 'bravefox-auth-return';
   const PERSONALIZATION_AUTH_HANDOFF_KEY = 'bravefoxChatGptPersonalizationAuthHandoff_v1';
   const AUTH_LOOP_GUARD_KEY = 'bravefoxChatGptAuthLoopGuard_v1';
@@ -130,7 +139,7 @@
   const VOICE_DISABLED_ATTR = 'data-bravefox-voice-disabled';
   // The PWA can render the composer Voice launcher for a frame before general
   // UI cleanup. These exact semantics are CSS-blocked from document_start.
-  // Never include Start dictation, microphone inputs, or message Read Aloud.
+  // Keep the voice-mode launcher distinct from dictation and Read Aloud.
   const VOICE_LAUNCH_BUTTON_SELECTOR = [
     'button[aria-label="Start Voice" i]',
     'button[aria-label="Start voice mode" i]',
@@ -150,6 +159,15 @@
     ':is(form, [data-testid*="composer" i], [class*="composer"]) button[aria-label="Voice mode" i]',
     ':is(form, [data-testid*="composer" i], [class*="composer"]) button[aria-label="Puhetila" i]',
     ':is(form, [data-testid*="composer" i], [class*="composer"]) button[aria-label="Äänitila" i]'
+  ].join(', ');
+  // The November 2026 composer briefly shows a disabled microphone during
+  // hydration. Suppress that native dictation button independently, using the
+  // localized action label and the stable SVG fragment rather than CSS hashes.
+  const DICTATION_MICROPHONE_BUTTON_SELECTOR = [
+    'button[aria-label="Sanele" i]',
+    'button[aria-label="Dictate" i]',
+    'button[aria-label="Start dictation" i]',
+    ':is(form, [data-testid*="composer" i], [class*="composer"]) button:has(svg use[href*="#codex-icon-microphone-light-"])'
   ].join(', ');
   const CODEX_MODE_BUTTON_SELECTOR = [
     'button[aria-haspopup="menu"][aria-label^="Vaihda tilaa, nykyinen tila:"]',
@@ -270,6 +288,9 @@
   ];
 
   const BILLING_UPDATE_BUTTON_LABELS = new Set([
+    'korota tilausluokkaa',
+    'upgrade plan',
+    'upgrade subscription',
     'päivitä tilaus',
     'paivita tilaus',
     'päivitä',
@@ -340,7 +361,7 @@
   // ChatGPT mounts the sidebar in stages. Keep the early navigation rows hidden until
   // the real Library button exists, then reveal that top group together. Recent chats stay
   // hidden until the real Projects section exists, so both late-loading areas settle together.
-  const SIDEBAR_LIBRARY_LABELS = new Set(['kirjasto', 'library']);
+  const SIDEBAR_LIBRARY_LABELS = new Set(['kirjasto', 'library', 'tila', 'space']);
   const SIDEBAR_NEW_CHAT_LABELS = new Set(['uusi keskustelu', 'new chat']);
   const SIDEBAR_SCHEDULED_LABELS = new Set([
     'ajoitettu',
@@ -888,6 +909,7 @@
   const protectedLibraryDescendantPaths = new Set();
   let routeAuthCheckInProgress = false;
   let authRedirectRequested = false;
+  let instructionsBridgeActive = false;
   let pendingApprovedAction = null;
   let lastUrl = location.href;
   let routeCheckQueued = false;
@@ -913,6 +935,8 @@
   const gptShowMoreState = new WeakMap();
 
   const replayAllowedButtons = new WeakSet();
+  const replayAllowedInstructionsButtons = new WeakSet();
+  const replayAllowedPersonalizationSettingsButtons = new WeakSet();
   const replayAllowedPluginButtons = new WeakSet();
   const userControlledAnalysisActivityKeys = new Set();
   const nativeBannerCloseReplayAllowedButtons = new WeakSet();
@@ -1670,6 +1694,20 @@
 
   restoreProtectedLibraryNavigationSession();
 
+  const bridgedInstructionsTarget = getInstructionsAuthBridgeTarget(location.href);
+  if (bridgedInstructionsTarget) {
+    startInstructionsAuthBridge(bridgedInstructionsTarget);
+    return;
+  }
+
+  // The Space landing route now defaults to Suggested. Redirect at document_start,
+  // before React can paint that view, and leave folder/deleted queries untouched.
+  if (enforceSpaceAllEntryRoute()) return;
+
+  if (shouldArmSpaceTabsPaintGate(location.href)) {
+    document.documentElement.classList.add(SPACE_TABS_WAIT_CLASS);
+  }
+
   // Older BraveFox background builds only know the legacy Personalization hash route.
   // IMPORTANT: consume the one-time native grant WHILE STILL ON that approved bridge
   // route, then carry the approved result across exactly one redirect in extension-
@@ -1727,6 +1765,9 @@
   if (IS_ANDROID) document.documentElement.classList.add(ANDROID_APP_UPSELL_ROOT_CLASS);
 
   injectStyles();
+  if (document.documentElement.classList.contains(SPACE_TABS_WAIT_CLASS)) {
+    window.setTimeout(() => document.documentElement.classList.remove(SPACE_TABS_WAIT_CLASS), 4500);
+  }
   hideLegacyHomeModeSwitch(document);
   suppressAndroidAppUpsell(document);
   enforceCodexAndVoicePolicy(document);
@@ -1826,8 +1867,40 @@
       }
 
       /* PWA + desktop + Firefox Nightly legacy composer: Voice launchers must
-       * never paint once, then disappear. Keep speech dictation separate. */
+       * never paint once, then disappear. */
       ${VOICE_LAUNCH_BUTTON_SELECTOR} {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+
+      /* The temporary 'Sanele' microphone is a separate dictation action.
+       * Its route-independent CSS gate is installed at document_start, so
+       * neither the loading placeholder nor the hydrated button can flash. */
+      ${DICTATION_MICROPHONE_BUTTON_SELECTOR} {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+
+      /* Settings' new side navigation uses a stable panel slug. Hide only
+       * Voice/Ääni, leaving the other settings categories in place. */
+      button[data-settings-panel-slug="voice"] {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+
+      /* Space's new native tabs arrive all at once. Hold their first paint
+       * until BraveFox has retained only the requested four categories. */
+      html.${SPACE_TABS_WAIT_CLASS} [role="tablist"]:has([role="tab"]),
+      html.${SPACE_TABS_WAIT_CLASS} h1 > button {
+        visibility: hidden !important;
+      }
+      [${SPACE_TAB_HIDDEN_ATTR}="true"] {
         display: none !important;
         visibility: hidden !important;
         opacity: 0 !important;
@@ -2286,6 +2359,12 @@
        * row never gets a painted frame on the native account page. The legacy Android
        * modal is additionally handled by the document-start observer below because its
        * historical markup has rotated more often than the native settings-row component. */
+      /* November 2026 settings overlay: the row is now route-less, but its
+       * settings-search ID is stable. Hide the row on every route and collapse
+       * its dedicated single-row section without hiding neighbouring settings. */
+      #account-delete,
+      [data-settings-search-entry="account-delete"],
+      section:has(> div:only-child > div:only-child > #account-delete:only-child),
       html.${ACCOUNT_SETTINGS_CLASS}
       section:has(div[class~="@container/settings-row"] button.text-chart-red),
       html.${ACCOUNT_SETTINGS_CLASS}
@@ -2329,6 +2408,12 @@
 
       a[data-bravefox-sidebar-images="true"] {
         display: flex !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+      }
+
+      button[data-bravefox-sidebar-images="true"] {
         visibility: visible !important;
         opacity: 1 !important;
         pointer-events: auto !important;
@@ -2396,6 +2481,8 @@
       html.${PERSONALIZATION_CLASS} div[class~="@container/settings-row"]:has(button[aria-label*="Codex" i]),
       html.${PERSONALIZATION_CLASS} [role="dialog"] button[aria-label*="Codex" i],
       html.${PERSONALIZATION_CLASS} div.flex.justify-between.gap-2:has(> button[aria-label*="Codex" i]),
+      #personalization-codex-instructions,
+      [data-settings-search-entry="personalization-codex-instructions"],
       [${CODEX_UI_HIDDEN_ATTR}="true"] {
         display: none !important;
         visibility: hidden !important;
@@ -2422,6 +2509,27 @@
 
       /* Both the native row and the legacy Android dialog keep Voice visible
        * but disabled. The DOM marker covers old unlabelled switches as well. */
+      /* New settings modal does not change the URL, so these exact stable IDs
+       * are also enforced without requiring the old Personalization route. */
+      ${PERSONALIZATION_CODEX_ROW_SELECTOR} {
+        display: none !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+      }
+      :is(${PERSONALIZATION_VOICE_ROW_SELECTOR}) button[role="switch"],
+      :is(${PERSONALIZATION_VOICE_ROW_SELECTOR}) button[role="switch"] * {
+        pointer-events: none !important;
+        cursor: not-allowed !important;
+      }
+      :is(${PERSONALIZATION_VOICE_ROW_SELECTOR}) button[role="switch"] {
+        opacity: .42 !important;
+        filter: grayscale(1) !important;
+      }
+      :is(${PERSONALIZATION_MEMORY_ROW_SELECTOR}) button[role="switch"] {
+        pointer-events: none !important;
+        cursor: not-allowed !important;
+        opacity: .48 !important;
+      }
       html.${PERSONALIZATION_CLASS} [${VOICE_DISABLED_ATTR}="true"] {
         pointer-events: none !important;
       }
@@ -3070,6 +3178,42 @@
     }
   }
 
+  function makeInstructionsAuthBridgeUrl(value = location.href) {
+    try {
+      const source = new URL(String(value || location.href), location.href);
+      if (source.origin !== location.origin) return null;
+      source.hash = INSTRUCTIONS_AUTH_BRIDGE_HASH;
+      return source.href;
+    } catch {
+      return null;
+    }
+  }
+
+  function makeSettingsAuthBridgeUrl(value = location.href) {
+    try {
+      const source = new URL(String(value || location.href), location.href);
+      if (source.origin !== location.origin) return null;
+      source.hash = SETTINGS_AUTH_BRIDGE_HASH;
+      return source.href;
+    } catch {
+      return null;
+    }
+  }
+
+  function getInstructionsAuthBridgeTarget(value = location.href) {
+    try {
+      const bridge = new URL(String(value || location.href), location.href);
+      if (bridge.origin !== location.origin) return null;
+      let hash = bridge.hash;
+      try { hash = decodeURIComponent(hash); } catch {}
+      if (normalizeText(hash) !== INSTRUCTIONS_AUTH_BRIDGE_HASH) return null;
+      bridge.hash = '';
+      return bridge.href;
+    } catch {
+      return null;
+    }
+  }
+
   function normalizeProtectedLibraryPath(value) {
     try {
       const url = new URL(String(value || location.href), location.href);
@@ -3084,9 +3228,29 @@
     return `/library/d/${LIBRARY_PROTECTED_FOLDER_ID}`.toLowerCase();
   }
 
+  function isProtectedSpaceUrl(value) {
+    try {
+      const url = new URL(String(value || location.href), location.href);
+      if (url.origin !== location.origin) return false;
+      const path = url.pathname.toLowerCase().replace(/\/+$/, '') || '/';
+      if (path !== SPACE_PATH && !path.startsWith(`${SPACE_PATH}/`)) return false;
+      // The new Space router may put the folder ID in a path segment or search
+      // parameter. Only the exact protected ID counts: /space itself is public.
+      const id = LIBRARY_PROTECTED_FOLDER_ID.toLowerCase();
+      if (path.split('/').includes(id)) return true;
+      return Array.from(url.searchParams.values()).some(value =>
+        String(value).toLowerCase().split(/[^a-z0-9]+/).includes(id)
+      );
+    } catch {
+      return false;
+    }
+  }
+
   function isKnownProtectedLibraryPath(pathname) {
     const normalized = normalizeProtectedLibraryPath(pathname);
     if (!normalized) return false;
+
+    if (isProtectedSpaceUrl(pathname)) return true;
 
     const root = getProtectedLibraryRootPath();
     if (normalized === root || normalized.startsWith(`${root}/`)) return true;
@@ -3099,13 +3263,13 @@
 
   function isCandidateProtectedLibraryDescendantPath(value) {
     const pathname = normalizeProtectedLibraryPath(value);
-    if (!pathname || !pathname.startsWith('/library/')) return false;
-    if (pathname === '/library') return false;
+    if (!pathname || !(pathname.startsWith('/library/') || pathname.startsWith('/space/'))) return false;
+    if (pathname === '/library' || pathname === SPACE_PATH) return false;
 
     // Never learn top-level Library destinations as descendants merely because the user
     // clicked them while standing inside Protected Files. Only item/detail-style paths
     // can become part of the protected subtree.
-    if (/^\/library\/(?:trash|all|shared|recent|uploads?|images?|settings)(?:\/|$)/i.test(pathname)) {
+    if (/^\/(?:library|space)\/(?:trash|all|shared|recent|uploads?|images?|settings)(?:\/|$)/i.test(pathname)) {
       return false;
     }
     return true;
@@ -3131,7 +3295,7 @@
       protectedLibraryNavigationUnlocked = saved?.unlocked === true;
       for (const value of Array.isArray(saved?.paths) ? saved.paths : []) {
         const pathname = normalizeProtectedLibraryPath(value);
-        if (!pathname || !pathname.startsWith('/library/') || pathname === '/library') continue;
+        if (!pathname || !(pathname.startsWith('/library/') || pathname.startsWith('/space/'))) continue;
         protectedLibraryDescendantPaths.add(pathname);
       }
     } catch {}
@@ -3202,7 +3366,7 @@
       }
 
       const protectedLibraryPath = getProtectedLibraryRootPath();
-      if (isKnownProtectedLibraryPath(pathname)) {
+      if (isKnownProtectedLibraryPath(url.href) || isProtectedSpaceUrl(url.href)) {
         return { key: 'library-protected-files', path: protectedLibraryPath, title: LIBRARY_PROTECTED_FOLDER_PROMPT };
       }
       for (const route of PROTECTED_PATH_ROUTES) {
@@ -3225,6 +3389,22 @@
 
   function isPersonalizationRoute() {
     return getProtectedRouteDescriptor()?.key === 'personalization';
+  }
+
+  function isPersonalizationSettingsUiActive() {
+    // The November 2026 settings modal no longer changes the page URL. Its
+    // search-entry IDs are stable even when the dialog itself has no route.
+    if (isPersonalizationRoute()) return true;
+    return Boolean(
+      document.getElementById('personalization-unified-memory') ||
+      document.getElementById('personalization-voice') ||
+      document.getElementById('personalization-codex-instructions') ||
+      document.querySelector(
+        '[data-settings-search-entry="personalization-unified-memory"], ' +
+        '[data-settings-search-entry="personalization-voice"], ' +
+        '[data-settings-search-entry="personalization-codex-instructions"]'
+      )
+    );
   }
 
   function isPersonalizationMemoryModalUrl(value = location.href) {
@@ -3466,6 +3646,46 @@
     location.replace(targetHref);
   }
 
+  async function completeInstructionsAuthBridge(targetHref) {
+    // The extension's password page returns to a temporary protected hash ON
+    // the original chat URL. Consume the grant before removing that hash;
+    // the background then starts a tab-scoped five-minute instructions unlock.
+    // Also accept the new direct-approval flow, which persists the unlock at
+    // the native password page and returns to a clean URL. This branch remains
+    // for one-time transitions from already-open older password pages.
+    const status = await sendRuntimeMessage({ type: 'BRAVEFOX_CHATGPT_AUTH_STATUS' });
+    const alreadyUnlocked = status?.ok && Number(status.instructionsUnlockedUntil || 0) > Date.now();
+    if (!alreadyUnlocked) await consumeNativePasswordGrantWithRetry();
+    await clearAuthLoopGuard();
+    // A stale hash is not an authorization and should simply be discarded.
+    // The old bridge emitted a warning here even after the password page had
+    // already approved the request and another listener consumed its grant.
+    location.replace(targetHref);
+  }
+
+  function startInstructionsAuthBridge(targetHref) {
+    if (instructionsBridgeActive) return;
+    instructionsBridgeActive = true;
+    setInlinePaintGate(true);
+    void completeInstructionsAuthBridge(targetHref);
+  }
+
+  function resolveNativePasswordReturnUrl(kind, routeKey, returnUrl) {
+    if (routeKey !== 'personalization') return returnUrl;
+    if (getProtectedRouteDescriptorForUrl(returnUrl)?.key === 'personalization') return returnUrl;
+
+    // The 2026 settings modal can open from /c/<conversation> without updating
+    // the address bar. Never send that public chat URL to the background as the
+    // destination of a protected Personalization grant.
+    const target = new URL(PERSONALIZATION_PATH, location.origin);
+    if (kind === 'memory-summary') {
+      target.searchParams.set('modal', PERSONALIZATION_MEMORY_MODAL);
+    } else if (kind === 'personalization-instructions') {
+      target.searchParams.set(PERSONALIZATION_INSTRUCTIONS_PARAM, PERSONALIZATION_CHATGPT_INSTRUCTIONS);
+    }
+    return target.href;
+  }
+
   async function beginNativePasswordFlow({ kind = 'protected-route', routeKey, title, returnUrl = location.href, payload = {} }) {
     if (TEMP_DISABLE_ALL_PASSWORD_PROMPTS) {
       authRedirectRequested = false;
@@ -3476,6 +3696,8 @@
       setInlinePaintGate(false);
       return true;
     }
+
+    returnUrl = resolveNativePasswordReturnUrl(kind, routeKey, returnUrl);
 
     if (authRedirectRequested) return false;
     authRedirectRequested = true;
@@ -3657,7 +3879,7 @@
 
     document.documentElement.classList.toggle(PERSONALIZATION_CLASS, onPersonalization);
     document.documentElement.classList.toggle(ACCOUNT_SETTINGS_CLASS, isAccountSettingsRoute());
-    document.documentElement.classList.toggle(MEMORY_MODAL_CLASS, onMemoryModal);
+    document.documentElement.classList.toggle(MEMORY_MODAL_CLASS, onMemoryModal || hasSavedMemoriesDialogOpen());
     document.documentElement.classList.toggle(PLUGINS_CURATING_CLASS, onPlugins);
     document.documentElement.classList.toggle(GPTS_CURATING_CLASS, onGpts);
 
@@ -3833,6 +4055,13 @@
 
   function checkForRouteChange() {
     if (location.href === lastUrl) return false;
+    const instructionsBridge = getInstructionsAuthBridgeTarget(location.href);
+    if (instructionsBridge) {
+      startInstructionsAuthBridge(instructionsBridge);
+      return true;
+    }
+    if (enforceSpaceAllEntryRoute()) return true;
+    armSpaceTabsPaintGate(location.href);
     const previousUrl = lastUrl;
     rememberProtectedLibraryTransition(previousUrl, location.href);
     lastUrl = location.href;
@@ -3845,7 +4074,14 @@
 
   function installNavigationGuards() {
     const handleNavigation = () => {
+      const instructionsBridge = getInstructionsAuthBridgeTarget(location.href);
+      if (instructionsBridge) {
+        startInstructionsAuthBridge(instructionsBridge);
+        return;
+      }
+      if (enforceSpaceAllEntryRoute()) return;
       const previousUrl = lastUrl;
+      if (previousUrl !== location.href) armSpaceTabsPaintGate(location.href);
       rememberProtectedLibraryTransition(previousUrl, location.href);
       lastUrl = location.href;
       cleanupProtectedLibraryUiOutsideFolder();
@@ -3878,6 +4114,7 @@
           try {
             const destinationUrl = event?.destination?.url;
             if (!destinationUrl) return;
+            armSpaceTabsPaintGate(destinationUrl);
             if (isKnownProtectedLibraryPath(location.href)) {
               rememberProtectedLibraryDescendantUrl(destinationUrl);
             }
@@ -4181,11 +4418,41 @@
 
   function installInteractionGuards() {
     document.addEventListener('click', event => {
+      const settingsNavButton = getButtonFromEvent(event);
+      if (
+        !TEMP_DISABLE_ALL_PASSWORD_PROMPTS &&
+        settingsNavButton &&
+        isPersonalizationSettingsNavButton(settingsNavButton) &&
+        !replayAllowedPersonalizationSettingsButtons.has(settingsNavButton)
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        void authorizePersonalizationSettingsNavButton(settingsNavButton);
+        return;
+      }
+
+      // The new Personal Instructions editor is a route-less React dialog.
+      // Catch its native Edit button before React opens the unprotected editor.
+      const instructionsEdit = getButtonFromEvent(event);
+      if (
+        !TEMP_DISABLE_ALL_PASSWORD_PROMPTS &&
+        instructionsEdit &&
+        isChatGptInstructionsEditButton(instructionsEdit) &&
+        !replayAllowedInstructionsButtons.has(instructionsEdit)
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        void authorizeChatGptInstructionsEdit(instructionsEdit);
+        return;
+      }
+
       // A real user must not be able to turn Memory off while BraveFox is on.
       // Allow only the extension's own one-shot native ON request to reach React.
       const memoryToggle = getElementFromEvent(event, 'button[role="switch"]');
       if (
-        isPersonalizationRoute() && memoryToggle &&
+        isPersonalizationSettingsUiActive() && memoryToggle &&
         isMemoryEnableSwitch(memoryToggle, getSettingsSwitchRow(memoryToggle)) &&
         !MEMORY_NATIVE_ENABLE_IN_PROGRESS.has(memoryToggle)
       ) {
@@ -4348,7 +4615,9 @@
           kind: 'memory-summary',
           routeKey: 'personalization',
           title: MEMORY_SUMMARY_PROMPT,
-          returnUrl: location.href
+          returnUrl: isPersonalizationRoute()
+            ? location.href
+            : new URL(`${PERSONALIZATION_PATH}?modal=${PERSONALIZATION_MEMORY_MODAL}`, location.origin).href
         });
         return;
       }
@@ -4379,7 +4648,35 @@
 
     document.addEventListener('keydown', event => {
       if (
-        isPersonalizationRoute() &&
+        !TEMP_DISABLE_ALL_PASSWORD_PROMPTS &&
+        (event.key === 'Enter' || event.key === ' ') &&
+        event.target instanceof HTMLButtonElement &&
+        isPersonalizationSettingsNavButton(event.target) &&
+        !replayAllowedPersonalizationSettingsButtons.has(event.target)
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        void authorizePersonalizationSettingsNavButton(event.target);
+        return;
+      }
+
+      if (
+        !TEMP_DISABLE_ALL_PASSWORD_PROMPTS &&
+        (event.key === 'Enter' || event.key === ' ') &&
+        event.target instanceof HTMLButtonElement &&
+        isChatGptInstructionsEditButton(event.target) &&
+        !replayAllowedInstructionsButtons.has(event.target)
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        void authorizeChatGptInstructionsEdit(event.target);
+        return;
+      }
+
+      if (
+        isPersonalizationSettingsUiActive() &&
         (event.key === 'Enter' || event.key === ' ') &&
         event.target instanceof HTMLButtonElement &&
         isMemoryEnableSwitch(event.target, getSettingsSwitchRow(event.target))
@@ -6516,6 +6813,64 @@
     return element instanceof HTMLButtonElement ? element : null;
   }
 
+  function isPersonalizationSettingsNavButton(button) {
+    return button instanceof HTMLButtonElement &&
+      button.matches('button[data-sidebar-cycle-item][data-settings-panel-slug="personalization"]');
+  }
+
+  async function authorizePersonalizationSettingsNavButton(button) {
+    if (!(button instanceof HTMLButtonElement) || !button.isConnected) return;
+    const status = await sendRuntimeMessage({ type: 'BRAVEFOX_CHATGPT_AUTH_STATUS' });
+    if (status?.ok && Number(status.settingsUnlockedUntil || 0) > Date.now()) {
+      replayAllowedPersonalizationSettingsButtons.add(button);
+      try { button.click(); }
+      finally { queueMicrotask(() => replayAllowedPersonalizationSettingsButtons.delete(button)); }
+      return;
+    }
+
+    const returnUrl = makeSettingsAuthBridgeUrl(location.href);
+    if (!returnUrl) return;
+    void beginNativePasswordFlow({
+      kind: 'personalization-settings',
+      routeKey: 'personalization',
+      title: PERSONALIZATION_PROMPT,
+      returnUrl
+    });
+  }
+
+  function isChatGptInstructionsEditButton(button) {
+    if (!(button instanceof HTMLButtonElement) || !button.closest(CHATGPT_INSTRUCTIONS_ROW_SELECTOR)) return false;
+    const label = normalizeText(button.getAttribute('aria-label'));
+    return label === 'muokkaa chatgpt:n mukautettuja ohjeita' ||
+      label === 'edit chatgpt custom instructions' ||
+      ['edit', 'muokkaa'].includes(normalizeText(button.textContent));
+  }
+
+  async function authorizeChatGptInstructionsEdit(button) {
+    if (!(button instanceof HTMLButtonElement) || !button.isConnected) return;
+    const status = await sendRuntimeMessage({ type: 'BRAVEFOX_CHATGPT_AUTH_STATUS' });
+    if (status?.ok && Number(status.instructionsUnlockedUntil || 0) > Date.now()) {
+      replayAllowedInstructionsButtons.add(button);
+      try { button.click(); }
+      finally { queueMicrotask(() => replayAllowedInstructionsButtons.delete(button)); }
+      return;
+    }
+
+    // A route-less settings popup can appear over any normal conversation.
+    // The temporary protected hash lets the password page return to that
+    // conversation without granting access to any unprotected URL.
+    const returnUrl = isPersonalizationRoute()
+      ? new URL(`${PERSONALIZATION_PATH}?instructions=${PERSONALIZATION_CHATGPT_INSTRUCTIONS}`, location.origin).href
+      : makeInstructionsAuthBridgeUrl(location.href);
+    if (!returnUrl) return;
+    void beginNativePasswordFlow({
+      kind: 'personalization-instructions',
+      routeKey: 'personalization',
+      title: PERSONALIZATION_INSTRUCTIONS_PROMPT,
+      returnUrl
+    });
+  }
+
   function isDeleteAllMemoriesItem(menuItem) {
     return DELETE_ALL_MEMORY_LABELS.has(normalizeText(menuItem.textContent));
   }
@@ -6527,13 +6882,13 @@
     // New UI: on the Saved Memories route, Poista/Delete rendered as a Radix menuitem
     // is the destructive per-memory action. Route scoping keeps this from affecting
     // unrelated Delete items elsewhere in ChatGPT.
-    if (isPersonalizationMemoryModalUrl() && menuItem.matches?.('[role="menuitem"]')) {
+    if (hasSavedMemoriesDialogOpen() && menuItem.matches?.('[role="menuitem"]')) {
       return true;
     }
 
     // Legacy UI fallback.
     if (!hasSavedMemoriesDialogOpen()) return false;
-    if (menuItem.getAttribute('data-color') === 'danger') return true;
+    if (menuItem.getAttribute('data-color') === 'danger' || menuItem.classList.contains('text-danger')) return true;
 
     return Boolean(document.querySelector(
       'button[aria-label^="Lisää vaihtoehtoja muistille:"], button[aria-label^="More options for memory:"]'
@@ -6589,7 +6944,7 @@
   }
 
   function isMemorySummaryManageButton(button) {
-    if (!isPersonalizationRoute() || !protectedRouteUnlocked) return false;
+    if (!isPersonalizationSettingsUiActive()) return false;
     if (!MANAGE_LABELS.has(normalizeText(button.textContent))) return false;
 
     let node = button;
@@ -6679,7 +7034,7 @@
           }
           if (mutation.type === 'attributes' &&
               (mutation.attributeName === 'aria-checked' || mutation.attributeName === 'disabled')) {
-            if (isPersonalizationRoute() && mutation.target instanceof HTMLButtonElement &&
+            if (isPersonalizationSettingsUiActive() && mutation.target instanceof HTMLButtonElement &&
                 mutation.target.getAttribute('role') === 'switch') {
               // Reconcile real React state changes and restore the DOM lock if
               // a different script removes the native disabled attribute.
@@ -6701,7 +7056,7 @@
             }
             // Legacy Android settings rows sometimes mount the switch first and
             // write the sibling heading in a later React commit.
-            if (isPersonalizationRoute() && parent instanceof Element &&
+            if (isPersonalizationSettingsUiActive() && parent instanceof Element &&
                 (normalizeText(parent.textContent) === 'codex' ||
                  VOICE_ROW_LABELS.has(normalizeText(parent.textContent)) ||
                  LEGACY_MEMORY_ROW_LABELS.has(normalizeText(parent.textContent)))) {
@@ -6775,7 +7130,7 @@
 
             // This existing observer runs before paint. It is the only live
             // policy hook required; do not add a page-wide timer or observer.
-            const legacySettingsDialog = isPersonalizationRoute() &&
+            const legacySettingsDialog = isPersonalizationSettingsUiActive() &&
               (node.matches('[role="dialog"]') ? node : node.closest('[role="dialog"]'));
             const legacySettingsSignal = legacySettingsDialog && (
               node.matches('button[role="switch"], button[aria-label*="Codex" i]') ||
@@ -6792,7 +7147,7 @@
               uiPolicyRoot.querySelector(`button[aria-haspopup="menu"], button[role="switch"], [role="menuitem"], [role="tab"], ${SETTINGS_ROW_SELECTOR}`)
             ) {
               enforceCodexAndVoicePolicy(uiPolicyRoot);
-              if (isPersonalizationRoute()) enforceMemoryEnabledUi(uiPolicyRoot);
+              if (isPersonalizationSettingsUiActive()) enforceMemoryEnabledUi(uiPolicyRoot);
             }
             // The old Android announcement layout has no "banner" aria-label.
             if (
@@ -6850,7 +7205,8 @@
             // Radix menus/settings dialogs are portal-mounted after the click that opens
             // them. The same already-cheap observer also notices top-level ChatGPT banners
             // and the specifically matched fixed assistant notice, avoiding extra observers.
-            const memoryUiActive = isPersonalizationMemoryModalUrl();
+            const memoryUiActive = hasSavedMemoriesDialogOpen();
+            if (memoryUiActive) document.documentElement.classList.add(MEMORY_MODAL_CLASS);
             const relevantMemoryUpgradeBanner =
               memoryUiActive &&
               (
@@ -6886,7 +7242,10 @@
                 'button.sidebar-item[aria-haspopup="menu"]'
               );
             if (relevantSidebarControl) hideNewSidebarControls(node);
-            if (memoryUiActive) hideSavedMemoryOverviewControls(node);
+            if (memoryUiActive) {
+              hideSavedMemoryOverviewControls(node);
+              removeForbiddenMemoryDeleteItems(node);
+            }
 
             if (
               node.matches?.('[role="dialog"], [role="menu"], [role="listbox"], [data-state="open"]') ||
@@ -6954,7 +7313,7 @@
             if (!relevantEscapeHatch && !relevantDeleteAccountUi) continue;
 
             applyAccountAndSettingsCleanup(node);
-            if (isPersonalizationRoute()) hideSensitiveMemoryControls(node);
+            if (isPersonalizationSettingsUiActive()) hideSensitiveMemoryControls(node);
           }
         }
       });
@@ -7198,7 +7557,7 @@
 
   function runGeneralUiScan(scope) {
     ensureConversationArchiveButton();
-    if (isPersonalizationRoute()) hideSensitiveMemoryControls(scope);
+    if (isPersonalizationSettingsUiActive()) hideSensitiveMemoryControls(scope);
     if (isPluginsRoute()) void applyPluginPagePolicy(document);
     if (isGptsRoute()) applyGptPagePolicy(document);
     cleanChatGptUi(scope);
@@ -7218,13 +7577,13 @@
   }
 
   function hideSensitiveMemoryControls(scope = document) {
-    if (!isPersonalizationRoute()) return;
+    if (!isPersonalizationSettingsUiActive()) return;
 
     // Keep Enable memory visible with its native ON colour, but muted and locked.
     // If React exposes an OFF state, request ON through the real native handler.
     enforceMemoryEnabledUi(scope);
 
-    if (isPersonalizationMemoryModalUrl()) {
+    if (hasSavedMemoriesDialogOpen()) {
       hideSavedMemoryOverviewControls(scope);
       hideEnhancedMemoryBanners(scope);
       removeForbiddenMemoryDeleteItems(scope);
@@ -7234,7 +7593,7 @@
   function getSettingsSwitchRow(toggle) {
     if (!(toggle instanceof HTMLButtonElement)) return null;
     const nativeRow = toggle.closest(
-      'div[class~="@container/settings-row"], div.border-token-border-light.flex.min-h-15.items-center.border-b'
+      `${PERSONALIZATION_MEMORY_ROW_SELECTOR}, ${PERSONALIZATION_VOICE_ROW_SELECTOR}, div[class~="@container/settings-row"], div.border-token-border-light.flex.min-h-15.items-center.border-b`
     );
     if (nativeRow) return nativeRow;
 
@@ -7289,12 +7648,12 @@
     clearNativeMemoryEnableRetry(state);
     state.retry = window.setTimeout(() => {
       state.retry = 0;
-      if (toggle.isConnected && isPersonalizationRoute()) enforceMemoryEnabledUi(toggle);
+      if (toggle.isConnected && isPersonalizationSettingsUiActive()) enforceMemoryEnabledUi(toggle);
     }, delay);
   }
 
   function requestNativeMemoryEnable(toggle, state = getNativeMemoryEnableState(toggle)) {
-    if (!(toggle instanceof HTMLButtonElement) || !toggle.isConnected || !isPersonalizationRoute()) return;
+    if (!(toggle instanceof HTMLButtonElement) || !toggle.isConnected || !isPersonalizationSettingsUiActive()) return;
     if (toggle.getAttribute('aria-checked') === 'true' || state.retry ||
         MEMORY_NATIVE_ENABLE_IN_PROGRESS.has(toggle)) return;
 
@@ -7335,7 +7694,7 @@
   }
 
   function enforceMemoryEnabledUi(scope = document) {
-    if (!isPersonalizationRoute()) return;
+    if (!isPersonalizationSettingsUiActive()) return;
 
     forEachMatch(scope, 'button[role="switch"]', toggle => {
       const row = getSettingsSwitchRow(toggle);
@@ -7426,7 +7785,7 @@
   }
 
   function hideSavedMemoryOverviewControls(scope = document) {
-    if (!isPersonalizationMemoryModalUrl()) return;
+    if (!hasSavedMemoriesDialogOpen()) return;
 
     forEachMatch(scope, 'button[aria-haspopup="menu"]', button => {
       const label = normalizeText(
@@ -8848,8 +9207,9 @@
   function findSidebarLibraryElement(root) {
     if (!(root instanceof Element)) return null;
     return root.querySelector(
-      'a[href="/library"], a[href^="/library?"], ' +
-      'button[data-sidebar-destination="library"], button[data-sidebar-destination="builtin:library"]'
+      'a[href="/library"], a[href^="/library?"], a[href^="/space"], ' +
+      'button[data-sidebar-destination="library"], button[data-sidebar-destination="builtin:library"], ' +
+      'button[data-sidebar-destination="builtin:space"]'
     ) || findExactSidebarTextElement(root, SIDEBAR_LIBRARY_LABELS);
   }
 
@@ -8959,8 +9319,53 @@
       pluginsButton.setAttribute('data-bravefox-sidebar-hidden', 'plugins');
     }
 
-    const existingCustom = document.querySelector('a[data-bravefox-sidebar-images="true"]');
+    // The icon rail now calls the former Library destination "Tila" (Space).
+    // Keep the React-owned destination and icon, but restore its old Finnish name.
+    for (const space of document.querySelectorAll('nav button[data-sidebar-destination="builtin:space"]')) {
+      space.setAttribute('aria-label', 'Kirjasto');
+      space.title = 'Kirjasto';
+      for (const leaf of space.querySelectorAll('span, div')) {
+        if (leaf.children.length) continue;
+        if (['tila', 'space'].includes(normalizeText(leaf.textContent))) leaf.textContent = 'Kirjasto';
+      }
+    }
+
+    const existingCustom = document.querySelector('[data-bravefox-sidebar-images="true"]');
     if (existingCustom?.isConnected) return;
+
+    // In the new narrow icon rail, every destination is a React-owned button,
+    // not an <a data-sidebar-item>. Keep its native button structure/classes
+    // while adding the previously available Images destination after Scheduled.
+    const spaceButton = document.querySelector('nav button[data-sidebar-destination="builtin:space"]');
+    if (spaceButton instanceof HTMLButtonElement) {
+      const custom = spaceButton.cloneNode(true);
+      custom.removeAttribute('data-sidebar-destination');
+      custom.removeAttribute('data-slate-sidebar-peek-area');
+      custom.removeAttribute('data-selected');
+      custom.removeAttribute('aria-current');
+      custom.removeAttribute('aria-expanded');
+      custom.removeAttribute('aria-haspopup');
+      custom.removeAttribute('data-suppress-active-style');
+      custom.setAttribute('data-bravefox-sidebar-images', 'true');
+      custom.setAttribute('aria-label', 'Kuvat');
+      custom.title = 'Kuvat';
+      for (const element of custom.querySelectorAll('[id]')) element.removeAttribute('id');
+      for (const element of custom.querySelectorAll('span, div')) {
+        if (element.children.length) continue;
+        if (['tila', 'space'].includes(normalizeText(element.textContent))) element.textContent = 'Kuvat';
+      }
+      const icon = makeSidebarImagesItem(spaceButton).querySelector('svg');
+      const originalIcon = custom.querySelector('svg');
+      if (icon && originalIcon) originalIcon.replaceWith(icon);
+      custom.addEventListener('click', event => {
+        event.preventDefault();
+        event.stopPropagation();
+        location.assign(new URL('/images', location.origin).href);
+      });
+      const scheduled = document.querySelector('nav button[data-sidebar-destination="builtin:automations"]');
+      (scheduled || spaceButton).after(custom);
+      return;
+    }
 
     const nativeImages = Array.from(document.querySelectorAll('a[data-sidebar-item="true"][href="/images"]'))
       .find(item => !item.hasAttribute('data-bravefox-sidebar-images'));
@@ -9097,11 +9502,25 @@
   }
 
   function hideDeleteAccountSettingsUi(scope = document) {
-    if (!isAccountSettingsRoute()) return false;
+    const selector = '#account-delete, [data-settings-search-entry="account-delete"]';
+    const rows = new Set();
+    if (scope instanceof Element) {
+      if (scope.matches(selector)) rows.add(scope);
+      const containingRow = scope.closest(selector);
+      if (containingRow) rows.add(containingRow);
+    }
+    for (const row of scope.querySelectorAll?.(selector) || []) rows.add(row);
 
+    // Old UI variants have no stable ID. Only use fuzzy text detection on a
+    // known Account route; the new stable ID is safe even in route-less dialogs.
+    if (isAccountSettingsRoute()) {
+      for (const label of findDeleteAccountLabelLeaves(scope)) {
+        const row = findDeleteAccountRowFromLabel(label);
+        if (row) rows.add(row);
+      }
+    }
     let changed = false;
-    for (const label of findDeleteAccountLabelLeaves(scope)) {
-      const row = findDeleteAccountRowFromLabel(label);
+    for (const row of rows) {
       if (!(row instanceof HTMLElement)) continue;
 
       row.setAttribute('data-bravefox-delete-account-row-hidden', 'true');
@@ -9119,8 +9538,11 @@
   }
 
   function mayContainDeleteAccountSettingsUi(scope) {
-    if (!isAccountSettingsRoute()) return false;
     if (!(scope instanceof Element)) return false;
+
+    const selector = '#account-delete, [data-settings-search-entry="account-delete"]';
+    if (scope.matches(selector) || scope.closest(selector) || scope.querySelector(selector)) return true;
+    if (!isAccountSettingsRoute()) return false;
 
     if (
       scope.matches?.('[data-bravefox-delete-account-row-hidden="true"]') ||
@@ -9157,6 +9579,21 @@
     } catch {
       return false;
     }
+  }
+
+  function isBillingSettingsUiActive() {
+    if (isBillingSettingsRoute()) return true;
+    // The new settings overlay keeps /u/<account> or /c/<conversation> in the
+    // address bar. Prefer its selected sidebar item, then a native Plan + Renewal
+    // fingerprint confined to real settings rows (never conversation content).
+    if (document.querySelector(
+      'button[data-settings-panel-slug="billing"][data-state="open"], ' +
+      'button[data-settings-panel-slug="subscription"][data-state="open"]'
+    )) return true;
+    for (const row of document.querySelectorAll('div[class~="@container/settings-row"]')) {
+      if (billingContainerHasNativeSignals(row)) return true;
+    }
+    return false;
   }
 
   function extractBillingRenewalDate(nativeText) {
@@ -9293,7 +9730,7 @@
   }
 
   function mayContainBillingSubscriptionUi(scope) {
-    if (!isBillingSettingsRoute()) return false;
+    if (!isBillingSettingsUiActive()) return false;
     if (!(scope instanceof Element)) return false;
 
     if (
@@ -9317,7 +9754,7 @@
   }
 
   function findBillingSubscriptionRow(scope = document) {
-    if (!isBillingSettingsRoute()) return null;
+    if (!isBillingSettingsUiActive()) return null;
 
     if (
       scope instanceof HTMLElement &&
@@ -9365,7 +9802,7 @@
   }
 
   function customizeBillingSubscriptionRow(scope = document) {
-    if (!BILLING_SUBSCRIPTION_CUSTOMIZATION.enabled || !isBillingSettingsRoute()) return false;
+    if (!BILLING_SUBSCRIPTION_CUSTOMIZATION.enabled || !isBillingSettingsUiActive()) return false;
 
     const row = findBillingSubscriptionRow(scope) || findBillingSubscriptionRow(document);
     if (!(row instanceof HTMLElement)) return false;
@@ -9592,6 +10029,12 @@
   }
 
   function enforceCodexAndVoicePolicy(scope = document) {
+    // Search-entry IDs remain stable in the route-less 2026 settings modal.
+    forEachMatch(scope, PERSONALIZATION_CODEX_ROW_SELECTOR, row => {
+      row.setAttribute(CODEX_UI_HIDDEN_ATTR, 'true');
+      hardHideEscapeHatch(row);
+    });
+
     forEachMatch(scope, CODEX_MODE_BUTTON_SELECTOR, button => {
       if (!(button instanceof HTMLButtonElement)) return;
       button.disabled = true;
@@ -9627,7 +10070,7 @@
       }
     });
 
-    if (!isPersonalizationRoute()) return;
+    if (!isPersonalizationSettingsUiActive()) return;
     // The legacy modal has neither the new settings-row token nor a labelled
     // switch. Match its row heading beside the switch, not a whole dialog.
     forEachMatch(scope, 'button[role="switch"]', toggle => {
@@ -14263,11 +14706,13 @@
       control.textContent ||
       ''
     );
-    if (!['uusi', 'new', 'create new'].includes(label)) return false;
+    if (!['uusi', 'new', 'create new', 'luo', 'create'].includes(label)) return false;
 
     // The Library's New button is a Radix menu trigger. Prefer this exact native shape,
     // while keeping the structural fallback for localized/older ChatGPT builds.
-    if (control.matches('button[aria-haspopup="menu"]')) return true;
+    if (control.matches('button[aria-haspopup="menu"]')) {
+      return Boolean(control.closest('[class*="pageActions-"], main, [role="main"]'));
+    }
     const main = control.closest('main, [role="main"]');
     return Boolean(main || !control.closest('nav, aside, [data-testid*="sidebar"]'));
   }
@@ -14285,7 +14730,7 @@
   }
 
   function isConversationArchiveLibraryDocumentText(value) {
-    return ['asiakirja', 'document', 'new document', 'uusi asiakirja'].includes(normalizeText(value));
+    return ['asiakirja', 'document', 'new document', 'uusi asiakirja', 'sivu', 'page', 'new page'].includes(normalizeText(value));
   }
 
   function isConversationArchiveLibraryUploadText(value) {
@@ -14420,7 +14865,7 @@
       const value = normalizeText(node.nodeValue);
       if ([
         'kansio', 'folder', 'uusi kansio', 'new folder',
-        'asiakirja', 'document', 'new document', 'uusi asiakirja'
+        'asiakirja', 'document', 'new document', 'uusi asiakirja', 'sivu', 'page', 'new page'
       ].includes(value)) {
         node.nodeValue = 'Arkisto';
         return true;
@@ -17030,6 +17475,43 @@
     return Boolean(scope.querySelector(selector));
   }
 
+  function renameSpaceCreateControl(scope = document) {
+    if (location.pathname.replace(/\/+$/, '').toLowerCase() !== SPACE_PATH) return;
+    // Keep ChatGPT's menu trigger and all its actions. Change only the visible
+    // "Luo" label; the existing Space create-menu reduction still runs as before.
+    forEachMatch(scope, 'button[aria-haspopup="menu"]', button => {
+      if (!(button instanceof HTMLButtonElement) || normalizeText(button.textContent) !== 'luo') return;
+      const leaf = Array.from(button.querySelectorAll('span, div'))
+        .find(node => node.children.length === 0 && normalizeText(node.textContent) === 'luo');
+      if (leaf) {
+        leaf.textContent = 'Uusi';
+      } else if (!button.children.length) {
+        button.textContent = 'Uusi';
+      } else {
+        const node = Array.from(button.childNodes).find(child =>
+          child.nodeType === Node.TEXT_NODE && normalizeText(child.textContent) === 'luo'
+        );
+        if (!node) return;
+        node.textContent = 'Uusi';
+      }
+      if (normalizeText(button.getAttribute('aria-label')) === 'luo') {
+        button.setAttribute('aria-label', 'Uusi');
+      }
+    });
+  }
+
+  function renameSpacePageHeading(scope = document) {
+    if (!isChatGptLibraryLocation()) return;
+    forEachMatch(scope, 'h1 > button', button => {
+      if (!(button instanceof HTMLButtonElement) || normalizeText(button.textContent) !== 'tila') return;
+      button.textContent = 'Kirjasto';
+      if (normalizeText(button.getAttribute('aria-label')) === 'tila') {
+        button.setAttribute('aria-label', 'Kirjasto');
+      }
+      if (normalizeText(button.title) === 'tila') button.title = 'Kirjasto';
+    });
+  }
+
   function cleanChatGptUi(scope = document) {
     hideLegacyHomeModeSwitch(scope);
     suppressAndroidAppUpsell(scope);
@@ -17049,6 +17531,8 @@
     replaceCustomizableChatGptBannerText(scope);
     replaceFixedAssistantNoticeText(scope);
     polishSidebarNavigation();
+    renameSpaceCreateControl(scope);
+    renameSpacePageHeading(scope);
     maintainSidebarStageReveal(scope);
     removePluginFeaturedPromo(scope);
     braveFoxEnhanceTwoStopControls(scope);
@@ -17128,7 +17612,9 @@
   let libraryGuardLastHref = location.href;
 
   function isChatGptLibraryLocation() {
-    return location.pathname.toLowerCase().startsWith('/library');
+    const path = location.pathname.toLowerCase().replace(/\/+$/, '') || '/';
+    return path === '/library' || path.startsWith('/library/') ||
+      path === SPACE_PATH || path.startsWith(`${SPACE_PATH}/`);
   }
 
   function normalizedLibraryLabel(element) {
@@ -17536,15 +18022,25 @@
     'ehdotetut', 'suggested'
   ]);
   const LIBRARY_ALL_TAB_LABELS = new Set(['kaikki', 'all']);
+  const LIBRARY_IMAGES_TAB_LABELS = new Set(['kuvat', 'images']);
+  const LIBRARY_FAVORITES_TAB_LABELS = new Set(['suosikit', 'favorites', 'favourites']);
+  const LIBRARY_VISIBLE_SPACE_TAB_LABELS = new Set([
+    'kaikki', 'all', 'kuvat', 'images', 'suosikit', 'favorites', 'favourites', 'roskakori', 'trash'
+  ]);
   const LIBRARY_TAB_CONTEXT_LABELS = new Set([
     'suositellut', 'recommended',
     'ehdotetut', 'suggested',
     'suosikit', 'favorites',
     'kansiot', 'folders',
     'kuvat', 'images',
+    'sivut', 'pages', 'diat', 'slides',
+    'laskentataulukot', 'spreadsheets', 'sites',
     'kaikki', 'all'
   ]);
   const LIBRARY_TRASH_TAB_ATTR = 'data-bravefox-library-trash-tab';
+  const LIBRARY_SYNTHETIC_TRASH_ATTR = 'data-bravefox-space-trash-tab';
+  const LIBRARY_SYNTHETIC_FAVORITES_ATTR = 'data-bravefox-space-favorites-tab';
+  const LIBRARY_SYNTHETIC_ALL_ATTR = 'data-bravefox-space-all-tab';
   const LIBRARY_ALL_TAB_ATTR = 'data-bravefox-library-all-tab';
   const LIBRARY_TRASH_VIEW_CLASS = 'bravefox-library-trash-view';
   let libraryDefaultAllNavigationHref = '';
@@ -17566,6 +18062,11 @@
   }
 
   function findLibraryTabStrip() {
+    if (isChatGptLibraryLocation()) {
+      for (const tablist of document.querySelectorAll('[role="tablist"]')) {
+        if (countKnownLibraryTabs(tablist) >= 4) return tablist;
+      }
+    }
     const controls = Array.from(document.querySelectorAll('a, button, [role="tab"]'));
     for (const control of controls) {
       if (!LIBRARY_ALL_TAB_LABELS.has(getLibraryTabControlLabel(control))) continue;
@@ -17641,6 +18142,141 @@
     return false;
   }
 
+  function makeNativeShapedSpaceTrashTab(allControl) {
+    if (!(allControl instanceof HTMLButtonElement)) return null;
+    const nativeWrapper = allControl.parentElement;
+    if (!(nativeWrapper instanceof HTMLElement)) return null;
+
+    const wrapper = nativeWrapper.cloneNode(false);
+    const button = allControl.cloneNode(false);
+    button.removeAttribute('id');
+    button.removeAttribute('aria-current');
+    button.removeAttribute('data-state');
+    button.removeAttribute('data-selected');
+    button.removeAttribute('aria-controls');
+    button.removeAttribute('data-active');
+    button.removeAttribute('aria-labelledby');
+    button.setAttribute('aria-selected', 'false');
+    // Our tab is not part of React's roving-tabindex state, so retain a real
+    // keyboard tab stop rather than making Roskakori pointer-only.
+    button.setAttribute('tabindex', '0');
+    button.setAttribute('aria-label', 'Roskakori');
+    button.setAttribute(LIBRARY_TRASH_TAB_ATTR, 'true');
+    button.setAttribute(LIBRARY_SYNTHETIC_TRASH_ATTR, 'true');
+    button.classList.remove('bg-secondary-ghost-hover', 'text-default');
+    button.classList.add('text-tertiary', 'hover:bg-background-secondary-ghost-hover/50', 'hover:text-default');
+    button.style.display = 'inline-flex';
+    button.style.alignItems = 'center';
+    button.style.gap = '0.375rem';
+
+    const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    icon.setAttribute('width', '16');
+    icon.setAttribute('height', '16');
+    icon.setAttribute('viewBox', '0 0 16 16');
+    icon.setAttribute('aria-hidden', 'true');
+    const nativeTrashUse = document.querySelector('use[href*="codex-icon-trash-light-16"]');
+    const iconHref = nativeTrashUse?.getAttribute('href') || nativeTrashUse?.getAttribute('xlink:href');
+    if (iconHref) {
+      const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+      use.setAttribute('href', iconHref);
+      use.setAttribute('fill', 'currentColor');
+      icon.appendChild(use);
+    } else {
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', 'M3.5 4.5h9M6 4.5V3h4v1.5M5 6v6.5h6V6M7 7.5v3.5M9 7.5v3.5');
+      path.setAttribute('fill', 'none');
+      path.setAttribute('stroke', 'currentColor');
+      path.setAttribute('stroke-width', '1.3');
+      path.setAttribute('stroke-linecap', 'round');
+      path.setAttribute('stroke-linejoin', 'round');
+      icon.appendChild(path);
+    }
+    const label = document.createElement('span');
+    label.textContent = 'Roskakori';
+    button.append(icon, label);
+    wrapper.appendChild(button);
+    return wrapper;
+  }
+
+  function makeNativeShapedSpaceFavoritesTab(allControl) {
+    if (!(allControl instanceof HTMLButtonElement)) return null;
+    const nativeWrapper = allControl.parentElement;
+    if (!(nativeWrapper instanceof HTMLElement)) return null;
+    const wrapper = nativeWrapper.cloneNode(false);
+    const button = allControl.cloneNode(false);
+    for (const attr of ['id', 'aria-current', 'data-state', 'data-selected', 'aria-controls', 'data-active', 'aria-labelledby']) {
+      button.removeAttribute(attr);
+    }
+    button.setAttribute('aria-selected', 'false');
+    button.setAttribute('tabindex', '0');
+    button.setAttribute('aria-label', 'Suosikit');
+    button.setAttribute(LIBRARY_SYNTHETIC_FAVORITES_ATTR, 'true');
+    button.classList.remove('bg-secondary-ghost-hover', 'text-default');
+    button.classList.add('text-tertiary', 'hover:bg-background-secondary-ghost-hover/50', 'hover:text-default');
+    button.textContent = 'Suosikit';
+    button.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      const nativeFavorites = Array.from(document.querySelectorAll('button[data-sidebar-cycle-item]'))
+        .find(item => LIBRARY_FAVORITES_TAB_LABELS.has(normalizeText(item.textContent)));
+      if (nativeFavorites instanceof HTMLButtonElement) {
+        nativeFavorites.click();
+      } else {
+        location.assign(new URL(`${SPACE_PATH}?tab=favorites`, location.origin).href);
+      }
+    });
+    wrapper.appendChild(button);
+    return wrapper;
+  }
+
+  function makeNativeShapedSpaceAllTab(donorControl) {
+    if (!(donorControl instanceof HTMLButtonElement) || !(donorControl.parentElement instanceof HTMLElement)) return null;
+    const wrapper = donorControl.parentElement.cloneNode(false);
+    const button = donorControl.cloneNode(false);
+    for (const attr of ['id', 'aria-current', 'data-state', 'data-selected', 'aria-controls', 'data-active', 'aria-labelledby']) {
+      button.removeAttribute(attr);
+    }
+    button.setAttribute('aria-selected', 'false');
+    button.setAttribute('tabindex', '0');
+    button.setAttribute('aria-label', 'Kaikki');
+    button.setAttribute(LIBRARY_SYNTHETIC_ALL_ATTR, 'true');
+    button.classList.remove('bg-secondary-ghost-hover', 'text-default');
+    button.classList.add('text-tertiary', 'hover:bg-background-secondary-ghost-hover/50', 'hover:text-default');
+    button.textContent = 'Kaikki';
+    button.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      location.assign(new URL(`${SPACE_PATH}?tab=all`, location.origin).href);
+    });
+    wrapper.appendChild(button);
+    return wrapper;
+  }
+
+  function reconcileSpaceTabVisibility(strip, controls) {
+    if (!(strip instanceof Element)) return;
+    for (const control of strip.querySelectorAll('a[role="tab"], button[role="tab"]')) {
+      const node = directChildWithin(strip, control);
+      if (!node) continue;
+      const keep = LIBRARY_VISIBLE_SPACE_TAB_LABELS.has(getLibraryTabControlLabel(control));
+      if (keep) {
+        removeLibraryAttributeIfPresent(node, SPACE_TAB_HIDDEN_ATTR);
+      } else {
+        setLibraryAttributeIfChanged(node, SPACE_TAB_HIDDEN_ATTR, 'true');
+      }
+    }
+
+    // Reorder native controls only when their visible relative order differs.
+    // Repeated DOM insertions used to cause an observer/React reconciliation loop.
+    let cursor = strip.firstElementChild;
+    for (const control of controls) {
+      const node = directChildWithin(strip, control);
+      if (!node) continue;
+      if (node !== cursor) strip.insertBefore(node, cursor);
+      cursor = node.nextElementSibling;
+    }
+    document.documentElement.classList.remove(SPACE_TABS_WAIT_CLASS);
+  }
+
   function scheduleLibraryTabReconcile(delay = 0) {
     if (libraryTabReconcileTimer) return;
     libraryTabReconcileTimer = window.setTimeout(() => {
@@ -17650,16 +18286,32 @@
   }
 
   function currentLibraryIsTrashView() {
-    if (location.pathname.replace(/\/+$/, '').toLowerCase() !== '/library') return false;
+    if (!isChatGptLibraryLocation()) return false;
     try {
-      return new URL(location.href).searchParams.get('deleted') === 'true';
+      const url = new URL(location.href);
+      const tab = normalizeText(url.searchParams.get('tab'));
+      return url.searchParams.get('deleted') === 'true' ||
+        ['trash', 'deleted', 'bin', 'roskakori'].includes(tab) ||
+        /\/(?:trash|deleted)\/?$/i.test(url.pathname);
+    } catch {
+      return false;
+    }
+  }
+
+  function currentLibraryIsFavoritesView() {
+    if (!isChatGptLibraryLocation()) return false;
+    try {
+      return ['favorites', 'favourites', 'suosikit'].includes(
+        normalizeText(new URL(location.href).searchParams.get('tab'))
+      );
     } catch {
       return false;
     }
   }
 
   function shouldDefaultLibraryToAll() {
-    if (location.pathname.replace(/\/+$/, '').toLowerCase() !== '/library') return false;
+    const path = location.pathname.replace(/\/+$/, '').toLowerCase();
+    if (path !== '/library' && path !== SPACE_PATH) return false;
     let url;
     try {
       url = new URL(location.href);
@@ -17667,12 +18319,38 @@
       return false;
     }
     if (url.searchParams.get('deleted') === 'true') return false;
+    if (path === SPACE_PATH && Array.from(url.searchParams.keys()).some(key => key !== 'tab')) return false;
     const tab = normalizeText(url.searchParams.get('tab'));
     return !tab || tab === 'recommended' || tab === 'suggested';
   }
 
+  function enforceSpaceAllEntryRoute() {
+    if (location.pathname.replace(/\/+$/, '').toLowerCase() !== SPACE_PATH ||
+        !shouldDefaultLibraryToAll()) return false;
+    location.replace(new URL(`${SPACE_PATH}?tab=all`, location.origin).href);
+    return true;
+  }
+
+  function shouldArmSpaceTabsPaintGate(value = location.href) {
+    try {
+      const url = new URL(String(value || location.href), location.href);
+      return url.origin === location.origin &&
+        url.pathname.replace(/\/+$/, '').toLowerCase() === SPACE_PATH &&
+        url.searchParams.get('deleted') !== 'true' &&
+        Array.from(url.searchParams.keys()).every(key => key === 'tab');
+    } catch {
+      return false;
+    }
+  }
+
+  function armSpaceTabsPaintGate(value = location.href) {
+    if (!shouldArmSpaceTabsPaintGate(value)) return;
+    document.documentElement.classList.add(SPACE_TABS_WAIT_CLASS);
+    window.setTimeout(() => document.documentElement.classList.remove(SPACE_TABS_WAIT_CLASS), 4500);
+  }
+
   function reconcileLibraryTabs() {
-    if (location.pathname.replace(/\/+$/, '').toLowerCase() !== '/library') {
+    if (!isChatGptLibraryLocation()) {
       document.documentElement.classList.remove(LIBRARY_TRASH_VIEW_CLASS);
       return;
     }
@@ -17680,36 +18358,106 @@
     const strip = findLibraryTabStrip();
     if (!strip) return;
 
-    const allControl = findLibraryTabControl(strip, LIBRARY_ALL_TAB_LABELS);
+    const syntheticAll = strip.querySelector(`[${LIBRARY_SYNTHETIC_ALL_ATTR}="true"]`);
+    let allControl = Array.from(strip.querySelectorAll('a, button, [role="tab"]'))
+      .find(control => !control.hasAttribute(LIBRARY_SYNTHETIC_ALL_ATTR) &&
+        LIBRARY_ALL_TAB_LABELS.has(getLibraryTabControlLabel(control))) || syntheticAll;
+    if (allControl && syntheticAll && allControl !== syntheticAll) syntheticAll.parentElement?.remove();
+    if (!(allControl instanceof Element) && location.pathname.startsWith(SPACE_PATH)) {
+      const donor = strip.querySelector('button[role="tab"]');
+      const wrapper = makeNativeShapedSpaceAllTab(donor);
+      if (wrapper) {
+        strip.appendChild(wrapper);
+        allControl = wrapper.querySelector(`[${LIBRARY_SYNTHETIC_ALL_ATTR}="true"]`);
+      }
+    }
+    if (!(allControl instanceof Element)) return;
+    setLibraryAttributeIfChanged(allControl, LIBRARY_ALL_TAB_ATTR, 'true');
+
+    const syntheticFavorites = strip.querySelector(`[${LIBRARY_SYNTHETIC_FAVORITES_ATTR}="true"]`);
+    let favoritesControl = Array.from(strip.querySelectorAll('a, button, [role="tab"]'))
+      .find(control => !control.hasAttribute(LIBRARY_SYNTHETIC_FAVORITES_ATTR) &&
+        LIBRARY_FAVORITES_TAB_LABELS.has(getLibraryTabControlLabel(control))) || syntheticFavorites;
+    if (favoritesControl && syntheticFavorites && favoritesControl !== syntheticFavorites) {
+      syntheticFavorites.parentElement?.remove();
+    }
+    if (!favoritesControl && location.pathname.startsWith(SPACE_PATH)) {
+      const wrapper = makeNativeShapedSpaceFavoritesTab(allControl);
+      if (wrapper) {
+        strip.appendChild(wrapper);
+        favoritesControl = wrapper.querySelector(`[${LIBRARY_SYNTHETIC_FAVORITES_ATTR}="true"]`);
+      }
+    }
+
     let recommendedControl = strip.querySelector(`[${LIBRARY_TRASH_TAB_ATTR}="true"]`);
     if (!recommendedControl) recommendedControl = findLibraryTabControl(strip, LIBRARY_RECOMMENDED_TAB_LABELS);
-    if (!(allControl instanceof Element) || !(recommendedControl instanceof Element)) return;
 
-    setLibraryAttributeIfChanged(allControl, LIBRARY_ALL_TAB_ATTR, 'true');
+    // The current /space renderer swaps All and Suggested in the same first
+    // slot. Keep the real All tab and all native content tabs, then add a small
+    // BraveFox-owned Roskakori tab at the end when no donor tab exists.
+    if (!(recommendedControl instanceof Element) && location.pathname.startsWith(SPACE_PATH)) {
+      const wrapper = makeNativeShapedSpaceTrashTab(allControl);
+      if (wrapper) {
+        strip.appendChild(wrapper);
+        recommendedControl = wrapper.querySelector(`[${LIBRARY_TRASH_TAB_ATTR}="true"]`);
+      }
+    }
+    if (!(recommendedControl instanceof Element)) return;
+
     setLibraryAttributeIfChanged(recommendedControl, LIBRARY_TRASH_TAB_ATTR, 'true');
     setLibraryTabText(recommendedControl, 'Roskakori');
 
-    const trashHref = new URL('/library?deleted=true', location.origin).href;
+    const base = location.pathname.startsWith(SPACE_PATH) ? SPACE_PATH : '/library';
+    const trashHref = new URL(`${base}?deleted=true`, location.origin).href;
     if (recommendedControl instanceof HTMLAnchorElement) {
       if (recommendedControl.href !== trashHref) recommendedControl.href = trashHref;
     } else {
       setLibraryAttributeIfChanged(
         recommendedControl,
         'data-bravefox-library-trash-href',
-        '/library?deleted=true'
+        `${base}?deleted=true`
       );
     }
 
-    const allNode = directChildWithin(strip, allControl);
-    const trashNode = directChildWithin(strip, recommendedControl);
-    if (allNode && trashNode) {
-      if (strip.firstElementChild !== allNode) strip.insertBefore(allNode, strip.firstElementChild);
-      if (strip.lastElementChild !== trashNode) strip.appendChild(trashNode);
+    const imagesControl = findLibraryTabControl(strip, LIBRARY_IMAGES_TAB_LABELS);
+    if (location.pathname.startsWith(SPACE_PATH)) {
+      reconcileSpaceTabVisibility(strip, [allControl, imagesControl, favoritesControl, recommendedControl]);
+    } else {
+      for (const node of strip.querySelectorAll(`[${SPACE_TAB_HIDDEN_ATTR}="true"]`)) {
+        removeLibraryAttributeIfPresent(node, SPACE_TAB_HIDDEN_ATTR);
+      }
+      const allNode = directChildWithin(strip, allControl);
+      const trashNode = directChildWithin(strip, recommendedControl);
+      if (allNode && trashNode) {
+        if (strip.firstElementChild !== allNode) strip.insertBefore(allNode, strip.firstElementChild);
+        if (strip.lastElementChild !== trashNode) strip.appendChild(trashNode);
+      }
     }
 
     const trashView = currentLibraryIsTrashView();
+    const favoritesView = currentLibraryIsFavoritesView();
     toggleLibraryClassIfChanged(document.documentElement, LIBRARY_TRASH_VIEW_CLASS, trashView);
     toggleLibraryClassIfChanged(recommendedControl, 'bravefox-library-trash-tab-active', trashView);
+    if (recommendedControl.hasAttribute(LIBRARY_SYNTHETIC_TRASH_ATTR)) {
+      toggleLibraryClassIfChanged(recommendedControl, 'bg-secondary-ghost-hover', trashView);
+      toggleLibraryClassIfChanged(recommendedControl, 'text-default', trashView);
+      toggleLibraryClassIfChanged(recommendedControl, 'text-tertiary', !trashView);
+    }
+    if (favoritesControl instanceof Element && favoritesControl.hasAttribute(LIBRARY_SYNTHETIC_FAVORITES_ATTR)) {
+      toggleLibraryClassIfChanged(favoritesControl, 'bg-secondary-ghost-hover', favoritesView);
+      toggleLibraryClassIfChanged(favoritesControl, 'text-default', favoritesView);
+      toggleLibraryClassIfChanged(favoritesControl, 'text-tertiary', !favoritesView);
+      setLibraryAttributeIfChanged(favoritesControl, 'aria-selected', favoritesView ? 'true' : 'false');
+    }
+    if (favoritesView) setLibraryAttributeIfChanged(allControl, 'aria-selected', 'false');
+    if (allControl.hasAttribute(LIBRARY_SYNTHETIC_ALL_ATTR)) {
+      const allView = !favoritesView && !trashView &&
+        normalizeText(new URL(location.href).searchParams.get('tab')) === 'all';
+      toggleLibraryClassIfChanged(allControl, 'bg-secondary-ghost-hover', allView);
+      toggleLibraryClassIfChanged(allControl, 'text-default', allView);
+      toggleLibraryClassIfChanged(allControl, 'text-tertiary', !allView);
+      setLibraryAttributeIfChanged(allControl, 'aria-selected', allView ? 'true' : 'false');
+    }
 
     if (trashView) {
       setLibraryAttributeIfChanged(recommendedControl, 'aria-current', 'page');
@@ -17743,7 +18491,7 @@
       }
       window.setTimeout(() => {
         if (location.href !== before || !shouldDefaultLibraryToAll()) return;
-        location.replace(new URL('/library?tab=all', location.origin).href);
+        location.replace(new URL(`${base}?tab=all`, location.origin).href);
       }, 120);
     }
   }
@@ -17755,7 +18503,24 @@
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation();
-    const target = new URL('/library?deleted=true', location.origin).href;
+    if (currentLibraryIsTrashView()) return;
+    const base = location.pathname.startsWith(SPACE_PATH) ? SPACE_PATH : '/library';
+    const target = new URL(`${base}?deleted=true`, location.origin).href;
+    // Prefer ChatGPT's actual native Trash handler (from the old nav row) when
+    // present. Its current internal route need not be the old ?deleted=true URL.
+    if (control.hasAttribute(LIBRARY_SYNTHETIC_TRASH_ATTR)) {
+      const nativeTrash = Array.from(document.querySelectorAll('button[data-sidebar-cycle-item]'))
+        .find(button => normalizeText(button.textContent) === 'roskakori' ||
+          normalizeText(button.textContent) === 'trash');
+      if (nativeTrash instanceof HTMLButtonElement) {
+        const from = location.href;
+        nativeTrash.click();
+        window.setTimeout(() => {
+          if (location.href === from && location.href !== target) location.assign(target);
+        }, 450);
+        return;
+      }
+    }
     if (location.href !== target) location.assign(target);
   }
 
@@ -17768,6 +18533,8 @@
     cleanupProtectedLibraryUiOutsideFolder();
     if (!isChatGptLibraryLocation()) return;
 
+    renameSpacePageHeading(document);
+    renameSpaceCreateControl(document);
     reconcileLibraryTabs();
     discoverProtectedLibraryDescendantLinks(document);
 
