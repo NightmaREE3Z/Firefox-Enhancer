@@ -2401,7 +2401,12 @@ function braveFoxChatGptProtectedRouteKey(rawUrl) {
     if (url.protocol !== "https:" || url.hostname.toLowerCase() !== "chatgpt.com") return "";
     const path = braveFoxNormalizeChatGptPath(url.pathname);
     const hash = decodeURIComponent(url.hash || "").toLowerCase();
-    if (path === "/library/d/6ab47ad73fe88191b5861b9b1f45132a" || path.startsWith("/library/d/6ab47ad73fe88191b5861b9b1f45132a/")) return "library-protected-files";
+    const protectedId = "6ab47ad73fe88191b5861b9b1f45132a";
+    if (path === `/library/d/${protectedId}` || path.startsWith(`/library/d/${protectedId}/`)) return "library-protected-files";
+    if ((path === "/space" || path.startsWith("/space/")) && (
+      path.split("/").includes(protectedId) ||
+      Array.from(url.searchParams.values()).some(value => String(value).toLowerCase().split(/[^a-z0-9]+/).includes(protectedId))
+    )) return "library-protected-files";
     if (hash.startsWith("#settings/personalization")) return "personalization";
     return "";
   } catch (_) {
