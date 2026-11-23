@@ -3,6 +3,7 @@
 // Platform-exclusive behavior lives in modules/pc-esr.js and modules/fenix-nightly.js.
 
 import './scripts/elementselect.js';
+import './blocker/service.js';
 
 import { isCompletelyExcludedHostname, isCompletelyExcludedUrl, isGoogleMapsOrEarthUrl } from "./blocker/shared.js";
 import { getSettings, loadDataset } from "./blocker/storage.js";
@@ -2694,9 +2695,6 @@ browser.runtime.onMessage.addListener((message, sender) => {
 
 async function main() {
   const manifest = browser.runtime.getManifest();
-  // Load the unified Focus Master dataset before request interception so
-  // TrustedSites DOMAIN/PATH exceptions are live from the first request.
-  await loadDataset({ force: true });
   const platformInfo = await browser.runtime.getPlatformInfo();
   const isAndroid = platformInfo?.os === "android";
 
@@ -2704,9 +2702,28 @@ async function main() {
     ? await import("./modules/fenix-nightly.js")
     : await import("./modules/pc-esr.js");
 
-  await platformModule.initializePlatform?.();
-  await loadHostsCache();
+  // Install the request interceptor before slower dataset/cache reads.
+  // The shared Focus Master hosts service preloads the hard-host fallback.
   installRequestListener();
+  try {
+    await platformModule.initializePlatform?.();
+  } catch (error) {
+    console.warn(`${LOG_PREFIX} Platform UI initialization failed; network blocking remains active:`, error);
+  }
+
+  // Keep the synchronized Focus Master dataset and legacy hosts migration
+  // non-fatal so storage problems cannot disable request interception.
+  try {
+    await loadDataset({ force: true });
+  } catch (error) {
+    console.warn(`${LOG_PREFIX} Dataset startup load failed; request blocking remains active:`, error);
+  }
+  try {
+    await loadHostsCache();
+  } catch (error) {
+    console.warn(`${LOG_PREFIX} Legacy hosts cache load failed; shared host service remains active:`, error);
+  }
+
   void braveFoxScanOpenFirefoxSystemTabs();
   setupAlarms();
   await runStartupUpdates(false);
