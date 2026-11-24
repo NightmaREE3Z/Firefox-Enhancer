@@ -661,7 +661,7 @@
   // Share only compact, non-content message metadata across ChatGPT tabs/windows.
   // This lets an already-seen conversation restore timestamps/model labels synchronously
   // instead of refetching and reparsing the full conversation tree in every tab.
-  const MESSAGE_METADATA_SHARED_CACHE_KEY = 'bravefoxChatGptMessageMetadataCache_v1';
+  const MESSAGE_METADATA_SHARED_CACHE_KEY = 'bravefoxChatGptMessageMetadataCache_v2';
   const MESSAGE_METADATA_SHARED_CACHE_MAX_CONVERSATIONS = 10;
   const MESSAGE_METADATA_SHARED_CACHE_MAX_RECORDS = 600;
   const MESSAGE_USER_NAME_SHARED_CACHE_KEY = 'bravefoxChatGptUserDisplayName_v1';
@@ -11613,6 +11613,15 @@
     ]);
     if (known.has(slug)) return known.get(slug);
 
+    // Preserve GPT-6 minor versions in both compact headers and full model names.
+    const versionedModel = slug.match(/^gpt-(6(?:[.-]\d+)?)(?:-(thinking|instant|sol|luna|pro|astra(?:-wm)?))?$/);
+    if (versionedModel) {
+      const version = versionedModel[1].replace('-', '.');
+      const tier = versionedModel[2] || '';
+      const tierLabel = tier === 'astra-wm' ? 'Astra Work' : tier.replace(/\b\w/g, char => char.toUpperCase());
+      return tierLabel ? `${version} ${tierLabel}` : version;
+    }
+
     let label = slug.replace(/^gpt-/, 'GPT-').replace(/-/g, ' ');
     label = label.replace(/\b(\d+) (\d+)\b/g, '$1.$2');
     return label.replace(/\b\w/g, char => char.toUpperCase()).trim();
@@ -11734,7 +11743,7 @@
   }
 
   function inferConversationModelSlugFromText(value, effort = '') {
-    const text = normalizeText(value).replace(/_/g, ' ');
+    const text = normalizeText(value).replace(/(\d)_(?=\d)/g, '$1-').replace(/_/g, ' ');
     if (!text) return '';
 
     // Preserve exact identifiers from the Chrome snapshot before inferring a
@@ -11745,12 +11754,16 @@
     const normalizedEffort = normalizeConversationReasoningEffort(effort);
     const thinkingSelected = ['medium', 'high', 'extra-high'].includes(normalizedEffort);
 
-    if (/\bgpt[- ]?6\b|\b6\s+(?:astra|sol|luna)\b/.test(text)) {
-      if (text.includes('pro')) return 'gpt-6-pro';
-      if (text.includes('astra')) return text.includes('work') ? 'gpt-6-astra-wm' : 'gpt-6-astra';
-      if (text.includes('sol')) return 'gpt-6-sol';
-      if (text.includes('luna')) return 'gpt-6-luna';
-      return 'gpt-6';
+    const versionedModel = text.match(/\bgpt[- ]?(6(?:[.-]\d+)?)(?![.\d])\b|(?<![\w.-])(6(?:[.-]\d+)?)(?![.\d])\s+(?:astra|sol|luna|thinking|instant|pro)\b/);
+    if (versionedModel) {
+      const family = `gpt-${(versionedModel[1] || versionedModel[2]).replace('-', '.')}`;
+      if (/\bpro\b/.test(text)) return `${family}-pro`;
+      if (/\bastra\b/.test(text)) return /\b(?:work|wm)\b/.test(text) ? `${family}-astra-wm` : `${family}-astra`;
+      if (/\bsol\b/.test(text)) return `${family}-sol`;
+      if (/\bluna\b/.test(text)) return `${family}-luna`;
+      if (/\bthinking\b/.test(text)) return `${family}-thinking`;
+      if (/\binstant\b/.test(text)) return `${family}-instant`;
+      return family;
     }
 
     if (/\b5[.\s-]?6\b/.test(text)) {
@@ -12169,15 +12182,15 @@
     const modelLabel = formatConversationModelLabel(modelSlug);
     if (!modelLabel) return '';
 
-    // BraveFox's on-screen GPT-5.6 / GPT-6 aliases: Thinking uses "T" plus the
+    // BraveFox's on-screen GPT-5.6 / GPT-6.x aliases: Thinking uses "T" plus the
     // actual effort; Instant uses Sol by convention, or Luna if the selected model
     // explicitly identifies Luna. The plain model slug alone does not prove which
     // backend is serving the request. Pro/Astra and archival labels are unchanged.
-    const standardModelMatch = normalizedModelSlug.match(/^gpt-(5[.-]6|6)(?:-(thinking|instant|sol|luna))?$/);
+    const standardModelMatch = normalizedModelSlug.match(/^gpt-(5[.-]6|6(?:[.-]\d+)?)(?:-(thinking|instant|sol|luna))?$/);
     if (standardModelMatch) {
       const standardVersion = standardModelMatch[1].replace('-', '.');
       const standardTier = standardModelMatch[2] || '';
-      if (effort === 'medium' || effort === 'high') {
+      if (['medium', 'high', 'extra-high'].includes(effort)) {
         const level = CHATGPT_MESSAGE_METADATA_CUSTOMIZATION.showAssistantReasoningLevel
           ? formatConversationReasoningEffort(effort) : '';
         return `${standardVersion}T${level ? ` ${level}` : ''}`;
