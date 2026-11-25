@@ -447,6 +447,31 @@
   // Optional native banner-text overrides; empty when no custom notices are configured.
   const CHATGPT_BANNER_TEXT_REPLACEMENTS = [];
 
+  // === Native model retirement notices (desktop / mobile) ======================
+  // null = keep the native label; a string = replace only that label.
+  // Tokens: {model}, {date}, {native}. Model/date come from the notice itself.
+  // hidePermanently: true hides matching notices without clicking native controls.
+  // The ⋯ menu also saves a per-model permanent hide in extension-local storage.
+  // The original Try CTA becomes a normal dismiss button; its label is editable.
+  // Per-model settings override the defaults; future notices use the defaults.
+  const CHATGPT_MODEL_RETIREMENT_NOTICE_CUSTOMIZATION = {
+    enabled: true,
+    titleText: 'Hyvää joulua! GPT-5.6 poistuu käytöstä 23.12',
+    descriptionText: 'Sam-setä on joulumielellä, täten hän halusi tehdä leikkauksia sadannetta kertaa tänä vuonna.',
+    tryButtonText: 'Ok Altman',
+    dismissButtonLabel: 'Mene nyt vittuun siitä',
+    hidePermanently: false,
+    models: {
+      'gpt-5.6-sol': {
+        // titleText: 'Model notice',
+        // descriptionText: '{model} is retiring on {date}.',
+        // tryButtonText: 'Ohita',
+        // dismissButtonLabel: 'Dismiss',
+        // hidePermanently: true
+      }
+    }
+  };
+
   // === Fixed assistant notice text ==============================================
   // Edit `replacementHtml` below to permanently rewrite the matching grey assistant
   // notice. Text, link labels and href values are all controlled here in chatgpt.js.
@@ -760,6 +785,20 @@
     'ei enää saatavilla', 'ei enaa saatavilla',
     'lopetetaan', 'lakkautetaan', 'vanhentuu'
   ];
+
+  const MODEL_RETIREMENT_CLOSE_SELECTOR = [
+    'button[aria-label="Ohita ilmoitus mallin poistumisesta käytöstä" i]',
+    'button[aria-label*="dismiss" i][aria-label*="model" i][aria-label*="retir" i]',
+    'button[aria-label*="dismiss" i][aria-label*="model" i][aria-label*="deprecat" i]',
+    'button[aria-label*="dismiss" i][aria-label*="model" i][aria-label*="discontinu" i]',
+    'button[data-bravefox-model-retirement-close="true"]'
+  ].join(', ');
+  const MODEL_RETIREMENT_SELECTOR = `aside:has(> div[class*="dismiss-"] > :is(${MODEL_RETIREMENT_CLOSE_SELECTOR}))`;
+  const MODEL_RETIREMENT_HIDDEN_ATTR = 'data-bravefox-model-retirement-hidden';
+  const MODEL_RETIREMENT_DISMISS_ACTION_ATTR = 'data-bravefox-model-retirement-dismiss-action';
+  const MODEL_RETIREMENT_READY_ATTR = 'data-bravefox-model-retirement-ready';
+  const modelRetirementNoticeStates = new WeakMap();
+  const modelRetirementNativeLabels = new WeakMap();
 
   const CHATGPT_BANNER_HIDE_KEY = 'bravefoxChatGptHiddenModelNotices_v1';
   const CHATGPT_BANNER_PREFS_LOADING_CLASS = 'bravefox-chatgpt-banner-prefs-loading';
@@ -1795,7 +1834,10 @@
   void ensureHiddenChatGptBannerPrefsLoaded().then(() => {
     // Apply saved preferences synchronously while the short Android paint guard is
     // still active. Unhide native announcements that are not in the saved list.
-    try { hidePreviouslyDismissedChatGptBanners(document); }
+    try {
+      reconcileModelRetirementNotices(document);
+      hidePreviouslyDismissedChatGptBanners(document);
+    }
     finally { document.documentElement.classList.remove(CHATGPT_BANNER_PREFS_LOADING_CLASS); }
     scheduleGeneralUiScan(true);
   });
@@ -2218,6 +2260,19 @@
         visibility: hidden !important;
         opacity: 0 !important;
         pointer-events: none !important;
+      }
+
+      /* New retirement status component: hold only this notice until classified.
+       * A permanent hide collapses the notice's own status wrapper, not the page. */
+      ${MODEL_RETIREMENT_SELECTOR}:not([${MODEL_RETIREMENT_READY_ATTR}="true"]) {
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+      [${MODEL_RETIREMENT_HIDDEN_ATTR}="true"],
+      div.select-none[role="status"]:has(> div[class*="container-"]:only-child > aside[${MODEL_RETIREMENT_HIDDEN_ATTR}="true"]:only-child),
+      div[class*="container-"]:has(> aside[${MODEL_RETIREMENT_HIDDEN_ATTR}="true"]:only-child) {
+        display: none !important;
       }
 
       /* A tiny Android pre-paint guard while the stored preference is read.
@@ -2907,6 +2962,10 @@
       summary[${CHATGPT_BANNER_MENU_TRIGGER_ATTR}="true"]:focus-visible {
         background: var(--surface-hover, rgba(127, 127, 127, 0.16)) !important;
         outline: none !important;
+      }
+
+      details[${CHATGPT_BANNER_MENU_DETAILS_ATTR}="true"]:not([open]) > #${CHATGPT_BANNER_CLOSE_MENU_ID} {
+        display: none !important;
       }
 
       details[${CHATGPT_BANNER_MENU_DETAILS_ATTR}="true"] > #${CHATGPT_BANNER_CLOSE_MENU_ID} {
@@ -4418,6 +4477,7 @@
 
   function installInteractionGuards() {
     document.addEventListener('click', event => {
+      if (interceptModelRetirementDismissAction(event)) return;
       const settingsNavButton = getButtonFromEvent(event);
       if (
         !TEMP_DISABLE_ALL_PASSWORD_PROMPTS &&
@@ -4712,7 +4772,7 @@
     }, true);
   }
 
-  function ensureCustomChatGptBannerMenuTrigger(banner) {
+  function ensureCustomChatGptBannerMenuTrigger(banner, retirementNotice = false) {
     if (!(banner instanceof Element)) return null;
 
     const existing = banner.querySelector(`details[${CHATGPT_BANNER_MENU_DETAILS_ATTR}="true"]`);
@@ -4732,7 +4792,7 @@
     summary.setAttribute(CHATGPT_BANNER_MENU_TRIGGER_ATTR, 'true');
     details.appendChild(summary);
 
-    const modelSlug = getCurrentChatGptBannerModelSlug(banner);
+    const modelSlug = retirementNotice ? modelRetirementNoticeStates.get(banner)?.modelSlug : getCurrentChatGptBannerModelSlug(banner);
     const menu = document.createElement('div');
     menu.id = CHATGPT_BANNER_CLOSE_MENU_ID;
     menu.setAttribute('role', 'menu');
@@ -4742,19 +4802,23 @@
     const hideModelButton = document.createElement('button');
     hideModelButton.type = 'button';
     hideModelButton.setAttribute('role', 'menuitem');
-    hideModelButton.textContent = 'Hide this notification permanently';
+    hideModelButton.textContent = 'Heivaa ilmoitus vittuun pysyvästi';
     hideModelButton.addEventListener('click', event => {
       event.preventDefault();
       event.stopPropagation();
       details.open = false;
-      void hideCustomChatGptBannerForModelAndClose(banner, closeButton, modelSlug);
+      if (retirementNotice) {
+        void permanentlyHideModelRetirementNotice(banner);
+      } else {
+        void hideCustomChatGptBannerForModelAndClose(banner, closeButton, modelSlug);
+      }
     });
     menu.appendChild(hideModelButton);
 
     const cancelButton = document.createElement('button');
     cancelButton.type = 'button';
     cancelButton.setAttribute('role', 'menuitem');
-    cancelButton.textContent = 'Cancel';
+    cancelButton.textContent = 'Peruuta';
     cancelButton.addEventListener('click', event => {
       event.preventDefault();
       event.stopPropagation();
@@ -7045,6 +7109,9 @@
 
           if (mutation.type === 'characterData') {
             const parent = mutation.target?.parentElement;
+            if (parent instanceof Element && parent.closest(MODEL_RETIREMENT_SELECTOR)) {
+              reconcileModelRetirementNotices(parent);
+            }
             if (parent instanceof Element && parent.closest('[role="menuitem"]')) {
               braveFoxHideWorkBranchItems(parent.closest('[role="menuitem"]'));
             }
@@ -7104,6 +7171,9 @@
             reconcileNativeChatGptAnnouncementFilter(mutation.target);
           }
 
+          if (mutation.target instanceof Element && mutation.target.closest(MODEL_RETIREMENT_SELECTOR)) {
+            reconcileModelRetirementNotices(mutation.target);
+          }
           for (const addedNode of mutation.addedNodes) {
             const node = addedNode instanceof Element ? addedNode : addedNode.parentElement;
             if (!(node instanceof Element)) continue;
@@ -7267,6 +7337,7 @@
             const relevantHomeHeadline = mayContainCustomizableHomeHeadline(node);
             if (relevantHomeHeadline) replaceCustomizableHomeHeadline(node);
 
+            reconcileModelRetirementNotices(node);
             const relevantBanner = mayContainCustomizableChatGptBanner(node);
             const relevantComposerModelSelector =
               node.matches?.('button.__composer-pill[aria-haspopup="menu"]') ||
@@ -10551,6 +10622,7 @@
     if (!(banner instanceof Element)) return null;
 
     const selectors = [
+      MODEL_RETIREMENT_CLOSE_SELECTOR,
       'button[data-testid="close-button"]',
       'button[aria-label="Close"]',
       'button[aria-label="Sulje"]',
@@ -10732,6 +10804,7 @@
   }
 
   function collectCustomizableChatGptBanners(scope = document) {
+    if (!CHATGPT_BANNER_TEXT_REPLACEMENTS.some(rule => rule?.enabled)) return [];
     const banners = [];
     const seen = new Set();
     const structuralSelector = [
@@ -10747,6 +10820,7 @@
     const add = candidate => {
       if (!(candidate instanceof Element) || seen.has(candidate)) return;
       if (isInsideConversationContent(candidate)) return;
+      if (candidate.closest(MODEL_RETIREMENT_SELECTOR) || candidate.querySelector(MODEL_RETIREMENT_SELECTOR)) return;
       if (!getMatchingChatGptBannerRule(candidate.textContent)) return;
       seen.add(candidate);
       banners.push(candidate);
@@ -10777,6 +10851,7 @@
   }
 
   function mayContainCustomizableChatGptBanner(scope) {
+    if (!CHATGPT_BANNER_TEXT_REPLACEMENTS.some(rule => rule?.enabled)) return false;
     try {
       if (!(scope instanceof Element)) return false;
       // Cheap text gate first. Most mutations are normal chat/UI nodes and cannot
@@ -10827,6 +10902,125 @@
       } else {
         banner.removeAttribute(CHATGPT_NATIVE_BANNER_ALLOWED_ATTR);
       }
+    }
+  }
+
+  function parseModelRetirementNotice(text) {
+    const native = String(text || '').replace(/\s+/g, ' ').trim();
+    const match = native.match(/^Käytät tällä hetkellä mallia\s+(.+?)\.\s+Tämä malli poistuu käytöstä\s+(.+?)(?:\.\s+(?=Kokeile\b)|\.$|$)/i) ||
+      native.match(/^(?:You(?:['’]re| are) currently using(?: the model)?|You(?:['’]re| are) using(?: the model)?)\s+(.+?)\.\s+This model (?:will be retired|is being retired|will be discontinued|will no longer be available|is retiring)\s+(?:on\s+)?(.+?)(?:\.\s|\.$|$)/i);
+    if (!match) return null;
+    const model = match[1].trim();
+    const date = match[2].trim();
+    const normalized = normalizeChatGptModelSlug(model);
+    if (!normalized) return null;
+    const modelSlug = /^\d/.test(normalized) ? `gpt-${normalized}` : normalized;
+    return { model, date, modelSlug, native };
+  }
+
+  function applyModelRetirementLabel(node, template, info, attribute = null) {
+    if (!(node instanceof Element)) return;
+    if (!attribute && node.children.length) return;
+    const current = attribute ? node.getAttribute(attribute) || '' : node.textContent || '';
+    let state = modelRetirementNativeLabels.get(node);
+    if (!state || state.last !== current || state.attribute !== attribute) {
+      state = { native: current, last: current, attribute };
+      modelRetirementNativeLabels.set(node, state);
+    }
+    const desired = typeof template === 'string' ? template.replace(/\{(model|date|native)\}/g, (_, key) =>
+      key === 'native' ? state.native : info[key]) : state.native;
+    if (desired !== current) {
+      if (attribute) node.setAttribute(attribute, desired);
+      else node.textContent = desired;
+    }
+    state.last = desired;
+  }
+
+  async function permanentlyHideModelRetirementNotice(banner) {
+    const info = modelRetirementNoticeStates.get(banner);
+    if (!info?.modelSlug) return;
+    banner.setAttribute(MODEL_RETIREMENT_HIDDEN_ATTR, 'true');
+    await ensureHiddenChatGptBannerPrefsLoaded();
+    hiddenChatGptBannerModelSlugs.add(info.modelSlug);
+    await saveHiddenChatGptBannerPrefs();
+    reconcileModelRetirementNotices(document);
+  }
+
+  function interceptModelRetirementDismissAction(event) {
+    const button = getElementFromEvent(event, `button[${MODEL_RETIREMENT_DISMISS_ACTION_ATTR}="true"]`);
+    if (!(button instanceof HTMLButtonElement)) return false;
+    const banner = button.closest(MODEL_RETIREMENT_SELECTOR);
+    // Cancel the original Try action before React receives the click, even if
+    // the native X is temporarily missing during a component update.
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+    if (banner && !isInsideConversationContent(banner)) {
+      const close = banner.querySelector(MODEL_RETIREMENT_CLOSE_SELECTOR);
+      if (close && close !== button) clickNativeChatGptBannerClose(close);
+    }
+    return true;
+  }
+
+  function reconcileModelRetirementNotices(scope = document) {
+    if (!scope) return;
+    const candidates = new Set();
+    if (scope instanceof Element) {
+      const parent = scope.closest(MODEL_RETIREMENT_SELECTOR);
+      if (parent) candidates.add(parent);
+    }
+    // Only the dedicated retirement control is searched; no generic text-leaf scan.
+    for (const button of scope.querySelectorAll?.(MODEL_RETIREMENT_CLOSE_SELECTOR) || []) {
+      const banner = button.closest(MODEL_RETIREMENT_SELECTOR);
+      if (banner) candidates.add(banner);
+    }
+    for (const banner of candidates) {
+      if (isInsideConversationContent(banner)) {
+        banner.setAttribute(MODEL_RETIREMENT_READY_ATTR, 'true');
+        continue;
+      }
+      if (!hiddenChatGptBannerPrefsLoaded) continue;
+      const config = CHATGPT_MODEL_RETIREMENT_NOTICE_CUSTOMIZATION;
+      if (!config.enabled) {
+        banner.setAttribute(MODEL_RETIREMENT_READY_ATTR, 'true');
+        continue;
+      }
+      const description = banner.querySelector('div[class*="description-"]');
+      const closeButton = banner.querySelector(MODEL_RETIREMENT_CLOSE_SELECTOR);
+      if (!description || !closeButton) continue;
+      const current = description.textContent || '';
+      const cached = modelRetirementNativeLabels.get(description);
+      const native = cached && cached.last === current ? cached.native : current;
+      const info = parseModelRetirementNotice(native);
+      if (!info) {
+        // Unknown localized wording remains native, never hide using another model's ID.
+        banner.removeAttribute(MODEL_RETIREMENT_HIDDEN_ATTR);
+        banner.setAttribute(MODEL_RETIREMENT_READY_ATTR, 'true');
+        continue;
+      }
+      modelRetirementNoticeStates.set(banner, info);
+      const options = { ...config, ...config.models?.[info.modelSlug] };
+      const hidden = options.hidePermanently === true || hiddenChatGptBannerModelSlugs.has(info.modelSlug);
+      if (hidden) banner.setAttribute(MODEL_RETIREMENT_HIDDEN_ATTR, 'true');
+      else banner.removeAttribute(MODEL_RETIREMENT_HIDDEN_ATTR);
+      // Preserve native button handlers and React-owned wrapper nodes.
+      if (!closeButton.hasAttribute('data-bravefox-model-retirement-close')) {
+        closeButton.setAttribute('data-bravefox-model-retirement-close', 'true');
+      }
+      if (!hidden) {
+        applyModelRetirementLabel(banner.querySelector('div[class*="title-"]'), options.titleText, info);
+        applyModelRetirementLabel(description, options.descriptionText, info);
+        const tryButton = banner.querySelector('div[class*="ctas-"] button[class*="primary-"]');
+        if (tryButton instanceof HTMLButtonElement && tryButton !== closeButton) {
+          if (tryButton.getAttribute(MODEL_RETIREMENT_DISMISS_ACTION_ATTR) !== 'true') {
+            tryButton.setAttribute(MODEL_RETIREMENT_DISMISS_ACTION_ATTR, 'true');
+          }
+          applyModelRetirementLabel(tryButton, options.tryButtonText, info);
+        }
+        applyModelRetirementLabel(closeButton, options.dismissButtonLabel, info, 'aria-label');
+        ensureCustomChatGptBannerMenuTrigger(banner, true);
+      }
+      banner.setAttribute(MODEL_RETIREMENT_READY_ATTR, 'true');
     }
   }
 
@@ -17541,6 +17735,7 @@
     customizeActionFailureToast(scope);
     replaceCustomizableHomeHeadline(scope);
     reconcileNativeChatGptAnnouncementFilter(scope);
+    reconcileModelRetirementNotices(scope);
     replaceCustomizableChatGptBannerText(scope);
     replaceFixedAssistantNoticeText(scope);
     polishSidebarNavigation();

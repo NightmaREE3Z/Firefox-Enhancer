@@ -1406,6 +1406,8 @@
         "r/AyyMD",
 	"r/buildapc",
 	"r/buildmeapc",
+	"r/pcmasterrace",
+	"r/2007Scape",
 	"r/RealHomePorn",
 	"r/AmateursDoingIt",
     ];
@@ -1714,8 +1716,9 @@
             observer.observe(document.documentElement, {
                 childList: true,
                 subtree: true,
-                attributes: false,
-                characterData: false
+                attributes: true,
+                attributeFilter: ['recent-post-ids'],
+                characterData: true
             });
 
             const domDetachObserver = new MutationObserver((muts) => {
@@ -1787,6 +1790,10 @@
 
     function cleanup() {
         devLog('🧹 Performing cleanup...');
+        if (redditScreenTimerV296 !== null) clearTimeout(redditScreenTimerV296);
+        redditScreenTimerV296 = null;
+        pendingRedditPostChecksV296.clear();
+        pendingRedditCommentChecksV296.clear();
         
         intervalIds.forEach(id => {
             try { clearInterval(id); } catch {}
@@ -1859,14 +1866,24 @@
             timer = null;
             if (!pending.length) return;
             lastCall = performance.now();
-            const next = pending.splice(0, 30);
-            fn(next);
-            if (pending.length) timer = setTimeout(flush, wait);
+            const next = pending.splice(0, 6);
+            const started = performance.now();
+            try {
+                fn(next);
+            } catch (error) {
+                console.warn('[REDDIT.JS] Mutation processing error:', error?.name || 'Error');
+                queueRedditOverflowSweepV295();
+                queueRedditCommentOverflowSweep();
+            } finally {
+                reportSlowRedditWorkV296('mutation batch', started);
+                if (pending.length) timer = setTimeout(flush, 0);
+            }
         }
 
         return function(mutations) {
-            if (Array.isArray(mutations)) pending.push(...mutations);
-            else if (mutations) pending.push(mutations);
+            if (Array.isArray(mutations)) {
+                for (const mutation of mutations) pending.push(mutation);
+            } else if (mutations) pending.push(mutations);
             // Bound backlog during unusually large React commits. The overflow
             // gets a full post scan (still fail-closed) rather than keeping the
             // renderer blocked by an unlimited queue of old mutation records.
@@ -1877,8 +1894,8 @@
             }
             if (timer === null && pending.length) {
                 const remaining = Math.max(0, wait - (performance.now() - lastCall));
-                if (remaining === 0) flush();
-                else timer = setTimeout(flush, remaining);
+                // Exit the MutationObserver microtask before doing DOM work.
+                timer = setTimeout(flush, remaining);
             }
         };
     }
@@ -2449,6 +2466,68 @@
         }
     }
 
+    // Feed screening must yield between cards. A hydrated infinite-scroll batch
+    // can contain many media-rich cards; never evaluate the entire batch in one task.
+    const pendingRedditPostChecksV296 = new Set();
+    const pendingRedditCommentChecksV296 = new Set();
+    let redditScreenTimerV296 = null;
+    let redditScreenCommentsNextV296 = false;
+    let lastSlowScreenLogV296 = -Infinity;
+
+    function reportSlowRedditWorkV296(kind, started) {
+        const elapsed = performance.now() - started;
+        if (elapsed >= 50 && performance.now() - lastSlowScreenLogV296 >= 1000) {
+            lastSlowScreenLogV296 = performance.now();
+            console.warn('[REDDIT.JS] Slow ' + kind + ': ' + Math.round(elapsed) + 'ms',
+                { postsQueued: pendingRedditPostChecksV296.size, commentsQueued: pendingRedditCommentChecksV296.size });
+        }
+    }
+
+    function scheduleRedditScreenV296() {
+        if (redditScreenTimerV296 !== null ||
+            (!pendingRedditPostChecksV296.size && !pendingRedditCommentChecksV296.size)) return;
+        redditScreenTimerV296 = setTimeout(() => {
+            redditScreenTimerV296 = null;
+            const start = performance.now();
+            let count = 0;
+            while (count < 8 && (count === 0 || performance.now() - start < 8)) {
+                const useComment = pendingRedditCommentChecksV296.size &&
+                    (redditScreenCommentsNextV296 || !pendingRedditPostChecksV296.size);
+                const queue = useComment ? pendingRedditCommentChecksV296 : pendingRedditPostChecksV296;
+                if (!queue.size) break;
+                const node = queue.values().next().value;
+                queue.delete(node);
+                redditScreenCommentsNextV296 = !useComment;
+                count++;
+                if (!node?.isConnected) continue;
+                const cardStart = performance.now();
+                try {
+                    if (useComment) screenRedditComment(node);
+                    else screenRedditPostRootV295(node);
+                } catch (error) {
+                    // Preserve the no-glimpse gate on errors; periodic audits retry.
+                    if (!useComment && !node.classList.contains('reddit-approved')) processedElements.delete(node);
+                    console.warn('[REDDIT.JS] Screening error:', error?.name || 'Error');
+                }
+                reportSlowRedditWorkV296(useComment ? 'comment screening' : 'post screening', cardStart);
+            }
+            scheduleRedditScreenV296();
+        }, 0);
+    }
+
+    function queueRedditPostCheckV296(seed) {
+        const post = getRedditScreeningRootV295(seed);
+        if (!post?.isConnected) return;
+        pendingRedditPostChecksV296.add(post);
+        scheduleRedditScreenV296();
+    }
+
+    function queueRedditCommentCheckV296(comment) {
+        if (!comment?.isConnected) return;
+        pendingRedditCommentChecksV296.add(comment);
+        scheduleRedditScreenV296();
+    }
+
     function screenRedditPostRootV295(seed) {
         const post = getRedditScreeningRootV295(seed);
         if (!post) return;
@@ -2500,8 +2579,9 @@
             processedElements.add(post);
             return;
         }
+        const banned = evaluateElementForBanning(post);
         processedElements.add(post);
-        if (evaluateElementForBanning(post)) {
+        if (banned) {
             post.classList.add('prehide', 'reddit-banned');
             hideSearchElement(post);
             removeElementAndRelated(post);
@@ -2555,7 +2635,7 @@
         const comments = document.querySelectorAll(
             'shreddit-comment:not(.reddit-comment-approved):not(.reddit-comment-banned)'
         );
-        for (const comment of comments) screenRedditComment(comment);
+        for (const comment of comments) queueRedditCommentCheckV296(comment);
     }
 
     function processAllUnapprovedPosts() {
@@ -2565,7 +2645,7 @@
             const posts = document.querySelectorAll(
                 'article:has(> shreddit-post), article[data-testid="post-container"], shreddit-post'
             );
-            for (const post of posts) revealPostCardOnDetailPage(getRedditScreeningRootV295(post));
+            for (const post of new Set(Array.from(posts, getRedditScreeningRootV295))) queueRedditPostCheckV296(post);
             return;
         }
         const posts = document.querySelectorAll(`
@@ -2577,8 +2657,8 @@
             [data-testid="search-post-with-content-preview"]:not(.prehide):not(.reddit-approved)
         `);
         
-        for (let i = 0; i < posts.length; i++) {
-            screenRedditPostRootV295(posts[i]);
+        for (const post of new Set(Array.from(posts, getRedditScreeningRootV295))) {
+            queueRedditPostCheckV296(post);
         }
     }
 
@@ -2818,7 +2898,16 @@
     }
 
     const throttledShadowRootHandler = throttle((mutations) => {
-        const maxMutations = Math.min(mutations.length, 20);
+        // One policy evaluation per canonical card in this mutation batch.
+        // Later batches still recheck changed content using the original rules.
+        const pendingPosts = new Set();
+        const screenPostOnce = seed => {
+            const root = getRedditScreeningRootV295(seed);
+            if (root) pendingPosts.add(root);
+        };
+
+        const pendingSearchTargets = new Set();
+        const maxMutations = mutations.length;
         for (let mi = 0; mi < maxMutations; mi++) {
             const mutation = mutations[mi];
             const addedLimit = Math.min(mutation.addedNodes.length, 10);
@@ -2833,17 +2922,17 @@
                         else screenCommunityTypeaheadSuggestions(mutation.target);
                     }
                     screenPremiumAdultLinks(node);
-                    processShadowSearchItems(mutation.target);
+                    pendingSearchTargets.add(mutation.target);
                     // A feed's shadow root can receive posts after its initial
                     // scan. Screen those specific new posts instead of leaving
                     // them waiting for an unreachable light-DOM fallback.
                     if (node.matches?.('shreddit-post, article[data-testid="post-container"], [data-testid="search-post-unit"], [data-id="search-media-post-unit"], [data-testid="search-post-with-content-preview"]') ||
                         (node.tagName === 'ARTICLE' && node.querySelector?.('shreddit-post'))) {
-                        screenRedditPostRootV295(node);
+                        screenPostOnce(node);
                     } else if (node.querySelectorAll) {
                         const nested = node.querySelectorAll('shreddit-post, article[data-testid="post-container"], [data-testid="search-post-unit"], [data-id="search-media-post-unit"], [data-testid="search-post-with-content-preview"]');
                         const limit = Math.min(nested.length, 60);
-                        for (let k = 0; k < limit; k++) screenRedditPostRootV295(nested[k]);
+                        for (let k = 0; k < limit; k++) screenPostOnce(nested[k]);
                         if (nested.length > limit) queueRedditOverflowSweepV295();
                     }
                     if (node.shadowRoot && !shadowRootsProcessed.has(node.shadowRoot)) {
@@ -2854,6 +2943,10 @@
                 }
             }
         }
+        for (const post of pendingPosts) {
+            if (post.isConnected) queueRedditPostCheckV296(post);
+        }
+        for (const target of pendingSearchTargets) processShadowSearchItems(target);
     }, 100);
 
     function getShadowRootObserverOptions(root) {
@@ -3278,7 +3371,7 @@
             const posts = element.shadowRoot.querySelectorAll('article, shreddit-post');
             for (let j = 0; j < posts.length; j++) {
                 const post = posts[j];
-                screenRedditPostRootV295(post);
+                queueRedditPostCheckV296(post);
             }
             
             observeShadowRootOnce(element.shadowRoot);
@@ -3306,7 +3399,6 @@
         
         hideAnswersButton();
         
-        hideBannedSubredditsFromSearch();
         hideBannedSubredditsFromAllSearchDropdowns();
         observeSearchDropdown();
         
@@ -3449,8 +3541,14 @@
             hideAndClearRecentPostsPanel();
         }
         if (window.requestIdleCallback) {
+            let idleAuditPendingV295 = false;
             const idleAuditIntervalV295 = setInterval(() => {
-                window.requestIdleCallback(runRedditIdleAuditV295, { timeout: 3000 });
+                if (idleAuditPendingV295) return;
+                idleAuditPendingV295 = true;
+                window.requestIdleCallback(() => {
+                    try { runRedditIdleAuditV295(); }
+                    finally { idleAuditPendingV295 = false; }
+                }, { timeout: 3000 });
             }, 2200);
             intervalIds.add(idleAuditIntervalV295);
         } else {
@@ -3460,6 +3558,25 @@
             intervalIds.add(backgroundInterval);
         }
         
+        // Log renderer stalls even when they are outside the filtering routines.
+        // The attribution is deliberately not presented as proof of script blame.
+        try {
+            if (typeof PerformanceObserver !== 'undefined' &&
+                PerformanceObserver.supportedEntryTypes?.includes('longtask')) {
+                let lastLongTaskLog = -Infinity;
+                const longTasks = new PerformanceObserver(list => {
+                    for (const entry of list.getEntries()) {
+                        if (entry.duration >= 150 && performance.now() - lastLongTaskLog >= 1000) {
+                            lastLongTaskLog = performance.now();
+                            console.warn('[REDDIT.JS] Renderer long task: ' + Math.round(entry.duration) + 'ms');
+                        }
+                    }
+                });
+                longTasks.observe({ entryTypes: ['longtask'] });
+                window.addEventListener('pagehide', () => longTasks.disconnect(), { once: true });
+            }
+        } catch {}
+
         const memoryMonitorInterval = setInterval(() => {
             monitorMemoryPressure();
         }, MEMORY_CHECK_INTERVAL);
@@ -3498,6 +3615,16 @@
     }
 
     const processNewElements = throttle((mutations) => {
+        // One policy evaluation per canonical card in this mutation batch.
+        // Later batches still recheck changed content using the original rules.
+        const pendingPosts = new Set();
+        const screenPostOnce = seed => {
+            const root = getRedditScreeningRootV295(seed);
+            if (root) pendingPosts.add(root);
+        };
+        const pendingComments = new Set();
+        const screenCommentOnce = comment => { if (comment) pendingComments.add(comment); };
+
         let needsSearchUpdate = false;
         let needsPostSweepV295 = false;
 
@@ -3509,12 +3636,12 @@
                 const changedLink = mutation.target.parentElement?.closest?.('a[href]');
                 if (changedLink) screenPremiumAdultLinks(changedLink);
                 const ownComment = mutation.target.parentElement?.closest?.('shreddit-comment');
-                if (ownComment) screenRedditComment(ownComment);
+                if (ownComment) screenCommentOnce(ownComment);
                 continue;
             }
             if (mutation.type === 'childList') {
                 const ownComment = mutation.target.closest?.('shreddit-comment');
-                if (ownComment) screenRedditComment(ownComment);
+                if (ownComment) screenCommentOnce(ownComment);
             }
             
             if (mutation.target.id === 'search-dropdown-results-container' ||
@@ -3530,15 +3657,19 @@
             // The preview shell may be inserted before its title/snippet. Later
             // childList commits must recheck that same card in-place.
             const changedSearchCard = mutation.target.closest?.(REDDIT_SEARCH_PREVIEW_SELECTOR_V295);
-            if (changedSearchCard) screenRedditSearchPreviewV295(changedSearchCard);
+            if (changedSearchCard) screenPostOnce(changedSearchCard);
             
             const addedLimit = Math.min(mutation.addedNodes.length, 15);
+            if (mutation.addedNodes.length > addedLimit) {
+                needsPostSweepV295 = true;
+                queueRedditCommentOverflowSweep();
+            }
             for (let j = 0; j < addedLimit; j++) {
                 const node = mutation.addedNodes[j];
                 if (!node) continue;
                 if (node.nodeType === 3) {
                     const comment = node.parentElement?.closest?.('shreddit-comment');
-                    if (comment) screenRedditComment(comment);
+                    if (comment) screenCommentOnce(comment);
                     continue;
                 }
                 if (node.nodeType !== 1) continue;
@@ -3571,15 +3702,15 @@
                 }
                 
                 const enclosingSearchCard = node.closest?.(REDDIT_SEARCH_PREVIEW_SELECTOR_V295);
-                if (enclosingSearchCard) screenRedditSearchPreviewV295(enclosingSearchCard);
+                if (enclosingSearchCard) screenPostOnce(enclosingSearchCard);
 
                 const enclosingComment = node.closest?.('shreddit-comment');
-                if (enclosingComment) screenRedditComment(enclosingComment);
-                if (node.matches?.('shreddit-comment')) screenRedditComment(node);
+                if (enclosingComment) screenCommentOnce(enclosingComment);
+                if (node.matches?.('shreddit-comment')) screenCommentOnce(node);
                 if (node.querySelectorAll) {
                     const nestedComments = node.querySelectorAll('shreddit-comment');
                     for (let k = 0; k < Math.min(nestedComments.length, 90); k++)
-                        screenRedditComment(nestedComments[k]);
+                        screenCommentOnce(nestedComments[k]);
                 }
                 // React can add the credit-bar Join host AFTER this post was
                 // already approved. Revoke approval as soon as that happens;
@@ -3588,19 +3719,19 @@
                     ? node : node.querySelector?.('shreddit-join-button[data-testid="credit-bar-join-button"]');
                 if (joinPrompt && isRedditJoinFeedContext()) {
                     const joinPost = joinPrompt.closest?.('shreddit-post');
-                    if (joinPost) screenRedditPostRootV295(joinPost);
+                    if (joinPost) screenPostOnce(joinPost);
                 }
 
                 const mediaPost = node.closest?.('shreddit-post');
                 if (mediaPost && (node.closest?.('[slot="post-media-container"]') ||
                     node.matches?.('[slot="post-media-container"]'))) {
-                    screenRedditPostRootV295(mediaPost);
+                    screenPostOnce(mediaPost);
                 }
 
                 if (node.tagName === 'ARTICLE' || node.tagName === 'SHREDDIT-POST' ||
                    (node.getAttribute && node.getAttribute('data-testid') === 'search-post-unit') ||
                    (node.getAttribute && node.getAttribute('data-id') === 'search-media-post-unit')) {
-                    screenRedditPostRootV295(node);
+                    screenPostOnce(node);
                 } else if (node.querySelectorAll) {
                     // Reddit commonly inserts a wrapper containing many posts.
                     // Screen its descendants now; no whole-document pass for
@@ -3610,7 +3741,7 @@
                         '[data-testid="search-post-unit"], [data-id="search-media-post-unit"], [data-testid="search-post-with-content-preview"]'
                     );
                     const limit = Math.min(nestedPosts.length, 60);
-                    for (let k = 0; k < limit; k++) screenRedditPostRootV295(nestedPosts[k]);
+                    for (let k = 0; k < limit; k++) screenPostOnce(nestedPosts[k]);
                     if (nestedPosts.length > limit) needsPostSweepV295 = true;
                 }
                 // Ordinary feed posts also have role/data-testid attributes.
@@ -3646,7 +3777,7 @@
                     const maxShadowPosts = Math.min(shadowPosts.length, 10);
                     for (let k = 0; k < maxShadowPosts; k++) {
                         const shadowPost = shadowPosts[k];
-                        screenRedditPostRootV295(shadowPost);
+                        screenPostOnce(shadowPost);
                     }
                     
                     observeShadowRootOnce(node.shadowRoot);
@@ -3671,6 +3802,13 @@
             }
         }
         
+        for (const post of pendingPosts) {
+            if (post.isConnected) queueRedditPostCheckV296(post);
+        }
+        for (const comment of pendingComments) {
+            if (comment.isConnected) queueRedditCommentCheckV296(comment);
+        }
+
         // The targeted fragment scan above handles fresh posts. A bounded
         // fallback is retained if one React commit exceeded its per-pass limit.
         if (needsPostSweepV295) queueRedditOverflowSweepV295();
@@ -3678,7 +3816,6 @@
         if (needsSearchUpdate) {
             batchProcess(() => {
                 observeSearchDropdown();
-                hideBannedSubredditsFromSearch();
                 hideBannedSubredditsFromAllSearchDropdowns();
                 processSearchCommunities();
             });

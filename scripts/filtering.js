@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BraveFox WebFilter Script
-// @version	 29.9.0
-// @date	 2026-11-13
+// @version	 30.0.8
+// @date	 2026-11-25
 // @description  Filter out stuff on the internet (Targeted Enforcer)
 // @match        *://xvideos.com/*
 // @match        *://*.xvideos.com/*
@@ -3432,8 +3432,13 @@
         // without touching other banners or Bunkr's video/file content.
         const bunkrMigrationBannerSelector =
             'div:is([style*="background: red"], [style*="background:red"]):has(> a[href="https://balbums.st"], > a[href="https://balbums.st/"])';
+        // New Balbums result tiles use a compact title/footer instead of the old .card class.
+        // Prefer the enclosing link; for non-link tiles use only the immediate footer parent.
+        const balbumsFooterSelector = 'div[class~="p-2.5"].border-t.theme-border';
         const cardSelector = site === 'balbums'
-            ? 'a.card[href]:has(h3, img.thumb-img)'
+            ? ':is(a.card[href]:has(h3, img.thumb-img), ' +
+              `a[href]:has(${balbumsFooterSelector}), ` +
+              `:is(div, article, li):has(> ${balbumsFooterSelector}):not(a[href] *):not(:has(> ${balbumsFooterSelector} ~ ${balbumsFooterSelector})))`
             : 'div.theItem';
         const regexes = createStaticBlockedRegexWords();
         const exclusions = new Set([
@@ -3606,6 +3611,16 @@
             };
             if (site === 'balbums') {
                 // Album IDs and CDN paths are opaque; use only user-facing titles.
+                // Wait for the compact footer's title during hydration; file counts alone
+                // must not approve an unfinished result tile.
+                const footers = element.querySelectorAll(balbumsFooterSelector);
+                for (const footer of footers) {
+                    const title = footer.querySelector('h3');
+                    if (!title?.textContent?.trim()) return '';
+                    push(footer.textContent);
+                    push(title.getAttribute('title'));
+                    push(title.getAttribute('aria-label'));
+                }
                 element.querySelectorAll('h3, .thumb-img[alt]').forEach(node => {
                     if (node.matches('h3')) push(node.textContent);
                     push(node.getAttribute('alt'));

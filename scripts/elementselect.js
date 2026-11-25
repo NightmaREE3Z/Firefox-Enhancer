@@ -111,42 +111,159 @@
           ? exactPathMatches(location.pathname, rule.path, host) && location.search === rule.query
           : pathMatches(location.pathname, rule.path, host)));
     }
-    function styleRoots() {
-      return [document, ...[...shadowStyles.keys()].filter(root => root.host.isConnected)];
+    const shadowObservers = new Map();
+    const discoveryRoots = new Set();
+    const repairRoots = new Set();
+    let activeDiscovery = null;
+    let discoveryTimer = null;
+    let pruneTimer = null;
+    let currentCss = '';
+
+    function rootConnected(root) {
+      return root === document || (root.host ? root.host.isConnected : root.isConnected);
     }
-    function renderRules() {
-      const css = applicableRules().map(rule =>
-        `:is(${rule.selector}) { display: none !important; }`).join('\n');
-      if (!mainStyle) {
-        mainStyle = document.createElement('style');
-        mainStyle.id = 'bravefox-elementselect-rules';
-      }
-      // Keep the document and accessible open shadow trees in sync. Ordinary
-      // document CSS cannot cross a shadow boundary, even with !important.
-      for (const root of styleRoots()) {
-        let style = root === document ? mainStyle : shadowStyles.get(root);
-        if (!style) {
-          style = document.createElement('style');
+    function styleRoots() {
+      return [document, ...[...shadowStyles.keys()].filter(rootConnected)];
+    }
+    function applyRootStyle(root) {
+      if (!rootConnected(root)) return;
+      let style = root === document ? mainStyle : shadowStyles.get(root);
+      // Empty styles in hundreds of shadow roots do not hide anything.
+      if (!style && root !== document && !currentCss) return;
+      if (!style) {
+        style = document.createElement('style');
+        if (root === document) {
+          mainStyle = style;
+          style.id = 'bravefox-elementselect-rules';
+        } else {
           style.setAttribute('data-bravefox-elementselect', '');
           shadowStyles.set(root, style);
         }
-        const target = root === document ? (document.head || document.documentElement) : root;
-        if (target && !style.isConnected) target.appendChild(style);
-        if (style.textContent !== css) style.textContent = css;
       }
+      if (style.textContent !== currentCss) style.textContent = currentCss;
+      const target = root === document ? (document.head || document.documentElement) : root;
+      if (target && !style.isConnected) target.appendChild(style);
+    }
+    function renderRules() {
+      currentCss = applicableRules().map(rule =>
+        `:is(${rule.selector}) { display: none !important; }`).join('\n');
+      // Rules change infrequently. Apply to known roots once, then discover any
+      // newly relevant open roots incrementally.
+      applyRootStyle(document);
+      for (const [root, style] of shadowStyles) {
+        if (rootConnected(root)) applyRootStyle(root);
+        else if (style && style.textContent !== currentCss) style.textContent = currentCss;
+      }
+      if (currentCss || picker) discoverShadowRoots(document);
+    }
+    function scheduleDiscovery() {
+      if (discoveryTimer !== null) return;
+      discoveryTimer = setTimeout(drainDiscovery, 8);
     }
     function discoverShadowRoots(scope) {
-      if (scope?.nodeType === 1 && scope.shadowRoot) registerShadowRoot(scope.shadowRoot);
-      scope?.querySelectorAll?.('*').forEach(node => {
-        if (node.shadowRoot) registerShadowRoot(node.shadowRoot);
-      });
+      if (!scope || !rootConnected(scope)) return;
+      discoveryRoots.add(scope);
+      scheduleDiscovery();
+    }
+    function inspectShadowHost(node) {
+      if (node?.nodeType === 1 && node.shadowRoot) registerShadowRoot(node.shadowRoot);
+    }
+    function drainDiscovery() {
+      discoveryTimer = null;
+      const started = performance.now();
+      let steps = 0;
+      while (steps++ < 240 && performance.now() - started < 6) {
+        if (repairRoots.size) {
+          const root = repairRoots.values().next().value;
+          repairRoots.delete(root);
+          applyRootStyle(root);
+        }
+        if (activeDiscovery && !rootConnected(activeDiscovery.root)) activeDiscovery = null;
+        if (!activeDiscovery && discoveryRoots.size) {
+          const scope = discoveryRoots.values().next().value;
+          discoveryRoots.delete(scope);
+          if (rootConnected(scope)) {
+            inspectShadowHost(scope);
+            activeDiscovery = document.createTreeWalker(scope, NodeFilter.SHOW_ELEMENT);
+          }
+        }
+        if (activeDiscovery) {
+          const node = activeDiscovery.nextNode();
+          if (node) inspectShadowHost(node);
+          else activeDiscovery = null;
+        }
+        if (!activeDiscovery && !discoveryRoots.size && !repairRoots.size) break;
+      }
+      if (activeDiscovery || discoveryRoots.size || repairRoots.size) scheduleDiscovery();
     }
     function registerShadowRoot(root) {
-      if (shadowStyles.has(root)) return;
+      if (shadowStyles.has(root) || !rootConnected(root)) return;
       shadowStyles.set(root, null);
-      observer.observe(root, { childList: true, subtree: true });
+      const shadowObserver = new MutationObserver(handleMutations);
+      shadowObservers.set(root, shadowObserver);
+      shadowObserver.observe(root, { childList: true, subtree: true });
+      applyRootStyle(root);
       discoverShadowRoots(root);
+    }
+    function schedulePrune() {
+      if (pruneTimer !== null) return;
+      pruneTimer = setTimeout(() => {
+        pruneTimer = null;
+        for (const [root, observer] of shadowObservers) {
+          if (rootConnected(root)) continue;
+          observer.disconnect();
+          shadowObservers.delete(root);
+          // A detached host can later be reinserted. Remove our old style so
+          // rediscovery cannot leave duplicate or stale rules in that root.
+          shadowStyles.get(root)?.remove();
+          shadowStyles.delete(root);
+          discoveryRoots.delete(root);
+          repairRoots.delete(root);
+        }
+      }, 1000);
+    }
+    function checkRoute() {
+      if (location.href === currentUrl) return;
+      currentUrl = location.href;
       renderRules();
+    }
+    function handleMutations(records) {
+      checkRoute();
+      const needsDiscovery = !!(currentCss || picker);
+      for (const record of records) {
+        if (needsDiscovery) {
+          for (const node of record.addedNodes) {
+            if (node.nodeType === 1 || node.nodeType === 11) discoverShadowRoots(node);
+          }
+        }
+        if (record.removedNodes.length) {
+          if (shadowStyles.size) schedulePrune();
+          const root = record.target.getRootNode();
+          const style = root === document ? mainStyle : shadowStyles.get(root);
+          if (style && !style.isConnected) {
+            repairRoots.add(root);
+            scheduleDiscovery();
+          }
+        }
+      }
+      if (mainStyle && !mainStyle.isConnected) {
+        repairRoots.add(document);
+        scheduleDiscovery();
+      }
+    }
+    // Explicit picking needs complete selector counts immediately. This is
+    // user-triggered only, not a repeated background mutation scan.
+    function discoverForPicker() {
+      const roots = [document];
+      for (let i = 0; i < roots.length; i++) {
+        const walker = document.createTreeWalker(roots[i], NodeFilter.SHOW_ELEMENT);
+        let node;
+        while ((node = walker.nextNode())) {
+          if (!node.shadowRoot) continue;
+          registerShadowRoot(node.shadowRoot);
+          roots.push(node.shadowRoot);
+        }
+      }
     }
     api.storage.local.get(KEY).then(result => {
       rules = (Array.isArray(result[KEY]) ? result[KEY] : []).map(normalizedRule).filter(Boolean);
@@ -160,23 +277,10 @@
         .map(normalizedRule).filter(Boolean);
       renderRules();
     });
-    const observer = new MutationObserver(records => {
-      for (const record of records) {
-        for (const node of record.addedNodes) {
-          if (node.nodeType === 1 || node.nodeType === 11) discoverShadowRoots(node);
-        }
-      }
-      if (location.href !== currentUrl) { currentUrl = location.href; renderRules(); }
-      if (mainStyle && !mainStyle.isConnected) renderRules();
-      for (const [root, style] of shadowStyles) {
-        if (root.host.isConnected && (!style || !style.isConnected)) {
-          renderRules();
-          break;
-        }
-      }
-    });
+    const observer = new MutationObserver(handleMutations);
     observer.observe(document, { childList: true, subtree: true });
-    discoverShadowRoots(document);
+    window.addEventListener('popstate', checkRoute, { passive: true });
+    window.addEventListener('hashchange', checkRoute, { passive: true });
 
     function qs(selector) {
       try {
@@ -457,6 +561,7 @@
     }
     function openPicker() {
       if (picker) { startPicking(); return; }
+      discoverForPicker();
       const host = document.createElement('div');
       host.id = 'bravefox-element-picker';
       const shadow = host.attachShadow({ mode: 'closed' });

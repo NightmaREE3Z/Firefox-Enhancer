@@ -33,6 +33,19 @@
   let rafTick = null;
   let roParent = null;
   let roDoc = null;
+  let guardedContainer = null;
+  let observedResizeParent = null;
+  let navWorkTimer = null;
+  let mediaWorkTimer = null;
+  let answersBurst = null;
+  let recentBurst = null;
+  let upgradeBurst = null;
+  let navLayoutPending = false;
+  let navBurstPending = false;
+  let fullMediaSweepPending = false;
+  let lastRoute = location.href;
+  let stopped = false;
+  const mediaRoots = new Set();
 
   const listeners = [];
 
@@ -176,11 +189,14 @@
 
   // NEW: short burst to sweep late nav mounts after big layout changes
   function scheduleAnswersNudgeBurst(times = 12, delay = 120) {
+    if (stopped || answersBurst !== null) return;
     let count = 0;
-    const id = setInterval(() => {
+    answersBurst = setInterval(() => {
       try { nudgeAnswersRemoval(); } catch {}
-      try { nudgeRecentRemoval(); } catch {}
-      if (++count >= times) clearInterval(id);
+      if (++count >= times) {
+        clearInterval(answersBurst);
+        answersBurst = null;
+      }
     }, delay);
   }
 
@@ -261,10 +277,14 @@
   }
 
   function scheduleRecentNudgeBurst(times = 12, delay = 120) {
+    if (stopped || recentBurst !== null) return;
     let count = 0;
-    const id = setInterval(() => {
+    recentBurst = setInterval(() => {
       try { nudgeRecentRemoval(); } catch {}
-      if (++count >= times) clearInterval(id);
+      if (++count >= times) {
+        clearInterval(recentBurst);
+        recentBurst = null;
+      }
     }, delay);
   }
 
@@ -293,9 +313,7 @@
         el.style.opacity = '1';
       });
 
-      // NEW: also kill any hidden nav extras that may have mounted here
-      nudgeAnswersRemoval();
-      nudgeRecentRemoval();
+      // Navigation cleanup is performed once by forceExpandOnce().
     } catch {}
   }
 
@@ -538,7 +556,7 @@
     }
   }
 
-  function forceExpandOnce() {
+  function forceExpandOnce(withBurst = true) {
     const container = getContainer();
     if (!container) return;
 
@@ -560,57 +578,128 @@
     // NEW: enforce nav cleanup again after any reflow
     nudgeAnswersRemoval();
     nudgeRecentRemoval();
-    scheduleAnswersNudgeBurst();
-    scheduleRecentNudgeBurst();
-
-    // NEW: sweep for insecure subresources possibly mounted with this reflow
-    scheduleUpgradeBurst();
+    if (withBurst) {
+      scheduleAnswersNudgeBurst();
+      scheduleRecentNudgeBurst();
+      scheduleUpgradeBurst();
+    }
 
     log(`expand run: before=${before}, attrChanged=${attrChanged}, after=${isExpanded(container)}`);
   }
 
   function installAttributeGuard(container) {
-    if (!container) return;
+    if (!container || (moAttr && guardedContainer === container)) return;
     try {
       if (moAttr) moAttr.disconnect();
-      moAttr = new MutationObserver(muts => {
-        for (const m of muts) {
-          if (m.type === 'attributes' && m.attributeName === EXPANDED_ATTR) {
-            const nowExpanded = isExpanded(container);
-            if (!nowExpanded) {
-              setExpanded(container);
-              neutralizeHoverGate();
-              applyLayout();
-              nudgeAnswersRemoval();        // NEW: re‑hide Answers after attribute flips
-              nudgeRecentRemoval();
-              scheduleAnswersNudgeBurst();  // NEW: sweep late mounts
-              scheduleRecentNudgeBurst();
-              scheduleUpgradeBurst();       // NEW: sweep newly mounted media
-              log('guard reapplied expanded after attribute flip');
-            }
-          }
+      guardedContainer = container;
+      moAttr = new MutationObserver(() => {
+        if (container.isConnected && !isExpanded(container)) {
+          // Yield to the browser instead of fighting Reddit in a microtask loop.
+          scheduleNavWork(true, true);
         }
       });
       moAttr.observe(container, { attributes: true, attributeFilter: [EXPANDED_ATTR] });
     } catch {}
   }
 
+  function scheduleNavWork(layout = false, burst = false) {
+    if (stopped) return;
+    navLayoutPending = navLayoutPending || layout;
+    navBurstPending = navBurstPending || burst;
+    if (navWorkTimer !== null) return;
+    navWorkTimer = setTimeout(() => {
+      navWorkTimer = null;
+      const layout = navLayoutPending;
+      const burst = navBurstPending;
+      navLayoutPending = navBurstPending = false;
+      const container = getContainer();
+      if (container && (layout || container !== guardedContainer)) {
+        const newContainer = container !== guardedContainer;
+        installAttributeGuard(container);
+        forceExpandOnce(burst || newContainer);
+      } else {
+        if (!container && guardedContainer) {
+          moAttr?.disconnect();
+          moAttr = null;
+          guardedContainer = null;
+        }
+        nudgeAnswersRemoval();
+        nudgeRecentRemoval();
+        if (burst) {
+          scheduleAnswersNudgeBurst();
+          scheduleRecentNudgeBurst();
+          scheduleUpgradeBurst();
+        }
+      }
+    }, 100);
+  }
+
+  const NAV_CHANGE_SELECTOR = CONTAINER_SELECTOR + ', ' + NAV_SELECTOR + ', ' +
+    EXPAND_BTN_SELECTOR + ', ' + COLLAPSE_BTN_SELECTOR;
+  const NAV_CLEANUP_SELECTOR = NAV_SCOPE_SELECTOR + ', ' + RECENT_SELECTORS.join(', ');
+
+  function queueMediaRoot(node) {
+    if (stopped || !node || node.nodeType !== 1) return;
+    if (!fullMediaSweepPending) {
+      mediaRoots.add(node);
+      if (mediaRoots.size > 128) {
+        mediaRoots.clear();
+        fullMediaSweepPending = true;
+      }
+    }
+    if (mediaWorkTimer !== null) return;
+    mediaWorkTimer = setTimeout(() => {
+      mediaWorkTimer = null;
+      const roots = Array.from(mediaRoots);
+      mediaRoots.clear();
+      const full = fullMediaSweepPending;
+      fullMediaSweepPending = false;
+      if (full) {
+        upgradeInsecureResources();
+        return;
+      }
+      for (const root of roots) {
+        if (!root.isConnected || roots.some(other => other !== root && other.contains(root))) continue;
+        upgradeInsecureResources(root);
+      }
+    }, 120);
+  }
+
   function installDomObserver() {
     try {
       if (moDoc) moDoc.disconnect();
-      moDoc = new MutationObserver(() => {
-        const container = getContainer();
-        if (container) {
-          forceExpandOnce();
-          installAttributeGuard(container);
-          // NEW: catch late nav mounts caused by SPA route changes
-          nudgeAnswersRemoval();
-          nudgeRecentRemoval();
-          // NEW: and upgrade insecure resources that may have been added
-          upgradeInsecureResources();
+      moDoc = new MutationObserver(mutations => {
+        const routeChanged = location.href !== lastRoute;
+        if (routeChanged) lastRoute = location.href;
+        let layout = routeChanged || !!(guardedContainer && !guardedContainer.isConnected);
+        let cosmetics = layout;
+        for (const mutation of mutations) {
+          const target = mutation.target;
+          if (mutation.type === 'attributes') {
+            // Late lazy-loaded URLs may change without inserting a new node.
+            // Ignore all normal style/URL writes, including our own HTTPS upgrades.
+            if (/http:/i.test(target.getAttribute(mutation.attributeName) || '')) queueMediaRoot(target);
+            continue;
+          }
+          if (target.nodeType === 1) {
+            if (target.closest(NAV_CHANGE_SELECTOR)) layout = true;
+            if (target.closest(NAV_CLEANUP_SELECTOR)) cosmetics = true;
+          }
+          for (const node of mutation.addedNodes) {
+            if (node.nodeType !== 1) continue;
+            queueMediaRoot(node);
+            if (!layout && (node.matches(NAV_CHANGE_SELECTOR) || node.querySelector(NAV_CHANGE_SELECTOR))) layout = true;
+            if (!cosmetics && (node.matches(NAV_CLEANUP_SELECTOR) || node.querySelector(NAV_CLEANUP_SELECTOR))) cosmetics = true;
+          }
         }
+        if (layout || cosmetics) scheduleNavWork(layout, routeChanged);
       });
-      moDoc.observe(document.documentElement, { childList: true, subtree: true });
+      moDoc.observe(document.documentElement, {
+        childList: true, subtree: true, attributes: true,
+        attributeFilter: ['src', 'href', 'poster', 'srcset', 'style']
+      });
+      const container = getContainer();
+      if (container) installAttributeGuard(container);
     } catch {}
   }
 
@@ -621,13 +710,12 @@
 
     // Observe parent width/position changes (grid/flex changes on home feed/posts)
     try {
-      if ('ResizeObserver' in window && parent) {
+      if ('ResizeObserver' in window && parent && observedResizeParent !== parent) {
         roParent?.disconnect?.();
+        observedResizeParent = parent;
         roParent = new ResizeObserver(() => {
           scheduleLeftSync();
-          nudgeAnswersRemoval();       // NEW: in case layout swaps nav variants
-          nudgeRecentRemoval();
-          scheduleUpgradeBurst();      // NEW: layout swaps often mount media nodes
+          scheduleNavWork();
         });
         roParent.observe(parent);
       }
@@ -635,13 +723,10 @@
 
     // Also observe documentElement for viewport scrollbar/zoom/layout shifts
     try {
-      if ('ResizeObserver' in window) {
-        roDoc?.disconnect?.();
+      if ('ResizeObserver' in window && !roDoc) {
         roDoc = new ResizeObserver(() => {
           scheduleLeftSync();
-          nudgeAnswersRemoval();
-          nudgeRecentRemoval();
-          scheduleUpgradeBurst();
+          scheduleNavWork();
         });
         roDoc.observe(document.documentElement);
       }
@@ -650,12 +735,12 @@
 
   function installWindowListeners() {
     // Keep fixed-left aligned in Firefox on resize/zoom/orientation changes
-    on(window, 'resize', () => { scheduleLeftSync(); nudgeAnswersRemoval(); nudgeRecentRemoval(); scheduleUpgradeBurst(); }, { passive: true });
-    on(window, 'orientationchange', () => { scheduleLeftSync(); nudgeAnswersRemoval(); nudgeRecentRemoval(); scheduleUpgradeBurst(); }, { passive: true });
+    on(window, 'resize', () => { scheduleLeftSync(); scheduleNavWork(false, true); }, { passive: true });
+    on(window, 'orientationchange', () => { scheduleLeftSync(); scheduleNavWork(false, true); }, { passive: true });
 
     // Also re-run on visibility regain (route changes often happen while hidden)
     on(document, 'visibilitychange', () => {
-      if (!document.hidden) setTimeout(() => { forceExpandOnce(); scheduleLeftSync(); nudgeAnswersRemoval(); nudgeRecentRemoval(); scheduleAnswersNudgeBurst(); scheduleRecentNudgeBurst(); scheduleUpgradeBurst(); }, 50);
+      if (!document.hidden) { scheduleNavWork(true, true); scheduleLeftSync(); }
     }, { passive: true });
 
     // Occasionally Reddit toggles classes that change layout margins on scroll.
@@ -677,6 +762,15 @@
     try { moAttr && moAttr.disconnect && moAttr.disconnect(); } catch {}
     try { roParent && roParent.disconnect && roParent.disconnect(); } catch {}
     try { roDoc && roDoc.disconnect && roDoc.disconnect(); } catch {}
+    stopped = true;
+    for (const timer of [answersBurst, recentBurst, upgradeBurst]) {
+      if (timer !== null) clearInterval(timer);
+    }
+    for (const timer of [navWorkTimer, mediaWorkTimer]) {
+      if (timer !== null) clearTimeout(timer);
+    }
+    if (rafTick !== null) cancelAnimationFrame(rafTick);
+    mediaRoots.clear();
     offAll();
     removeFixedArtifactsIfAny();
   }
@@ -707,7 +801,7 @@
     try {
       const str = String(u || '').trim();
       if (!str) return null;
-      if (str.startsWith('data:') || str.startsWith('blob:') || str.startsWith('about:') || str.startsWith('chrome-extension:')) return null;
+      if (str.startsWith('data:') || str.startsWith('blob:') || str.startsWith('about:') || str.startsWith('chrome-extension:') || /^https:/i.test(str)) return null;
 
       const url = new URL(str, document.baseURI);
       if (url.protocol === 'http:' && hostnameMatchesAllowlist(url.hostname)) {
@@ -742,7 +836,9 @@
 
   function upgradeInsecureResources(root = document) {
     try {
-      const nodes = root.querySelectorAll('img, source, video, audio, picture, a, link[rel="preload"][as="image"], [style]');
+      const selector = 'img, source, video, audio, picture, a, link[rel="preload"][as="image"], [style]';
+      const nodes = Array.from(root.querySelectorAll(selector));
+      if (root.matches?.(selector)) nodes.unshift(root);
       nodes.forEach(el => {
         try {
           // src / href / poster
@@ -776,10 +872,14 @@
   }
 
   function scheduleUpgradeBurst(times = 10, delay = 120) {
+    if (stopped || upgradeBurst !== null) return;
     let count = 0;
-    const id = setInterval(() => {
+    upgradeBurst = setInterval(() => {
       try { upgradeInsecureResources(); } catch {}
-      if (++count >= times) clearInterval(id);
+      if (++count >= times) {
+        clearInterval(upgradeBurst);
+        upgradeBurst = null;
+      }
     }, delay);
   }
 
@@ -787,20 +887,19 @@
 
   function init() {
     // Try immediately, then on DOM ready, then install observers.
-    nudgeAnswersRemoval();       // NEW: immediate pass
-    nudgeRecentRemoval();
-    scheduleAnswersNudgeBurst(); // NEW: early burst
-    scheduleRecentNudgeBurst();
-
-    // NEW: proactively upgrade any insecure media URLs right away
     upgradeInsecureResources();
-    scheduleUpgradeBurst();
-
-    forceExpandOnce();
+    if (getContainer()) forceExpandOnce();
+    else {
+      nudgeAnswersRemoval();
+      nudgeRecentRemoval();
+      scheduleAnswersNudgeBurst();
+      scheduleRecentNudgeBurst();
+      scheduleUpgradeBurst();
+    }
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => { forceExpandOnce(); nudgeAnswersRemoval(); nudgeRecentRemoval(); scheduleAnswersNudgeBurst(); scheduleRecentNudgeBurst(); upgradeInsecureResources(); scheduleUpgradeBurst(); }, { once: true });
+      document.addEventListener('DOMContentLoaded', () => { scheduleNavWork(true, true); upgradeInsecureResources(); }, { once: true });
     } else {
-      setTimeout(() => { forceExpandOnce(); nudgeAnswersRemoval(); nudgeRecentRemoval(); scheduleAnswersNudgeBurst(); scheduleRecentNudgeBurst(); upgradeInsecureResources(); scheduleUpgradeBurst(); }, 0);
+      scheduleNavWork(true, true);
     }
     installDomObserver();
     installWindowListeners();
